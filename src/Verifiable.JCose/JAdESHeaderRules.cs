@@ -43,7 +43,7 @@ namespace Verifiable.JCose;
 /// one.</strong> <see cref="JAdESProtectedHeaders"/> exposes no <c>x5t</c> property at all (JA-5.1.6-01 is
 /// satisfied by construction on the CREATION side), so this rule can only ever fire from a fact the wire decoder
 /// observed and this aggregate itself has nowhere to carry: <see cref="JAdESSignatureValidation"/>'s own
-/// <c>DetectX5tPresence</c> seam (<see cref="JAdESProtectedHeaderJson.DetectX5tPresence"/>) inspects the raw
+/// <c>DetectX5tPresence</c> seam (<c>JAdESProtectedHeaderJson.DetectX5tPresence</c>) inspects the raw
 /// protected-header JSON for a present <c>x5t</c> member before/alongside the JAdES-typed decode and passes the
 /// result through as <c>x5tWasPresentOnWire</c> on every <c>ValidateAsync</c> call. Defaults to
 /// <see langword="false"/>, so a creation call (which never has wire content to inspect) never raises it.
@@ -135,7 +135,7 @@ public static class JAdESHeaderRules
 
         return violations;
 
-        /// <summary>Determines whether every entry of <paramref name="headerNames"/> is already lowercase (JA-5.2.8.2-04), ordinal comparison.</summary>
+        //Determines whether every entry of headerNames is already lowercase (JA-5.2.8.2-04), ordinal comparison.
         static bool EveryHeaderNameIsLowercase(IReadOnlyList<string> headerNames)
         {
             for(int i = 0; i < headerNames.Count; ++i)
@@ -153,10 +153,8 @@ public static class JAdESHeaderRules
             return true;
         }
 
-        /// <summary>Determines whether <paramref name="criticalLabels"/> contains <paramref name="label"/>.</summary>
-        /// <param name="criticalLabels">The <c>crit</c> member's labels, or <see langword="null"/>.</param>
-        /// <param name="label">The label to look for; compared ordinally (RFC 7515 §4).</param>
-        /// <returns><see langword="true"/> when found.</returns>
+        //Determines whether criticalLabels (the crit member's labels, or null) contains label,
+        //compared ordinally (RFC 7515 §4); returns true when found.
         static bool ContainsCriticalLabel(IReadOnlyList<string>? criticalLabels, string label)
         {
             if(criticalLabels is null)

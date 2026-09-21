@@ -6,7 +6,7 @@ using Verifiable.Cryptography.Aead;
 namespace Verifiable.Tpm.Extensions.Seal;
 
 /// <summary>
-/// The persistable result of <see cref="TpmDeviceExtensions.SealEnvelopeAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AeadEncryptDelegate, ReadOnlyMemory{byte}, bool, System.Threading.CancellationToken)"/>:
+/// The persistable result of <see cref="TpmDeviceExtensions.extension(TpmDevice).SealEnvelopeAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AeadEncryptDelegate, ReadOnlyMemory{byte}, bool, System.Threading.CancellationToken)"/>:
 /// a content-encryption key sealed by the TPM (<see cref="SealedKey"/>) and the caller's data encrypted under
 /// that key with an AEAD, bound to the sealed key through the additional authenticated data — the composition
 /// that lets a secret of any width ride a sealed data object, which carries at most
@@ -25,8 +25,8 @@ namespace Verifiable.Tpm.Extensions.Seal;
 /// <para>
 /// Every carrier is pooled and owned by this instance; dispose it once the envelope is persisted (its bytes
 /// copied out via <see cref="WriteTo"/>) or consumed by
-/// <see cref="TpmDeviceExtensions.UnsealEnvelopeAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, ReadOnlyMemory{byte}, AeadDecryptDelegate, System.Threading.CancellationToken)"/> /
-/// <see cref="TpmDeviceExtensions.UnsealEnvelopeUnderPolicyAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, uint, AeadDecryptDelegate, System.Threading.CancellationToken)"/>.
+/// <see cref="TpmDeviceExtensions.extension(TpmDevice).UnsealEnvelopeAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, ReadOnlyMemory{byte}, AeadDecryptDelegate, System.Threading.CancellationToken)"/> /
+/// <see cref="TpmDeviceExtensions.extension(TpmDevice).UnsealEnvelopeUnderPolicyAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, uint, AeadDecryptDelegate, System.Threading.CancellationToken)"/>.
 /// Shaped like <see cref="TpmSealedBlob"/> rather than as a record: no value-equality contract is offered over
 /// pooled, disposable buffer ownership.
 /// </para>

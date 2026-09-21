@@ -37,7 +37,6 @@ namespace Verifiable.Core.Did.Methods.Key
     /// </list>
     /// <para>
     /// This library provides TPM (Trusted Platform Module) integration for hardware-backed key protection.
-    /// //TODO: Add proper reference to TPM utilities class when available: <see cref="TpmUtilities"/>
     /// For scenarios requiring long-term <c>did:key</c> usage, consider utilizing hardware security modules
     /// or TPM-backed key storage to meet the hardware isolation requirements specified in the DID Key specification.
     /// </para>

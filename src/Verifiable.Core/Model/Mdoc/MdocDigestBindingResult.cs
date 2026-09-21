@@ -61,8 +61,8 @@ public enum MdocDigestBindingFailureReason
 
 
 /// <summary>
-/// Per-item result from <see cref="MdocMsoDigestBindingValidator.Validate"/>.
-/// Mirrors the shape of <see cref="Verifiable.Core.SelectiveDisclosure.SdClaimVerificationResult"/>
+/// Per-item result from <see cref="MdocMsoDigestBindingValidator.Validate(MdocIssuerSigned, BaseMemoryPool)"/>.
+/// Mirrors the shape of <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdClaimVerificationResult"/>
 /// — verifier-side callers iterate per-item to see which items proved out and
 /// which did not.
 /// </summary>

@@ -66,6 +66,12 @@ public static class JsonPointerPaths
 
                 break;
             }
+            case JsonValueKind.String:
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
             default:
             {
                 //Leaf value: its path was already added by the enclosing object/array.

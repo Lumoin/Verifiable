@@ -1,7 +1,9 @@
+using System.Buffers;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 using Verifiable.Tests.X509;
 
@@ -72,7 +74,7 @@ internal static class TpmAttestationTestVectors
     /// <param name="notAfter">The certificate's <c>notAfter</c> instant. Defaults to a fixed conformant value.</param>
     /// <param name="attachPrivateKey">
     /// Whether to attach <paramref name="aikKey"/>'s private half to the returned certificate via
-    /// <see cref="X509Certificate2.CopyWithPrivateKey(ECDsa)"/>. Defaults to <see langword="true"/>
+    /// <c>X509Certificate2.CopyWithPrivateKey(ECDsa)</c>. Defaults to <see langword="true"/>
     /// for the ordinary hand-built-KAT fixtures, whose own <paramref name="aikKey"/> signs the
     /// attestation directly; pass <see langword="false"/> when <paramref name="aikKey"/> is a
     /// public-only reconstruction of a key whose private half never leaves a TPM (the live-minted
@@ -340,12 +342,20 @@ internal static class TpmAttestationTestVectors
     /// <param name="key">The P-256 private key to sign with.</param>
     /// <param name="message">The bytes to sign — <c>certInfo</c> for a tpm attestation signature.</param>
     /// <returns>The <c>r</c> and <c>s</c> components, each exactly 32 bytes.</returns>
-    internal static (byte[] R, byte[] S) SignWithEcdsaP256Components(ECDsa key, byte[] message)
+    internal static async Task<(byte[] R, byte[] S)> SignWithEcdsaP256Components(ECDsa key, byte[] message)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(message);
 
-        byte[] p1363 = key.SignData(message, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        byte[] exportedPrivateKey = key.ExportParameters(true).D!;
+        using IMemoryOwner<byte> privateKeyOwner = BaseMemoryPool.Shared.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
+        using Signature signature = (await sign(privateKeyOwner.Memory, message, BaseMemoryPool.Shared, context: null, cancellationToken: default).ConfigureAwait(false)).Signature;
+
+        byte[] p1363 = signature.AsReadOnlySpan().ToArray();
         int componentSize = p1363.Length / 2;
 
         return (p1363[..componentSize], p1363[componentSize..]);

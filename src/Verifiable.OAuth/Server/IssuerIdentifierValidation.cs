@@ -3,7 +3,7 @@ namespace Verifiable.OAuth.Server;
 /// <summary>
 /// The server-side issuer-identifier shape validation applied wherever
 /// <see cref="ClientRecord.IssuerUri"/> or the request-scoped
-/// <see cref="ExchangeContextServerExtensions.Issuer"/> becomes the value emitted as
+/// <see cref="Verifiable.Server.ExchangeContextServerExtensions.extension(Verifiable.Core.ExchangeContext).Issuer"/> becomes the value emitted as
 /// the discovery <c>issuer</c> field or the Authorize-redirect <c>iss</c> parameter.
 /// The sibling of the client-side
 /// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataValidation"/>.

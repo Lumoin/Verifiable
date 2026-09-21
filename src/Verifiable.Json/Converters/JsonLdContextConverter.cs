@@ -50,6 +50,33 @@ public class JsonLdContextConverter: JsonConverter<Context>
             JsonTokenType.String => new Context([ContextEntry.FromIri(ReadIri(ref reader))], ContextForm.Scalar),
             JsonTokenType.StartObject => new Context([ContextEntry.FromDefinition(ReadDefinition(ref reader))], ContextForm.Scalar),
             JsonTokenType.StartArray => ReadArray(ref reader),
+            JsonTokenType.None => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.EndObject => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.EndArray => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.PropertyName => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.Comment => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.Number => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.True => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.False => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
+            JsonTokenType.Null => throw new JsonException(
+                $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
+                + $"got '{reader.TokenType}'."),
             _ => throw new JsonException(
                 $"VC Data Model 2.0 §4.3: @context MUST be a URL, an object, or an array of URLs and objects; "
                 + $"got '{reader.TokenType}'.")
@@ -109,6 +136,36 @@ public class JsonLdContextConverter: JsonConverter<Context>
             {
                 JsonTokenType.String => ContextEntry.FromIri(reader.GetString()!),
                 JsonTokenType.StartObject => ContextEntry.FromDefinition(ReadDefinition(ref reader)),
+                JsonTokenType.None => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.EndObject => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.StartArray => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.EndArray => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.PropertyName => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.Comment => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.Number => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.True => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.False => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
+                JsonTokenType.Null => throw new JsonException(
+                    $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
+                    + $"processable as a JSON-LD Context; got '{reader.TokenType}'."),
                 _ => throw new JsonException(
                     $"VC Data Model 2.0 §4.3: each @context array item MUST be a URL or an object "
                     + $"processable as a JSON-LD Context; got '{reader.TokenType}'.")

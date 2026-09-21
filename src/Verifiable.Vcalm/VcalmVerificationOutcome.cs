@@ -100,4 +100,26 @@ public sealed record VcalmStatusResult
 
     /// <summary>The status entry's <c>id</c> as the <c>input</c>, or empty when it has none.</summary>
     public required string Input { get; init; }
+
+    /// <summary>
+    /// The status purpose this result was evaluated against (e.g. <c>revocation</c>).
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vc-bitstring-status-list/#validate-algorithm">Bitstring
+    /// Status List 1.0 §3.2 Validate Algorithm</see>: "set the <c>purpose</c> key in result to the
+    /// value of <c>statusPurpose</c>."
+    /// </remarks>
+    public required string Purpose { get; init; }
+
+    /// <summary>
+    /// For a <c>message</c>-purpose entry, the message mapped to the status value by the entry's
+    /// <c>statusMessage</c> array; otherwise <see langword="null"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vc-bitstring-status-list/#validate-algorithm">Bitstring
+    /// Status List 1.0 §3.2 Validate Algorithm</see>: "If the <c>statusPurpose</c> is <c>message</c>,
+    /// set the <c>message</c> key in result to the corresponding <c>message</c> of the <c>value</c>
+    /// as indicated in the <c>statusMessages</c> array."
+    /// </remarks>
+    public string? Message { get; init; }
 }

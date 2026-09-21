@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -97,31 +98,37 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
     public async Task ParPkceAuthorizationCodeJourneyEndsInAnIssuedCredential()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, Capabilities).ConfigureAwait(false);
 
         //OID4VCI 1.0 section 13.10: a plain-bearer credential token stays within the
         //long-lived threshold (lifetimes over 5 minutes count as long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
+        //Both authorization-details seams are coupled changes and are published together in ONE
+        //alteration (EndpointServer.RequestAlterationAsync's own doc): a candidate wiring only the
+        //parser is itself a half-wired server the composition-time pairing check now refuses.
         IReadOnlyList<CredentialAuthorizationDetail>? grantedDetails = null;
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-            {
-                grantedDetails = details;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                {
+                    grantedDetails = details;
 
-                return ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
-                [
-                    new GrantedCredentialAuthorization
-                    {
-                        CredentialConfigurationId = details[0].CredentialConfigurationId!,
-                        CredentialIdentifiers = [CredentialIdentifier]
-                    }
-                ]));
-            };
+                    return ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
+                    [
+                        new GrantedCredentialAuthorization
+                        {
+                            CredentialConfigurationId = details[0].CredentialConfigurationId!,
+                            CredentialIdentifiers = [CredentialIdentifier]
+                        }
+                    ]));
+                };
+        }).ConfigureAwait(false);
 
-        IssuerSeamObservations observations = WireCredentialSeams(host);
+        IssuerSeamObservations observations = await WireCredentialSeamsAsync(host).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -140,7 +147,8 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         });
 
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
-            registration, RedirectUri, authorizationFields, [], TestContext.CancellationToken)
+            registration, RedirectUri, authorizationFields,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy), TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
@@ -174,7 +182,8 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
             $"Callback must succeed. ErrorCode={callbackResult.ErrorCode} ErrorDescription={callbackResult.ErrorDescription}");
 
         AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
-            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+            registration, flowId, TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
             $"Token exchange must succeed. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
@@ -189,16 +198,21 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
 
         Oid4VciWalletClient walletClient = BuildWalletClient(host);
-        CredentialIssuanceResult issued = await walletClient.IssueWithAccessTokenDetailedAsync(
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> issuedOutcome = await walletClient.IssueWithAccessTokenDetailedAsync(
             accessToken,
             tokenType,
+            accessTokenExpiresAt: null,
             material.Registration.IssuerUri!,
             ConfigurationId,
             holderPrivate,
             holderPublic,
             ResolveEndpoints(host, material),
             responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
             TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(issuedOutcome.IsSuccess, "The auth-code journey's issuance must succeed over the wire.");
+        CredentialIssuanceResult issued = issuedOutcome.Value;
 
         Assert.HasCount(1, issued.Credentials, "The auth-code journey must end in exactly the one requested credential.");
         Assert.AreEqual(IssuedCredential, issued.Credentials[0],
@@ -261,48 +275,54 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
     }
 
 
-    //Wires the issuance seams with real work: c_nonce minting and section 8 issuance that verifies
-    //the holder proof signature + its c_nonce before issuing the opaque credential. The
-    //pre-authorized-code seam stays unwired: this journey's authorization is the code grant.
-    private static IssuerSeamObservations WireCredentialSeams(TestHostShell host)
+    /// <summary>
+    /// Installs credential parsing, proof and issuance delegates through a requested alteration.
+    /// </summary>
+    private static async Task<IssuerSeamObservations> WireCredentialSeamsAsync(TestHostShell host)
     {
         IssuerSeamObservations observations = new();
         string? mintedNonce = null;
 
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-
-        host.Server.OAuth().IssueCredentialNonceAsync = (_, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
 
-            return ValueTask.FromResult(mintedNonce);
-        };
 
-        host.Server.OAuth().IssueCredentialAsync = async (request, _, _, _, ct) =>
-        {
-            string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
-            (PublicKeyMemory proofKey, string? proofNonce, string? proofAudience) = ReadProof(proof);
-
-            using(proofKey)
+            candidateIntegration.IssueCredentialNonceAsync = (_, _) =>
             {
-                bool isProofSignatureValid = await Jws.VerifyAsync(
-                    proof, TestSetup.Base64UrlDecoder,
-                    Pool,
-                    proofKey, ct).ConfigureAwait(false);
+                mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
 
-                if(!isProofSignatureValid
-                    || mintedNonce is null
-                    || !string.Equals(proofNonce, mintedNonce, StringComparison.Ordinal))
+                return ValueTask.FromResult(mintedNonce);
+            };
+
+
+            candidateIntegration.IssueCredentialAsync = async (request, _, _, _, ct) =>
+            {
+                string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
+                (PublicKeyMemory proofKey, string? proofNonce, string? proofAudience) = ReadProof(proof);
+
+                using(proofKey)
                 {
-                    return CredentialIssuanceDecision.Deny(CredentialRequestError.InvalidProof);
+                    bool isProofSignatureValid = await Jws.VerifyAsync(
+                        proof, TestSetup.Base64UrlDecoder,
+                        Pool,
+                        proofKey, ct).ConfigureAwait(false);
+
+                    if(!isProofSignatureValid
+                        || mintedNonce is null
+                        || !string.Equals(proofNonce, mintedNonce, StringComparison.Ordinal))
+                    {
+
+                        return CredentialIssuanceDecision.Deny(CredentialRequestError.InvalidProof);
+                    }
+
+                    observations.IsProofVerified = true;
+                    observations.ProofAudience = proofAudience;
+
+                    return CredentialIssuanceDecision.Issue([IssuedCredential]);
                 }
-
-                observations.IsProofVerified = true;
-                observations.ProofAudience = proofAudience;
-
-                return CredentialIssuanceDecision.Issue([IssuedCredential]);
-            }
-        };
+            };
+        }).ConfigureAwait(false);
 
         return observations;
     }
@@ -365,66 +385,20 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
         Oid4VciWalletConfiguration configuration = new()
         {
-            SendFormPost = (endpoint, formFields, ct) => SendFormPostAsync(httpClient, endpoint, formFields, ct),
-            SendJsonPost = (endpoint, body, headers, ct) => SendJsonPostAsync(httpClient, endpoint, body, headers, ct),
+            SendFormPost = (endpoint, formFields, headers, _, ct) =>
+                HttpClientTransport.SendFormPostAsync(httpClient, endpoint, formFields, headers, ct),
+            SendJsonPost = (endpoint, body, headers, _, ct) =>
+                HttpClientTransport.SendJsonPostAsync(httpClient, endpoint, body, headers, ct),
             JwtHeaderSerializer = HeaderSerializer,
             JwtPayloadSerializer = PayloadSerializer,
             Base64UrlEncoder = TestSetup.Base64UrlEncoder,
             TimeProvider = TimeProvider,
-            MemoryPool = Pool
+            MemoryPool = Pool,
+            OutboundFetchPolicy = TestHostShell.LoopbackOutboundFetchPolicy
         };
 
         return new Oid4VciWalletClient(configuration);
     }
 
 
-    //HttpClient form-POST transport (unused by this journey's issuance leg, wired for completeness).
-    private static async ValueTask<(int StatusCode, string Body)> SendFormPostAsync(
-        HttpClient httpClient,
-        Uri endpoint,
-        IReadOnlyDictionary<string, string> formFields,
-        CancellationToken cancellationToken)
-    {
-        using FormUrlEncodedContent content = new(formFields);
-        using HttpResponseMessage response = await httpClient.PostAsync(
-            endpoint, content, cancellationToken).ConfigureAwait(false);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        return ((int)response.StatusCode, body);
-    }
-
-
-    //HttpClient JSON-POST transport for the Nonce and Credential Requests, attaching the
-    //wallet-composed authorization headers and surfacing the response Content-Type.
-    private static async ValueTask<(int StatusCode, string Body, string? ContentType)> SendJsonPostAsync(
-        HttpClient httpClient,
-        Uri endpoint,
-        string jsonBody,
-        IReadOnlyDictionary<string, string> headers,
-        CancellationToken cancellationToken)
-    {
-        using HttpRequestMessage request = new(HttpMethod.Post, endpoint);
-
-        //The Nonce Request carries no body; only the Credential Request has one.
-        if(jsonBody.Length > 0)
-        {
-            request.Content = new StringContent(jsonBody, Encoding.UTF8, WellKnownMediaTypes.Application.Json);
-        }
-        else
-        {
-            request.Content = new ByteArrayContent([]);
-        }
-
-        foreach(KeyValuePair<string, string> header in headers)
-        {
-            _ = request.Headers.TryAddWithoutValidation(header.Key, header.Value);
-        }
-
-        using HttpResponseMessage response = await httpClient.SendAsync(
-            request, cancellationToken).ConfigureAwait(false);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        string? contentType = response.Content.Headers.ContentType?.MediaType;
-
-        return ((int)response.StatusCode, body, contentType);
-    }
 }

@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 
 namespace Verifiable.Tests.Tpm;
@@ -130,13 +131,13 @@ internal sealed class TpmPolicyDigestTests
     }
 
     /// <summary>
-    /// Verifies that <see cref="TpmPolicyDigest.ExtendForOr"/> over <c>[PolicyA, PolicyC]</c> reproduces the
+    /// Verifies that <see cref="TpmPolicyDigest.ExtendForOr(IReadOnlyList{ReadOnlyMemory{byte}}, TpmAlgIdConstants, Span{byte}, BaseMemoryPool)"/> over <c>[PolicyA, PolicyC]</c> reproduces the
     /// published "PolicyB" value (TCG EK Credential Profile, Annex B.6.5, Table 36) — a spec-published KAT for
     /// the OR fold itself (Part 3, clause 23.6, eqs. (17)(18)), as opposed to <see cref="PolicyAuthorizeNvFoldMatchesThePublishedPolicyC"/>,
     /// which pins the one-off hash that produces one of the OR fold's two inputs.
     /// </summary>
     /// <remarks>
-    /// <see cref="TpmPolicyDigest.ExtendForOr"/>'s signature carries no "current policyDigest" parameter at all —
+    /// <see cref="TpmPolicyDigest.ExtendForOr(IReadOnlyList{ReadOnlyMemory{byte}}, TpmAlgIdConstants, Span{byte}, BaseMemoryPool)"/>'s signature carries no "current policyDigest" parameter at all —
     /// unlike every other <c>Extend*</c> method here — because clause 23.6's Note 2 zero-reset semantics ("reset
     /// policyDigest to the Zero Digest" before hashing) are unconditional for PolicyOR. The omission itself is
     /// the observable proof: there is no way for a caller to make the OR fold depend on a prior digest, so this
@@ -219,6 +220,70 @@ internal sealed class TpmPolicyDigestTests
                 expected.SequenceEqual(destination[..written]),
                 $"ExtendForCommandCode must match an independent SHA-256 transcription for code '{code}'.");
         }
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForCommandCode"/> (Part 3, clause 23.11 TPM2_PolicyCommandCode, eq.
+    /// (26)) under a SHA-384 policy session against an in-test SHA-384 transcription of <c>H(current ||
+    /// TPM_CC_PolicyCommandCode || code)</c>. <see cref="TpmPolicyDigest"/> resolves its hash through the
+    /// registered synchronous seam (<see cref="CryptographicKeyEvents.ComputeDigest(ReadOnlySpan{byte}, int, Tag, BaseMemoryPool, string?)"/>),
+    /// which selects the registered <see cref="HashFunctionDelegate"/> by type and qualifier alone and ignores the
+    /// <see cref="Tag"/> it is also given; the qualifier for a non-default algorithm must therefore reach the
+    /// seam explicitly, or this fold silently resolves the unqualified SHA-256 registration instead of SHA-384 —
+    /// this test's SHA-384 oracle fails on both length and value against that substitution.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForCommandCodeMatchesAnIndependentSha384Transcription()
+    {
+        int size = TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA384);
+        Span<byte> current = stackalloc byte[size];
+        Span<byte> destination = stackalloc byte[size];
+
+        int written = TpmPolicyDigest.ExtendForCommandCode(
+            current, TpmCcConstants.TPM_CC_PolicyPCR, TpmAlgIdConstants.TPM_ALG_SHA384, destination, BaseMemoryPool.Shared);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + sizeof(uint)];
+        current.CopyTo(transcription);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyCommandCode);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[(current.Length + sizeof(uint))..], (uint)TpmCcConstants.TPM_CC_PolicyPCR);
+
+        Span<byte> expected = stackalloc byte[size];
+        _ = SHA384.HashData(transcription, expected);
+
+        Assert.AreEqual(size, written, "SHA-384 policyDigest is 48 octets.");
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForCommandCode under a SHA-384 policy session must match an independent SHA-384 transcription, not the unqualified SHA-256 registration.");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForCommandCode"/> (Part 3, clause 23.11 TPM2_PolicyCommandCode, eq.
+    /// (26)) under a SHA-512 policy session against an in-test SHA-512 transcription of <c>H(current ||
+    /// TPM_CC_PolicyCommandCode || code)</c>, for the same reason <see cref="ExtendForCommandCodeMatchesAnIndependentSha384Transcription"/>
+    /// pins SHA-384: the registered-seam qualifier must reach the hash resolution for SHA-512 too.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForCommandCodeMatchesAnIndependentSha512Transcription()
+    {
+        int size = TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA512);
+        Span<byte> current = stackalloc byte[size];
+        Span<byte> destination = stackalloc byte[size];
+
+        int written = TpmPolicyDigest.ExtendForCommandCode(
+            current, TpmCcConstants.TPM_CC_PolicyPCR, TpmAlgIdConstants.TPM_ALG_SHA512, destination, BaseMemoryPool.Shared);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + sizeof(uint)];
+        current.CopyTo(transcription);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyCommandCode);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[(current.Length + sizeof(uint))..], (uint)TpmCcConstants.TPM_CC_PolicyPCR);
+
+        Span<byte> expected = stackalloc byte[size];
+        _ = SHA512.HashData(transcription, expected);
+
+        Assert.AreEqual(size, written, "SHA-512 policyDigest is 64 octets.");
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForCommandCode under a SHA-512 policy session must match an independent SHA-512 transcription, not the unqualified SHA-256 registration.");
     }
 
     /// <summary>

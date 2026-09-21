@@ -554,7 +554,7 @@ internal sealed class SdCwtVpTokenVerificationTests
 
     /// <summary>
     /// Wallet side for the typed credential: issues the shared SD-CWT PID
-    /// (<see cref="SdCwtVpFixture.IssueSdCwtTokenAsync"/> — <c>iss</c>, <c>vct</c>, the holder's
+    /// (<see cref="SdCwtVpFixture.IssueSdCwtTokenAsync(FakeTimeProvider, PrivateKeyMemory, PublicKeyMemory, CancellationToken)"/> — <c>iss</c>, <c>vct</c>, the holder's
     /// <c>cnf</c> COSE_Key and the three business claims), then selects <c>given_name</c> +
     /// <c>family_name</c> and signs the Key Binding Token over them.
     /// </summary>

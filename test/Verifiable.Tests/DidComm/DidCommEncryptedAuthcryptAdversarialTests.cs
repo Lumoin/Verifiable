@@ -16,7 +16,7 @@ namespace Verifiable.Tests.DidComm;
 
 /// <summary>
 /// Adversarial, fail-closed tests for the DIDComm v2.1 authcrypt (ECDH-1PU) unpack
-/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>).
+/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, Verifiable.Cryptography.Aead.AuthenticatedKeyAgreementDecryptDelegate, Verifiable.Cryptography.Aead.AuthenticatedKeyDerivationDelegate, Verifiable.Cryptography.Aead.KeyUnwrapDelegate, Verifiable.Cryptography.Aead.AeadDecryptDelegate, BaseMemoryPool, JwtClaimsDeserializer?, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}?, DidCommEncryptedHeaderPolicy, System.Threading.CancellationToken)"/>).
 /// Each test packs a valid X25519 / A256CBC-HS512 authcrypt message, tampers or rebuilds the wire envelope,
 /// and asserts that unpack returns <see cref="DidCommEncryptedUnpackResult.IsUnpacked"/> = <see langword="false"/>
 /// with the specific <see cref="DidCommDecryptionError"/> — and that a tampered ciphertext/tag never

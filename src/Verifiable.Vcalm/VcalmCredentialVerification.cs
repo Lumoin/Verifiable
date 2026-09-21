@@ -1,3 +1,4 @@
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
@@ -47,6 +48,16 @@ public sealed record VcalmCredentialVerification
     /// </summary>
     public ContextResolverDelegate? ContextResolver { get; init; }
 
+    /// <summary>
+    /// The deployment's known <c>@context</c>: the exact ordered set of entries a credential or
+    /// presentation this verifier accepts must carry, checked after the proof verifies per
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data Integrity
+    /// 1.0 §2.4.1 Validating Contexts</see> and threaded to
+    /// <see cref="CredentialDataIntegrityExtensions.VerifyAsync"/> /
+    /// <see cref="PresentationDataIntegrityExtensions.VerifyAsync"/> unchanged.
+    /// </summary>
+    public required Context KnownContext { get; init; }
+
     /// <summary>Decodes a proof value string (e.g. base58btc multibase) into the signature bytes.</summary>
     public required ProofValueDecoderDelegate DecodeProofValue { get; init; }
 
@@ -86,7 +97,7 @@ public sealed record VcalmCredentialVerification
     /// Parses an ecdsa-sd-2023 DERIVED proof value (a <c>u</c>-prefixed base64url multibase wrapping a
     /// CBOR <c>0xd9 0x5d 0x01</c>-tagged <c>[baseSignature, ephemeralPublicKey, signatures, labelMap,
     /// mandatoryIndexes]</c>) into its components — the parser
-    /// <see cref="CredentialEcdsaSd2023Extensions.VerifyDerivedProofAsync"/> consumes
+    /// <c>DataIntegritySecuredCredential.VerifyDerivedProofAsync</c> consumes
     /// (W3C VC-DI-ECDSA §3.4.7 <c>parseDerivedProofValue</c>). When unset, an ecdsa-sd-2023 derived
     /// credential cannot be selectively-disclosure-verified and falls through to the generic Data
     /// Integrity path (which reports it unverifiable) — non-SD deployments are unaffected.
@@ -95,7 +106,7 @@ public sealed record VcalmCredentialVerification
 
     /// <summary>
     /// The ECDSA verification function the ecdsa-sd-2023 derived-proof verifier
-    /// (<see cref="CredentialEcdsaSd2023Extensions.VerifyDerivedProofAsync"/>) calls to check the
+    /// (<c>DataIntegritySecuredCredential.VerifyDerivedProofAsync</c>) calls to check the
     /// issuer's base signature and each disclosed-statement signature (W3C VC-DI-ECDSA §3.4.8
     /// <c>verifyDerivedProof</c>). Required alongside <see cref="ParseDerivedProof"/> for SD
     /// verification; <see langword="null"/> on a non-SD deployment.

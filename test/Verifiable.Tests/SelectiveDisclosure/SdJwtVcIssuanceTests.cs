@@ -13,7 +13,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.SelectiveDisclosure;
 
 /// <summary>
-/// Tests for VC-specific SD-JWT issuance using <see cref="SdJwtIssuance.IssueAsync"/>
+/// Tests for VC-specific SD-JWT issuance using <see cref="SdJwtIssuance.IssueAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/>
 /// with <c>vc+sd-jwt</c> media type.
 /// </summary>
 [TestClass]
@@ -100,7 +100,7 @@ internal sealed class SdJwtVcIssuanceTests
 
     /// <summary>
     /// Serializes a VC to JSON, encodes into a <see cref="BaseMemoryPool"/> rental,
-    /// and issues via <see cref="SdJwtIssuance.IssueAsync"/> with <c>vc+sd-jwt</c> media type.
+    /// and issues via <see cref="SdJwtIssuance.IssueAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/> with <c>vc+sd-jwt</c> media type.
     /// </summary>
     private async ValueTask<SdToken<string>> SignCredentialAsync(PrivateKeyMemory privateKey)
     {

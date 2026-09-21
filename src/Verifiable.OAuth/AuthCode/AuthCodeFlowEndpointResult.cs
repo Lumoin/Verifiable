@@ -4,7 +4,7 @@ using Verifiable.Core.Assessment;
 namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
-/// The outcome kind returned by an <see cref="AuthCodeFlowEndpoint"/> handler.
+/// The outcome kind returned by an <c>AuthCodeFlowEndpoint</c> handler.
 /// </summary>
 public enum AuthCodeFlowEndpointOutcome
 {
@@ -35,7 +35,7 @@ public enum AuthCodeFlowEndpointOutcome
 
 
 /// <summary>
-/// The framework-agnostic result returned by an <see cref="AuthCodeFlowEndpoint"/> handler.
+/// The framework-agnostic result returned by an <c>AuthCodeFlowEndpoint</c> handler.
 /// </summary>
 /// <remarks>
 /// The caller inspects <see cref="Outcome"/> and maps to the appropriate HTTP response.
@@ -76,8 +76,8 @@ public sealed class AuthCodeFlowEndpointResult
 
     /// <summary>
     /// The individual validation claims produced during callback validation.
-    /// Populated when <see cref="ValidateCallbackDelegate"/> was invoked — i.e., for
-    /// all outcomes of <see cref="HandleCallbackAsync"/>. Empty for other handlers.
+    /// Populated when the callback <see cref="ClaimIssuer{TInput}"/> was invoked — i.e., for
+    /// all outcomes of <see cref="AuthCodeClient.HandleCallbackAsync(Verifiable.OAuth.Client.ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>. Empty for other handlers.
     /// </summary>
     /// <remarks>
     /// Callers can inspect this list to feed per-check outcomes into monitoring,

@@ -15,7 +15,7 @@ namespace Verifiable.Tests.DidComm;
 
 /// <summary>
 /// Anchors the DIDComm v2.1 nested <c>authcrypt(sign(plaintext))</c> UNPACK path
-/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>)
+/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, Verifiable.Cryptography.Aead.AuthenticatedKeyAgreementDecryptDelegate, Verifiable.Cryptography.Aead.AuthenticatedKeyDerivationDelegate, Verifiable.Cryptography.Aead.KeyUnwrapDelegate, Verifiable.Cryptography.Aead.AeadDecryptDelegate, BaseMemoryPool, JwtClaimsDeserializer?, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}?, DidCommEncryptedHeaderPolicy, System.Threading.CancellationToken)"/>)
 /// to the DIDComm Messaging v2.1 Appendix C.3 example 5 vector: the Appendix C.1 plaintext signed with
 /// EdDSA (Alice's <c>key-1</c>) and then authcrypted with ECDH-1PU over NIST P-256 and A256CBC-HS512,
 /// sent from <c>did:example:alice#key-p256-1</c> (the <c>skid</c>) to two of Bob's P-256

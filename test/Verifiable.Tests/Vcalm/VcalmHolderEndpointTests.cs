@@ -46,7 +46,7 @@ namespace Verifiable.Tests.Vcalm;
 /// </para>
 /// <para>
 /// The §3.5.1 derive money-shot verifies the derived credential through the Core
-/// <see cref="CredentialEcdsaSd2023Extensions.VerifyDerivedProofAsync"/> surface (the correct verifier
+/// <see cref="CredentialEcdsaSd2023Extensions.VerifyDerivedProofAsync(DataIntegritySecuredCredential, PublicKeyMemory, VerificationDelegate, ParseDerivedProofDelegate, CanonicalizationDelegate, ContextResolverDelegate?, Context, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/> surface (the correct verifier
 /// for an ecdsa-sd-2023 DERIVED proof, whose base/derived signature reconstruction the generic Data
 /// Integrity verifier the V-1 <c>/credentials/verify</c> endpoint composes does not implement). The
 /// §3.5.2 create-presentation money-shot drives the produced presentation straight into the V-1
@@ -90,6 +90,8 @@ internal sealed class VcalmHolderEndpointTests
 
     private static ContextResolverDelegate ContextResolver { get; } =
         CanonicalizationTestUtilities.CreateTestContextResolver();
+
+    private static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, Context.CredentialsExamples20);
 
     //JCS is context-free and produces a non-empty canonical form for a minimal presentation; the
     //§3.5.2 presentation tests sign with eddsa-jcs-2022.
@@ -154,7 +156,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         SdIssuerContext sd = CreateSdIssuerKeys();
-        string segment = RegisterHolder(app);
+        string segment = await RegisterHolderAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential baseCredential = await CreateBaseProofedCredentialAsync(sd).ConfigureAwait(false);
         string deriveBody = "{\"verifiableCredential\":" + SerializeCredential(baseCredential)
@@ -168,7 +170,7 @@ internal sealed class VcalmHolderEndpointTests
             "The derived credential carries a derived ecdsa-sd-2023 proof.");
 
         //The derived VC verifies through the correct ecdsa-sd-2023 derived-proof verifier (the V-1
-        ///credentials/verify endpoint composes the generic Data Integrity verifier, which does not
+        //credentials/verify endpoint composes the generic Data Integrity verifier, which does not
         //reconstruct an SD derived proof — the SD verifier is the conformant verifier here).
         DataIntegritySecuredCredential received = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(
             derivedRoot.GetRawText(), JsonOptions)!;
@@ -178,6 +180,7 @@ internal sealed class VcalmHolderEndpointTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -206,11 +209,11 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        VerifierKeyMaterial materialA = app.RegisterClient(
-            "https://derive-a.client.test", new Uri("https://derive-a.client.test"), HolderCapabilities);
+        VerifierKeyMaterial materialA = await app.RegisterClientAsync(
+            "https://derive-a.client.test", new Uri("https://derive-a.client.test"), HolderCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(materialA);
-        VerifierKeyMaterial materialB = app.RegisterClient(
-            "https://derive-b.client.test", new Uri("https://derive-b.client.test"), HolderCapabilities);
+        VerifierKeyMaterial materialB = await app.RegisterClientAsync(
+            "https://derive-b.client.test", new Uri("https://derive-b.client.test"), HolderCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(materialB);
 
         string segmentA = materialA.Registration.TenantId.Value;
@@ -222,8 +225,10 @@ internal sealed class VcalmHolderEndpointTests
         DataIntegritySecuredCredential baseA = await CreateBaseProofedCredentialAsync(CreateSdIssuerKeys(), VmA).ConfigureAwait(false);
         DataIntegritySecuredCredential baseB = await CreateBaseProofedCredentialAsync(CreateSdIssuerKeys(), VmB).ConfigureAwait(false);
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         //Per-tenant derive configuration resolved off the dispatcher-stamped tenant.
         Dictionary<string, VcalmCredentialDerivation> derivationBySegment = new(StringComparer.Ordinal)
@@ -231,8 +236,11 @@ internal sealed class VcalmHolderEndpointTests
             [segmentA] = BuildDerivationConfig(),
             [segmentB] = BuildDerivationConfig()
         };
-        vcalm.ResolveVcalmCredentialDerivationAsync = (context, _) =>
-            ValueTask.FromResult(derivationBySegment.GetValueOrDefault(DeriveTenantSegment(context)));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmCredentialDerivationAsync = (context, _) =>
+                ValueTask.FromResult(derivationBySegment.GetValueOrDefault(DeriveTenantSegment(context)));
+        }).ConfigureAwait(false);
 
         using JsonDocument derivedA = await PostDeriveAsync(app, segmentA, DeriveBody(baseA), expectedStatus: 201).ConfigureAwait(false);
         using JsonDocument derivedB = await PostDeriveAsync(app, segmentB, DeriveBody(baseB), expectedStatus: 201).ConfigureAwait(false);
@@ -260,7 +268,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         SdIssuerContext sd = CreateSdIssuerKeys();
-        string segment = RegisterHolder(app);
+        string segment = await RegisterHolderAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential baseCredential = await CreateBaseProofedCredentialAsync(sd).ConfigureAwait(false);
         string deriveBody = "{\"verifiableCredential\":" + SerializeCredential(baseCredential)
@@ -280,7 +288,7 @@ internal sealed class VcalmHolderEndpointTests
     public async Task DeriveNonSdCredentialYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterHolder(app);
+        string segment = await RegisterHolderAsync(app).ConfigureAwait(false);
 
         //A credential with an ordinary (non-SD) eddsa proof: the converter upcasts it to the secured
         //subtype, so it parses, but it is not a derivable ecdsa-sd-2023 base credential.
@@ -306,7 +314,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder, alsoVerifier: true);
+        string segment = await RegisterHolderAsync(app, holder, alsoVerifier: true).ConfigureAwait(false);
 
         const string Challenge = "challenge-roundtrip-123";
         const string Domain = "verifier.example";
@@ -349,7 +357,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
         string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson + ",\"options\":{\"domain\":\"verifier.example\"}}";
@@ -373,7 +381,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
         string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson
@@ -407,7 +415,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
         const string Domain = "verifier.example";
         string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
@@ -434,7 +442,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
         const string PresentationId = "urn:uuid:presentation-crud-1";
         string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation, PresentationId);
@@ -482,7 +490,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
         ServerHttpResponse notFound = await app.DispatchVcalmPresentationByIdAsync(
             segment, "GET", "urn:uuid:never-created", [], TestContext.CancellationToken).ConfigureAwait(false);
@@ -500,7 +508,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
         string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson
@@ -523,7 +531,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterHolder(app, holder);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
         byte[] bytes = Encoding.UTF8.GetBytes("{\"presentation\":{}}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
@@ -537,114 +545,146 @@ internal sealed class VcalmHolderEndpointTests
 
     //Registers a tenant with the VcalmHolder capability and wires the parse seams plus the holder's
     //selective-disclosure derive and presentation-signing configurations and the presentation store.
-    private string RegisterHolder(TestHostShell app)
+    private async Task<string> RegisterHolderAsync(TestHostShell app)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, HolderCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, HolderCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        WireHolderSeams(app, presentationSigning: null);
+        await WireHolderSeamsAsync(app, presentationSigning: null).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }
 
 
-    private string RegisterHolder(TestHostShell app, HolderSigningContext holder, bool alsoVerifier = false)
+    /// <summary>
+    /// Registers a holder with the capabilities and delegates needed by the presentation cases.
+    /// </summary>
+    private async Task<string> RegisterHolderAsync(TestHostShell app, HolderSigningContext holder, bool alsoVerifier = false)
     {
-        VerifierKeyMaterial material = app.RegisterClient(
-            ClientId, ClientBaseUri, alsoVerifier ? HolderAndVerifierCapabilities : HolderCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(
+            ClientId, ClientBaseUri, alsoVerifier ? HolderAndVerifierCapabilities : HolderCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        WireHolderSeams(app, holder.Signing);
+        await WireHolderSeamsAsync(app, holder.Signing).ConfigureAwait(false);
 
         if(alsoVerifier)
         {
             //The §3.5.2 round-trip POSTs the created presentation to /presentations/verify on the same
             //tenant; the verifier composes the JCS canonicalizer matching the presentation's suite.
-            app.Server.Vcalm().VcalmCredentialVerification = new VcalmCredentialVerification
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
             {
-                Resolver = KeyDidResolverSeam,
-                Canonicalize = JcsCanonicalizer,
-                ContextResolver = ContextResolver,
-                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-                SerializeCredential = SerializeCredential,
-                SerializePresentation = SerializePresentation,
-                SerializeProofOptions = SerializeProofOptions,
-                Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-                MemoryPool = Pool
-            };
+                candidateIntegration.VcalmCredentialVerification = new VcalmCredentialVerification
+                {
+                    Resolver = KeyDidResolverSeam,
+                    Canonicalize = JcsCanonicalizer,
+                    ContextResolver = ContextResolver,
+                    KnownContext = VcalmWireFixtures.PresentationKnownContext,
+                    DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                    SerializeCredential = SerializeCredential,
+                    SerializePresentation = SerializePresentation,
+                    SerializeProofOptions = SerializeProofOptions,
+                    Decoder = TestSetup.Base58Decoder,
+                    ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                    MemoryPool = Pool
+                };
+            }).ConfigureAwait(false);
         }
 
         return material.Registration.TenantId.Value;
     }
 
 
-    private void WireHolderSeams(TestHostShell app, VcalmPresentationSigning? presentationSigning)
+    /// <summary>
+    /// Installs credential derivation and presentation storage delegates on the holder wiring.
+    /// </summary>
+    private async Task WireHolderSeamsAsync(TestHostShell app, VcalmPresentationSigning? presentationSigning)
     {
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         //§3.5.1 derive: the ecdsa-sd-2023 selective-disclosure seams over the RDFC canonicalizer.
-        app.Server.Vcalm().VcalmCredentialDerivation = new VcalmCredentialDerivation
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Canonicalize = RdfcCanonicalizer,
-            ContextResolver = ContextResolver,
-            PartitionStatements = JsonLdSelection.PartitionStatements,
-            SelectFragments = JsonLdSelection.SelectFragments,
-            ParseBaseProof = EcdsaSd2023CborSerializer.ParseBaseProof,
-            SerializeDerivedProof = EcdsaSd2023CborSerializer.SerializeDerivedProof,
-            SerializeCredential = SerializeCredential,
-            DeserializeCredential = DeserializeCredential,
-            Encoder = TestSetup.Base64UrlEncoder,
-            Decoder = TestSetup.Base64UrlDecoder,
-            MemoryPool = Pool
-        };
+            candidateIntegration.VcalmCredentialDerivation = new VcalmCredentialDerivation
+            {
+                Canonicalize = RdfcCanonicalizer,
+                ContextResolver = ContextResolver,
+                PartitionStatements = JsonLdSelection.PartitionStatements,
+                SelectFragments = JsonLdSelection.SelectFragments,
+                ParseBaseProof = EcdsaSd2023CborSerializer.ParseBaseProof,
+                SerializeDerivedProof = EcdsaSd2023CborSerializer.SerializeDerivedProof,
+                SerializeCredential = SerializeCredential,
+                DeserializeCredential = DeserializeCredential,
+                Encoder = TestSetup.Base64UrlEncoder,
+                Decoder = TestSetup.Base64UrlDecoder,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
 
         if(presentationSigning is not null)
         {
-            app.Server.Vcalm().VcalmPresentationSigning = presentationSigning;
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.VcalmPresentationSigning = presentationSigning;
+            }).ConfigureAwait(false);
         }
 
         //§3.5.3 / §3.5.4 / §3.5.5 storage seams over the in-memory store.
-        app.Server.Vcalm().StoreVcalmPresentationAsync = (presentationId, json, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            PresentationStore[presentationId] = new VcalmStoredPresentation
+            candidateIntegration.StoreVcalmPresentationAsync = (presentationId, json, _, _) =>
             {
-                PresentationId = presentationId,
-                VerifiablePresentationJson = json
-            };
-
-            return ValueTask.CompletedTask;
-        };
-
-        app.Server.Vcalm().ListVcalmPresentationsAsync = (_, _) =>
-        {
-            List<string> presentations = [];
-            foreach(VcalmStoredPresentation stored in PresentationStore.Values)
-            {
-                if(!stored.IsDeleted)
+                PresentationStore[presentationId] = new VcalmStoredPresentation
                 {
-                    presentations.Add(stored.VerifiablePresentationJson);
-                }
-            }
+                    PresentationId = presentationId,
+                    VerifiablePresentationJson = json
+                };
 
-            return ValueTask.FromResult<IReadOnlyList<string>>(presentations);
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
-        app.Server.Vcalm().LoadVcalmPresentationAsync = (presentationId, _, _) =>
-            ValueTask.FromResult(PresentationStore.GetValueOrDefault(presentationId));
-
-        app.Server.Vcalm().DeleteVcalmPresentationAsync = (presentationId, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            if(!PresentationStore.TryGetValue(presentationId, out VcalmStoredPresentation? existing) || existing.IsDeleted)
+            candidateIntegration.ListVcalmPresentationsAsync = (_, _) =>
             {
-                return ValueTask.FromResult(false);
-            }
+                List<string> presentations = [];
+                foreach(VcalmStoredPresentation stored in PresentationStore.Values)
+                {
+                    if(!stored.IsDeleted)
+                    {
+                        presentations.Add(stored.VerifiablePresentationJson);
+                    }
+                }
 
-            //§3.5.5 soft delete (the 202 default): retain a tombstone so the §3.5.4 GET answers 410.
-            PresentationStore[presentationId] = existing with { IsDeleted = true };
+                return ValueTask.FromResult<IReadOnlyList<string>>(presentations);
+            };
+        }).ConfigureAwait(false);
 
-            return ValueTask.FromResult(true);
-        };
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadVcalmPresentationAsync = (presentationId, _, _) =>
+                ValueTask.FromResult(PresentationStore.GetValueOrDefault(presentationId));
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.DeleteVcalmPresentationAsync = (presentationId, _, _) =>
+            {
+                if(!PresentationStore.TryGetValue(presentationId, out VcalmStoredPresentation? existing) || existing.IsDeleted)
+                {
+
+                    return ValueTask.FromResult(false);
+                }
+
+                //§3.5.5 soft delete (the 202 default): retain a tombstone so the §3.5.4 GET answers 410.
+                PresentationStore[presentationId] = existing with { IsDeleted = true };
+
+                return ValueTask.FromResult(true);
+            };
+        }).ConfigureAwait(false);
     }
 
 

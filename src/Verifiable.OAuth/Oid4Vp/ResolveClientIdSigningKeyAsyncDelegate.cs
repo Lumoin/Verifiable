@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// The threaded per-operation <see cref="ExchangeContext"/>. Carries the
 /// per-tenant trust material the handler evaluates against (placed by the
 /// application via <see cref="Oid4VpExchangeContextExtensions"/>) and the
-/// <see cref="ExchangeContextExtensions.ValidationTime"/> at which to evaluate
+/// <see cref="ExchangeContextExtensions.extension(ExchangeContext).ValidationTime"/> at which to evaluate
 /// trust-material validity, stamped by the operation driver. Threading the
 /// material through the context — rather than capturing it — lets one stateless
 /// resolver serve every tenant in a recursive multi-tenant deployment.
@@ -29,7 +29,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <param name="jarHeader">
 /// The JAR's JWS protected header. Different prefixes consume different
 /// header parameters: <c>x5c</c> for X.509,
-/// <see cref="WellKnownFederationClaimNames.TrustChain"/> for OpenID
+/// <see cref="Verifiable.OAuth.Federation.WellKnownFederationClaimNames.TrustChain"/> for OpenID
 /// Federation, <see cref="WellKnownJoseHeaderNames.Jwt"/> for verifier
 /// attestation. <c>kid</c> may also be consulted when the prefix's
 /// underlying resolver picks among multiple candidate keys.

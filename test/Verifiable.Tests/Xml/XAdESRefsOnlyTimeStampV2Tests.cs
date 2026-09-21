@@ -51,7 +51,7 @@ internal sealed class XAdESRefsOnlyTimeStampV2Tests
         Assert.IsTrue(isRead, $"Must read but was refused with {error.Failure}.");
         using(value)
         {
-            Assert.HasCount(0, value!.TimeStamp.Includes);
+            Assert.IsEmpty(value!.TimeStamp.Includes);
         }
     }
 
@@ -129,3 +129,4 @@ internal sealed class XAdESRefsOnlyTimeStampV2Tests
         }
     }
 }
+

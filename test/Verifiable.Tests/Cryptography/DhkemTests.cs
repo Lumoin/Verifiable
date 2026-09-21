@@ -97,7 +97,7 @@ internal sealed class DhkemTests
     /// identifier into every labeled HKDF call. Re-deriving the Appendix A.3.1 vector's <c>dh</c>/
     /// <c>kem_context</c> under a foreign <c>kem_id</c> (0x0011, DHKEM(P-384, HKDF-SHA384)'s
     /// identifier per Section 7.1, Table 2) must land on a different shared secret than the vector's
-    /// own 0x0010 suite - proving <paramref name="kemId"/> genuinely participates in derivation
+    /// own 0x0010 suite - proving <c>kem_id</c> genuinely participates in derivation
     /// rather than being cosmetic.
     /// </summary>
     [TestMethod]

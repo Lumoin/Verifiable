@@ -35,7 +35,7 @@ internal sealed class CtapUserPresenceTests
     /// <summary>
     /// A poll issued at EXACTLY 10 seconds since the wait was armed still finds the wait pending — the
     /// :2840 MUST ("MUST be at least 10 seconds") holds behaviorally, since a configured duration below
-    /// 10 seconds would already have timed out here. <see cref="CtapAuthenticatorTransitions.UserActionTimeoutDuration"/>
+    /// 10 seconds would already have timed out here. <c>CtapAuthenticatorTransitions.UserActionTimeoutDuration</c>
     /// is <c>private</c> (mirroring <c>GetNextAssertionTimerDuration</c>'s own posture — see
     /// <c>CtapAuthenticatorGetNextAssertionTests</c>'s identical boundary-test style for its 30-second
     /// timer), so this is the direct substitute for a compile-time assertion on the constant: an

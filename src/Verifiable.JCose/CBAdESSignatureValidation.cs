@@ -98,7 +98,7 @@ public delegate PublicKeyMemory? CBAdESResolveCounterSignaturePublicKeyDelegate(
 /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-4.4">RFC 9052 §4.4</see>) the parse step read off
 /// the wire — and this class builds the Sig_structure from those bytes directly, exactly like
 /// <see cref="Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, CancellationToken)"/>/
-/// <see cref="Verifiable.Cbor.CoseVerification"/> do for plain COSE_Sign1. The identical rationale extends to
+/// <c>Verifiable.Cbor.CoseVerification</c> do for plain COSE_Sign1. The identical rationale extends to
 /// <see cref="CBAdESSign1ParseResult.RawUnsignedHeaders"/>: the <c>sigRTst</c>/
 /// <c>rfsTst</c> message-imprint builders consume THOSE raw bytes, never a re-encoding of the decoded
 /// <see cref="CBAdESUnsignedHeaders"/> model, for the same read/write-asymmetry reason.
@@ -727,6 +727,11 @@ public static class CBAdESSignatureValidation
     /// version 2 countersignature. OPTIONAL — see the B-B-only... (registry-resolved)
     /// overload's remarks for the full opt-in contract.
     /// </param>
+    /// <param name="decodeCounterSignatureProtectedHeader">
+    /// Decodes a countersignature's protected header bytes into a <see cref="CBAdESProtectedHeaders"/> for
+    /// re-deriving its Countersign_structure. OPTIONAL — required only when
+    /// <paramref name="parseCounterSignatureHeaderValue"/> is supplied.
+    /// </param>
     /// <param name="buildCountersignStructure">
     /// Builds the RFC 9338 §3.3 Countersign_structure ToBeSigned bytes for cryptographic verification.
     /// OPTIONAL.
@@ -960,6 +965,16 @@ public static class CBAdESSignatureValidation
                                     violations,
                                     pool,
                                     cancellationToken).ConfigureAwait(false);
+                                break;
+
+                            case CBAdESUnsignedHeaderElementReferences:
+                            case CBAdESUnsignedHeaderElementValidationData:
+                            case CBAdESUnsignedHeaderElementSignaturePolicyStore:
+                            case CBAdESUnsignedHeaderElementCertificateChain:
+                            case CBAdESUnsignedHeaderElementUnknown:
+                                //Carries no timestamp token this verification loop opens or verifies; an
+                                //explicit no-op arm preserving this switch's original silent fall-through for
+                                //every other kind.
                                 break;
                         }
                     }
@@ -1687,17 +1702,19 @@ public static class CBAdESSignatureValidation
 
         return tokenInfo.HasEmbeddedCertificates;
 
-        /// <summary>
-        /// Names the actual condition <see cref="CBAdESLevelRules.IsTimestampTokenSignerCertificateResolvedAsync"/>
-        /// found unresolvable, so <see cref="CBAdESTimestampSignerCertificateCoverageViolation"/>
-        /// never carries a generic message a reader cannot act on.
-        /// </summary>
-        /// <param name="tokenInfo">The token the coverage check ran against.</param>
-        /// <returns>A human-readable statement of why the signer certificate did not resolve.</returns>
+        // Names the actual condition CBAdESLevelRules.IsTimestampTokenSignerCertificateResolvedAsync
+        // found unresolvable, so CBAdESTimestampSignerCertificateCoverageViolation
+        // never carries a generic message a reader cannot act on.
+        // tokenInfo: the token the coverage check ran against.
+        // Returns a human-readable statement of why the signer certificate did not resolve.
         static string DescribeUnresolvedSignerCondition(TimestampTokenInfo tokenInfo) => tokenInfo.EmbeddedMaterialStatus switch
         {
             CmsEmbeddedMaterialStatus.Malformed =>
                 "the token's own embedded certificate/CRL material could not be read (status: Malformed), so its signer identity cannot be confirmed.",
+            CmsEmbeddedMaterialStatus.NotRead =>
+                "the token's own signer identity matches neither an embedded certificate nor any valData certificate candidate.",
+            CmsEmbeddedMaterialStatus.Read =>
+                "the token's own signer identity matches neither an embedded certificate nor any valData certificate candidate.",
             _ =>
                 "the token's own signer identity matches neither an embedded certificate nor any valData certificate candidate."
         };
@@ -2285,6 +2302,10 @@ public static class CBAdESSignatureValidation
         (string componentLabel, string clauseCitation) = consumingComponent switch
         {
             CBAdESTimestampTokenBindingKind.ArchiveTimestamp => ("arcTst", "clause 5.3.5.3 steps 6/7"),
+            CBAdESTimestampTokenBindingKind.SignatureTimestamp => ("adoTst", "clause 5.2.6"),
+            CBAdESTimestampTokenBindingKind.PayloadTimestamp => ("adoTst", "clause 5.2.6"),
+            CBAdESTimestampTokenBindingKind.SignatureAndReferencesTimestamp => ("adoTst", "clause 5.2.6"),
+            CBAdESTimestampTokenBindingKind.ReferencesTimestamp => ("adoTst", "clause 5.2.6"),
             _ => ("adoTst", "clause 5.2.6")
         };
 
@@ -2365,14 +2386,14 @@ public static class CBAdESSignatureValidation
     /// <summary>
     /// Determines whether <paramref name="exception"/> represents malformed or non-conformant untrusted wire
     /// bytes that <see cref="VerifyStructureAndSignatureAsync"/> catches to fail closed, mirroring
-    /// <see cref="Verifiable.Cbor.CoseVerification"/>'s own classifier.
+    /// <c>Verifiable.Cbor.CoseVerification</c>'s own classifier.
     /// </summary>
     /// <remarks>
     /// <see cref="ParseCBAdESSign1Delegate"/>'s own documented contract already promises never to throw for
     /// malformed input (its <see cref="CBAdESSign1ParseResult.IsSuccess"/> <see langword="false"/> arm covers
     /// that case), so this catch is belt-and-suspenders defense against a non-conformant implementation of
     /// that delegate, not a documented necessity. <c>Lumoin.Veritas.Cbor.CborException</c> — the type
-    /// <see cref="Verifiable.Cbor.CoseVerification"/>'s own classifier includes — is deliberately absent here:
+    /// <c>Verifiable.Cbor.CoseVerification</c>'s own classifier includes — is deliberately absent here:
     /// <c>Verifiable.JCose</c> does not reference the CBOR reader package at all (the reference graph runs
     /// <c>Verifiable.Cbor</c> → <c>Verifiable.JCose</c>, never the other way), so this classifier can only name
     /// exception types this project can actually see.
@@ -2394,7 +2415,7 @@ public static class CBAdESSignatureValidation
     /// <strong>The B-B/level rule bodies run once, reused, per signer — never forked.</strong> Each signer is
     /// checked through the IDENTICAL <see cref="CBAdESHeaderRules.Check"/> and <see cref="CBAdESLevelRules.Check"/>
     /// calls the <c>COSE_Sign1</c> path above runs once for the whole message, mirroring
-    /// <see cref="SignCoseSignAsync"/>'s own creation-side per-signer reuse.
+    /// <see cref="CBAdESSignatureCreation.SignCoseSignAsync"/>'s own creation-side per-signer reuse.
     /// </para>
     /// <para>
     /// <strong><c>sigD</c> is per-signer, over the ONE shared body-layer payload.</strong> RFC
@@ -2714,7 +2735,7 @@ public static class CBAdESSignatureValidation
 /// </summary>
 /// <remarks>
 /// <strong>Ownership on success.</strong> <see cref="Headers"/> and <see cref="UnsignedHeaders"/> transfer to
-/// whichever <see cref="CBAdESValidationResult"/> factory the caller ultimately calls (<see cref="Dispose"/> on
+/// whichever <see cref="CBAdESValidationResult"/> factory the caller ultimately calls (<see cref="CBAdESValidationResult.Dispose"/> on
 /// the <em>failure</em> arm of that later call, or ownership transfer via <see cref="CBAdESValidationResult.Success"/>).
 /// <see cref="SignatureValue"/> and <see cref="RawUnsignedHeaders"/> are NOT carried by
 /// <see cref="CBAdESValidationResult"/> at all — the caller (either overload pair) disposes them explicitly

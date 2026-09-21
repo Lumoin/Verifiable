@@ -314,7 +314,7 @@ internal sealed class XAdESIndividualDataObjectsTimeStampImprintTests
         using(signature)
         using(stamp)
         {
-            Assert.HasCount(0, stamp.TimeStamp.Includes);
+            Assert.IsEmpty(stamp.TimeStamp.Includes);
 
             bool isComputed = XAdESIndividualDataObjectsTimeStampImprint.TryComputeImprintInput(table, signature, stamp, resolver: null, pool, out PooledMemory? imprintInput, out XAdESProcessingError error);
             Assert.IsTrue(isComputed, $"Must compute but was refused with {error.Failure}.");
@@ -405,3 +405,4 @@ internal sealed class XAdESIndividualDataObjectsTimeStampImprintTests
         }
     }
 }
+

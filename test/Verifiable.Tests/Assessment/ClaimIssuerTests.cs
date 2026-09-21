@@ -293,7 +293,7 @@ internal sealed class ClaimIssuerTests
         Assert.IsTrue(result.IsComplete);
         Assert.AreEqual(0, result.RulesExecuted);
         Assert.AreEqual(0, result.TotalRules);
-        Assert.HasCount(0, result.Claims);
+        Assert.IsEmpty(result.Claims);
     }
 
 
@@ -423,3 +423,4 @@ internal sealed class ClaimIssuerTests
         throw new InvalidOperationException("Simulated rule failure.");
     }
 }
+

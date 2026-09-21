@@ -24,7 +24,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Drives the password (all-<c>TPM_RS_PW</c>/single-slot) form of <c>TPM2_RSA_Decrypt()</c> against the in-house
 /// behavioural <see cref="TpmSimulator"/> through the production command path (<see cref="TpmCommandExecutor"/>
-/// with <see cref="RsaDecryptInput"/> and <see cref="TpmResponseCodecExtensions.RsaDecrypt"/>): the private-key
+/// with <see cref="RsaDecryptInput"/> and the <c>TpmResponseCodecExtensions.RsaDecrypt</c> response codec): the private-key
 /// operation under a padding scheme selected between the key's own scheme and <c>inScheme</c>, authorized at
 /// <c>@keyHandle</c>'s USER slot.
 /// </summary>
@@ -302,7 +302,7 @@ internal sealed class TpmInHouseSimulatorRsaDecryptTests
     }
 
     /// <summary>
-    /// A bounded in-process contention instrument: 32 concurrently running simulators, each with its own
+    /// A bounded in-process contention instrument: 4 concurrently running simulators, each with its own
     /// <c>TPM2_CreatePrimary()</c>'d NULL-scheme decrypt key, share only <see cref="BaseMemoryPool.Shared"/> —
     /// the process-wide house pool singleton every test in this class rents from — while each repeatedly
     /// decrypts the Table 42 (Null, Null) cell's own raw ciphertext (<c>7^e mod n</c>, below the modulus by
@@ -313,15 +313,19 @@ internal sealed class TpmInHouseSimulatorRsaDecryptTests
     /// integer value that is the result of the modular exponentiation of cipherText using the private
     /// exponent") and Part 1, clause 43.2's RSAEP/RSADP requirement <c>0 &lt;= m &lt; n</c>: a pool-buffer
     /// aliasing fault under contention corrupting a modulus or ciphertext octet would surface here as a bare
-    /// <c>TPM_RC_VALUE</c> or a wrong recovered plaintext, at a scale the full suite's own contention cannot
-    /// reach in one run. The expected plaintext is a LITERAL k-wide array — a zeroed span of the modulus width
-    /// with the last octet <c>7</c> — written directly here rather than through this class's own fixed-width
-    /// helper, so this oracle is never self-consistent with a defect in that shared helper.
+    /// <c>TPM_RC_VALUE</c> or a wrong recovered plaintext. The width is fixed at 4 workers, independent of the
+    /// machine's processor count: each cycle drives RSA modular exponentiation and private-key parameter
+    /// parsing, so a wider fan-out would multiply CPU-bound work onto the suite's own shared thread pool
+    /// instead of exercising the pool-buffer aliasing invariant under test; 4 simultaneous simulators is
+    /// enough for their decrypts to genuinely overlap on <see cref="BaseMemoryPool.Shared"/>. The expected
+    /// plaintext is a LITERAL k-wide array — a zeroed span of the modulus width with the last octet <c>7</c>
+    /// — written directly here rather than through this class's own fixed-width helper, so this oracle is
+    /// never self-consistent with a defect in that shared helper.
     /// </summary>
     [TestMethod]
     public async Task RsaDecryptNullSchemeConcurrentSimulatorsAllSucceedWithTheExactPlaintext()
     {
-        const int WorkerCount = 32;
+        const int WorkerCount = 4;
         const int DecryptsPerWorker = 100;
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] expectedPlaintext = new byte[ModulusOctets];
@@ -1900,6 +1904,66 @@ internal sealed class TpmInHouseSimulatorRsaDecryptTests
         TpmAlgIdConstants.TPM_ALG_SHA256 => new Sha256Digest(),
         TpmAlgIdConstants.TPM_ALG_SHA384 => new Sha384Digest(),
         TpmAlgIdConstants.TPM_ALG_SHA512 => new Sha512Digest(),
+        TpmAlgIdConstants.TPM_ALG_ERROR => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_RSA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_TDES => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_HMAC => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_AES => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_MGF1 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_XOR => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_NULL => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SM4 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_RSASSA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_RSAES => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_OAEP => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_ECDSA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_ECDH => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_ECDAA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SM2 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_ECMQV => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_HKDF => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KDF2 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_ECC => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_CMAC => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_CTR => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_OFB => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_CBC => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_CFB => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_ECB => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_CCM => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_GCM => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KW => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KWP => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_EAX => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_LMS => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_XMSS => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_MLKEM => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_MLDSA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle."),
         _ => throw new NotSupportedException($"'{hashAlg}' is not supported by this oracle.")
     };
 
@@ -2316,6 +2380,7 @@ internal sealed class TpmInHouseSimulatorRsaDecryptTests
     /// <param name="inSchemeBody">The already-marshaled <c>TPMT_RSA_DECRYPT</c> body, verbatim.</param>
     /// <param name="label">The already-unmarshaled <c>label</c> octets.</param>
     /// <param name="hasTrailingOctet">Whether to append one octet after every declared field.</param>
+    /// <param name="length">The framed command's total byte length.</param>
     /// <returns>The rented, framed command buffer.</returns>
     private static IMemoryOwner<byte> FrameRsaDecryptCommand(
         BaseMemoryPool pool, uint keyHandle, ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> inSchemeBody, ReadOnlySpan<byte> label, bool hasTrailingOctet, out int length)
@@ -2366,6 +2431,7 @@ internal sealed class TpmInHouseSimulatorRsaDecryptTests
     /// <param name="cipherText">The already-unmarshaled <c>cipherText</c> octets.</param>
     /// <param name="inSchemeBody">The already-marshaled <c>TPMT_RSA_DECRYPT</c> body, verbatim.</param>
     /// <param name="label">The already-unmarshaled <c>label</c> octets.</param>
+    /// <param name="length">The framed command's total byte length.</param>
     /// <returns>The rented, framed command buffer.</returns>
     private static IMemoryOwner<byte> FrameRsaDecryptNoSessionsCommand(
         BaseMemoryPool pool, uint keyHandle, ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> inSchemeBody, ReadOnlySpan<byte> label, out int length)

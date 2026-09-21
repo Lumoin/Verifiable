@@ -256,7 +256,7 @@ public static class WebFingerClient
 
             return descriptor is null
                 ? WebFingerResolutionResult.Failure(WebFingerResolutionErrors.InvalidJrd)
-                : WebFingerResolutionResult.Success(descriptor);
+                : WebFingerResolutionResult.Success(descriptor, HttpCacheFreshness.Compute(fetch.Response));
         };
     }
 }

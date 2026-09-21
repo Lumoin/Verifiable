@@ -152,7 +152,7 @@ public static class RedirectUriMatching
     /// <param name="requested">The redirect URI presented on the request.</param>
     /// <param name="isLocalhostNameAccepted">
     /// Whether the deployment's policy accepts the <c>localhost</c> host literal alongside the two
-    /// IP literals — <see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.IsLocalhostNameAcceptedForLoopbackRedirects"/>,
+    /// IP literals — <c>PolicyExchangeContextExtensions.IsLocalhostNameAcceptedForLoopbackRedirects</c>,
     /// which defaults to <see langword="false"/> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8252#section-8.3">RFC 8252 §8.3</see>'s NOT
     /// RECOMMENDED. This method is a pure predicate over its three arguments; callers pass the

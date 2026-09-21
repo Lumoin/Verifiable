@@ -8,8 +8,20 @@ using Verifiable.JCose;
 
 namespace Verifiable.Core.Did.Methods.Web
 {
+    /// <summary>
+    /// Encodes a public key into the wire representation a <c>did:web</c> verification method carries,
+    /// choosing the encoding by the requested <see cref="KeyFormat"/>.
+    /// </summary>
     public static class IdentifierExtensions
     {
+        /// <summary>
+        /// Encodes <paramref name="publicKey"/> as <paramref name="keyFormat"/> requires: JWK for
+        /// <see cref="PublicKeyJwk"/>, otherwise the algorithm-tagged multibase encoding.
+        /// </summary>
+        /// <param name="publicKey">The key to encode.</param>
+        /// <param name="keyFormat">The verification method key format to encode into.</param>
+        /// <param name="pool">Memory pool for transient encoding buffers.</param>
+        /// <returns>The encoded key string.</returns>
         public static string EncodeKey(PublicKeyMemory publicKey, KeyFormat keyFormat, BaseMemoryPool pool)
         {
             ArgumentNullException.ThrowIfNull(publicKey);

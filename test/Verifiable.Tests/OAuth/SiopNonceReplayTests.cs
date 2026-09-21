@@ -55,8 +55,8 @@ internal sealed class SiopNonceReplayTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         //The same Self-Issued OP key and the same (client_id, nonce) token are POSTed into two
@@ -103,8 +103,8 @@ internal sealed class SiopNonceReplayTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();

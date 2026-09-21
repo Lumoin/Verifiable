@@ -31,7 +31,7 @@ namespace Verifiable.Core.Did.Methods.WebVh;
 ///   <item><description><c>did:webvh:{SCID}:example.com%3A3000:dids:issuer</c> → <c>https://example.com:3000/dids/issuer/did.jsonl</c></description></item>
 /// </list>
 /// <para>
-/// <see cref="Resolve"/> computes the DID Log URL only. <see cref="Build"/> performs full resolution: it
+/// <see cref="Resolve"/> computes the DID Log URL only. <see cref="Build(OutboundTransportDelegate, WebVhLineParser, WebVhWitnessFileParser, WebVhDocumentIdentityReader, WebVhStateDeserializer, WebVhCanonicalizer, EncodeDelegate, DecodeDelegate, BaseMemoryPool, TimeProvider)"/> performs full resolution: it
 /// fetches the <c>did.jsonl</c> through the guarded outbound-fetch chokepoint, replays and verifies every
 /// entry through the <see cref="LogReplayer{TState,TOperation,TProof,TContext}"/>, and returns the resolved
 /// <see cref="DidDocument"/>.
@@ -141,7 +141,7 @@ public static class WebVhDidResolver
 
 
     /// <summary>
-    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the no-digest <see cref="Build"/> overload.
+    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the no-digest <see cref="Build(OutboundTransportDelegate, WebVhLineParser, WebVhWitnessFileParser, WebVhDocumentIdentityReader, WebVhStateDeserializer, WebVhCanonicalizer, EncodeDelegate, DecodeDelegate, BaseMemoryPool, TimeProvider)"/> overload.
     /// </summary>
     /// <returns>The registered digest delegate.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no <see cref="ComputeDigestDelegate"/> is registered.</exception>
@@ -205,6 +205,66 @@ public static class WebVhDidResolver
     /// <param name="pool">The pool the key, signature, hash and witness-file buffers are rented from.</param>
     /// <param name="timeProvider">The clock used for the <c>versionTime</c> checks.</param>
     /// <returns>A <see cref="DidMethodResolverDelegate"/> for registration with the resolver composition.</returns>
+    /// <remarks>
+    /// <para>
+    /// did:webvh's Read algorithm matches the requested DID against the top-level <c>id</c> of ANY verified
+    /// version, not only the resolved one: "If the DID being resolved matches exactly the value of
+    /// <c>state.id</c> in the current DIDDoc entry, increment <c>didIdMatchCount</c> by 1", and at the end
+    /// "the value of <c>didIdMatchCount</c> MUST be greater than 0" (
+    /// <see href="https://identity.foundation/didwebvh/v1.0/#read-resolve">did:webvh v1.0, Read</see>). So the
+    /// old name of a moved DID resolves, and what it resolves to is the current document, whose <c>id</c> is
+    /// the new name. DID Resolution says of the returned document: "The value of <c>id</c> in the resolved DID
+    /// document MUST be string equal to the DID that was resolved" (
+    /// <see href="https://www.w3.org/TR/did-resolution/#dfn-diddocument">DID Resolution, the <c>didDocument</c>
+    /// output value</see>). For a moved DID resolved by its old name the two rules cannot both be met to the
+    /// letter: the returned <c>id</c> is NOT string equal to the requested DID. This resolver returns the
+    /// current document and states, in the document metadata, the equivalence it has verified; the paragraphs
+    /// below say why that is the sound reading and what bounds it.
+    /// </para>
+    /// <para>
+    /// The current document is returned rather than the last pre-move version because a caller resolves a DID
+    /// to learn its CURRENT keys and services; a pre-move version is a superseded state, and handing it out
+    /// would hand out superseded keys. did:webvh's own portability rule agrees: the DID "can be renamed by
+    /// changing the <c>id</c> DID string in the DIDDoc", so an old name is a past label for the SAME, evolving
+    /// subject, not a frozen alias to its old document.
+    /// </para>
+    /// <para>
+    /// This equivalence is expressed through <see cref="DidDocumentMetadata.CanonicalId"/> and
+    /// <see cref="DidDocumentMetadata.EquivalentId"/>, inside DID Resolution rather than as a special case around
+    /// it, because <c>equivalentId</c> exists precisely for this: "A DID method can define different forms of a
+    /// DID that are logically equivalent... A conforming DID method specification MUST guarantee that each
+    /// <c>equivalentId</c> value is logically equivalent to the <c>id</c> property value", and the specification
+    /// ranks it above the DID Core <c>alsoKnownAs</c> property: "<c>equivalentId</c> is a much stronger form of
+    /// equivalence than <c>alsoKnownAs</c> because the equivalence MUST be guaranteed by the governing DID
+    /// method" (<see href="https://www.w3.org/TR/did-resolution/#did-document-metadata">DID Resolution,
+    /// <c>equivalentId</c></see>). A method that sets <c>EquivalentId</c> is making exactly that guarantee, so
+    /// <see cref="DidResolver.ResolveAsync"/> accepts a differing document <c>id</c> only on this method's own
+    /// verified statement.
+    /// </para>
+    /// <para>
+    /// <c>alsoKnownAs</c> is never read for this equivalence, even though did:webvh REQUIRES it on the moved
+    /// document ("The DIDDoc MUST contain the prior DID string as an <c>alsoKnownAs</c> entry") and this
+    /// resolver's portability check enforces that requirement: <c>alsoKnownAs</c> is the controller's own
+    /// unverified assertion about itself, while what makes a prior name equivalent here is that it WAS a
+    /// replay-verified <c>state.id</c> of this same SCID's chain — a fact this resolver checked, not a claim the
+    /// document makes about itself.
+    /// </para>
+    /// <para>
+    /// The did:webvh Security Note on prior domains applies unchanged: "Resolvers and clients of resolvers MUST
+    /// ignore any prior domain components when evaluating the history or trustworthiness of a did:webvh DID;
+    /// only the current hosting location and its associated verifiable history are relevant" (
+    /// <see href="https://identity.foundation/didwebvh/v1.0/#did-portability">did:webvh v1.0, DID
+    /// Portability</see>). Naming a prior identifier as equivalent says nothing about trusting the domain it once
+    /// named; the verified history served from the location being resolved is what the trust decision rests on.
+    /// </para>
+    /// <para>
+    /// A caller is expected to use <see cref="DidDocumentMetadata.CanonicalId"/>, not any prior name, as its
+    /// primary identifier: "A requesting party is expected to use the <c>canonicalId</c> value as its primary ID
+    /// value for the DID subject and treat all other equivalent values as secondary aliases" (
+    /// <see href="https://www.w3.org/TR/did-resolution/#did-document-metadata">DID Resolution,
+    /// <c>canonicalId</c></see>).
+    /// </para>
+    /// </remarks>
     public static DidMethodResolverDelegate Build(
         OutboundTransportDelegate transport,
         WebVhLineParser lineParser,
@@ -284,11 +344,13 @@ public static class WebVhDidResolver
             //Fetch the DID Log from the DID's designated HTTPS location; on a not-found condition the resolver
             //MAY fall back to the supplied alternative sources (Watcher URLs), retrieving and verifying the log
             //from them exactly as it would the primary (did:webvh v1.0, Read: L886). A successful fetch from
-            //any source is used; if none succeed, the DID is notFound.
-            OutboundResponse? logResponse = await FetchDidLogAsync(target, options, transport, context, cancellationToken).ConfigureAwait(false);
+            //any source is used; if none succeed, the DID is notFound, with a Detail naming which of the three
+            //retrieval causes the primary hit.
+            (OutboundResponse? logResponse, string? logFetchDetail) =
+                await FetchDidLogAsync(target, options, transport, context, cancellationToken).ConfigureAwait(false);
             if(logResponse is null)
             {
-                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
+                return DidResolutionResult.Failure(NotFound(logFetchDetail));
             }
 
             //Bound the fetched DID Log so an oversized payload is rejected before it is parsed, rather than
@@ -498,12 +560,20 @@ public static class WebVhDidResolver
 
             bool isResolvedVersionDeactivated = isDeactivated || isDeactivatedByLaterEntry;
 
+            //The portability equivalence this resolver has itself replay-verified (identities[*].Id only, never
+            //alsoKnownAs); this single construction site is reached by the latest, deactivated and
+            //version-specific (versionId/versionTime) paths alike, since identities holds exactly the verified
+            //prefix up to targetIndex for all three (see the Build(...) remarks for the full reasoning).
+            (string? canonicalId, IReadOnlyList<string>? equivalentId) = BuildPortabilityEquivalence(identities);
+
             DidDocumentMetadata metadata = new()
             {
                 VersionId = finalState.VersionId,
                 Deactivated = isResolvedVersionDeactivated,
                 Created = WebVhResolutionMetadata.ParseTimestamp(states[0].VersionTime),
                 Updated = WebVhResolutionMetadata.ParseTimestamp(finalState.VersionTime),
+                CanonicalId = canonicalId,
+                EquivalentId = equivalentId,
                 AdditionalData = WebVhResolutionMetadata.Build(finalState, isResolvedVersionDeactivated)
             };
 
@@ -512,45 +582,81 @@ public static class WebVhDidResolver
             //it as a deactivated resolution (did:webvh v1.0, Deactivate: L1019). A prior version queried on a
             //deactivated DID still returns its DIDDoc with deactivated:true metadata (L1023), so the
             //null-document rule applies only when the target entry is the deactivation itself.
+            HttpCacheFreshness freshness = HttpCacheFreshness.Compute(logResponse);
+
             if(isDeactivated)
             {
-                return DidResolutionResult.SuccessDeactivated(metadata, contentType: "application/did+json");
+                return DidResolutionResult.SuccessDeactivated(metadata, contentType: "application/did+json", freshness: freshness);
             }
 
-            return DidResolutionResult.Success(document, metadata, contentType: "application/did+json");
+            return DidResolutionResult.Success(document, metadata, contentType: "application/did+json", freshness: freshness);
         };
     }
 
 
     /// <summary>
-    /// Fetches the DID Log from the primary location, then — only on a not-found condition — from each supplied
-    /// alternative source (Watcher URL) in turn. Returns the first successful 200 response body, or
-    /// <see langword="null"/> when no source yields one. A transport failure or a non-200 status is treated as
-    /// not-found for fallback purposes; the retrieved log is verified by the caller exactly as the primary would
-    /// be, so a tampered alternative source still fails verification (did:webvh v1.0, Read: L886).
+    /// The three ways a guarded fetch can fail to yield a usable response, told apart so a resolution result's
+    /// <c>Detail</c> can say which one it was without ever publishing the application transport's own exception
+    /// message or the outbound-fetch policy's diagnostic <see cref="OutboundFetchResult.DenyReason"/>.
+    /// </summary>
+    private enum WebVhFetchFailureCause
+    {
+        /// <summary>The application transport threw (cancellation excepted).</summary>
+        TransportFailed,
+
+        /// <summary>The outbound-fetch policy refused the target, or a redirect hop, before any terminal response.</summary>
+        PolicyRefused,
+
+        /// <summary>A terminal response was obtained but its status was not 200.</summary>
+        UnsuccessfulStatus
+    }
+
+
+    /// <summary>
+    /// The outcome of one guarded fetch driven through <see cref="TryFetchAsync(Uri, long, OutboundTransportDelegate, ExchangeContext, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="Response">The successful response, or <see langword="null"/> on failure.</param>
+    /// <param name="Cause">The failure cause, or <see langword="null"/> on success.</param>
+    /// <param name="StatusCode">
+    /// The status the server answered with, when <paramref name="Cause"/> is
+    /// <see cref="WebVhFetchFailureCause.UnsuccessfulStatus"/>; otherwise <c>0</c>.
+    /// </param>
+    private sealed record WebVhFetchOutcome(OutboundResponse? Response, WebVhFetchFailureCause? Cause, int StatusCode);
+
+
+    /// <summary>
+    /// Fetches the DID Log from the primary location, then — only when the primary fails — from each supplied
+    /// alternative source (Watcher URL) in turn. Returns the first successful 200 response, or, when no source
+    /// yields one, a <c>Detail</c> naming the PRIMARY's own retrieval cause — the transport failed, the outbound
+    /// policy refused the fetch, or the server answered with a non-200 status — and, when at least one
+    /// alternative source was tried, that none of them yielded the log either (did:webvh v1.0, Read: L886, the
+    /// alternative-source fallback). The retrieved log is verified by the caller exactly as the primary would
+    /// be, so a tampered alternative source still fails verification.
     /// </summary>
     /// <param name="primaryTarget">The DID's designated DID Log location.</param>
     /// <param name="options">The resolution options carrying any watcher URLs.</param>
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
     /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The first successful response, or <see langword="null"/> when no source yields a 200.</returns>
-    private static async ValueTask<OutboundResponse?> FetchDidLogAsync(
+    /// <returns>The first successful response, or <see langword="null"/> with the not-found <c>Detail</c>.</returns>
+    private static async ValueTask<(OutboundResponse? Response, string? Detail)> FetchDidLogAsync(
         Uri primaryTarget,
         DidResolutionOptions options,
         OutboundTransportDelegate transport,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        OutboundResponse? primary = await TryFetchLogAsync(primaryTarget, transport, context, cancellationToken).ConfigureAwait(false);
-        if(primary is not null)
+        WebVhFetchOutcome primary = await TryFetchLogAsync(primaryTarget, transport, context, cancellationToken).ConfigureAwait(false);
+        if(primary.Response is not null)
         {
-            return primary;
+            return (primary.Response, null);
         }
+
+        string primaryDetail = DescribeFetchFailure(primary.Cause!.Value, primary.StatusCode);
 
         if(options.WatcherUrls is not { Count: > 0 } watcherUrls)
         {
-            return null;
+            return (null, primaryDetail);
         }
 
         foreach(string watcherUrl in watcherUrls)
@@ -560,33 +666,54 @@ public static class WebVhDidResolver
                 continue;
             }
 
-            OutboundResponse? watcherResponse = await TryFetchLogAsync(watcherTarget, transport, context, cancellationToken).ConfigureAwait(false);
-            if(watcherResponse is not null)
+            WebVhFetchOutcome watcherOutcome = await TryFetchLogAsync(watcherTarget, transport, context, cancellationToken).ConfigureAwait(false);
+            if(watcherOutcome.Response is not null)
             {
-                return watcherResponse;
+                return (watcherOutcome.Response, null);
             }
         }
 
-        return null;
+        return (null, $"{primaryDetail} No alternative source yielded the log.");
     }
 
 
     /// <summary>
-    /// Drives one guarded fetch for the DID Log, returning the response only on a successful 200, or
-    /// <see langword="null"/> on a transport failure or any non-200 status. Cancellation is always propagated.
+    /// Drives one guarded fetch for the DID Log, bounded by <see cref="MaxDidLogBytes"/>.
     /// </summary>
     /// <param name="target">The DID Log URL to fetch.</param>
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
     /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The successful response, or <see langword="null"/> when the fetch did not yield a 200.</returns>
-    private static async ValueTask<OutboundResponse?> TryFetchLogAsync(
+    /// <returns>The fetch outcome: the successful response, or the cause of the failure.</returns>
+    private static ValueTask<WebVhFetchOutcome> TryFetchLogAsync(
         Uri target,
         OutboundTransportDelegate transport,
         ExchangeContext context,
         CancellationToken cancellationToken)
+        => TryFetchAsync(target, MaxDidLogBytes, transport, context, cancellationToken);
+
+
+    /// <summary>
+    /// Drives one guarded fetch, telling apart the three ways it can fail to yield a usable response: the
+    /// application transport threw (an application transport that enforces <paramref name="maxResponseBytes"/>
+    /// while streaming reports it this way), the outbound-fetch policy refused the target (or a redirect hop)
+    /// before any terminal response, or a terminal response was obtained whose status was not 200. Cancellation
+    /// is always propagated, never turned into a failure cause.
+    /// </summary>
+    /// <param name="target">The URL to fetch.</param>
+    /// <param name="maxResponseBytes">The response size this fetch is bounded to.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The fetch outcome: the successful response, or the cause of the failure.</returns>
+    private static async ValueTask<WebVhFetchOutcome> TryFetchAsync(
+        Uri target,
+        long maxResponseBytes,
+        OutboundTransportDelegate transport,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
     {
-        OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = MaxDidLogBytes };
+        OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = maxResponseBytes };
 
         OutboundFetchResult fetch;
         try
@@ -599,13 +726,62 @@ public static class WebVhDidResolver
         }
         catch
         {
-            //A transport/network failure is a not-found from this helper's perspective, cancellation
+            //An application transport that enforces maxResponseBytes while streaming reports an oversized or
+            //otherwise failed fetch by throwing; the exception's own message and type are the application
+            //transport's, not the library's to publish, so only the cause is recorded here, cancellation
             //excepted above.
-            return null;
+            return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.TransportFailed, StatusCode: 0);
         }
 
-        return fetch is { IsFetched: true, Response: { StatusCode: 200 } response } ? response : null;
+        if(!fetch.IsFetched)
+        {
+            //The outbound-fetch policy refused the target (or a redirect hop) before any terminal response was
+            //obtained; OutboundFetchResult.DenyReason is diagnostic only and is not the library's to publish.
+            return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.PolicyRefused, StatusCode: 0);
+        }
+
+        if(fetch.Response is not { StatusCode: 200 } response)
+        {
+            return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.UnsuccessfulStatus, StatusCode: fetch.Response?.StatusCode ?? 0);
+        }
+
+        return new WebVhFetchOutcome(Response: response, Cause: null, StatusCode: 200);
     }
+
+
+    /// <summary>
+    /// The one-sentence, application-agnostic description of a guarded-fetch failure cause for the DID Log
+    /// fetch — naming neither the application transport's own exception text nor the outbound-fetch policy's
+    /// diagnostic reason, only which of the three causes it was (did:webvh v1.0, Read: the <c>notFound</c>
+    /// error condition; L848-849).
+    /// </summary>
+    /// <param name="cause">The failure cause.</param>
+    /// <param name="statusCode">The status the server answered with, when <paramref name="cause"/> is <see cref="WebVhFetchFailureCause.UnsuccessfulStatus"/>.</param>
+    /// <returns>The one-sentence detail.</returns>
+    private static string DescribeFetchFailure(WebVhFetchFailureCause cause, int statusCode) => cause switch
+    {
+        WebVhFetchFailureCause.TransportFailed => "The transport failed to retrieve the DID Log.",
+        WebVhFetchFailureCause.PolicyRefused => "The outbound policy refused the fetch of the DID Log.",
+        WebVhFetchFailureCause.UnsuccessfulStatus => $"The server answered with status {statusCode}.",
+        _ => "The DID Log could not be retrieved.",
+    };
+
+
+    /// <summary>
+    /// The one-sentence description of a guarded-fetch failure cause for the <c>did-witness.json</c> fetch, in
+    /// the same three-cause shape as <see cref="DescribeFetchFailure(WebVhFetchFailureCause, int)"/> (did:webvh
+    /// v1.0, DID Witnesses: resolvers MUST retrieve and verify the witness file when witnesses are active).
+    /// </summary>
+    /// <param name="cause">The failure cause.</param>
+    /// <param name="statusCode">The status the server answered with, when <paramref name="cause"/> is <see cref="WebVhFetchFailureCause.UnsuccessfulStatus"/>.</param>
+    /// <returns>The one-sentence detail.</returns>
+    private static string DescribeWitnessFetchFailure(WebVhFetchFailureCause cause, int statusCode) => cause switch
+    {
+        WebVhFetchFailureCause.TransportFailed => "Witnesses are active but the transport failed to retrieve the did-witness.json file.",
+        WebVhFetchFailureCause.PolicyRefused => "Witnesses are active but the outbound policy refused the fetch of the did-witness.json file.",
+        WebVhFetchFailureCause.UnsuccessfulStatus => $"Witnesses are active but the server answered with status {statusCode} for the did-witness.json file.",
+        _ => "Witnesses are active but the did-witness.json file could not be retrieved.",
+    };
 
 
     /// <summary>
@@ -635,41 +811,25 @@ public static class WebVhDidResolver
             return DidResolutionErrors.InvalidDid;
         }
 
-        OutboundRequest request = new() { Target = witnessTarget, Method = "GET", MaxResponseBytes = MaxWitnessFileBytes };
-
-        OutboundFetchResult fetch;
-        try
-        {
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            //A transport/network failure fetching the witness file fails resolution closed, cancellation
-            //excepted above.
-            return DidResolutionErrors.InvalidDid;
-        }
-
         //Witnesses are active, so an absent or unsuccessful did-witness.json fails resolution closed: the
-        //entries requiring witnessing cannot be confirmed without it.
-        if(!fetch.IsFetched || fetch.Response is null || fetch.Response.StatusCode != 200)
+        //entries requiring witnessing cannot be confirmed without it. The three ways the fetch can fail are
+        //told apart in the Detail exactly as the primary DID Log fetch tells them apart.
+        WebVhFetchOutcome witnessFetch = await TryFetchAsync(witnessTarget, MaxWitnessFileBytes, transport, context, cancellationToken).ConfigureAwait(false);
+        if(witnessFetch.Response is not { } fetchedWitnessResponse)
         {
-            return InvalidDid("Witnesses are active but the did-witness.json file could not be retrieved.");
+            return InvalidDid(DescribeWitnessFetchFailure(witnessFetch.Cause!.Value, witnessFetch.StatusCode));
         }
 
         //The did-witness.json media type SHOULD be application/json (did:webvh v1.0, The Witness Proofs File).
         //A response that declares a different content type is treated as a retrieval failure: the file the
         //witness rule depends on was not served in its defined form, so witnessing cannot be confirmed. An
         //absent Content-Type is tolerated (the SHOULD does not require the header to be present).
-        if(!IsAcceptableJsonContentType(fetch.Response))
+        if(!IsAcceptableJsonContentType(fetchedWitnessResponse))
         {
             return InvalidDid("The did:webvh did-witness.json was served with a non-JSON Content-Type.");
         }
 
-        ReadOnlyMemory<byte> body = fetch.Response.Body.Memory;
+        ReadOnlyMemory<byte> body = fetchedWitnessResponse.Body.Memory;
         int length = body.Length;
 
         //Bound the witness file like the DID Log (MaxWitnessFileBytes) before any allocation or verification,
@@ -767,6 +927,25 @@ public static class WebVhDidResolver
 
 
     /// <summary>
+    /// did:webvh resolution maps a DID Log that could not be retrieved to the
+    /// <see href="https://identity.foundation/didwebvh/v1.0/#read-resolve">notFound error</see> (did:webvh
+    /// v1.0, Read: "notFound — The DID Log or the resource referenced by a DID URL was not found"); a precise
+    /// message naming which of the three retrieval causes it was (the transport failed; the outbound policy
+    /// refused the fetch; the server answered with a non-200 status) is carried as the occurrence-specific
+    /// <c>problemDetails.Detail</c>. The detail-free form equals the shared <see cref="DidResolutionErrors.NotFound"/>
+    /// by problem-type, so callers can still compare by type.
+    /// </summary>
+    /// <param name="detail">The occurrence-specific detail, or <see langword="null"/> for the shared instance.</param>
+    /// <returns>The not-found problem details.</returns>
+    private static DidProblemDetails NotFound(string? detail)
+    {
+        return detail is null
+            ? DidResolutionErrors.NotFound
+            : new DidProblemDetails(DidErrorTypes.NotFound, Title: "Not found", Detail: detail);
+    }
+
+
+    /// <summary>
     /// Whether the requested DID matches the top-level <c>id</c> of any verified version — a portable DID's
     /// resolved version may carry a different <c>id</c> than an earlier one (did:webvh v1.0, Read).
     /// </summary>
@@ -784,6 +963,41 @@ public static class WebVhDidResolver
         }
 
         return false;
+    }
+
+
+    /// <summary>
+    /// Computes the did:webvh portability equivalence this resolver has itself replay-verified: the resolved
+    /// version's own top-level <c>id</c> becomes <see cref="DidDocumentMetadata.CanonicalId"/>, and every OTHER
+    /// distinct top-level <c>id</c> the verified chain carried becomes
+    /// <see cref="DidDocumentMetadata.EquivalentId"/>, in log order. A chain whose entries all share the same
+    /// <c>id</c> never moved, so neither value is set — a document is not an equivalent of itself.
+    /// </summary>
+    /// <param name="identities">
+    /// The per-version document identities collected from every replay-verified entry up to and including the
+    /// resolved one; <c>alsoKnownAs</c> is deliberately not read here (the controller's own unverified
+    /// assertion), only <see cref="WebVhDocumentIdentity.Id"/>, the value this resolver has itself verified.
+    /// </param>
+    /// <returns>The resolved version's canonical id and its other verified equivalents, or both <see langword="null"/> when the chain never moved.</returns>
+    private static (string? CanonicalId, IReadOnlyList<string>? EquivalentId) BuildPortabilityEquivalence(
+        List<WebVhDocumentIdentity> identities)
+    {
+        string? resolvedId = identities.Count > 0 ? identities[^1].Id : null;
+
+        //Every OTHER distinct verified id, in the order it first appeared in the log — never the resolved id
+        //itself, and never a value read from alsoKnownAs.
+        List<string> equivalentId = new(identities.Count);
+        foreach(WebVhDocumentIdentity identity in identities)
+        {
+            if(identity.Id is { } id
+                && !string.Equals(id, resolvedId, StringComparison.Ordinal)
+                && !equivalentId.Contains(id, StringComparer.Ordinal))
+            {
+                equivalentId.Add(id);
+            }
+        }
+
+        return equivalentId.Count == 0 ? (null, null) : (resolvedId, equivalentId);
     }
 
 

@@ -10,7 +10,7 @@ namespace Verifiable.Cbor.Mdoc;
 /// <see cref="CoseSign1X5ChainExtractor"/> with a caller-supplied
 /// <see cref="ValidateCertificateChainAsyncDelegate"/> and trust-anchor list to
 /// produce a delegate the wallet/verifier can hand to
-/// <see cref="MdocCborIssuerAuthVerifier.VerifyAsync(MdocIssuerAuth, ResolveMdocIssuerKeyDelegate, System.Threading.CancellationToken)"/>.
+/// <see cref="MdocVerificationExtensions.extension(MdocIssuerAuth).VerifyAsync(ResolveMdocIssuerKeyDelegate, BaseMemoryPool, Verifiable.JCose.ParseCoseSign1Delegate, Verifiable.JCose.BuildSigStructureDelegate, CancellationToken)"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -58,9 +58,10 @@ public static class MdocCborIacaTrustResolver
     /// The IACA trust anchors the validator builds against. Caller
     /// retains ownership; do not dispose them while the delegate is in use.
     /// </param>
-    /// <param name="validationTime">
-    /// The instant for certificate-validity evaluation. Production callers
-    /// pass <c>DateTimeOffset.UtcNow</c>; tests pass deterministic times.
+    /// <param name="timeProvider">
+    /// The time source for certificate-validity evaluation, read at each resolution rather than
+    /// captured once — the returned delegate is reused across many calls, and a fixed instant would
+    /// validate every later chain against the delegate's build time instead of the resolution's own.
     /// </param>
     /// <param name="pool">Memory pool for DER and key-material allocations.</param>
     /// <returns>The composed delegate.</returns>
@@ -73,11 +74,12 @@ public static class MdocCborIacaTrustResolver
     public static ResolveMdocIssuerKeyDelegate Create(
         ValidateCertificateChainAsyncDelegate validateChain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
-        DateTimeOffset validationTime,
+        TimeProvider timeProvider,
         BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(validateChain);
         ArgumentNullException.ThrowIfNull(trustAnchors);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(pool);
 
         return async (issuerAuth, cancellationToken) =>
@@ -99,7 +101,7 @@ public static class MdocCborIacaTrustResolver
                 try
                 {
                     leafKey = await validateChain(
-                        chain, trustAnchors, validationTime, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+                        chain, trustAnchors, timeProvider.GetUtcNow(), pool, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
                 catch(System.Security.SecurityException ex)
                 {

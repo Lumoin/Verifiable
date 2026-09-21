@@ -21,7 +21,7 @@ namespace Verifiable.Tests.OAuth;
 /// </list>
 /// <remarks>
 /// Tests dispatch directly against the AS via
-/// <see cref="TestHostShell.DispatchAtEndpointAsync"/> and inspect
+/// <see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, Verifiable.Server.RequestFields, Verifiable.Core.ExchangeContext, CancellationToken)"/> and inspect
 /// <see cref="ServerHttpResponse.Headers"/> rather than threading
 /// through a client-side accessor. Both gaps are observable at the
 /// server-side response shape; <see cref="HttpWireFidelityTests"/>
@@ -55,11 +55,12 @@ internal sealed class AuthorizationServerResponseHeaderTests
         //AllowedRedirectUris. Mirrors the JAR-PAR check that already existed;
         //this regression-guards the new PKCE-PAR check.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, ParCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, ParCapabilities).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -92,11 +93,12 @@ internal sealed class AuthorizationServerResponseHeaderTests
         //a request submitting the registered redirect_uri must still return
         //a 200 OK request_uri response.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, ParCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, ParCapabilities).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -125,11 +127,12 @@ internal sealed class AuthorizationServerResponseHeaderTests
         //request_uri. Treated as sensitive and emitted with Cache-Control:
         //no-store.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, ParCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, ParCapabilities).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -159,8 +162,8 @@ internal sealed class AuthorizationServerResponseHeaderTests
         //the access token; Cache-Control: no-store mandated. Drive a full
         //PKCE flow end to end and inspect the token response headers.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(
             TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -170,6 +173,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
         //PAR.
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = challenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,

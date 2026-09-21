@@ -69,10 +69,8 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
 
         return size;
 
-        /// <summary>
-        /// Folds a PolicySecret assertion: a permanent handle's Name is its 4-octet big-endian handle value
-        /// (TPM 2.0 Library Part 1, clause 13, Table 9), folded with an empty policyRef.
-        /// </summary>
+        //Folds a PolicySecret assertion: a permanent handle's Name is its 4-octet big-endian handle value
+        //(TPM 2.0 Library Part 1, clause 13, Table 9), folded with an empty policyRef.
         static int ExtendSecret(Span<byte> running, uint authHandle, TpmAlgIdConstants policyHash, BaseMemoryPool pool)
         {
             //A permanent handle value is public, non-secret data, so the tiny fixed-size stack buffer is safe.
@@ -128,7 +126,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
 
         return TpmResult<uint>.Success(policySession);
 
-        /// <summary>Replays a TPM2_PolicyCommandCode assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyCommandCode assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepCommandCodeAsync(TpmDevice device, uint policySession, CommandCodePolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyCommandCodeResponse> result = await device.PolicyCommandCodeAsync(policySession, assertion.CommandCode, cancellationToken).ConfigureAwait(false);
@@ -136,7 +134,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyAuthValue assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyAuthValue assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepAuthValueAsync(TpmDevice device, uint policySession, CancellationToken cancellationToken)
         {
             TpmResult<PolicyAuthValueResponse> result = await device.PolicyAuthValueAsync(policySession, cancellationToken).ConfigureAwait(false);
@@ -144,7 +142,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicySecret assertion, disposing the pooled response; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicySecret assertion, disposing the pooled response; null on success.
         static async ValueTask<TpmResult<uint>?> StepSecretAsync(TpmDevice device, uint policySession, SecretPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicySecretResponse> result = await device.PolicySecretAsync(assertion.AuthHandle, policySession, cancellationToken).ConfigureAwait(false);
@@ -158,7 +156,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return null;
         }
 
-        /// <summary>Replays a TPM2_PolicyNV assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyNV assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepNvAsync(TpmDevice device, uint policySession, NvPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyNvResponse> result = await device.PolicyNvAsync(assertion.AuthHandle, assertion.NvIndex, policySession, assertion.OperandB, assertion.Offset, assertion.Operation, cancellationToken).ConfigureAwait(false);
@@ -166,7 +164,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyCounterTimer assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyCounterTimer assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepCounterTimerAsync(TpmDevice device, uint policySession, CounterTimerPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyCounterTimerResponse> result = await device.PolicyCounterTimerAsync(
@@ -175,7 +173,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyOR assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyOR assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepOrAsync(TpmDevice device, uint policySession, OrPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyOrResponse> result = await device.PolicyOrAsync(policySession, assertion.BranchDigests, cancellationToken).ConfigureAwait(false);
@@ -183,7 +181,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyPCR assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyPCR assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepPcrAsync(TpmDevice device, uint policySession, PcrPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyPcrResponse> result = await device.PolicyPcrAsync(policySession, assertion.PcrBank, assertion.PcrIndices, assertion.PcrDigest, cancellationToken).ConfigureAwait(false);
@@ -191,11 +189,9 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>
-        /// Replays a TPM2_PolicySigned assertion: builds <c>aHash</c> in a pooled buffer, obtains the signature
-        /// through the assertion's delegate as a pooled <see cref="Signature"/> carrier (disposed here), and
-        /// submits the command; <see langword="null"/> on success.
-        /// </summary>
+        //Replays a TPM2_PolicySigned assertion: builds aHash in a pooled buffer, obtains the signature
+        //through the assertion's delegate as a pooled Signature carrier (disposed here), and
+        //submits the command; null on success.
         static async ValueTask<TpmResult<uint>?> StepSignedAsync(TpmDevice device, uint policySession, SignedPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             BaseMemoryPool pool = device.Pool;
@@ -220,7 +216,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return null;
         }
 
-        /// <summary>Replays a TPM2_PolicyAuthorize assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyAuthorize assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepAuthorizeAsync(TpmDevice device, uint policySession, AuthorizePolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyAuthorizeResponse> result = await device.PolicyAuthorizeAsync(
@@ -229,7 +225,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyPassword assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyPassword assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepPasswordAsync(TpmDevice device, uint policySession, CancellationToken cancellationToken)
         {
             TpmResult<PolicyPasswordResponse> result = await device.PolicyPasswordAsync(policySession, cancellationToken).ConfigureAwait(false);
@@ -237,7 +233,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyCpHash assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyCpHash assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepCpHashAsync(TpmDevice device, uint policySession, CpHashPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyCpHashResponse> result = await device.PolicyCpHashAsync(policySession, assertion.CpHashA, cancellationToken).ConfigureAwait(false);
@@ -245,7 +241,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyNameHash assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyNameHash assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepNameHashAsync(TpmDevice device, uint policySession, NameHashPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyNameHashResponse> result = await device.PolicyNameHashAsync(policySession, assertion.NameHash, cancellationToken).ConfigureAwait(false);
@@ -253,7 +249,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyDuplicationSelect assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyDuplicationSelect assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepDuplicationSelectAsync(TpmDevice device, uint policySession, DuplicationSelectPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyDuplicationSelectResponse> result = await device.PolicyDuplicationSelectAsync(
@@ -262,7 +258,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyParameters assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyParameters assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepParametersAsync(TpmDevice device, uint policySession, ParametersPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyParametersResponse> result = await device.PolicyParametersAsync(policySession, assertion.ParametersHash, cancellationToken).ConfigureAwait(false);
@@ -270,7 +266,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyTemplate assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyTemplate assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepTemplateAsync(TpmDevice device, uint policySession, TemplatePolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyTemplateResponse> result = await device.PolicyTemplateAsync(policySession, assertion.TemplateHash, cancellationToken).ConfigureAwait(false);
@@ -278,7 +274,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyLocality assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyLocality assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepLocalityAsync(TpmDevice device, uint policySession, LocalityPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyLocalityResponse> result = await device.PolicyLocalityAsync(policySession, assertion.Locality, cancellationToken).ConfigureAwait(false);
@@ -286,7 +282,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyNvWritten assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyNvWritten assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepNvWrittenAsync(TpmDevice device, uint policySession, NvWrittenPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyNvWrittenResponse> result = await device.PolicyNvWrittenAsync(policySession, assertion.IsWrittenSet, cancellationToken).ConfigureAwait(false);
@@ -294,7 +290,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Replays a TPM2_PolicyAuthorizeNV assertion; <see langword="null"/> on success.</summary>
+        //Replays a TPM2_PolicyAuthorizeNV assertion; null on success.
         static async ValueTask<TpmResult<uint>?> StepAuthorizeNvAsync(TpmDevice device, uint policySession, AuthorizeNvPolicyAssertion assertion, CancellationToken cancellationToken)
         {
             TpmResult<PolicyAuthorizeNvResponse> result = await device.PolicyAuthorizeNvAsync(assertion.AuthHandle, assertion.NvIndex, policySession, cancellationToken).ConfigureAwait(false);
@@ -302,12 +298,73 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
-        /// <summary>Maps a scheme hash algorithm to the digest tag its <see cref="DigestValue"/> carries.</summary>
+        //Maps a scheme hash algorithm to the digest tag its DigestValue carries.
         static Tag DigestTagFor(TpmAlgIdConstants schemeHashAlg) => schemeHashAlg switch
         {
+            TpmAlgIdConstants.TPM_ALG_ERROR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_TDES => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HMAC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_AES => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MGF1 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_XOR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
             TpmAlgIdConstants.TPM_ALG_SHA256 => CryptoTags.Sha256Digest,
             TpmAlgIdConstants.TPM_ALG_SHA384 => CryptoTags.Sha384Digest,
             TpmAlgIdConstants.TPM_ALG_SHA512 => CryptoTags.Sha512Digest,
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_NULL => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM4 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSASSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSAES => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_OAEP => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDH => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDAA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM2 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECMQV => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HKDF => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF2 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CMAC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CTR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_OFB => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CBC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CFB => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECB => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CCM => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_GCM => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KW => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KWP => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EAX => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_LMS => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_XMSS => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MLKEM => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MLDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
             _ => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported.")
         };
     }
@@ -337,9 +394,10 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
     /// for a <see cref="SignedPolicyAssertion"/>'s replay into a caller-provided (pooled) destination. This
     /// builder always replays with an empty caller nonceTPM and an empty cpHashA (a session-unbound,
     /// command-unbound authorization), so the formula collapses to <c>H(expiration || policyRef)</c> — the
-    /// nonceTPM and cpHashA terms contribute no bytes. A pure, synchronous computation with no TPM I/O, so it
-    /// hashes directly rather than through the async digest seam (mirrors <see cref="TpmPolicyDigest"/>'s own
-    /// host-side prediction).
+    /// nonceTPM and cpHashA terms contribute no bytes. A pure, synchronous computation with no TPM I/O, routed
+    /// through the registered synchronous <see cref="CryptographicKeyEvents.ComputeDigest(ReadOnlySpan{byte}, int, Tag, BaseMemoryPool, string?)"/>
+    /// seam rather than the async digest delegate (mirrors <see cref="TpmPolicyDigest"/>'s own host-side
+    /// prediction, which uses the same seam).
     /// </summary>
     /// <param name="expiration">The signed expiration.</param>
     /// <param name="policyRef">The policy qualifier.</param>
@@ -358,12 +416,96 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
 
         return schemeHashAlg switch
         {
-            TpmAlgIdConstants.TPM_ALG_SHA256 => SHA256.HashData(message, destination),
-            TpmAlgIdConstants.TPM_ALG_SHA384 => SHA384.HashData(message, destination),
-            TpmAlgIdConstants.TPM_ALG_SHA512 => SHA512.HashData(message, destination),
+            TpmAlgIdConstants.TPM_ALG_ERROR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_TDES => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HMAC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_AES => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MGF1 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_XOR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA256 => HashViaSeam(message, 32, CryptoTags.Sha256Digest, null, destination, pool),
+            TpmAlgIdConstants.TPM_ALG_SHA384 => HashViaSeam(message, 48, CryptoTags.Sha384Digest, nameof(HashAlgorithmName.SHA384), destination, pool),
+            TpmAlgIdConstants.TPM_ALG_SHA512 => HashViaSeam(message, 64, CryptoTags.Sha512Digest, nameof(HashAlgorithmName.SHA512), destination, pool),
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_NULL => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM4 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSASSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSAES => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_OAEP => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDH => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDAA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM2 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECMQV => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HKDF => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF2 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CMAC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CTR => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_OFB => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CBC => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CFB => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECB => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CCM => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_GCM => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KW => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KWP => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EAX => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_LMS => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_XMSS => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MLKEM => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MLDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported."),
             _ => throw new NotSupportedException($"Scheme hash algorithm '{schemeHashAlg}' is not supported.")
         };
     }
+
+
+    /// <summary>
+    /// Computes a digest through the registered synchronous <see cref="HashFunctionDelegate"/> seam
+    /// (<see cref="CryptographicKeyEvents.ComputeDigest(ReadOnlySpan{byte}, int, Tag, BaseMemoryPool, string?)"/>)
+    /// and copies it into <paramref name="destination"/>, matching what the direct <c>SHA*.HashData</c> call
+    /// this replaces would have written.
+    /// </summary>
+    /// <param name="message">The bytes to hash.</param>
+    /// <param name="length">The digest length in bytes for the selected algorithm.</param>
+    /// <param name="tag">The tag naming the hash algorithm.</param>
+    /// <param name="qualifier">Selects the non-default registered hash function, or <see langword="null"/> for the default SHA-256 registration.</param>
+    /// <param name="destination">Receives the digest.</param>
+    /// <param name="pool">The memory pool the digest is rented from.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    private static int HashViaSeam(ReadOnlySpan<byte> message, int length, Tag tag, string? qualifier, Span<byte> destination, BaseMemoryPool pool)
+    {
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(message, length, tag, pool, qualifier);
+        digest.AsReadOnlySpan()[..length].CopyTo(destination);
+
+        return length;
+    }
+
 
     /// <summary>
     /// Re-wraps a failed step result as a <see cref="TpmResult{T}"/> of session handle, preserving the error kind.

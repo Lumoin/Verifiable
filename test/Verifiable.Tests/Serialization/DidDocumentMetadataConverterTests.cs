@@ -99,4 +99,41 @@ internal sealed class DidDocumentMetadataConverterTests
         Assert.AreEqual("2-def", roundTripped.VersionId);
         Assert.IsTrue(roundTripped.Deactivated);
     }
+
+
+    /// <summary>
+    /// <c>canonicalId</c> and <c>equivalentId</c> are typed top-level members of the flat metadata map (W3C DID
+    /// Resolution, <c>canonicalId</c>/<c>equivalentId</c>), exactly like <c>versionId</c>: they serialize as
+    /// plain strings/arrays at the object root and read back into the same typed properties, not the
+    /// <see cref="DidDocumentMetadata.AdditionalData"/> bucket.
+    /// </summary>
+    [TestMethod]
+    public void CanonicalIdAndEquivalentIdRoundTrip()
+    {
+        DidDocumentMetadata metadata = new()
+        {
+            VersionId = "2-def",
+            CanonicalId = "did:webvh:scid:moved.example",
+            EquivalentId = ["did:webvh:scid:origin.example"]
+        };
+
+        string json = JsonSerializerExtensions.Serialize(metadata, Options);
+
+        using(JsonDocument document = JsonDocument.Parse(json))
+        {
+            Assert.IsTrue(document.RootElement.TryGetProperty("canonicalId", out JsonElement canonicalId));
+            Assert.AreEqual("did:webvh:scid:moved.example", canonicalId.GetString());
+            Assert.IsTrue(document.RootElement.TryGetProperty("equivalentId", out JsonElement equivalentId));
+            Assert.AreEqual(1, equivalentId.GetArrayLength());
+            Assert.AreEqual("did:webvh:scid:origin.example", equivalentId[0].GetString());
+        }
+
+        DidDocumentMetadata roundTripped = JsonSerializerExtensions.Deserialize<DidDocumentMetadata>(json, Options)!;
+
+        Assert.AreEqual(metadata.CanonicalId, roundTripped.CanonicalId);
+        Assert.IsNotNull(roundTripped.EquivalentId);
+        Assert.HasCount(1, roundTripped.EquivalentId!);
+        Assert.AreEqual("did:webvh:scid:origin.example", roundTripped.EquivalentId![0]);
+        Assert.IsNull(roundTripped.AdditionalData, "canonicalId/equivalentId MUST NOT land in the open-world bucket.");
+    }
 }

@@ -10,9 +10,16 @@ namespace Verifiable.Json.Converters;
 /// <remarks>
 /// <para>
 /// This resolver wraps an existing resolver and post-processes the
-/// <see cref="JsonTypeInfo"/> it returns. For types assignable to the target type,
-/// it sets <see cref="JsonPropertyInfo.ShouldSerialize"/> to <see langword="false"/>
-/// for the named property so that STJ skips it during serialization.
+/// <see cref="JsonTypeInfo"/> it returns. For types assignable to the target type, it
+/// transforms <c>propertyName</c> through the call's own
+/// <see cref="JsonSerializerOptions.PropertyNamingPolicy"/> and sets
+/// <see cref="JsonPropertyInfo.ShouldSerialize"/> to <see langword="false"/> for the
+/// property whose resolved <see cref="JsonPropertyInfo.Name"/> equals that transformed
+/// name, so STJ skips it during serialization. Matching the resolved name this way needs
+/// no inspection of the underlying CLR member, so it works identically for
+/// reflection-based and source-generated resolvers; it does not match a property whose
+/// JSON name was set by an explicit <c>JsonPropertyNameAttribute</c> that diverges from
+/// the naming policy's transform of its CLR name.
 /// </para>
 /// <para>
 /// The resolver never creates contracts for unknown types — it returns
@@ -35,10 +42,9 @@ internal sealed class PropertySuppressingResolver: IJsonTypeInfoResolver
     /// The type (and its subtypes) from which the property should be suppressed.
     /// </param>
     /// <param name="propertyName">
-    /// The CLR property name to suppress. Matched by
-    /// <see cref="JsonPropertyInfo.Name"/> before naming policy transformation,
-    /// using the <see cref="MemberInfo.Name"/> from the property's
-    /// <see cref="JsonPropertyInfo.AttributeProvider"/>.
+    /// The CLR property name to suppress, matched against the resolved
+    /// <see cref="JsonPropertyInfo.Name"/> after the active naming policy transforms it
+    /// (see the type remarks).
     /// </param>
     public PropertySuppressingResolver(
         IJsonTypeInfoResolver innerResolver,
@@ -65,16 +71,13 @@ internal sealed class PropertySuppressingResolver: IJsonTypeInfoResolver
 
         if(TargetType.IsAssignableFrom(type))
         {
+            //Transform the configured CLR name through the same naming policy STJ applied
+            //to each property's resolved Name, then match on that resolved name directly.
+            string expectedName = options.PropertyNamingPolicy?.ConvertName(PropertyName) ?? PropertyName;
+
             foreach(var property in typeInfo.Properties)
             {
-                //Match by the CLR property name. The AttributeProvider is the
-                //PropertyInfo when using DefaultJsonTypeInfoResolver. For
-                //source-generated resolvers, fall back to matching by the
-                //property's Get method name convention.
-                bool isMatch = property.AttributeProvider is System.Reflection.PropertyInfo pi
-                    && pi.Name == PropertyName;
-
-                if(isMatch)
+                if(property.Name == expectedName)
                 {
                     property.ShouldSerialize = static (_, _) => false;
                     break;

@@ -15,6 +15,7 @@ namespace Verifiable.JCose
         /// <summary>The UTF-8 source literal of <see cref="A128CbcHs256"/>.</summary>
         public static ReadOnlySpan<byte> A128CbcHs256Utf8 => "A128CBC-HS256"u8;
 
+        /// <summary>
         /// AES/CBC/HMAC/SHA authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">AES_128_CBC_HMAC_SHA_256</see>.</remarks>

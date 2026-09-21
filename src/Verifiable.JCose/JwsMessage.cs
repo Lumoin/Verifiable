@@ -159,6 +159,12 @@ public sealed class JwsMessage: IEquatable<JwsMessage>, IDisposable
     }
 
 
+    /// <summary>
+    /// Determines whether two <see cref="JwsMessage"/> instances are equal.
+    /// </summary>
+    /// <param name="left">The first message.</param>
+    /// <param name="right">The second message.</param>
+    /// <returns><see langword="true"/> if both carry the same payload, detachment flag, and signatures; otherwise, <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator ==(JwsMessage? left, JwsMessage? right)
     {
@@ -166,6 +172,12 @@ public sealed class JwsMessage: IEquatable<JwsMessage>, IDisposable
     }
 
 
+    /// <summary>
+    /// Determines whether two <see cref="JwsMessage"/> instances are not equal.
+    /// </summary>
+    /// <param name="left">The first message.</param>
+    /// <param name="right">The second message.</param>
+    /// <returns><see langword="true"/> if the messages differ; otherwise, <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator !=(JwsMessage? left, JwsMessage? right)
     {

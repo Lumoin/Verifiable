@@ -58,12 +58,12 @@ internal delegate Task<MinimalHttpResponse> MinimalHttpHandlerDelegate(
 /// for example a Shared Signals Receiver's push endpoint or a test Transmitter's poll endpoint — so
 /// end-to-end tests move real bytes over a real socket without standing up a full server skin. Binds
 /// through <see cref="WebApplication.CreateSlimBuilder()"/> with a single explicit
-/// <see cref="Microsoft.AspNetCore.Hosting.ListenOptionsHttpsExtensions.UseHttps(Microsoft.AspNetCore.Server.Kestrel.Core.ListenOptions, X509Certificate2)"/>
+/// <c>ListenOptionsHttpsExtensions.UseHttps(ListenOptions, X509Certificate2)</c>
 /// listen call presenting <see cref="Certificate"/> — the generic-host bootstrap a raw
 /// <c>KestrelServer</c> cannot reach, since enabling HTTPS resolves an internal
 /// <c>IHttpsConfigurationService</c> only that bootstrap wires up — so there is no plaintext fallback
 /// on this host at all. Callers pin their <see cref="System.Net.Http.HttpClient"/> to
-/// <see cref="Certificate"/> via <see cref="LoopbackTls.CreatePinnedHttpClient"/>.
+/// <see cref="Certificate"/> via <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.
 /// </summary>
 internal sealed class MinimalHttpHost: IAsyncDisposable
 {
@@ -72,7 +72,7 @@ internal sealed class MinimalHttpHost: IAsyncDisposable
     /// <summary>The loopback base address Kestrel bound (ephemeral port).</summary>
     public Uri BaseAddress { get; }
 
-    /// <summary>The self-signed leaf certificate this host's HTTPS listener presents; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient"/>.</summary>
+    /// <summary>The self-signed leaf certificate this host's HTTPS listener presents; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.</summary>
     internal X509Certificate2 Certificate { get; }
 
 

@@ -235,7 +235,7 @@ internal sealed class XAdESValidationDataTriggerTests
 
 
     /// <summary>
-    /// Proves the table-identity guard: a <paramref name="table"/> argument that is not the identical instance the fixture's <see
+    /// Proves the table-identity guard: a <c>table</c> argument that is not the identical instance the fixture's <see
     /// cref="XAdESUnsignedSignatureProperties"/> was read from refuses with <see cref="XAdESProcessingFailure.TableMismatch"/> rather than being silently
     /// processed against the wrong document. Anchored to <see
     /// href="https://www.etsi.org/deliver/etsi_en/319100_319199/31913201/01.03.01_60/en_31913201v010301p.pdf">ETSI EN 319 132-1 V1.3.1</see> Annex A.1.1.

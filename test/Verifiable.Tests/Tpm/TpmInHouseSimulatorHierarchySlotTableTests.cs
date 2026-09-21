@@ -961,6 +961,7 @@ internal sealed class TpmInHouseSimulatorHierarchySlotTableTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="registry">The response codec registry.</param>
     /// <param name="input">The command input.</param>
+    /// <param name="handleNames">The command's handle-area Names, in order, for the session's cpHash computation; <see langword="null"/> when the command has no handle area.</param>
     /// <returns>The command's result.</returns>
     private async Task<TpmResult<TResponse>> ExecuteOverUnboundHmacSessionAsync<TResponse>(
         TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, ITpmCommandInput input,

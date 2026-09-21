@@ -228,4 +228,30 @@ public static class WellKnownFederationCapabilityIdentifiers
     /// </summary>
     public static CapabilityIdentifier PublishTrustMarkStatus { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:federation:publish_trust_mark_status");
+
+
+    /// <summary>The hand-kept list behind <see cref="All"/>: every identifier this class declares, in declaration order.</summary>
+    private static IReadOnlyList<CapabilityIdentifier> RegisteredIdentifiers { get; } =
+    [
+        ValidateEntityStatement,
+        ValidateTrustChain,
+        FetchEntityStatement,
+        ListSubordinates,
+        ResolveTrustChain,
+        ApplyMetadataPolicy,
+        ValidateTrustMark,
+        ListTrustMarkSubjects,
+        TrustMarkStatus,
+        PublishEntityConfiguration,
+        PublishSubordinateStatement,
+        RegisterClientsExplicitly,
+        RegisterClientsAutomatically,
+        PublishHistoricalKeys,
+        PublishTrustMark,
+        PublishTrustMarkedList,
+        PublishTrustMarkStatus
+    ];
+
+    /// <summary>Gets every <see cref="CapabilityIdentifier"/> this class declares, in declaration order.</summary>
+    public static IReadOnlyList<CapabilityIdentifier> All => RegisteredIdentifiers;
 }

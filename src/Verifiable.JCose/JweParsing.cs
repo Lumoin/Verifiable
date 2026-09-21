@@ -179,6 +179,17 @@ public static class JweParsing
             EpkCrvToTagDelegate crvToTagConverter,
             BaseMemoryPool pool)
     {
+        //Gate the whole decoded protected header for well-formedness — including a duplicate Header
+        //Parameter name at any nesting depth (RFC 7516 §4 / §5.2 step 4) — before extracting a single
+        //field from it, so "alg"/"enc" selection below can never run against a first occurrence while a
+        //duplicate second occurrence goes unnoticed until later.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(headerJson))
+        {
+            throw new FormatException(
+                "JWE protected header is not a well-formed JSON object, or contains a duplicate Header "
+                + "Parameter name, which MUST be unique (RFC 7516 §4 / §5.2 step 4).");
+        }
+
         string? alg = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.AlgUtf8);
         string? enc = JwkJsonReader.ExtractStringValue(headerJson, "enc"u8);
 

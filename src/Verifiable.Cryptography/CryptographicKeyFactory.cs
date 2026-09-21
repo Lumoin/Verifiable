@@ -314,4 +314,17 @@ public static class CryptographicKeyFactory
 
         return dict.ToFrozenDictionary();
     }
+
+
+    /// <summary>
+    /// Gets whether this factory can create keys — delegating to
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}.IsInitialized"/> of
+    /// <see cref="CryptoAlgorithm"/>/<see cref="Purpose"/>, the registry this factory's own class
+    /// doc states it is "already-initialized" against, since this factory holds no throwing default
+    /// of its own to detect.
+    /// </summary>
+    public static bool IsInitialized
+    {
+        get => CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized;
+    }
 }

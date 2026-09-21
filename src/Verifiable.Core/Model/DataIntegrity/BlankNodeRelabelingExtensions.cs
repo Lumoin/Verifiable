@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Verifiable.Core.Model.DataIntegrity;
 
 /// <summary>
@@ -12,27 +10,8 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// blank node identifiers.
 /// </para>
 /// </remarks>
-public static partial class BlankNodeRelabelingExtensions
+public static class BlankNodeRelabelingExtensions
 {
-    /// <summary>
-    /// Regular expression pattern for matching blank node identifiers.
-    /// Matches patterns like <c>"_:c14n0"</c>, <c>"_:c14n123"</c>, <c>"_:uXYZ..."</c>, etc.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// HMAC-relabeled identifiers use the format <c>u</c> followed by a base64url-no-pad
-    /// encoded HMAC digest. Base64url encoding uses the alphabet <c>A-Za-z0-9-_</c>
-    /// per <see href="https://datatracker.ietf.org/doc/html/rfc4648#section-5">RFC 4648 §5</see>.
-    /// </para>
-    /// <para>
-    /// See <see href="https://www.w3.org/TR/vc-di-ecdsa/#createhmacidlabelmapfunction">
-    /// W3C VC DI ECDSA: createHmacIdLabelMapFunction</see>.
-    /// </para>
-    /// </remarks>
-    [GeneratedRegex(@"_:[a-zA-Z0-9_-]+")]
-    private static partial Regex BlankNodePattern();
-
-
     /// <summary>
     /// Applies an existing label map to relabel blank nodes in N-Quad statements.
     /// </summary>
@@ -48,7 +27,7 @@ public static partial class BlankNodeRelabelingExtensions
     /// <para>
     /// This method is used by verifiers who receive a label map in the derived proof
     /// and need to apply it to re-canonicalized statements. Unlike
-    /// <see cref="BlankNodeRelabeling.RelabelNQuadsWithMap"/>, this does not compute
+    /// <see cref="BlankNodeRelabeling.RelabelNQuadsWithMapAsync"/>, this does not compute
     /// HMAC values - it uses the pre-computed mappings from the label map.
     /// </para>
     /// <para>
@@ -93,36 +72,30 @@ public static partial class BlankNodeRelabelingExtensions
 
         var result = nquad;
         var searchStart = 0;
-        while(true)
+        while(NQuadBlankNodeScanner.FindNext(result, searchStart) is (int markerStart, int identifierEnd))
         {
-            //Find the next canonical blank node pattern "_:c".
-            var index = result.IndexOf("_:c", searchStart, StringComparison.Ordinal);
-            if(index < 0)
+            //A blank node term at a position that is not canonical (_:c14nN) carries nothing to
+            //relabel here; move past it.
+            var fullBlankNodeId = result[markerStart..identifierEnd];
+            if(!IsCanonicalBlankNode(fullBlankNodeId))
             {
-                break;
+                searchStart = identifierEnd;
+                continue;
             }
 
-            //Find the end of the blank node identifier.
-            var endIndex = index + 3;
-            while(endIndex < result.Length && (char.IsLetterOrDigit(result[endIndex]) || result[endIndex] == 'n'))
-            {
-                endIndex++;
-            }
-
-            //Extract the blank node identifier (without the "_:" prefix).
-            var canonicalId = result[(index + 2)..endIndex];
+            var canonicalId = fullBlankNodeId[2..];
 
             //Look up the HMAC-derived identifier.
             if(labelMap.TryGetValue(canonicalId, out var hmacId))
             {
                 var hmacFullId = "_:" + hmacId;
-                result = string.Concat(result.AsSpan(0, index), hmacFullId, result.AsSpan(endIndex));
-                searchStart = index + hmacFullId.Length;
+                result = string.Concat(result.AsSpan(0, markerStart), hmacFullId, result.AsSpan(identifierEnd));
+                searchStart = markerStart + hmacFullId.Length;
             }
             else
             {
                 //No mapping found, skip this blank node.
-                searchStart = endIndex;
+                searchStart = identifierEnd;
             }
         }
 
@@ -212,11 +185,12 @@ public static partial class BlankNodeRelabelingExtensions
     {
         ArgumentNullException.ThrowIfNull(nquad);
 
-        var matches = BlankNodePattern().Matches(nquad);
-        var result = new List<string>(matches.Count);
-        foreach(Match match in matches)
+        var result = new List<string>();
+        var searchStart = 0;
+        while(NQuadBlankNodeScanner.FindNext(nquad, searchStart) is (int markerStart, int identifierEnd))
         {
-            result.Add(match.Value);
+            result.Add(nquad[markerStart..identifierEnd]);
+            searchStart = identifierEnd;
         }
 
         return result;
@@ -246,5 +220,55 @@ public static partial class BlankNodeRelabelingExtensions
         ArgumentNullException.ThrowIfNull(blankNodeId);
 
         return blankNodeId.StartsWith(BlankNodeRelabeling.HmacBlankNodePrefix, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// Determines whether any canonical (<c>_:c14nN</c>) blank node in <paramref name="nquads"/>
+    /// has no entry in <paramref name="labelMap"/>.
+    /// </summary>
+    /// <param name="nquads">The canonical N-Quad statements to check.</param>
+    /// <param name="labelMap">
+    /// Mapping from canonical identifiers to relabeled identifiers, keyed in bare format
+    /// (e.g., <c>"c14n0"</c>) per
+    /// <see href="https://www.w3.org/TR/vc-di-ecdsa/#compresslabelmap">
+    /// VC Data Integrity ECDSA §3.5.5 compressLabelMap</see>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if some canonical blank node in <paramref name="nquads"/> has no
+    /// corresponding entry in <paramref name="labelMap"/>; otherwise <see langword="false"/>.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// A verifier canonicalizes the disclosed document with its own RDF Dataset Canonicalization
+    /// implementation, which is not required to assign a graph's blank nodes the same canonical
+    /// labels a different conformant implementation assigned to the same graph
+    /// (<see href="https://www.w3.org/TR/rdf-canon/">RDF Dataset Canonicalization 1.0</see>
+    /// defines a deterministic result per conformant implementation, not a label assignment
+    /// shared across implementations). When the proof's label map does not cover every canonical
+    /// blank node the verifier's own canonicalization produced, applying it would leave one or
+    /// more blank nodes under a label the base signature never bound, so verification refuses
+    /// rather than check content that was not what was signed.
+    /// </para>
+    /// </remarks>
+    public static bool HasUnmappedCanonicalBlankNode(
+        IEnumerable<string> nquads,
+        IReadOnlyDictionary<string, string> labelMap)
+    {
+        ArgumentNullException.ThrowIfNull(nquads);
+        ArgumentNullException.ThrowIfNull(labelMap);
+
+        foreach(var nquad in nquads)
+        {
+            foreach(var blankNode in ExtractBlankNodes(nquad))
+            {
+                if(IsCanonicalBlankNode(blankNode) && !labelMap.ContainsKey(blankNode[2..]))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

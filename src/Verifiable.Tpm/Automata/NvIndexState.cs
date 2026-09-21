@@ -316,7 +316,7 @@ public sealed record NvIndexState(
     }
 
     /// <summary>
-    /// Returns a copy of this Index carrying <paramref name="strippedAuthValue"/> as its authorization value —
+    /// Returns a copy of this Index carrying <paramref name="newAuth"/> as its authorization value —
     /// the sole effect of <c>TPM2_NV_ChangeAuth()</c> (TPM 2.0 Library Part 3, clause 31.15), which replaces the
     /// authValue and nothing else.
     /// </summary>

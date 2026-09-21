@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
+using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -80,22 +81,26 @@ internal sealed class FullLifecycleTests
             TestSetup.DefaultSerializationOptions);
 
 
+    /// <summary>
+    /// An issued credential completes presentation and its accepted result is available to introspection.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.2">Verifiable Presentations §8.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task OneCredentialLivesThroughIssuancePresentationAndIntrospection()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            WalletClientId, WalletBaseUri, PolicyProfile.Rfc6749WithPkce, AllIssuerCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            WalletClientId, WalletBaseUri, PolicyProfile.Rfc6749WithPkce, AllIssuerCapabilities).ConfigureAwait(false);
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." This lifecycle mints a plain-bearer credential token;
         //keep it within the long-lived threshold (lifetimes longer than 5 minutes are long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
         //RFC 9701: the introspection response is signed with a dedicated usage slot.
-        host.UpdateSigningKeys(
+        await host.UpdateSigningKeysAsync(
             material.Registration.TenantId.Value,
             material.Registration.SigningKeys.ToImmutableDictionary().Add(
                 KeyUsageContext.IntrospectionResponseSigning,
-                new SigningKeySet { Current = [material.SigningKeyId] }));
+                new SigningKeySet { Current = [material.SigningKeyId] })).ConfigureAwait(false);
         string tenant = material.Registration.TenantId.Value;
 
         //=== The wallet's long-lived key material. ===
@@ -118,9 +123,12 @@ internal sealed class FullLifecycleTests
         using PublicKeyMemory sdJwtIssuerPublic = sdJwtIssuerKeys.PublicKey;
         using PrivateKeyMemory sdJwtIssuerPrivate = sdJwtIssuerKeys.PrivateKey;
 
-        WireIssuerSeams(host, sdJwtIssuerPrivate, out LifecycleIssuerState issuerState);
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptAsync(jwe, requestEncryptionPrivate).ConfigureAwait(false);
+        LifecycleIssuerState issuerState = await WireIssuerSeamsAsync(host, sdJwtIssuerPrivate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, requestEncryptionPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         //=== Act 1, step 1: the Issuer hands the Wallet a Credential Offer (§4). ===
         CredentialOffer offer = new()
@@ -243,8 +251,8 @@ internal sealed class FullLifecycleTests
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        PublicKeyMemory? IssuerLookup(string iss) =>
-            string.Equals(iss, SdJwtIssuerId, StringComparison.Ordinal) ? sdJwtIssuerPublic : null;
+        ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
+            ValueTask.FromResult(string.Equals(iss, SdJwtIssuerId, StringComparison.Ordinal) ? sdJwtIssuerPublic : null);
 
         VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
             presentation, new CredentialQueryId("pid"),
@@ -255,6 +263,9 @@ internal sealed class FullLifecycleTests
             MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             saltReuseSeam: null,
+            parseX5c: null,
+            resolveTrustedAuthorityEvidence: null,
+            context: new ExchangeContext(),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify at the verifier.");
@@ -273,15 +284,19 @@ internal sealed class FullLifecycleTests
 
         //=== Act 3: a resource server introspects the issuance access token — signed per
         //RFC 9701 so the verdict itself is attestable. ===
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().IntrospectTokenAsync = (token, _, _, _, _) =>
-            ValueTask.FromResult(new TokenIntrospectionResult
-            {
-                IsActive = string.Equals(token, accessToken, StringComparison.Ordinal),
-                Subject = EndUserSubject,
-                Scope = WellKnownScopes.OpenId
-            });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.IntrospectTokenAsync = (token, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult
+                {
+                    IsActive = string.Equals(token, accessToken, StringComparison.Ordinal),
+                    Subject = EndUserSubject,
+                    Scope = WellKnownScopes.OpenId
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse introspection = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.AuthCodeIntrospect, "POST",
@@ -327,99 +342,110 @@ internal sealed class FullLifecycleTests
     /// bound to the proven holder key, deferred delivery, notification acknowledgement, and
     /// §10 response encryption with real ECDH-ES + AES-GCM.
     /// </summary>
-    private void WireIssuerSeams(
-        TestHostShell host, PrivateKeyMemory sdJwtIssuerPrivate, out LifecycleIssuerState state)
+    private async Task<LifecycleIssuerState> WireIssuerSeamsAsync(
+        TestHostShell host, PrivateKeyMemory sdJwtIssuerPrivate)
     {
         LifecycleIssuerState issuerState = new();
-        state = issuerState;
         string? mintedNonce = null;
 
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
-            ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
-                ? PreAuthorizedCodeDecision.Grant(EndUserSubject, WellKnownScopes.OpenId)
-                : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
-
-        host.Server.OAuth().IssueCredentialNonceAsync = (_, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
 
-            return ValueTask.FromResult(mintedNonce);
-        };
 
-        host.Server.OAuth().IssueCredentialAsync = async (request, accessTokenPayload, _, _, ct) =>
-        {
-            //Verify the holder proof: signature against the header jwk, c_nonce freshness.
-            string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
-            (PublicKeyMemory proofKey, string? proofNonce) = await ReadProofAsync(proof).ConfigureAwait(false);
+            candidateIntegration.ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
+                ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
+                    ? PreAuthorizedCodeDecision.Grant(EndUserSubject, WellKnownScopes.OpenId)
+                    : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
 
-            using(proofKey)
+
+            candidateIntegration.IssueCredentialNonceAsync = (_, _) =>
             {
-                bool isProofSignatureValid = await Jws.VerifyAsync(
-                    proof, TestSetup.Base64UrlDecoder,
-                    Pool,
-                    proofKey, cancellationToken: ct).ConfigureAwait(false);
+                mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
 
-                if(!isProofSignatureValid
-                    || mintedNonce is null
-                    || !string.Equals(proofNonce, mintedNonce, StringComparison.Ordinal))
+                return ValueTask.FromResult(mintedNonce);
+            };
+
+
+            candidateIntegration.IssueCredentialAsync = async (request, accessTokenPayload, _, _, ct) =>
+            {
+                //Verify the holder proof: signature against the header jwk, c_nonce freshness.
+                string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
+                (PublicKeyMemory proofKey, string? proofNonce) = await ReadProofAsync(proof).ConfigureAwait(false);
+
+                using(proofKey)
                 {
-                    return CredentialIssuanceDecision.Deny(CredentialRequestError.InvalidProof);
+                    bool isProofSignatureValid = await Jws.VerifyAsync(
+                        proof, TestSetup.Base64UrlDecoder,
+                        Pool,
+                        proofKey, cancellationToken: ct).ConfigureAwait(false);
+
+                    if(!isProofSignatureValid
+                        || mintedNonce is null
+                        || !string.Equals(proofNonce, mintedNonce, StringComparison.Ordinal))
+                    {
+
+                        return CredentialIssuanceDecision.Deny(CredentialRequestError.InvalidProof);
+                    }
+
+                    issuerState.IsProofVerified = true;
+
+                    //Mint the real SD-JWT VC bound to the proven holder key NOW; deliver it
+                    //later through the deferred transaction (manual decision simulation).
+                    issuerState.PendingCredential = await IssueSdJwtVcAsync(
+                        sdJwtIssuerPrivate, proof, cancellationToken: ct).ConfigureAwait(false);
                 }
 
-                issuerState.IsProofVerified = true;
+                return CredentialIssuanceDecision.Defer(TransactionId, 60);
+            };
 
-                //Mint the real SD-JWT VC bound to the proven holder key NOW; deliver it
-                //later through the deferred transaction (manual-review simulation).
-                issuerState.PendingCredential = await IssueSdJwtVcAsync(
-                    sdJwtIssuerPrivate, proof, cancellationToken: ct).ConfigureAwait(false);
-            }
 
-            return CredentialIssuanceDecision.Defer(TransactionId, 60);
-        };
+            candidateIntegration.ResolveDeferredCredentialAsync = (transactionId, _, _, _, _) =>
+                ValueTask.FromResult(
+                    string.Equals(transactionId, TransactionId, StringComparison.Ordinal)
+                        && issuerState.PendingCredential is string credential
+                    ? DeferredCredentialDecision.Issue([credential], NotificationIdValue)
+                    : DeferredCredentialDecision.Refuse(DeferredCredentialError.InvalidTransactionId));
 
-        host.Server.OAuth().ResolveDeferredCredentialAsync = (transactionId, _, _, _, _) =>
-            ValueTask.FromResult(
-                string.Equals(transactionId, TransactionId, StringComparison.Ordinal)
-                    && issuerState.PendingCredential is string credential
-                ? DeferredCredentialDecision.Issue([credential], NotificationIdValue)
-                : DeferredCredentialDecision.Refuse(DeferredCredentialError.InvalidTransactionId));
 
-        host.Server.OAuth().ProcessCredentialNotificationAsync = (notification, _, _, _, _) =>
-        {
-            issuerState.AcknowledgedNotificationId = notification.NotificationId;
-
-            return ValueTask.FromResult(
-                string.Equals(notification.NotificationId, NotificationIdValue, StringComparison.Ordinal)
-                    ? CredentialNotificationDecision.Accept
-                    : CredentialNotificationDecision.RejectUnknownId());
-        };
-
-        host.Server.OAuth().EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
-        {
-            Dictionary<string, object> jwkDict = new(StringComparer.Ordinal);
-            foreach(KeyValuePair<string, object> member in encryption.Jwk!)
+            candidateIntegration.ProcessCredentialNotificationAsync = (notification, _, _, _, _) =>
             {
-                jwkDict[member.Key] = member.Value;
-            }
+                issuerState.AcknowledgedNotificationId = notification.NotificationId;
 
-            var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                jwkDict, Pool, TestSetup.Base64UrlDecoder);
-            Tag recipientTag = Tag.Create(algorithm).With(purpose).With(scheme);
-            using PublicKeyMemory recipientKey = new(keyBytes, recipientTag);
+                return ValueTask.FromResult(
+                    string.Equals(notification.NotificationId, NotificationIdValue, StringComparison.Ordinal)
+                        ? CredentialNotificationDecision.Accept
+                        : CredentialNotificationDecision.RejectUnknownId());
+            };
 
-            return await HaipProfile.EncryptResponseAsync(
-                recipientKey, encryption.Enc!,
-                Encoding.UTF8.GetBytes(responseJson).AsMemory(),
-                HeaderSerializer,
-                CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
-                ConcatKdf.DefaultKeyDerivationDelegate,
-                BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
-                TestSetup.Base64UrlEncoder, Pool,
-                cancellationToken: ct).ConfigureAwait(false);
-        };
+
+            candidateIntegration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+            {
+                Dictionary<string, object> jwkDict = new(StringComparer.Ordinal);
+                foreach(KeyValuePair<string, object> member in encryption.Jwk!)
+                {
+                    jwkDict[member.Key] = member.Value;
+                }
+
+                var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
+                    jwkDict, Pool, TestSetup.Base64UrlDecoder);
+                Tag recipientTag = Tag.Create(algorithm).With(purpose).With(scheme);
+                using PublicKeyMemory recipientKey = new(keyBytes, recipientTag);
+
+                return await HaipProfile.EncryptResponseAsync(
+                    recipientKey, encryption.Enc!,
+                    Encoding.UTF8.GetBytes(responseJson).AsMemory(),
+                    HeaderSerializer,
+                    CryptoFormatConversions.DefaultTagToEpkCrvConverter,
+                    BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
+                    ConcatKdf.DefaultKeyDerivationDelegate,
+                    BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+                    TestSetup.Base64UrlEncoder, Pool,
+                    cancellationToken: ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
+
+        return issuerState;
     }
 
 

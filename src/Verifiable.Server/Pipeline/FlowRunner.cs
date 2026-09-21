@@ -44,7 +44,7 @@ public static class FlowRunner
     /// </param>
     /// <param name="context">
     /// The per-request context bag. Must carry the active dispatch host via
-    /// <see cref="ExchangeContextServerExtensions.Server"/> (set by the dispatcher at
+    /// <c>ExchangeContextServerExtensions.RequestServer</c> (set by the dispatcher at
     /// entry).
     /// </param>
     /// <param name="timeProvider">Time source for PDA step timestamps.</param>
@@ -64,9 +64,9 @@ public static class FlowRunner
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        EndpointServer server = context.Server
+        EndpointServer server = context.RequestServer
             ?? throw new InvalidOperationException(
-                "context.Server must be set before FlowRunner.StepWithEffectsAsync.");
+                "context.RequestServer must be set before FlowRunner.StepWithEffectsAsync.");
 
         if(currentState.Kind is not StatefulFlowKind statefulKind)
         {

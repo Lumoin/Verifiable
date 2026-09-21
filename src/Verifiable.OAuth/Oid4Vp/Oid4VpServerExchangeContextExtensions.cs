@@ -4,8 +4,6 @@ using Verifiable.Core.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
-using Verifiable.OAuth.Server;
-
 namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
@@ -223,7 +221,7 @@ public static class Oid4VpServerExchangeContextExtensions
 
         /// <summary>
         /// Gets the per-flow opaque token the application's
-        /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+        /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
         /// delegate uses when composing the <c>request_uri</c> URL.
         /// </summary>
         /// <returns>
@@ -233,7 +231,7 @@ public static class Oid4VpServerExchangeContextExtensions
         /// <remarks>
         /// The library's PAR endpoint generates a fresh random token and places
         /// it here immediately before invoking
-        /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+        /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
         /// with key <see cref="Oid4VpEndpointKeys.RequestUri"/>. The token is
         /// unrelated to the internal flow identifier — it crosses the wire as
         /// part of the URL the Wallet dereferences and as the JAR's <c>state</c>
@@ -247,7 +245,7 @@ public static class Oid4VpServerExchangeContextExtensions
 
         /// <summary>
         /// Sets the per-flow opaque token. Called by the library's PAR endpoint
-        /// before invoking <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>.
+        /// before invoking <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>.
         /// </summary>
         /// <param name="token">The opaque token.</param>
         public void SetParHandle(string token)

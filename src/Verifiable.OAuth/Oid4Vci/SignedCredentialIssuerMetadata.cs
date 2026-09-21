@@ -22,11 +22,11 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// <item>JOSE header <c>typ</c>: "REQUIRED. MUST be <c>openidvci-issuer-metadata+jwt</c>." — set
 /// from <see cref="SignedMetadataType"/>.</item>
 /// <item>Payload <c>sub</c>: "REQUIRED. String matching the Credential Issuer Identifier." — set
-/// from the <paramref name="credentialIssuer"/> argument.</item>
+/// from the <c>credentialIssuer</c> argument.</item>
 /// <item>Payload <c>iat</c>: "REQUIRED. Integer for the time at which the Credential Issuer
-/// Metadata was issued." — set from <paramref name="issuedAt"/>.</item>
+/// Metadata was issued." — set from <c>issuedAt</c>.</item>
 /// <item>"All metadata parameters used by the Credential Issuer MUST be added as top-level claims
-/// in the JWS payload." — every claim in <paramref name="metadata"/> is copied to the payload.</item>
+/// in the JWS payload." — every claim in <c>metadata</c> is copied to the payload.</item>
 /// </list>
 /// <para>
 /// The seam (<see cref="Server.SignCredentialIssuerMetadataDelegate"/>) stays application-owned —
@@ -48,6 +48,11 @@ public static class SignedCredentialIssuerMetadata
     /// </summary>
     public static string SignedMetadataType { get; } = Utf8Constants.ToInternedString(SignedMetadataTypeUtf8);
 
+    /// <summary>Whether <paramref name="typ"/> is <see cref="SignedMetadataType"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="SignedMetadataType"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSignedMetadataType(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, SignedMetadataType);
+
 
     /// <summary>
     /// Composes and signs the §12.2.3 <c>signed_metadata</c> JWS over the assembled metadata claim
@@ -65,7 +70,7 @@ public static class SignedCredentialIssuerMetadata
     /// <c>credential_issuer</c> the claim set carries.
     /// </param>
     /// <param name="signingKey">
-    /// The issuer's signing key. Its <see cref="Verifiable.Foundation.SensitiveMemory.Tag"/>
+    /// The issuer's signing key. Its <see cref="Lumoin.Base.SensitiveData.Tag"/>
     /// selects the JWS <c>alg</c> and signing function; a key whose algorithm resolves to
     /// <c>none</c> or a symmetric MAC is rejected before any signing happens.
     /// </param>

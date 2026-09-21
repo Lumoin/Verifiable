@@ -304,8 +304,8 @@ internal sealed class XmlCanonicalizationExclusiveFixtureTests
     /// the serialization of XML comments", with the section 2.3 <c>#xA</c> separators of Canonical XML
     /// around comments outside the document element. Both exclusive members of
     /// <see cref="XmlCanonicalizationAlgorithm"/> through
-    /// <see cref="XmlCanonicalization.TryCanonicalize"/> produce the same octets as
-    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/> with an empty prefix list.
+    /// <see cref="XmlCanonicalization.TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/> produce the same octets as
+    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/> with an empty prefix list.
     /// </summary>
     [TestMethod]
     public void ExclusiveWithCommentsRendersCommentsAndAlgorithmMembersDelegate()

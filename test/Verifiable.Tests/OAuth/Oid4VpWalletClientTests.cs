@@ -3,12 +3,14 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
+using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Oid4Vp;
@@ -16,7 +18,9 @@ using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.Federation;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -50,8 +54,8 @@ internal sealed class Oid4VpWalletClientTests
     public async Task PresentsValidVpTokenForSimpleSdJwtVcRequest()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -97,8 +101,8 @@ internal sealed class Oid4VpWalletClientTests
     public async Task IgnoresUnrecognizedDirectPostResponseMembersPerSection82()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -160,8 +164,8 @@ internal sealed class Oid4VpWalletClientTests
         //meant to answer. The wallet MUST refuse fail-closed before producing any
         //presentation or POSTing a response, so the Verifier never verifies.
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -204,8 +208,8 @@ internal sealed class Oid4VpWalletClientTests
     public async Task PresentJarAsyncRoundTripsThroughExistingVerifier()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -236,12 +240,216 @@ internal sealed class Oid4VpWalletClientTests
     }
 
 
+    /// <summary>
+    /// <see cref="OutboundRequest"/>: "the endpoints a client POSTs to ... are themselves taken
+    /// from discovered metadata, so a malicious or misconfigured metadata document could point
+    /// them at an internal, loopback, or cloud-metadata address ... The OutboundFetchPolicy must
+    /// therefore gate every method." The same reasoning applies to a Verifier's <c>response_uri</c>:
+    /// a loopback address is refused before the <c>direct_post</c> is ever sent.
+    /// </summary>
+    [TestMethod]
+    public async Task DirectPostRefusesLoopbackResponseUriBeforeAnyDial()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        Uri loopbackVerifierBaseUri = new("https://127.0.0.1");
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, loopbackVerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        (Uri requestUri, _, string compactJar) = await IssueJarAsync(app, verifierKeys).ConfigureAwait(false);
+
+        int invocationCount = 0;
+        (OAuthClient oauthClient, _, _) = app.CreateInProcessOAuthClientAndRegistration(
+            verifierKeys.Registration,
+            "https://client.example.com/callback",
+            verifierKeys.Registration.IssuerUri!.ToString(),
+            decorateSendFormPostAsync: inner => (endpoint, fields, headers, context, ct) =>
+            {
+                invocationCount++;
+
+                return inner(endpoint, fields, headers, context, ct);
+            });
+
+        ProduceVpTokenPresentationsDelegate produce =
+            TestHostShell.BuildSdJwtProduceDelegate(serializedSdJwt, holderKey);
+        Oid4VpWalletClient walletClient = new(
+            oauthClient.Infrastructure,
+            TestHostShell.BuildSlimOid4VpWalletConfiguration(
+                produce,
+                TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey)));
+
+        InvalidOperationException error = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await walletClient.PresentJarAsync(
+                new PresentJarOptions
+                {
+                    CompactJar = compactJar,
+                    RequestUri = requestUri,
+                    ExpectedVerifierClientId = VerifierClientId,
+                    FlowId = $"wallet-loopback-{Guid.NewGuid():N}"
+                },
+                TestContext.CancellationToken).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
+        Assert.Contains("outbound fetch policy", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(0, invocationCount, "The transport spy must record ZERO invocations when the policy denies response_uri.");
+    }
+
+
+    /// <summary>
+    /// <see cref="Oid4VpWalletConfiguration.OutboundFetchPolicy"/> governs the §5.10
+    /// <c>request_uri_method=post</c> JAR fetch whose <see cref="ExchangeContext"/> carries no
+    /// policy: a loopback <c>request_uri</c> refuses under the configuration's default and dials
+    /// once the configuration names a loopback-allowing policy.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUriMethodPostConsultsConfigurationPolicyWhenContextCarriesNone()
+    {
+        Uri loopbackRequestUri = new("https://127.0.0.1/request");
+        OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
+
+        (Oid4VpWalletClient deniedClient, PublicKeyMemory deniedExchangeKey) = BuildWalletPostFetchClient(
+            sendFormPost: (_, _, _, _, _) =>
+                throw new InvalidOperationException("The §5.10 POST must never be dialed once the policy denies it."));
+
+        using(deniedExchangeKey)
+        {
+            InvalidOperationException denial = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+                async () => await deniedClient.PresentJarAsync(
+                    BuildWalletPostFetchOptions(loopbackRequestUri, deniedExchangeKey),
+                    new ExchangeContext(),
+                    TestContext.CancellationToken).ConfigureAwait(false))
+                .ConfigureAwait(false);
+
+            Assert.Contains("outbound fetch policy", denial.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        List<Uri> invocations = [];
+        (Oid4VpWalletClient allowedClient, PublicKeyMemory allowedExchangeKey) = BuildWalletPostFetchClient(
+            sendFormPost: (endpoint, _, _, _, _) =>
+            {
+                invocations.Add(endpoint);
+                return ValueTask.FromResult(new HttpResponseData { StatusCode = 502, Body = string.Empty });
+            },
+            outboundFetchPolicy: loopbackAllowing);
+
+        using(allowedExchangeKey)
+        {
+            //The dial is permitted, so it proceeds to the transport and fails on the canned 502 —
+            //proving the policy let it through rather than that the whole call trivially succeeded.
+            InvalidOperationException transportFailure = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+                async () => await allowedClient.PresentJarAsync(
+                    BuildWalletPostFetchOptions(loopbackRequestUri, allowedExchangeKey),
+                    new ExchangeContext(),
+                    TestContext.CancellationToken).ConfigureAwait(false))
+                .ConfigureAwait(false);
+
+            Assert.DoesNotContain("outbound fetch policy", transportFailure.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.HasCount(1, invocations, "The loopback-allowing configuration must let the request_uri dial through.");
+        }
+    }
+
+
+    /// <summary>
+    /// A policy set explicitly on the call's <see cref="ExchangeContext"/> overrides
+    /// <see cref="Oid4VpWalletConfiguration.OutboundFetchPolicy"/>: a configuration that allows
+    /// loopback still refuses when the per-call context names the stricter secure default.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUriMethodPostContextPolicyOverridesConfigurationPolicy()
+    {
+        Uri loopbackRequestUri = new("https://127.0.0.1/request");
+        OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
+
+        (Oid4VpWalletClient walletClient, PublicKeyMemory exchangeKey) = BuildWalletPostFetchClient(
+            sendFormPost: (_, _, _, _, _) =>
+                throw new InvalidOperationException("The §5.10 POST must never be dialed once the policy denies it."),
+            outboundFetchPolicy: loopbackAllowing);
+
+        using(exchangeKey)
+        {
+            ExchangeContext strictContext = [];
+            strictContext.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
+
+            InvalidOperationException error = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+                async () => await walletClient.PresentJarAsync(
+                    BuildWalletPostFetchOptions(loopbackRequestUri, exchangeKey),
+                    strictContext,
+                    TestContext.CancellationToken).ConfigureAwait(false))
+                .ConfigureAwait(false);
+
+            Assert.Contains("outbound fetch policy", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+
+    //Builds a minimal PresentJarOptions that routes PresentJarAsync into the §5.10
+    //request_uri_method=post fetch (no CompactJar, an exchange public key present) so the
+    //outbound-fetch policy gate is reached before any JAR-parsing machinery.
+    private static PresentJarOptions BuildWalletPostFetchOptions(Uri requestUri, PublicKeyMemory exchangeKey) =>
+        new()
+        {
+            RequestUri = requestUri,
+            ExpectedVerifierClientId = VerifierClientId,
+            WalletExchangePublicKey = exchangeKey,
+            FlowId = $"wallet-post-fetch-{Guid.NewGuid():N}"
+        };
+
+
+    //Builds an Oid4VpWalletClient whose ProduceVpTokenPresentations/VerifierSigningKeyResolver are
+    //unreachable stubs — the outbound-fetch policy gate runs before either is ever invoked — over a
+    //throwaway in-process OAuthClientInfrastructure and the given SendFormPost spy.
+    private (Oid4VpWalletClient Client, PublicKeyMemory ExchangeKey) BuildWalletPostFetchClient(
+        SendFormPostDelegate sendFormPost,
+        OutboundFetchPolicy? outboundFetchPolicy = null)
+    {
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: (_, _, _, _, _) =>
+                throw new InvalidOperationException("This fixture's infrastructure transport is not used by the §5.10 POST."),
+            saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
+            loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            parseParResponseAsync: (response) => throw new NotImplementedException("Not exercised."),
+            parseTokenResponseAsync: (response, receivedAt) => throw new NotImplementedException("Not exercised."),
+            parseRegistrationResponseAsync: (body, ct) => throw new NotImplementedException("Not exercised."),
+            resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
+                throw new NotImplementedException("Not exercised."),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: TimeProvider,
+            fillEntropy: TestEntropy.NewCounterStream(),
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared));
+
+        Oid4VpWalletConfiguration configuration =
+            TestHostShell.BuildSlimOid4VpWalletConfiguration(
+                produceVpTokenPresentations: (presentationContext, ct) =>
+                    throw new NotImplementedException("The policy gate runs before presentation production."),
+                verifierSigningKeyResolver: (context, clientId, jarHeader, ct) =>
+                    throw new NotImplementedException("The policy gate runs before JAR verification.")) with
+            {
+                SendFormPost = sendFormPost,
+                OutboundFetchPolicy = outboundFetchPolicy ?? OutboundFetchPolicy.SecureDefault
+            };
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> exchangeKeys =
+            TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
+        exchangeKeys.PrivateKey.Dispose();
+
+        return (new Oid4VpWalletClient(infrastructure, configuration), exchangeKeys.PublicKey);
+    }
+
+
     [TestMethod]
     public async Task PresentJarAsyncSurfacesCancellation()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -276,8 +484,8 @@ internal sealed class Oid4VpWalletClientTests
     public async Task VerifierRejectsPresentationMissingARequestedClaim()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -327,8 +535,8 @@ internal sealed class Oid4VpWalletClientTests
     public async Task VerifierRejectsOverDisclosingPresentationByDefault()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -380,8 +588,8 @@ internal sealed class Oid4VpWalletClientTests
             SHA256.HashData, HashOutputByteLength: 32, Sha256CommitmentTag, store.IsSeen, store.Record);
 
         await using TestHostShell app = new(TimeProvider, saltReuseSeam: saltReuseSeam);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -452,8 +660,8 @@ internal sealed class Oid4VpWalletClientTests
                 issuerEntity, familiarAnchor, now, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using TestHostShell app = new(TimeProvider, resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -502,8 +710,8 @@ internal sealed class Oid4VpWalletClientTests
                 issuerEntity, familiarAnchor, now, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using TestHostShell app = new(TimeProvider, resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -651,8 +859,8 @@ fetchSubordinate,
         //minimal-disclosure wallet discloses given_name + family_name (both asked),
         //the verifier's value-constraint check passes, and the flow verifies.
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -689,8 +897,8 @@ fetchSubordinate,
         //over-disclosure is not the trigger), forcing the verifier's value-constraint
         //branch: the disclosed "Mustermann" is not the demanded value, so it must NOT verify.
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);

@@ -3,7 +3,7 @@ namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Signals that the PAR request body has been composed. Transitions from
-/// <see cref="PkceGenerated"/> to <see cref="ParRequestReady"/>.
+/// <see cref="Verifiable.OAuth.AuthCode.States.PkceGeneratedState"/> to <see cref="Verifiable.OAuth.AuthCode.States.ParRequestReadyState"/>.
 /// </summary>
 /// <param name="EncodedBody">
 /// The serialized PAR request body in <c>application/x-www-form-urlencoded</c> form per

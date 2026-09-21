@@ -1,13 +1,11 @@
 using Lumoin.Veritas.Canonicalization;
 using Lumoin.Veritas.Json.Stj;
 using Lumoin.Veritas.JsonLd;
-using Microsoft.Extensions.Caching.Memory;
-using System.Security;
-using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Cryptography;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -21,45 +19,33 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </para>
 /// <para>
 /// Per <see href="https://www.w3.org/TR/vc-data-integrity/">W3C Verifiable Credential Data Integrity 1.0</see>,
-/// JSON-LD context documents used in credential processing MUST be integrity-protected. The specification
-/// requires that:
+/// a context document defines what a signed document's terms mean, so resolving the wrong one, or
+/// a tampered one, changes what a proof appears to attest to. The specification describes several
+/// equivalent ways to guard against this:
 /// </para>
 /// <list type="number">
 /// <item>
 /// <description>
-/// Context documents SHOULD be retrieved from well-known, trusted sources.
-/// See <see href="https://www.w3.org/TR/vc-data-integrity/#securing-json-ld-contexts"/>.
+/// Use only local copies of approved context files, so neither the files nor their hashes can
+/// change in transit. This is the approach taken by <see cref="CreateTestContextResolver"/>.
+/// See <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">§2.4.1 Validating Contexts</see>.
 /// </description>
 /// </item>
 /// <item>
 /// <description>
-/// Context documents MUST be cacheable to prevent network-based attacks.
-/// See <see href="https://www.w3.org/TR/vc-data-integrity/#context-caching"/>.
+/// Keep a list of well-known context URLs paired with their approved cryptographic hashes, and
+/// verify a fetched document against that list before using it.
+/// See <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context Validation</see>.
 /// </description>
 /// </item>
 /// <item>
 /// <description>
-/// Context integrity SHOULD be verified using cryptographic hashes (e.g., SHA-256).
-/// See <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation"/>.
-/// </description>
-/// </item>
-/// <item>
-/// <description>
-/// Local copies of context documents SHOULD be used when available to avoid network fetches.
-/// This is the approach taken in these test utilities.
+/// Cache aggressively and defend against denial-of-service wherever a context must still be
+/// fetched from the network.
+/// See <see href="https://www.w3.org/TR/vc-data-integrity/#network-requests">§5.14 Network Requests</see>.
 /// </description>
 /// </item>
 /// </list>
-/// <para>
-/// <strong>Context Integrity Verification</strong>
-/// </para>
-/// <para>
-/// In production systems, context documents fetched from remote URLs should be verified against
-/// known SHA-256 hashes. For example, the W3C Credentials v2 context should match:
-/// </para>
-/// <code>
-/// SHA-256: [expected hash of https://www.w3.org/ns/credentials/v2]
-/// </code>
 /// <para>
 /// The test utilities in this class use embedded, pre-validated context documents to:
 /// </para>
@@ -70,8 +56,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <item><description>Enable offline testing</description></item>
 /// </list>
 /// <para>
-/// See <see cref="CreateProductionContextResolver"/> for an example of how to implement
-/// context integrity verification in production code.
+/// See <see cref="ContextResolverDelegate"/> for what a production implementation of this seam owns.
 /// </para>
 /// </remarks>
 internal static class CanonicalizationTestUtilities
@@ -114,141 +99,29 @@ internal static class CanonicalizationTestUtilities
         """;
 
     /// <summary>
-    /// Expected SHA-256 hash of the W3C Credentials v2 context document.
+    /// Expected SHA-256 hash of the W3C Credentials v2 base context document.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// To verify this hash against the live W3C document:
-    /// </para>
-    /// <code>
-    /// curl -s https://www.w3.org/ns/credentials/v2 | openssl dgst -sha256
-    /// </code>
-    /// <para>
-    /// Last verified: January 2026 (Update this date when re-verifying).
-    /// </para>
-    /// <para>
-    /// This hash should be updated if the W3C publishes a new version of the context.
-    /// Always verify context integrity as per
-    /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation"/>.
-    /// </para>
+    /// This is the literal digest published by
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#base-context">Appendix B.1 Base Context</see>
+    /// for the document at <see href="https://www.w3.org/ns/credentials/v2"/>, not a value computed
+    /// from the embedded text it is meant to check.
     /// </remarks>
-    public static string CredentialsV2ContextSha256 { get; } = ComputeContextHash(EmbeddedContextDocuments.CredentialsV2ContextJson);
+    public static string CredentialsV2ContextSha256 { get; } = "59955CED6697D61E03F2B2556FEBE5308AB16842846F5B586D7F1F7ADEC92734";
 
     /// <summary>
     /// Expected SHA-256 hash of the W3C Credentials Examples v2 context document.
     /// </summary>
     /// <remarks>
-    /// Last verified: January 2026 (Update this date when re-verifying).
+    /// <para>
+    /// Source: <see href="https://www.w3.org/ns/credentials/examples/v2"/>, retrieved 2026-09-17.
+    /// The live document matched <see cref="CredentialsExamplesV2ContextJson"/> byte for byte at
+    /// that date, so this is the literal SHA-256 hex digest of that content rather than a value
+    /// computed from the embedded text it is meant to check.
+    /// </para>
     /// </remarks>
-    public static string CredentialsExamplesV2ContextSha256 { get; } = ComputeContextHash(CredentialsExamplesV2ContextJson);
+    public static string CredentialsExamplesV2ContextSha256 { get; } = "58D3EB0C82FF326381C11710FB6728245849089A8B000896A3BC07C882AC0E89";
 
-
-    /// <summary>
-    /// Pre-warms the context cache by fetching and verifying all known contexts asynchronously.
-    /// </summary>
-    /// <param name="contextResolver">The context resolver to pre-warm (typically wraps a cache).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// <strong>Purpose:</strong> Warms the resolver's cache so canonicalization does not pay a
-    /// remote fetch (with its integrity verification) for a known context on first use.
-    /// </para>
-    /// <para>
-    /// <strong>Usage Pattern:</strong>
-    /// </para>
-    /// <code>
-    /// //1. Create resolver with cache.
-    /// var httpClient = new HttpClient();
-    /// var cache = new MemoryCache(new MemoryCacheOptions());
-    /// var contextResolver = CanonicalizationUtilities.CreateProductionContextResolver(httpClient, cache);
-    /// 
-    /// //2. Pre-warm cache asynchronously (once at startup).
-    /// await CanonicalizationUtilities.PreWarmContextCacheAsync(contextResolver);
-    /// 
-    /// //3. Canonicalize; each remote @context resolves through the async resolver.
-    /// var canonicalizer = CanonicalizationUtilities.CreateRdfcCanonicalizer();
-    /// var result = await canonicalizer(json, contextResolver, cancellationToken);
-    /// </code>
-    /// <para>
-    /// This pattern:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Performs the known-context I/O and integrity verification upfront.</description></item>
-    /// <item><description>Keeps every later resolution a cache read.</description></item>
-    /// <item><description>Enables fast, deterministic canonicalization.</description></item>
-    /// </list>
-    /// </remarks>
-    public static async Task PreWarmContextCacheAsync(ContextResolverDelegate contextResolver, CancellationToken cancellationToken = default)
-    {
-        var knownContexts = new[]
-        {
-            new Uri(CredentialsV2ContextUrl),
-            new Uri(CredentialsExamplesV2ContextUrl)
-        };
-
-        //Pre-warming is policy-agnostic; a default context yields the secure-default policy.
-        var exchangeContext = new ExchangeContext();
-        foreach(var contextUri in knownContexts)
-        {
-            //This will fetch, verify (if production resolver), and cache the context.
-            var result = await contextResolver(contextUri, exchangeContext, cancellationToken).ConfigureAwait(false);
-            if(result == null)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to pre-warm context cache for URI: {contextUri}. Ensure the context resolver can resolve all known context URIs.");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Verifies that embedded context documents match actual W3C published contexts.
-    /// </summary>
-    /// <param name="httpClient">HTTP client for fetching W3C contexts.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task that completes successfully if all hashes match.</returns>
-    /// <exception cref="SecurityException">Thrown if any context hash mismatch is detected.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method should be called in CI/CD pipelines or during development to ensure
-    /// embedded context documents haven't diverged from W3C published versions.
-    /// </para>
-    /// <para>
-    /// <strong>Example Usage in Tests:</strong>
-    /// </para>
-    /// <code>
-    /// [Fact]
-    /// public async Task EmbeddedContexts_MatchW3CPublishedVersions()
-    /// {
-    ///     using var httpClient = new HttpClient();
-    ///     await CanonicalizationUtilities.VerifyEmbeddedContextsAsync(httpClient);
-    /// }
-    /// </code>
-    /// </remarks>
-    public static async Task VerifyEmbeddedContextsAsync(HttpClient httpClient, CancellationToken cancellationToken = default)
-    {
-        //Verify Credentials v2 context.
-        var credV2Response = await httpClient.GetStringAsync(new Uri(CredentialsV2ContextUrl), cancellationToken).ConfigureAwait(false);
-        var credV2Hash = ComputeContextHash(credV2Response);
-        var embeddedCredV2Hash = CredentialsV2ContextSha256;
-
-        if(credV2Hash != embeddedCredV2Hash)
-        {
-            throw new SecurityException(
-                $"Embedded Credentials v2 context hash mismatch. Expected (from W3C): {credV2Hash}, Embedded: {embeddedCredV2Hash}. The W3C may have updated the context. Update the embedded context and hash.");
-        }
-
-        //Verify Credentials Examples v2 context.
-        var examplesV2Response = await httpClient.GetStringAsync(new Uri(CredentialsExamplesV2ContextUrl), cancellationToken).ConfigureAwait(false);
-        var examplesV2Hash = ComputeContextHash(examplesV2Response);
-        var embeddedExamplesV2Hash = CredentialsExamplesV2ContextSha256;
-
-        if(examplesV2Hash != embeddedExamplesV2Hash)
-        {
-            throw new SecurityException(
-                $"Embedded Credentials Examples v2 context hash mismatch. Expected (from W3C): {examplesV2Hash}, Embedded: {embeddedExamplesV2Hash}. The W3C may have updated the context. Update the embedded context and hash.");
-        }
-    }
 
     /// <summary>
     /// Creates an RDFC-1.0 canonicalization delegate backed by the Lumoin.Veritas RDF stack.
@@ -305,10 +178,18 @@ resolveContext,
             //per-document labels.
             JsonLdRdfSerializationResult serialized = JsonLdRdfSerializer.Serialize(expanded, pool);
 
-            //RDFC-1.0 requires SHA-256; SHA256.HashData is the same provider the library registers
-            //for HashFunctionDelegate at startup. A false return is the canonicalizer's work-budget
+            //RDFC-1.0 requires SHA-256; hashViaSeam resolves the registered HashFunctionDelegate rather than
+            //calling a framework hash function directly. A false return is the canonicalizer's work-budget
             //refusal for a poison graph.
-            if(!RdfCanonicalizer.TryCanonicalizeWithMap(serialized.Quads, SHA256.HashData, out RdfCanonicalizationResult? canonicalized))
+            static int hashViaSeam(ReadOnlySpan<byte> data, Span<byte> destination)
+            {
+                using DigestValue digest = CryptographicKeyEvents.ComputeDigest(data, 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+                digest.AsReadOnlySpan().CopyTo(destination);
+
+                return digest.Length;
+            }
+
+            if(!RdfCanonicalizer.TryCanonicalizeWithMap(serialized.Quads, hashViaSeam, out RdfCanonicalizationResult? canonicalized))
             {
                 throw new InvalidOperationException(
                     "RDF canonicalization exceeded its work budget: the dataset's blank-node structure is a poison graph.");
@@ -349,9 +230,10 @@ resolveContext,
     /// <item><description>No network dependencies.</description></item>
     /// </list>
     /// <para>
-    /// <strong>Production Use:</strong>
-    /// In production, use <see cref="CreateProductionContextResolver"/>
-    /// which fetches contexts remotely and verifies their integrity using SHA-256 hashes.
+    /// <strong>Production Use:</strong> a production implementation of
+    /// <see cref="ContextResolverDelegate"/> is the caller's; it may read from a file store, an
+    /// Orleans grain, a database, a remote fetch, or a combination of these, and owns matching
+    /// each resolved document against its expected identity and integrity.
     /// </para>
     /// <para>
     /// <strong>Note:</strong> This resolver always returns synchronously from embedded resources,
@@ -371,111 +253,6 @@ resolveContext,
             };
 
             return ValueTask.FromResult(contextJson);
-        };
-    }
-
-    /// <summary>
-    /// Creates a production context resolver that fetches contexts remotely and verifies integrity.
-    /// </summary>
-    /// <param name="httpClient">HTTP client for fetching remote contexts.</param>
-    /// <param name="contextCache">Optional cache for storing verified contexts. Strongly recommended for production.</param>
-    /// <returns>A context resolver suitable for production use.</returns>
-    /// <remarks>
-    /// <para>
-    /// <strong>Production Context Resolution Pattern</strong>
-    /// </para>
-    /// <para>
-    /// Per <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">W3C Data Integrity §4.1.3</see>,
-    /// production systems MUST verify context integrity. This resolver implements the recommended pattern:
-    /// </para>
-    /// <list type="number">
-    /// <item><description>Check if context is cached locally with verified integrity.</description></item>
-    /// <item><description>If not cached, fetch from remote URL using HTTPS.</description></item>
-    /// <item><description>Compute SHA-256 hash of fetched content.</description></item>
-    /// <item><description>Verify hash matches known good value for that context URL.</description></item>
-    /// <item><description>If verification fails, reject the context and raise an error.</description></item>
-    /// <item><description>If verification succeeds, cache the context for future use.</description></item>
-    /// </list>
-    /// <para>
-    /// <strong>Example Production Usage:</strong>
-    /// </para>
-    /// <code>
-    /// var httpClient = new HttpClient();
-    /// var contextCache = new MemoryCache(new MemoryCacheOptions());
-    /// var contextResolver = CanonicalizationUtilities.CreateProductionContextResolver(httpClient, contextCache);
-    /// 
-    /// //Pre-warm cache to avoid sync-over-async in document loader.
-    /// await CanonicalizationUtilities.PreWarmContextCacheAsync(contextResolver);
-    /// 
-    /// //Use in credential verification.
-    /// var canonicalizer = CanonicalizationUtilities.CreateRdfcCanonicalizer();
-    /// var result = await credential.VerifyAsync(
-    ///     issuerDidDocument,
-    ///     canonicalizer,
-    ///     contextResolver,
-    ///     ...);
-    /// </code>
-    /// <para>
-    /// <strong>Security Considerations:</strong>
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Always use HTTPS for fetching remote contexts to prevent MITM attacks.</description></item>
-    /// <item><description>Maintain a whitelist of known context URLs and their expected SHA-256 hashes.</description></item>
-    /// <item><description>Implement cache expiration policies to refresh contexts periodically.</description></item>
-    /// <item><description>Consider using Subresource Integrity (SRI) hashes if contexts support it.</description></item>
-    /// <item><description>Call <see cref="PreWarmContextCacheAsync"/> during application startup to populate cache.</description></item>
-    /// </list>
-    /// </remarks>
-    public static ContextResolverDelegate CreateProductionContextResolver(
-        HttpClient httpClient,
-        IMemoryCache? contextCache = null)
-    {
-        //Known good SHA-256 hashes for W3C contexts.
-        var knownContextHashes = new Dictionary<string, string>
-        {
-            [CredentialsV2ContextUrl] = CredentialsV2ContextSha256,
-            [CredentialsExamplesV2ContextUrl] = CredentialsExamplesV2ContextSha256
-        };
-
-        return async (uri, context, cancellationToken) =>
-        {
-            var uriString = uri.ToString();
-
-            //Check cache first.
-            if(contextCache?.TryGetValue(uriString, out string? cachedContext) == true)
-            {
-                return cachedContext;
-            }
-
-            //Fetch from remote.
-            var response = await httpClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
-            _ = response.EnsureSuccessStatusCode();
-
-            var contextJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-            //Verify integrity.
-            var actualHash = ComputeContextHash(contextJson);
-
-            if(!knownContextHashes.TryGetValue(uriString, out var expectedHash))
-            {
-                throw new SecurityException(
-                    $"Context URI '{uri}' is not in the whitelist of known contexts. For security, only pre-verified contexts are allowed.");
-            }
-
-            if(actualHash != expectedHash)
-            {
-                throw new SecurityException(
-                    $"Context integrity check failed for '{uri}'. Expected SHA-256: {expectedHash}, but got: {actualHash}. This may indicate tampering or an updated context version.");
-            }
-
-            //Cache verified context.
-            if(contextCache != null)
-            {
-                var cacheOptions = new MemoryCacheEntryOptions().SetAbsoluteExpiration(TimeSpan.FromHours(24));
-                _ = contextCache.Set(uriString, contextJson, cacheOptions);
-            }
-
-            return contextJson;
         };
     }
 
@@ -503,9 +280,9 @@ resolveContext,
     public static string ComputeContextHash(string contextJson)
     {
         var bytes = Encoding.UTF8.GetBytes(contextJson);
-        var hashBytes = SHA256.HashData(bytes);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(bytes, 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
 
-        return Convert.ToHexString(hashBytes).ToUpperInvariant();
+        return Convert.ToHexString(digest.AsReadOnlySpan()).ToUpperInvariant();
     }
 
     /// <summary>

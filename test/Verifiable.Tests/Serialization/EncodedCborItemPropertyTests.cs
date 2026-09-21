@@ -2,6 +2,7 @@ using CsCheck;
 using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using Verifiable.Cbor;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
 
@@ -42,7 +43,7 @@ internal sealed class EncodedCborItemPropertyTests
                 {
                     Assert.Fail("WireBytes diverged across round-trip.");
                 }
-            });
+            }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -73,7 +74,7 @@ internal sealed class EncodedCborItemPropertyTests
             {
                 Assert.Fail("Wrap → Read → Write should round-trip byte-for-byte.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

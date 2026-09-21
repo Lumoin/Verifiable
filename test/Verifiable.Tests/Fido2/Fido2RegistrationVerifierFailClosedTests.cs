@@ -47,8 +47,8 @@ internal sealed class Fido2RegistrationVerifierFailClosedTests
     /// A registered <see cref="AttestationVerifyDelegate"/> that throws an exception unrelated to
     /// the documented <see cref="Fido2FormatException"/> contract is rejected with
     /// <see cref="Fido2AttestationErrors.VerificationFailed"/> — the exception never escapes
-    /// <see cref="Fido2RegistrationVerifier.VerifyAsync"/> — and the ceremony is unacceptable with no
-    /// credential record built.
+    /// <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, IReadOnlyList{Verifiable.Cryptography.Pki.PkiCertificateMemory}, DateTimeOffset, string, BaseMemoryPool, TimeProvider, IReadOnlyList{string}?, string?, bool, CancellationToken)"/> —
+    /// and the ceremony is unacceptable with no credential record built.
     /// </summary>
     [TestMethod]
     public async Task AttestationVerifierThrowingAnUnexpectedExceptionIsRejectedWithVerificationFailed()

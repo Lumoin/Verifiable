@@ -41,11 +41,11 @@ public enum TpmContextResourceKind: byte
 /// it is read out of <see cref="TpmSimulatorState.TransientObjects"/>, <see cref="TpmSimulatorState.LoadedKeyedHashObjects"/>,
 /// <see cref="TpmSimulatorState.SequenceObjects"/>, <see cref="TpmSimulatorState.HmacSessions"/> or
 /// <see cref="TpmSimulatorState.PolicySessions"/> and stays that dictionary's (or, for a session, the record the
-/// save effect is about to remove and dispose itself) — the envelope's own <see cref="Dispose"/> must never be
+/// save effect is about to remove and dispose itself) — the envelope's own <see cref="Dispose()"/> must never be
 /// called on a save-path instance, since it does not own what it wraps. On the LOAD path the wrapped record is
 /// OWNED: <see cref="TpmContextSerializer.Deserialize"/> rents fresh carriers under the caller's pool and builds
 /// a brand-new resource record no dictionary yet references, which the effect that produced it (or a refusal
-/// after it) must dispose through this envelope's <see cref="Dispose"/> until the completing transition installs
+/// after it) must dispose through this envelope's <see cref="Dispose()"/> until the completing transition installs
 /// it into the resource's own dictionary — at which point ownership passes to that dictionary exactly as any
 /// other loaded resource's does, and this envelope is discarded unwrapped.
 /// </para>

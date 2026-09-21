@@ -24,7 +24,7 @@ namespace Verifiable.Fido2;
 /// <strong>Ownership.</strong> This record owns <see cref="AuthenticatorData"/> and
 /// <see cref="ExpectedRpIdHash"/> — disposing it disposes both. The whole-ceremony scope is the
 /// natural single-owner boundary: nothing outside this record needs either carrier once
-/// <see cref="Fido2RegistrationVerifier.VerifyAsync"/> returns, so a caller that constructs one
+/// <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, IReadOnlyList{Verifiable.Cryptography.Pki.PkiCertificateMemory}, DateTimeOffset, string, BaseMemoryPool, TimeProvider, IReadOnlyList{string}?, string?, bool, CancellationToken)"/> returns, so a caller that constructs one
 /// instance and disposes it when done never has to track the carriers individually.
 /// <see cref="Fido2RegistrationVerifier"/> itself only borrows this record — it does not dispose
 /// it, including the internal <c>with</c>-derived copy it builds to attach the attestation

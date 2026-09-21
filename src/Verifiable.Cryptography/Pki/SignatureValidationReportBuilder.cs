@@ -19,7 +19,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// <para>
 /// <strong>Call this before disposing the outcome.</strong> The returned graph references the same carriers
-/// <paramref name="outcome"/> (via its <see cref="SignatureValidationOutcome.Resources"/>) owns, exactly as the
+/// <c>outcome</c> (via its <see cref="SignatureValidationOutcome.Resources"/>) owns, exactly as the
 /// engine's own result records do; disposing the outcome invalidates the report.
 /// </para>
 /// <para>

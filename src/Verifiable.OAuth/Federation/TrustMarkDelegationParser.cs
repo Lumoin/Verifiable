@@ -22,7 +22,7 @@ public static class TrustMarkDelegationParser
 
         if(!header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
             || typObj is not string typ
-            || !string.Equals(typ, WellKnownFederationMediaTypes.TrustMarkDelegationJwt, StringComparison.Ordinal))
+            || !WellKnownFederationMediaTypes.IsTrustMarkDelegationJwt(typ))
         {
             return TrustMarkDelegationParseResult.Invalid(
                 $"Delegation 'typ' header must equal '{WellKnownFederationMediaTypes.TrustMarkDelegationJwt}' per RFC 8725 §3.11.");

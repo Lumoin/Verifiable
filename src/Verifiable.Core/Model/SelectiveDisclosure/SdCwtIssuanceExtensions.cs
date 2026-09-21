@@ -22,7 +22,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// to <c>Verifiable.Cbor.Sd.SdCwtIssuance.IssueVerboseAsync</c>).
 /// </para>
 /// <para>
-/// Unlike the JSON side where <see cref="System.Text.Json.JsonSerializer"/> provides
+/// Unlike the JSON side where <c>System.Text.Json.JsonSerializer</c> provides
 /// universal type-to-bytes conversion, CBOR has no universal serializer for arbitrary
 /// types. The caller provides a named CBOR-bytes delegate that performs the encoding:
 /// <see cref="ToCborBytesDelegate{T}"/> for the generic claims overload and

@@ -15,7 +15,7 @@ namespace Verifiable.Core.StatusList;
 /// <para>
 /// <see cref="IsTokenOwned"/> declares who releases <see cref="Token"/>'s pooled Status List back to
 /// the pool. A resolver that mints a fresh <see cref="StatusListToken"/> on every call (a per-call
-/// fetch-and-verify, e.g. <see cref="Verifiable.OAuth.StatusList.StatusListTokenResolvers.BuildResolving"/>)
+/// fetch-and-verify, e.g. <c>StatusListTokenResolvers.BuildResolving</c>)
 /// hands back an OWNED resolution: nothing else holds a reference to that Status List, so
 /// <see cref="Dispose"/> — called by <see cref="CredentialStatusGate.CheckAsync"/> once it has read
 /// the status and freshness verdicts — is the only release it gets. A caching resolver that answers

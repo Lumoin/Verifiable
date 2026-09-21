@@ -22,7 +22,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// <see cref="IssueSdJwtVerboseDelegate"/> (wired to <c>Verifiable.Json.SdJwtIssuance.IssueVerboseAsync</c>).
 /// </para>
 /// <para>
-/// Although <see cref="System.Text.Json.JsonSerializer"/> provides universal type-to-bytes
+/// Although <c>System.Text.Json.JsonSerializer</c> provides universal type-to-bytes
 /// conversion, <c>Verifiable.Core</c> cannot reference a serialization library, so the caller
 /// provides a named JSON-bytes delegate that performs the encoding:
 /// <see cref="ToJsonBytesDelegate{T}"/> for the generic claims overload and

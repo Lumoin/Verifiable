@@ -16,8 +16,10 @@ namespace Verifiable.Json;
 /// <c>PublicKeyCredential</c>'s <c>parseRequestOptionsFromJSON()</c> Method</see>, dictionary
 /// <c>PublicKeyCredentialRequestOptionsJSON</c>. See
 /// <see cref="PublicKeyCredentialCreationOptionsJsonWriter"/>'s remarks — the same reasoning (no
-/// <c>version</c> member, Base64url binary members, the two named extension-input carve-outs written
-/// under <c>extensions</c>) applies here.
+/// <c>version</c> member, Base64url binary members, the three named extension-input carve-outs written
+/// under <c>extensions</c>) applies here. <c>prf</c>'s <c>evalByCredential</c> is written as a JSON
+/// object keyed by each entry's base64url-encoded <see cref="CredentialId"/> — the CR's own
+/// <c>record&lt;DOMString, AuthenticationExtensionsPRFValuesJSON&gt;</c> shape.
 /// </remarks>
 public static class PublicKeyCredentialRequestOptionsJsonWriter
 {
@@ -33,6 +35,10 @@ public static class PublicKeyCredentialRequestOptionsJsonWriter
     private const string ExtensionsMember = "extensions";
     private const string ReadMember = "read";
     private const string WriteMember = "write";
+    private const string EvalMember = "eval";
+    private const string EvalByCredentialMember = "evalByCredential";
+    private const string FirstMember = "first";
+    private const string SecondMember = "second";
 
 
     /// <summary>
@@ -81,7 +87,7 @@ public static class PublicKeyCredentialRequestOptionsJsonWriter
             writer.WriteEndArray();
         }
 
-        WriteExtensions(writer, options.AppId, options.LargeBlob);
+        WriteExtensions(writer, options.AppId, options.LargeBlob, options.Prf);
 
         writer.WriteEndObject();
         writer.Flush();
@@ -89,12 +95,12 @@ public static class PublicKeyCredentialRequestOptionsJsonWriter
 
 
     /// <summary>
-    /// Writes the <c>extensions</c> member when at least one of the two named carve-outs this writer
+    /// Writes the <c>extensions</c> member when at least one of the three named carve-outs this writer
     /// supports is populated; omits the member entirely otherwise.
     /// </summary>
-    private static void WriteExtensions(Utf8JsonWriter writer, string? appId, Fido2LargeBlobAssertionExtensionInput? largeBlob)
+    private static void WriteExtensions(Utf8JsonWriter writer, string? appId, Fido2LargeBlobAssertionExtensionInput? largeBlob, Fido2PrfAssertionExtensionInput? prf)
     {
-        if(appId is null && largeBlob is null)
+        if(appId is null && largeBlob is null && prf is null)
         {
             return;
         }
@@ -119,7 +125,54 @@ public static class PublicKeyCredentialRequestOptionsJsonWriter
             }
             writer.WriteEndObject();
         }
+
+        if(prf is not null)
+        {
+            WritePrf(writer, prf);
+        }
         writer.WriteEndObject();
+    }
+
+
+    /// <summary>
+    /// Writes the <c>extensions.prf</c> member: <c>eval</c> when present, and <c>evalByCredential</c>
+    /// keyed by each entry's base64url-encoded credential id when present.
+    /// </summary>
+    private static void WritePrf(Utf8JsonWriter writer, Fido2PrfAssertionExtensionInput prf)
+    {
+        writer.WriteStartObject(WellKnownWebAuthnExtensionIdentifiers.Prf);
+        if(prf.Eval is Fido2PrfValues eval)
+        {
+            writer.WriteStartObject(EvalMember);
+            WritePrfValues(writer, eval);
+            writer.WriteEndObject();
+        }
+
+        if(prf.EvalByCredential is { Count: > 0 } evalByCredential)
+        {
+            writer.WriteStartObject(EvalByCredentialMember);
+            foreach(KeyValuePair<CredentialId, Fido2PrfValues> entry in evalByCredential)
+            {
+                writer.WriteStartObject(Base64Url.EncodeToString(entry.Key.AsReadOnlySpan()));
+                WritePrfValues(writer, entry.Value);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndObject();
+        }
+        writer.WriteEndObject();
+    }
+
+
+    /// <summary>
+    /// Writes <paramref name="values"/>' <c>first</c>/<c>second</c> members, base64url-encoded.
+    /// </summary>
+    private static void WritePrfValues(Utf8JsonWriter writer, Fido2PrfValues values)
+    {
+        writer.WriteString(FirstMember, Base64Url.EncodeToString(values.First.Span));
+        if(values.Second is TaggedMemory<byte> second)
+        {
+            writer.WriteString(SecondMember, Base64Url.EncodeToString(second.Span));
+        }
     }
 
 

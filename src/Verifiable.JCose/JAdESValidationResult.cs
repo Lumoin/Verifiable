@@ -6,7 +6,7 @@ using Verifiable.Cryptography.Pki;
 namespace Verifiable.JCose;
 
 /// <summary>
-/// The B-B structural-and-cryptographic facts a successful <see cref="JAdESSignatureValidation.ValidateAsync"/>
+/// The B-B structural-and-cryptographic facts a successful <see cref="JAdESSignatureValidation.ValidateAsync(System.ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.DecodeDelegate, Verifiable.Cryptography.EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, System.ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/>
 /// call promotes into a <see cref="Verified{T}"/> — the record a relying party consumes once verification has
 /// succeeded — JAdES's result surfaces are the family's FIRST promotion-shaped template.
 /// </summary>
@@ -86,12 +86,12 @@ public sealed class JAdESVerifiedSignatureFacts: IDisposable
 /// <summary>
 /// The outcome of validating a JAdES signature — a <see cref="Verified{T}"/>-wrapped
 /// <see cref="JAdESVerifiedSignatureFacts"/> when <see cref="IsValid"/> is <see langword="true"/>, or a
-/// closed-sum failure detail otherwise. Produced by <see cref="JAdESSignatureValidation.ValidateAsync"/>, the
+/// closed-sum failure detail otherwise. Produced by <see cref="JAdESSignatureValidation.ValidateAsync(System.ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.DecodeDelegate, Verifiable.Cryptography.EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, System.ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/>, the
 /// JAdES counterpart of <see cref="CBAdESValidationResult"/> — built PROMOTION-SHAPED from the outset.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Mint-only.</strong> The constructor and the <see cref="Success"/>/<see cref="Failed"/> factories are
+/// <strong>Mint-only.</strong> The constructor and the <see cref="Success"/>/<see cref="Failed(JAdESValidationFailure)"/> factories are
 /// <see langword="internal"/>, so a result with <see cref="IsValid"/> <see langword="true"/> — and therefore a
 /// non-null <see cref="Verified"/> — can only originate from <see cref="JAdESSignatureValidation"/>.
 /// </para>
@@ -219,7 +219,7 @@ public sealed class JAdESValidationResult: IDisposable
 
     /// <summary>
     /// Mints a successful, IDENTITY-BOUND result over <paramref name="facts"/> — the certificate-accepting
-    /// <see cref="JAdESSignatureValidation.ValidateAsync"/> overload's own terminal step. Unlike
+    /// <see cref="JAdESSignatureValidation.ValidateAsync(System.ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.DecodeDelegate, Verifiable.Cryptography.EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, System.ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/> overload's own terminal step. Unlike
     /// <see cref="Success"/>, this takes the already-constructed <paramref name="facts"/> rather than building
     /// one, because <paramref name="provenance"/> must have been established (<c>BoundProvenance.TryBindByCertificateDigestAsync</c>)
     /// AGAINST that exact instance before this method is called — <see cref="Verified{T}.TryCreateBound"/>'s own
@@ -419,7 +419,7 @@ public sealed class JAdESSignatureInvalidFailure: JAdESValidationFailure, IEquat
 
 
 /// <summary>
-/// The certificate-accepting <see cref="JAdESSignatureValidation.ValidateAsync"/> overload could not establish
+/// The certificate-accepting <see cref="JAdESSignatureValidation.ValidateAsync(System.ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.DecodeDelegate, Verifiable.Cryptography.EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, System.ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/> overload could not establish
 /// an identity binding for the supplied signing certificate — either the certificate itself is not one
 /// this binding can verify under (not an elliptic curve this library resolves, or not well-formed X.509), or the
 /// JWS signature value DID verify but the recomputed digest of the certificate it verified under does not match

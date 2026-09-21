@@ -1261,19 +1261,6 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     }
 
     /// <summary>
-    /// Composes <c>TPM2_NV_ChangeAuth</c> over a policy session that asserts <c>TPM2_PolicyCommandCode</c> and
-    /// NOTHING else - the minimal shape Part 3, clause 31.15.1's ADMIN requirement actually demands. No
-    /// authorization value is ever set on the session, so its HMAC key stays the Empty Buffer the unbound,
-    /// unsalted session key already is (TPM 2.0 Library Part 1, clause 16.6.9) and the Index's own authValue
-    /// takes no part in the authorization (clause 16.6.5's policy note).
-    /// </summary>
-    /// <param name="device">The TPM device.</param>
-    /// <param name="pool">The memory pool.</param>
-    /// <param name="registry">The response codec registry, already carrying the rotation codecs.</param>
-    /// <param name="nvIndex">The Index to rotate.</param>
-    /// <param name="newAuthValue">The replacement authorization value to send.</param>
-    /// <returns>The rotation's raw result.</returns>
-    /// <summary>
     /// The pHash <c>TPM2_PolicyParameters()</c> binds a rotation to: <c>SHA-256(TPM_CC_NV_ChangeAuth || TPM2B_AUTH(newAuth))</c>
     /// — the command code and the command's one parameter as framed, the Index Name skipped (TPM 2.0 Library Part
     /// 3, clause 23.24; clause 31.15, Table 269).

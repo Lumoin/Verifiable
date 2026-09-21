@@ -622,7 +622,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             CredentialPath.FromJsonPointer("/validUntil")
         };
 
-        var (derivedCredential, _) = await signedCredential.DeriveProofVerboseAsync(
+        var (derivedCredential, selectionResult) = await signedCredential.DeriveProofVerboseAsync(
             verifierRequestedPaths,
             userExclusions: null,
             JsonLdSelection.PartitionStatements,
@@ -646,9 +646,9 @@ internal sealed class EcdsaSd2023W3cVectorTests
             "Derived proof must use base64url-no-pad multibase encoding.");
 
         //Verify selection result indicates requirements satisfied.
-        //Assert.IsTrue(
-        //    selectionResult.SatisfiesRequirements,
-        //    "Disclosure selection must satisfy verifier requirements.");
+        Assert.IsTrue(
+            selectionResult.SatisfiesRequirements,
+            "Disclosure selection must satisfy verifier requirements.");
 
         //Verifier: Verify derived proof with verbose output.
         var (verifierResult, verifierContext) = await derivedCredential.VerifyDerivedProofVerboseAsync(

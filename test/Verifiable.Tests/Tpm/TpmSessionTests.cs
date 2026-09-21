@@ -26,7 +26,7 @@ internal sealed class TpmSessionTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// <see cref="StartAuthSessionInput.CreateBoundUnsaltedHmacSession"/> mints <c>nonceCaller</c> from
+    /// <c>StartAuthSessionInput.CreateBoundUnsaltedHmacSession</c> mints <c>nonceCaller</c> from
     /// exactly the <see cref="FillEntropyDelegate"/> the caller passes: a delegate that writes a known,
     /// fixed pattern is what <c>NonceCaller</c> equals, byte for byte.
     /// </summary>

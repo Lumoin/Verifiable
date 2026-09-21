@@ -1,7 +1,7 @@
 namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 /// <summary>
-/// Stores the opaque, TPM-sealed snapshot blob bytes <see cref="TpmSealedStateCustody"/> produced for
+/// Stores the opaque, TPM-sealed snapshot blob bytes <c>TpmSealedStateCustody</c> produced for
 /// <paramref name="runId"/>, overwriting whatever was previously stored for the same identifier — the
 /// caller-supplied I/O half of the adapter's persist step.
 /// </summary>
@@ -11,7 +11,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// rule: no closure capture).
 /// </param>
 /// <param name="sealedBlobBytes">
-/// The sealed blob's serialized bytes (<see cref="Verifiable.Tpm.Extensions.Seal.TpmSealedBlob.WriteTo"/>'s
+/// The sealed blob's serialized bytes (<c>Verifiable.Tpm.Extensions.Seal.TpmSealedBlob.WriteTo</c>'s
 /// own wire form: the parent-wrapped private area then the reserialized public area), already copied into
 /// an independent pooled carrier at the adapter's own boundary. Ownership stays with the caller: an
 /// implementation that must retain the bytes beyond this call copies what it needs, mirroring

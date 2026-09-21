@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// wins" unsigned-compare corner (relevant only when the two lengths genuinely differ) never arises here.
 /// </para>
 /// <para>
-/// A zero-length <paramref name="operandB"/> is rejected with <see cref="TpmRcConstants.TPM_RC_SIZE"/> before any
+/// A zero-length <c>operandB</c> is rejected with <see cref="TpmRcConstants.TPM_RC_SIZE"/> before any
 /// comparison runs, for every <see cref="TpmEoConstants"/> value alike — a deliberately defined rejection, not the
 /// vacuous-true/false convention an unsigned zero-length compare would otherwise produce.
 /// </para>

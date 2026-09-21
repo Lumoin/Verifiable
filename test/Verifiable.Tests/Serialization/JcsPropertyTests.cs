@@ -210,7 +210,7 @@ internal sealed class JcsPropertyTests
             var canonical2 = Jcs.Canonicalize(canonical1);
 
             Assert.AreEqual(canonical1, canonical2, "Canonicalization must be idempotent.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -226,7 +226,7 @@ internal sealed class JcsPropertyTests
             var isEqual = JsonSerializationUtilities.CompareJsonElements(jsonString, canonical);
 
             Assert.IsTrue(isEqual, "Canonicalization must preserve JSON semantic equality.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -246,7 +246,7 @@ internal sealed class JcsPropertyTests
 
             Assert.AreEqual(canonicalOriginal, canonicalShuffled,
                 "Canonicalization must produce identical output regardless of property order.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -261,7 +261,7 @@ internal sealed class JcsPropertyTests
 
             var parsedCanonical = JsonNode.Parse(canonical);
             AssertObjectPropertiesAreSorted(parsedCanonical);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -293,7 +293,7 @@ internal sealed class JcsPropertyTests
                 Assert.AreEqual(canonicalizedOriginal, canonicalizedCanonical,
                     $"Array element at index {i} must be preserved.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -313,7 +313,7 @@ internal sealed class JcsPropertyTests
             Assert.DoesNotContain("\n", canonical, StringComparison.Ordinal, "Canonical output must not contain newlines.");
             Assert.DoesNotContain("\r", canonical, StringComparison.Ordinal, "Canonical output must not contain carriage returns.");
             Assert.DoesNotContain("\t", canonical, StringComparison.Ordinal, "Canonical output must not contain tabs.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -344,7 +344,7 @@ internal sealed class JcsPropertyTests
 
             var isEqual = JsonSerializationUtilities.CompareJsonElements(viaSerialize, viaCanonicalizeString);
             Assert.IsTrue(isEqual, "Jcs.Serialize and Jcs.Canonicalize should produce semantically equivalent output.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

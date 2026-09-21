@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Drives the plain (<c>TPM_ST_NO_SESSIONS</c>) form of <c>TPM2_ContextSave()</c> against the in-house
 /// behavioural <see cref="TpmSimulator"/> through the production command path (<see cref="TpmCommandExecutor"/>
-/// with <see cref="ContextSaveInput"/> and <see cref="TpmResponseCodec.ContextSave"/>): "This command saves a
+/// with <see cref="ContextSaveInput"/> and <c>TpmResponseCodec.ContextSave</c>): "This command saves a
 /// session context, object context, or sequence object context outside the TPM. No authorization sessions of
 /// any type are allowed with this command and tag is required to be TPM_ST_NO_SESSIONS".
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 28.2.1</see>.

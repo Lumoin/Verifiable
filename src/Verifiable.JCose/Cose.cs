@@ -157,6 +157,7 @@ public static class Cose
     /// <param name="privateKey">The private key for signing.</param>
     /// <param name="signingFunction">The bound signing function to use.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The COSE_Sign1 message containing the signature.</returns>
     public static async ValueTask<CoseSign1Message> SignAsync(
         EncodedCoseProtectedHeader protectedHeader,
@@ -197,6 +198,7 @@ public static class Cose
     /// <param name="message">The COSE_Sign1 message to verify.</param>
     /// <param name="buildSigStructure">Delegate to build the Sig_structure for verification.</param>
     /// <param name="publicKey">The public key for verification.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     public static ValueTask<bool> VerifyAsync(
         CoseSign1Message message,
@@ -279,6 +281,7 @@ public static class Cose
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="verificationFunction">The verification function to use.</param>
     /// <param name="pool">Memory pool for allocations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     public static async ValueTask<bool> VerifyAsync(
         CoseSign1Message message,

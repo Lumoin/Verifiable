@@ -81,7 +81,7 @@ internal sealed class VerifiedProvenanceTests
 
 
     /// <summary>
-    /// A value-type <typeparamref name="T"/>'s <see cref="Verified{T}.TryCreateBound"/> is refused
+    /// A value-type payload's <see cref="Verified{T}.TryCreateBound"/> is refused
     /// explicitly, never left to fail incidentally on fresh boxing at every call.
     /// </summary>
     [TestMethod]

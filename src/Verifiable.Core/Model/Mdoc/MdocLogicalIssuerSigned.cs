@@ -14,7 +14,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// </para>
 /// <para>
 /// Disposal cascades into every item under every namespace. After a
-/// successful <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/>
+/// successful <c>Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync</c>
 /// call, the caller must not dispose this shape — the items' salts have
 /// transferred to the signed side.
 /// </para>

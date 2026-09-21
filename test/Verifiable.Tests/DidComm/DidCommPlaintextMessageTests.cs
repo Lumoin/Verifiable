@@ -10,7 +10,7 @@ namespace Verifiable.Tests.DidComm;
 /// message JSON pipeline — <see cref="DidCommMessageJson.Serializer"/> /
 /// <see cref="DidCommMessageJson.Parser"/> driving
 /// <see cref="DidCommPlaintextExtensions.PackPlaintext"/> /
-/// <see cref="DidCommPlaintextExtensions.UnpackPlaintext"/>.
+/// <see cref="DidCommPlaintextExtensions.UnpackPlaintext(DidCommPlaintextMessage, DidCommMessageParser)"/>.
 /// </summary>
 [TestClass]
 internal sealed class DidCommPlaintextMessageTests

@@ -138,7 +138,7 @@ internal sealed class StatusListTokenClaimsTests
 
 
     /// <summary>
-    /// <see cref="StatusList.EnsureIetfBitOrder"/> refuses a <see cref="BitOrder.MostSignificantFirst"/>
+    /// <see cref="StatusListType.EnsureIetfBitOrder"/> refuses a <see cref="BitOrder.MostSignificantFirst"/>
     /// Status List — the W3C Bitstring Status List's packing — rather than let its bytes ship as-is
     /// under the Section 5.1 <c>status_list</c> claim, where every reader (hard-coded to
     /// <see cref="BitOrder.LeastSignificantFirst"/>) would decode the wrong bit for indices under 8 bits.

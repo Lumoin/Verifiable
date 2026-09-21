@@ -4,7 +4,7 @@ using Verifiable.Core.Assessment;
 namespace Verifiable.Fido2;
 
 /// <summary>
-/// The result of <see cref="Fido2RegistrationVerifier.VerifyAsync"/>: the attestation statement's
+/// The result of <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, Verifiable.Core.Assessment.ClaimIssuer{RegistrationCeremonyInput}, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, System.Collections.Generic.IReadOnlyList{Verifiable.Cryptography.Pki.PkiCertificateMemory}, System.DateTimeOffset, string, BaseMemoryPool, System.Collections.Generic.IReadOnlyList{string}?, string?, bool, System.Threading.CancellationToken)"/>: the attestation statement's
 /// verification outcome, the WebAuthn L3 §7.1 ceremony rule claims (extended with the step 26
 /// credential-id-uniqueness signal), a policy-neutral summary of whether the registration is
 /// acceptable, and the step 27 credential record to store when it is.

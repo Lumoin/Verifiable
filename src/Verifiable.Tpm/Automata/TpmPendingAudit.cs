@@ -4,7 +4,7 @@ namespace Verifiable.Tpm.Automata;
 
 /// <summary>
 /// The in-flight audit of one command: the cpHash the audit-claiming session's command HMAC was verified over, the
-/// session's pre-command audit digest, and the first-use/exclusivity facts <see cref="OnCommandHmacVerified"/>
+/// session's pre-command audit digest, and the first-use/exclusivity facts <c>OnCommandHmacVerified</c>
 /// already has once every session in the command's authorization area has verified (TPM 2.0 Library Part 1, clause
 /// 17.1: "For all commands using a session tagged as audit (including the initial use), if the command completes
 /// successfully, the cpHash and the rpHash are Extended to the audit session digest."). Carried transiently on

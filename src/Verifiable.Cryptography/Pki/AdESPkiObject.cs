@@ -37,8 +37,10 @@ namespace Verifiable.Cryptography.Pki;
 /// </code>
 /// <para>
 /// The map/wire keys for the CB-AdES CBOR encoding and the JAdES JSON member names are per-format
-/// serialization facts, not part of this semantic type — see <see cref="CBAdESWireKeys.PkiObject"/> and
-/// <see cref="JAdESWireNames.PkiObject"/>.
+/// serialization facts, not part of this semantic type — see <see cref="CBAdESWireKeys.PkiObjectVal"/>,
+/// <see cref="CBAdESWireKeys.PkiObjectEncoding"/> and <see cref="CBAdESWireKeys.PkiObjectSpecRef"/>, and
+/// <see cref="JAdESWireNames.PkiObjectVal"/>, <see cref="JAdESWireNames.PkiObjectEncoding"/> and
+/// <see cref="JAdESWireNames.PkiObjectSpecRef"/>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AdESPkiObject({Val.Length} bytes, Encoding={Encoding})")]

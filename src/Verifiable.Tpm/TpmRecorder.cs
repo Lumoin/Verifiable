@@ -41,7 +41,7 @@ namespace Verifiable.Tpm;
 /// </para>
 /// </remarks>
 /// <seealso cref="TpmRecording"/>
-/// <seealso cref="VirtualTpm"/>
+/// <seealso cref="Verifiable.Tpm.Automata.TpmSimulator"/>
 /// <seealso cref="TpmDevice"/>
 public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
 {

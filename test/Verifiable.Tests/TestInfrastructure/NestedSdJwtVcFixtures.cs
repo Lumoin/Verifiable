@@ -77,7 +77,7 @@ internal sealed class NestedSdJwtVcCredential: IDisposable
 /// </para>
 /// <para>
 /// The credential is produced through the library's own issuance
-/// (<see cref="SdJwtIssuanceExtensions"/> over <see cref="SdJwtIssuance.IssueVerboseAsync"/>,
+/// (<see cref="SdJwtIssuanceExtensions"/> over <c>Verifiable.Json.SdJwtIssuance.IssueVerboseAsync</c>,
 /// <see cref="TestSalts"/>, <see cref="TestSetup.Base64UrlEncoder"/>): the issuance makes the
 /// four root-level claims disclosable and signs, while the digests that sit inside those
 /// claims' own values — the nested namesake, the array elements, the address members — are

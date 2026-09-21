@@ -7,7 +7,7 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// The set of form-encoded field occurrences to send in the body of an outgoing
-/// HTTP POST via <see cref="SendFormPostDelegate"/>.
+/// HTTP POST via <see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/>.
 /// </summary>
 /// <remarks>
 /// <para>

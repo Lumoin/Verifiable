@@ -6,6 +6,11 @@ namespace Verifiable.Core.Did.Methods;
 /// <remarks>Authoritative definition at <see href="https://atproto.com/specs/did-plc">DID Placeholder (did:plc)</see>.</remarks>
 public record PlaceholderDidMethod: GenericDidMethod
 {
+    /// <summary>
+    /// Creates a new instance of <see cref="PlaceholderDidMethod"/>.
+    /// </summary>
+    /// <param name="didString">The full <c>did:plc:</c> identifier string.</param>
+    /// <exception cref="ArgumentException">When <paramref name="didString"/> does not start with <c>did:plc:</c>.</exception>
     public PlaceholderDidMethod(string didString) : base(didString)
     {
         ArgumentNullException.ThrowIfNull(didString);

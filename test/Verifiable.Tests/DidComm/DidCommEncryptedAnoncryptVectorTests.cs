@@ -14,7 +14,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.DidComm;
 
 /// <summary>
-/// Anchors the DIDComm v2.1 anoncrypt UNPACK (decrypt) path (<see cref="DidCommEncryptedExtensions.UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>)
+/// Anchors the DIDComm v2.1 anoncrypt UNPACK (decrypt) path (<see cref="DidCommEncryptedExtensions.UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, JwtClaimsDeserializer?, System.Func{System.ReadOnlySpan{byte}, System.Collections.Generic.IReadOnlyDictionary{string, object}}?, DidCommEncryptedHeaderPolicy, System.Threading.CancellationToken)"/>)
 /// to the two NIST-curve anoncrypt vectors from DIDComm Messaging v2.1 Appendix C.3: example 2
 /// (ECDH-ES P-384, A256CBC-HS512) and example 3 (ECDH-ES P-521, A256GCM). Each vector is decrypted with
 /// Bob's Appendix A static <c>keyAgreement</c> private keys and MUST recover the Appendix C.1 plaintext.

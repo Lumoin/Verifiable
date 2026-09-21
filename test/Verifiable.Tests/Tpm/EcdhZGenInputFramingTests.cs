@@ -23,7 +23,7 @@ internal sealed class EcdhZGenInputFramingTests
     /// "TPM2B_ECC_POINT inPoint" (TPM 2.0 Library Part 3, clause 14.5.2, Table 50): the command area is
     /// <c>keyHandle</c> (TPMI_DH_OBJECT, four octets) followed by <c>inPoint</c> framed through
     /// <see cref="Tpm2bEccPoint"/> — the outer size then the two TPM2B-prefixed coordinates — and
-    /// <see cref="ITpmCommandInput.GetSerializedSize"/> accounts for exactly those octets.
+    /// <see cref="Verifiable.Tpm.Infrastructure.ITpmCommandInput.GetSerializedSize"/> accounts for exactly those octets.
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 14.5.2, Table 50</see>.
     /// </summary>
     [TestMethod]

@@ -628,7 +628,7 @@ public sealed class CBAdESArchiveTimestampContext
     /// <summary>
     /// Gets the CB-AdES signature's own signing certificate, whose readability this call checks before
     /// contacting any Time-Stamping Authority — the same locally-derivable-failure-first precedent every
-    /// pre-TSA validity check in this augmentation follows (<see cref="ReadSigningCertificateValidityOrThrow"/>).
+    /// pre-TSA validity check in this augmentation follows (<c>ReadSigningCertificateValidityOrThrow</c>).
     /// </summary>
     public required PkiCertificateMemory SigningCertificate { get; init; }
 
@@ -816,7 +816,7 @@ public sealed class CBAdESStripReferencesContext
 /// freshly encoding only the genuinely NEW element this call itself builds, never re-encoding a retained
 /// element from its DECODED model
 /// (<see cref="EncodeCBAdESUnprotectedHeaderDelegate"/>). A decoded-model re-encode of a retained element
-/// would be lossy for at least one CDDL union arm (<see cref="CBAdESSerialization.WriteTDate"/>'s
+/// would be lossy for at least one CDDL union arm (<c>CBAdESSerialization.WriteTDate</c>'s
 /// whole-second, forced-<c>Z</c> writer collapses a sub-second or non-<c>Z</c>-offset wire <c>tdate</c>, and
 /// an opaque <see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementUnknown"/> element is never
 /// modeled precisely enough to reproduce byte-for-byte from its decoded form at all) — the reason the splice
@@ -838,7 +838,7 @@ public sealed class CBAdESStripReferencesContext
 /// — no separate, potentially-drifting gate check is written here (an EXPLICIT, cheap pre-check still runs
 /// before the Time-Stamping-Authority round trip for those two verbs specifically, so a doomed call never
 /// bills a TSA — see their own remarks). A resulting rule violation propagates as
-/// <see cref="EnsureConformant"/>'s own <see cref="ArgumentException"/> UNCHANGED — it is not re-wrapped into
+/// <see cref="CBAdESLevelRules.EnsureConformant"/>'s own <see cref="ArgumentException"/> UNCHANGED — it is not re-wrapped into
 /// <see cref="CBAdESAugmentationException"/>, mirroring how <see cref="CBAdESSignatureCreation"/> lets
 /// <see cref="CBAdESHeaderRules.EnsureConformant"/>'s exception propagate on the B-B side.
 /// </para>
@@ -2110,13 +2110,6 @@ public static class CBAdESSignatureAugmentation
             DisposeAugmentationArtifacts(activeParseResult, finalUnsignedHeaders, transferred);
         }
 
-        /// <summary>
-        /// Determines whether <paramref name="unsignedHeaders"/> carries at least one <c>sigTst</c> instance —
-        /// Table 14's B-LTA ladder prerequisite (CB-6.3-21), checked structurally here rather than deferred to
-        /// <see cref="CBAdESLevelRules.EnsureConformant"/>'s own post-mint evaluation of the same rule.
-        /// </summary>
-        /// <param name="unsignedHeaders">The decoded <c>uHeaders</c> set, or <see langword="null"/> when absent.</param>
-        /// <returns><see langword="true"/> when at least one <c>sigTst</c> element is present.</returns>
         static bool HasSignatureTimestampInstance(CBAdESUnsignedHeaders? unsignedHeaders)
         {
             if(unsignedHeaders is null)
@@ -2136,13 +2129,6 @@ public static class CBAdESSignatureAugmentation
         }
 
 
-        /// <summary>
-        /// Determines whether <paramref name="unsignedHeaders"/> carries at least one <c>uHeaders</c>
-        /// counter-signature element (label 11 or 12) — CB-5.3.5.1-02's existence half,
-        /// mirroring <see cref="HasSignatureTimestampInstance"/>'s own shape.
-        /// </summary>
-        /// <param name="unsignedHeaders">The decoded <c>uHeaders</c> set, or <see langword="null"/> when absent.</param>
-        /// <returns><see langword="true"/> when at least one counter-signature element is present.</returns>
         static bool HasCounterSignatureElement(CBAdESUnsignedHeaders? unsignedHeaders)
         {
             if(unsignedHeaders is null)
@@ -2162,34 +2148,6 @@ public static class CBAdESSignatureAugmentation
         }
 
 
-        /// <summary>
-        /// CB-5.3.5.1-02's material-completeness half: every <c>uHeaders</c>
-        /// counter-signature element already incorporated must decode, and the caller must confirm its
-        /// signer material is already incorporated, before this call proceeds. Fail-closed — refuses whenever
-        /// completeness cannot be CONFIRMED, never only when it is disproven, since an unconfirmable state is
-        /// exactly what the requirement forbids reaching a new <c>arcTst</c> with.
-        /// </summary>
-        /// <param name="unsignedHeaders">The decoded <c>uHeaders</c> set (non-null; the caller already confirmed at least one element via <see cref="HasCounterSignatureElement"/>).</param>
-        /// <param name="parseCounterSignatureHeaderValue">
-        /// Decodes a counter-signature element's raw value bytes, or <see langword="null"/> to refuse outright
-        /// — with no decode delegate this call cannot confirm the element is even well-formed, let alone that
-        /// its material is complete.
-        /// </param>
-        /// <param name="isCounterSignatureMaterialComplete">
-        /// The caller-supplied completeness resolver, or <see langword="null"/> to refuse outright — this call
-        /// never itself builds or verifies a certificate chain (mirroring
-        /// <see cref="CBAdESResolveCounterSignaturePublicKeyDelegate"/>'s own certificate-path-neutral posture
-        /// at <see cref="CBAdESSignatureValidation"/>). Countersignature0V2's abbreviated form carries no
-        /// protected headers of its own (RFC 9338 §3.2), so a resolver has structurally less to decode for
-        /// that arm than for a full <see cref="CounterSignatureV2"/> — an honest depth difference, not a gap
-        /// this call papers over.
-        /// </param>
-        /// <param name="pool">Memory pool the decode buffers rent from.</param>
-        /// <exception cref="CBAdESAugmentationException">
-        /// <see cref="CBAdESAugmentationFailureKind.ArchiveTimestampCounterSignatureMaterialIncomplete"/> when
-        /// either delegate is <see langword="null"/>, an element fails to decode, or the resolver reports
-        /// incompleteness for any element.
-        /// </exception>
         static void EnsureCounterSignatureMaterialComplete(
             CBAdESUnsignedHeaders? unsignedHeaders,
             ParseCounterSignatureHeaderValueDelegate? parseCounterSignatureHeaderValue,
@@ -2604,20 +2562,6 @@ public static class CBAdESSignatureAugmentation
 
         return anyEmbedded;
 
-        /// <summary>
-        /// Opens every token of <paramref name="container"/> and throws the first time one is unreadable or its
-        /// signer certificate is unresolvable — the two conditions named distinctly,
-        /// mirroring <see cref="CBAdESSignatureValidation"/>'s own <c>VerifyOneTimestampTokenAsync</c> split
-        /// between an unreadable token (a different rule entirely on that side, CB-6.3-i) and an unresolved
-        /// signer (CB-6.3-h) — this throw posture reports both as the SAME
-        /// <see cref="CBAdESAugmentationFailureKind.ArchiveTimestampValidationMaterialIncomplete"/> kind, since
-        /// there is no separate binding check on the augmentation side to attribute the former to.
-        /// </summary>
-        /// <param name="container">The <c>tstContainer</c> to check.</param>
-        /// <param name="validationDataCertificates">The signature's own <c>valData</c> certificate candidates.</param>
-        /// <param name="pool">The memory pool the token and digest buffers rent from.</param>
-        /// <param name="cancellationToken">A cancellation token.</param>
-        /// <returns>Whether at least one token in <paramref name="container"/> carries <see cref="TimestampTokenInfo.HasEmbeddedCertificates"/>.</returns>
         static async ValueTask<bool> EnsureContainerTokensResolvedAsync(
             AdESTimestampContainer container,
             IReadOnlyList<AdESPkiObject> validationDataCertificates,
@@ -2659,18 +2603,14 @@ public static class CBAdESSignatureAugmentation
 
             return anyEmbeddedInContainer;
 
-            /// <summary>
-            /// Names the actual condition <see cref="CBAdESLevelRules.IsTimestampTokenSignerCertificateResolvedAsync"/>
-            /// found unresolvable, mirroring <see cref="CBAdESSignatureValidation"/>'s own identically-purposed
-            /// classifier so this exception never carries a generic message a
-            /// reader cannot act on.
-            /// </summary>
-            /// <param name="tokenInfo">The token the coverage check ran against.</param>
-            /// <returns>A human-readable statement of why the signer certificate did not resolve.</returns>
             static string DescribeUnresolvedSignerCondition(TimestampTokenInfo tokenInfo) => tokenInfo.EmbeddedMaterialStatus switch
             {
                 CmsEmbeddedMaterialStatus.Malformed =>
                     "the token's own embedded certificate/CRL material could not be read (status: Malformed), so its signer identity cannot be confirmed",
+                CmsEmbeddedMaterialStatus.NotRead =>
+                    "the token's own signer identity matches neither an embedded certificate nor any valData certificate candidate",
+                CmsEmbeddedMaterialStatus.Read =>
+                    "the token's own signer identity matches neither an embedded certificate nor any valData certificate candidate",
                 _ =>
                     "the token's own signer identity matches neither an embedded certificate nor any valData certificate candidate"
             };

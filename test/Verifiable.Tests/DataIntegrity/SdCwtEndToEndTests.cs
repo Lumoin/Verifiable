@@ -1,9 +1,9 @@
 using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DataIntegrity;
@@ -41,7 +41,8 @@ internal class SdCwtEndToEndTests
     public void ObjectPropertyDisclosureRoundTrips()
     {
         //Arrange - Create disclosure for issuer.name claim.
-        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        using Salt generatedSalt = TestSalts.Generate(16, TestSalts.TestSaltTag);
+        byte[] salt = generatedSalt.AsReadOnlySpan().ToArray();
         using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt), "name", "Example University");
 
         //Act - Serialize to CBOR and parse back.
@@ -68,7 +69,8 @@ internal class SdCwtEndToEndTests
     public void ArrayElementDisclosureRoundTrips()
     {
         //Arrange - Create disclosure for a type array element.
-        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        using Salt generatedSalt = TestSalts.Generate(16, TestSalts.TestSaltTag);
+        byte[] salt = generatedSalt.AsReadOnlySpan().ToArray();
         using SdDisclosure disclosure = SdDisclosure.CreateArrayElement(TestSalts.FromBytes(salt), "ExampleDegreeCredential");
 
         //Act - Serialize and parse.
@@ -92,7 +94,8 @@ internal class SdCwtEndToEndTests
     public void NestedObjectValueDisclosureRoundTrips()
     {
         //Arrange - Create disclosure for credentialSubject with nested degree.
-        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        using Salt generatedSalt = TestSalts.Generate(16, TestSalts.TestSaltTag);
+        byte[] salt = generatedSalt.AsReadOnlySpan().ToArray();
         var credentialSubject = new Dictionary<string, object?>
         {
             ["id"] = "did:example:ebfeb1f712ebc6f1c276e12ec21",
@@ -178,7 +181,8 @@ internal class SdCwtEndToEndTests
     [TestMethod]
     public void VariousValueTypesRoundTrip()
     {
-        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        using Salt generatedSalt = TestSalts.Generate(16, TestSalts.TestSaltTag);
+        byte[] salt = generatedSalt.AsReadOnlySpan().ToArray();
 
         //Boolean.
         VerifyRoundTrip(salt, "bool_true", true);
@@ -212,9 +216,9 @@ internal class SdCwtEndToEndTests
         //is the release point.
         var disclosures = new List<SdDisclosure>
         {
-            SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)), "name", "Alice"),
-            SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)), "age", 30),
-            SdDisclosure.CreateArrayElement(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)), "admin")
+            SdDisclosure.CreateProperty(TestSalts.Generate(16, TestSalts.TestSaltTag), "name", "Alice"),
+            SdDisclosure.CreateProperty(TestSalts.Generate(16, TestSalts.TestSaltTag), "age", 30),
+            SdDisclosure.CreateArrayElement(TestSalts.Generate(16, TestSalts.TestSaltTag), "admin")
         };
 
         try
@@ -288,32 +292,32 @@ internal class SdCwtEndToEndTests
         var disclosures = new List<(string Description, SdDisclosure Disclosure)>
         {
             ("issuer.id", SdDisclosure.CreateProperty(
-                TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)),
+                TestSalts.Generate(16, TestSalts.TestSaltTag),
                 "id",
                 "did:example:76e12ec712ebc6f1c221ebfeb1f")),
 
             ("issuer.name", SdDisclosure.CreateProperty(
-                TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)),
+                TestSalts.Generate(16, TestSalts.TestSaltTag),
                 "name",
                 "Example University")),
 
             ("credentialSubject.id", SdDisclosure.CreateProperty(
-                TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)),
+                TestSalts.Generate(16, TestSalts.TestSaltTag),
                 "id",
                 "did:example:ebfeb1f712ebc6f1c276e12ec21")),
 
             ("degree.type", SdDisclosure.CreateProperty(
-                TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)),
+                TestSalts.Generate(16, TestSalts.TestSaltTag),
                 "type",
                 "ExampleBachelorDegree")),
 
             ("degree.name", SdDisclosure.CreateProperty(
-                TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)),
+                TestSalts.Generate(16, TestSalts.TestSaltTag),
                 "name",
                 "Bachelor of Science and Arts")),
 
             ("type[1] (array element)", SdDisclosure.CreateArrayElement(
-                TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)),
+                TestSalts.Generate(16, TestSalts.TestSaltTag),
                 "ExampleDegreeCredential"))
         };
 

@@ -11,9 +11,9 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Flow coverage for the <c>Extensions/Counter</c> business-capability verbs (<see cref="TpmDeviceExtensions.DefineCounterAsync"/>,
-/// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/>, <see cref="TpmDeviceExtensions.ReadCounterAsync"/>,
-/// <see cref="TpmDeviceExtensions.UndefineCounterAsync"/>) against the in-house behavioural <see cref="TpmSimulator"/> -
+/// Flow coverage for the <c>Extensions/Counter</c> business-capability verbs (<see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>,
+/// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>, <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).ReadCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>,
+/// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).UndefineCounterAsync(ReadOnlyMemory{byte}, uint, CancellationToken)"/>) against the in-house behavioural <see cref="TpmSimulator"/> -
 /// entirely in-process, with no external assets - through the same production wire path
 /// <see cref="TpmInHouseSimulatorNvCounterTests"/> exercises directly with <see cref="NvIncrementInput"/>/
 /// <see cref="NvReadInput"/>/<see cref="NvDefineSpaceInput"/>/<see cref="NvUndefineSpaceInput"/>, except every
@@ -43,8 +43,8 @@ internal sealed class TpmCounterExtensionsTests
 
     /// <summary>
     /// Verifies a define-then-increment run through the verbs alone reads back strictly monotonically: each
-    /// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> call returns exactly the run index, and a follow-up
-    /// <see cref="TpmDeviceExtensions.ReadCounterAsync"/> agrees with the last increment's returned count - proving
+    /// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> call returns exactly the run index, and a follow-up
+    /// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).ReadCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> agrees with the last increment's returned count - proving
     /// the verb's internal NV_Increment+NV_Read composition and a standalone read observe the same stored value.
     /// </summary>
     [TestMethod]
@@ -76,9 +76,9 @@ internal sealed class TpmCounterExtensionsTests
 
     /// <summary>
     /// The flagship rollback-protection positive, driven entirely through the verbs: increments a Counter
-    /// Index to a known value, undefines it with <see cref="TpmDeviceExtensions.UndefineCounterAsync"/>, redefines
-    /// the same handle with <see cref="TpmDeviceExtensions.DefineCounterAsync"/>, and verifies the first
-    /// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> of the redefined Index seeds strictly above (exactly
+    /// Index to a known value, undefines it with <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).UndefineCounterAsync(ReadOnlyMemory{byte}, uint, CancellationToken)"/>, redefines
+    /// the same handle with <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>, and verifies the first
+    /// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> of the redefined Index seeds strictly above (exactly
     /// one past) the deleted counter's last value - the phantom high-water mark (TPM 2.0 Library Part 1, clause
     /// 34.2.6.3 NOTE 2/NOTE 6) proving delete-then-redefine can never roll a counter with this Name back.
     /// </summary>
@@ -124,7 +124,7 @@ internal sealed class TpmCounterExtensionsTests
     }
 
     /// <summary>
-    /// Verifies <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> with a wrong Index authValue rejects with
+    /// Verifies <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> with a wrong Index authValue rejects with
     /// <c>TPM_RC_BAD_AUTH</c>. The Index is defined with <c>noDa: true</c> (dictionary-attack opted out) so this
     /// negative is a clean bad-authorization answer, uncomplicated by the dictionary-attack lockout ladder a
     /// DA-protected Index would instead feed (TPM 2.0 Library Part 1, clause 16.8.1). The verb's default channel
@@ -154,7 +154,7 @@ internal sealed class TpmCounterExtensionsTests
     }
 
     /// <summary>
-    /// Pins <see cref="TpmDeviceExtensions.DefineCounterAsync"/>'s SECURE DEFAULT: with <c>noDa</c> left at its
+    /// Pins <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>'s SECURE DEFAULT: with <c>noDa</c> left at its
     /// default the Index is dictionary-attack PROTECTED, so a wrong Index authValue is an auth-failure that feeds
     /// the shared lockout counter (<c>TPM_RC_AUTH_FAIL</c>, TPM 2.0 Library Part 1, clause 16.8.3) rather than the
     /// plain bad-authorization a <c>TPMA_NV_NO_DA</c> Index answers (<c>TPM_RC_BAD_AUTH</c>, clause 16.8.1 — the
@@ -189,9 +189,9 @@ internal sealed class TpmCounterExtensionsTests
 
     /// <summary>
     /// Verifies the required behavioral contrast between the two read-side verbs on a freshly defined Counter
-    /// Index: <see cref="TpmDeviceExtensions.ReadCounterAsync"/> rejects with <c>TPM_RC_NV_UNINITIALIZED</c>
+    /// Index: <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).ReadCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> rejects with <c>TPM_RC_NV_UNINITIALIZED</c>
     /// (TPM 2.0 Library Part 3, clause 31.13.1) before any increment has ever run, while
-    /// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> against that very same, still-unwritten Index
+    /// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> against that very same, still-unwritten Index
     /// succeeds outright (clause 31.8.1's explicit non-error) and returns exactly <c>1</c>.
     /// </summary>
     [TestMethod]
@@ -219,7 +219,7 @@ internal sealed class TpmCounterExtensionsTests
     }
 
     /// <summary>
-    /// Regression proof that a Counter Index defined through <see cref="TpmDeviceExtensions.DefineCounterAsync"/>
+    /// Regression proof that a Counter Index defined through <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
     /// still refuses a raw <c>TPM2_NV_Write()</c> with <c>TPM_RC_ATTRIBUTES</c> (TPM 2.0 Library Part 3, clause
     /// 31.7.1: the four update commands partition NV Index types; only <c>TPM2_NV_Increment()</c> may modify a
     /// Counter Index). This verb group has no write verb, so the negative is driven with the raw

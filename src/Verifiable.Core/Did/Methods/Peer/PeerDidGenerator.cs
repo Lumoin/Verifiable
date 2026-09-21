@@ -50,7 +50,7 @@ public sealed record PeerDidPurposedKey(PublicKeyMemory Key, PeerDidPurpose Purp
 /// <summary>
 /// Generates <c>did:peer</c> identifiers, the inverse of the resolution performed by
 /// <see cref="Verifiable.Core.Did.Methods.Peer.PeerDidResolver"/>. This is the document-to-DID construction
-/// side, sitting alongside the other DID generators (for example <see cref="KeyDidBuilder"/>).
+/// side, sitting alongside the other DID generators (for example <see cref="Verifiable.Core.Did.Methods.Key.KeyDidBuilder"/>).
 /// </summary>
 public static class PeerDidGenerator
 {
@@ -114,7 +114,7 @@ public static class PeerDidGenerator
         multihashPrefix[sha256Code.Length] = Sha256DigestLength;
         string hashPortion = MultibaseSerializer.Encode(digest, multihashPrefix, MultibaseAlgorithms.Base58Btc, base58Encoder, pool);
 
-        return $"did:peer:4{hashPortion}:{encodedDocument}";
+        return $"{PeerDidMethod.Prefix}{PeerDidMethod.Numalgo4Indicator}{hashPortion}:{encodedDocument}";
     }
 
 
@@ -259,7 +259,7 @@ public static class PeerDidGenerator
 
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
-        StringBuilder builder = new("did:peer:2");
+        StringBuilder builder = new($"{PeerDidMethod.Prefix}{PeerDidMethod.Numalgo2Indicator}");
 
         foreach(PeerDidPurposedKey key in keys)
         {

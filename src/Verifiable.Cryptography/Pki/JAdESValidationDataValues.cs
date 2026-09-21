@@ -7,8 +7,8 @@ namespace Verifiable.Cryptography.Pki;
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11918201/01.02.01_60/ts_11918201v010201p.pdf">
 /// ETSI TS 119 182-1 V1.2.1, clause 5.3.5.2</see> — a non-empty, ordered list of certificate values
 /// (JA-5.3.5.2-13/-14). Reused verbatim by <c>axVals</c> (clause 5.3.5.4, Annex B.1 schema
-/// <c>"axVals": {"$ref": "#/definitions/xVals"}</c>) — see <see cref="JAdESSignatureCertificateValues"/> and
-/// <see cref="JAdESAttributeCertificateValues"/> for the two <c>etsiU</c> kinds that hold this shared shape.
+/// <c>"axVals": {"$ref": "#/definitions/xVals"}</c>) — see <c>JAdESSignatureCertificateValues</c> and
+/// <c>JAdESAttributeCertificateValues</c> for the two <c>etsiU</c> kinds that hold this shared shape.
 /// </summary>
 /// <remarks>
 /// <para>JSON Schema (clause 5.3.5.2, copied from Annex B.1):</para>
@@ -119,7 +119,7 @@ public sealed record JAdESOtherCertificate(AdESPkiObject Certificate): JAdESCert
 /// ETSI TS 119 182-1 V1.2.1, clause 5.3.5.3</see> — three independently-optional non-empty lists of
 /// <see cref="AdESPkiObject"/> instances (CRLs, OCSP responses, and other-format revocation data). Reused
 /// verbatim by <c>arVals</c> (clause 5.3.5.5, Annex B.1 schema <c>"arVals": {"$ref": "#/definitions/rVals"}</c>)
-/// — see <see cref="JAdESSignatureRevocationValues"/> and <see cref="JAdESAttributeRevocationValues"/> for the
+/// — see <c>JAdESSignatureRevocationValues</c> and <c>JAdESAttributeRevocationValues</c> for the
 /// two <c>etsiU</c> kinds that hold this shared shape.
 /// </summary>
 /// <remarks>
@@ -253,7 +253,7 @@ public sealed record JAdESRevocationValues
 /// ETSI TS 119 182-1 V1.2.1</see> — certificate values, revocation values, or both. Reused verbatim by BOTH
 /// <c>anyValData</c> (clause 5.3.5.6, JA-5.3.5.6-02) and <c>tstVD</c> (clause 5.3.6.1, JA-5.3.6.1-04), each
 /// Annex B.1 schema-typed as <c>{"$ref": "#/definitions/validationVals"}</c> — see
-/// <see cref="JAdESAnyValidationData"/> and <see cref="JAdESTimestampValidationData"/> for the two <c>etsiU</c>
+/// <c>JAdESAnyValidationData</c> and <c>JAdESTimestampValidationData</c> for the two <c>etsiU</c>
 /// kinds that hold this shared shape.
 /// </summary>
 /// <remarks>

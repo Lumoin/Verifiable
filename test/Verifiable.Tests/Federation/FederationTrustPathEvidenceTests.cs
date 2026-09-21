@@ -146,7 +146,7 @@ internal sealed class FederationTrustPathEvidenceTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(0, entities,
+        Assert.IsEmpty(entities,
             "§6.1.1.3: with no familiar anchor there is no path to any of them, so the evidence is empty.");
         Assert.AreEqual(0, counters.ConfigurationFetches,
             "§15.10: with no familiar anchor the resolver must dereference no Entity Configuration URL.");
@@ -186,7 +186,7 @@ internal sealed class FederationTrustPathEvidenceTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(0, entities,
+        Assert.IsEmpty(entities,
             "§6.1.1.3: no valid path reaches the stranger anchor, so no Entity Identifier is contributed.");
     }
 
@@ -224,7 +224,7 @@ internal sealed class FederationTrustPathEvidenceTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(0, entities,
+        Assert.IsEmpty(entities,
             "Federation §10.2: a chain carrying a forged Subordinate Statement signature is not valid, so it contributes no entities.");
     }
 
@@ -262,7 +262,7 @@ internal sealed class FederationTrustPathEvidenceTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(0, entities,
+        Assert.IsEmpty(entities,
             "§6.1.1.3: a path that cannot be constructed within the bound contributes no Entity Identifiers.");
     }
 
@@ -451,7 +451,7 @@ internal sealed class FederationTrustPathEvidenceTests
 
         Assert.IsNotNull(evidence,
             "§6.1.1.1: the certificate chain's AuthorityKeyIdentifiers keep the evidence non-empty for inspection.");
-        Assert.HasCount(0, evidence.FederationTrustPathEntities,
+        Assert.IsEmpty(evidence.FederationTrustPathEntities,
             "§6.1.1.3: a non-https issuer identifier is no Entity Identifier, so the federation set stays empty.");
         Assert.AreEqual(0, federationArmInvocations,
             "§15.10: a value that is not an https identifier must not enter the federation resolution arm.");
@@ -698,3 +698,4 @@ internal sealed class FederationTrustPathEvidenceTests
         public int SubordinateFetches { get; set; }
     }
 }
+

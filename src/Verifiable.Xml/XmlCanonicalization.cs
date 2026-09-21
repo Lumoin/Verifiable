@@ -26,15 +26,16 @@ namespace Verifiable.Xml;
 /// either method's body. The exclusive family of
 /// <see cref="XmlCanonicalizationAlgorithm"/> takes the <c>InclusiveNamespaces PrefixList</c> parameter of
 /// <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML Canonicalization
-/// 1.0</see> section 4 through <see cref="TryCanonicalizeExclusive"/>;
-/// <see cref="TryCanonicalize"/> serves the exclusive algorithm members by delegating there with an empty
+/// 1.0</see> section 4 through <see cref="TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/>;
+/// <see cref="TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/> serves the exclusive algorithm members by delegating there with an empty
 /// prefix list, which section 3 item 2 permits ("an additional, possibly null, parameter").
 /// </remarks>
 public static class XmlCanonicalization
 {
     /// <summary>
     /// Canonicalizes the node-set with the given canonicalization algorithm. The exclusive members of
-    /// <see cref="XmlCanonicalizationAlgorithm"/> delegate to <see cref="TryCanonicalizeExclusive"/> with
+    /// <see cref="XmlCanonicalizationAlgorithm"/> delegate to
+    /// <see cref="TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/> with
     /// an empty <c>InclusiveNamespaces PrefixList</c>.
     /// </summary>
     /// <param name="table">The node table the node-set marks nodes of.</param>
@@ -52,14 +53,21 @@ public static class XmlCanonicalization
 
 
     /// <summary>
-    /// <see cref="TryCanonicalize"/>, with the returned octets tagged <paramref name="tag"/> instead of the
+    /// <see cref="TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/>,
+    /// with the returned octets tagged <paramref name="tag"/> instead of the
     /// fixed <see cref="BufferTags.XmlCanonical"/> — the reference-processing engine's own implicit section
     /// 4.3.3.2 default node-set-to-octets conversion uses this to produce
     /// <see cref="BufferTags.XmlDigestInput"/>-tagged octets directly: when canonicalization itself IS the
     /// engine's final chain output, there is no reason to rent, copy into and tag a second buffer just to
     /// change the tag.
     /// </summary>
+    /// <param name="table">The node table the node-set marks nodes of.</param>
+    /// <param name="nodeSet">The node-set to canonicalize.</param>
+    /// <param name="algorithm">The canonicalization algorithm.</param>
+    /// <param name="pool">The pool every working buffer and the returned octets are rented from.</param>
     /// <param name="tag">The tag the returned octets carry.</param>
+    /// <param name="canonicalOctets">The canonical octets on success; the caller owns and must dispose them.</param>
+    /// <param name="error">The refusal on failure.</param>
     internal static bool TryCanonicalize(XmlNodeTable table, XmlNodeSet nodeSet, XmlCanonicalizationAlgorithm algorithm, BaseMemoryPool pool, Tag tag, [NotNullWhen(true)] out PooledMemory? canonicalOctets, out XmlCanonicalizationError error)
     {
         ArgumentNullException.ThrowIfNull(table);
@@ -130,11 +138,20 @@ public static class XmlCanonicalization
 
 
     /// <summary>
-    /// <see cref="TryCanonicalizeExclusive"/>, with the returned octets tagged <paramref name="tag"/>
+    /// <see cref="TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/>,
+    /// with the returned octets tagged <paramref name="tag"/>
     /// instead of the fixed <see cref="BufferTags.XmlCanonical"/> — see the tag-parameterized overload of
-    /// <see cref="TryCanonicalize"/> for why.
+    /// <see cref="TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, Tag, out PooledMemory?, out XmlCanonicalizationError)"/> for why.
     /// </summary>
+    /// <param name="table">The node table the node-set marks nodes of.</param>
+    /// <param name="nodeSet">The node-set to canonicalize.</param>
+    /// <param name="isWithComments">Whether comment nodes render, per the <c>#WithComments</c> identifier
+    /// of section 4.</param>
+    /// <param name="inclusivePrefixes">The <c>PrefixList</c> entries in the NMTOKENS format of section 4.</param>
+    /// <param name="pool">The pool every working buffer and the returned octets are rented from.</param>
     /// <param name="tag">The tag the returned octets carry.</param>
+    /// <param name="canonicalOctets">The canonical octets on success; the caller owns and must dispose them.</param>
+    /// <param name="error">The refusal on failure.</param>
     internal static bool TryCanonicalizeExclusive(XmlNodeTable table, XmlNodeSet nodeSet, bool isWithComments, ReadOnlySpan<string> inclusivePrefixes, BaseMemoryPool pool, Tag tag, [NotNullWhen(true)] out PooledMemory? canonicalOctets, out XmlCanonicalizationError error)
     {
         ArgumentNullException.ThrowIfNull(table);

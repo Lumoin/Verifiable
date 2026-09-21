@@ -4,6 +4,7 @@ using System.Text;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -121,7 +122,9 @@ public static class CredentialDataIntegrityExtensions
         /// <param name="deserialize">Delegate for deserializing credentials.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="encoder">The encoding delegate (e.g., Base58 encoder) passed to the proof value encoder.</param>
+        /// <param name="computeDigest">Delegate computing the credential and proof options digests the cryptosuite's hash algorithm requires.</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
+        /// <param name="context">The per-operation exchange context threaded to canonicalization.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>A new credential instance with the proof attached.</returns>
         /// <exception cref="ArgumentNullException">
@@ -287,6 +290,14 @@ public static class CredentialDataIntegrityExtensions
         /// Optional delegate for resolving JSON-LD contexts. Required for RDFC-based cryptosuites,
         /// can be null for JCS-based cryptosuites.
         /// </param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c>: the exact ordered set of entries a document
+        /// must carry for this deployment. Checked after the proof verifies, per
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data
+        /// Integrity 1.0 §2.4.1 Validating Contexts</see> and
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+        /// Validation</see> — see the remarks below.
+        /// </param>
         /// <param name="decodeProofValue">
         /// Delegate for decoding the proof value string to signature bytes.
         /// Use <see cref="ProofValueCodecs.DecodeBase58Btc"/> for standard Data Integrity proofs.
@@ -294,7 +305,9 @@ public static class CredentialDataIntegrityExtensions
         /// <param name="serialize">Delegate for serializing credentials.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="decoder">The decoding delegate (e.g., Base58 decoder) passed to the proof value decoder.</param>
+        /// <param name="computeDigest">Delegate computing the credential and proof options digests the cryptosuite's hash algorithm requires.</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
+        /// <param name="context">The per-operation exchange context threaded to canonicalization.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The verification result indicating cryptographic validity.</returns>
         /// <remarks>
@@ -318,11 +331,24 @@ public static class CredentialDataIntegrityExtensions
         /// See <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">
         /// VC Data Integrity §4.3 Verify Proof</see>.
         /// </para>
+        /// <para>
+        /// After the proof verifies, <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">
+        /// §2.4.1 Validating Contexts</see> requires context validation to run: the
+        /// <see cref="ContextValidationRules.ValidateCredentialContextAsync"/> normative pipeline
+        /// runs first, then the <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">
+        /// §4.6 Context Validation</see> deep-equality comparison — the credential's <c>@context</c>
+        /// must deeply equal <paramref name="knownContext"/>, entry by entry in order, and no
+        /// subtree of the credential may carry its own <c>@context</c> member. Either failing, or a
+        /// context the canonicalizer cannot load, answers
+        /// <see cref="VerificationFailureReason.ContextValidationFailed"/> — never an exception, since
+        /// the credential under verification is untrusted caller input.
+        /// </para>
         /// </remarks>
         public async ValueTask<CredentialVerificationResult<DataIntegritySecuredCredential>> VerifyAsync(
             DidDocument issuerDidDocument,
             CanonicalizationDelegate canonicalize,
             ContextResolverDelegate? contextResolver,
+            Context knownContext,
             ProofValueDecoderDelegate decodeProofValue,
             CredentialSerializeDelegate serialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
@@ -334,6 +360,7 @@ public static class CredentialDataIntegrityExtensions
         {
             ArgumentNullException.ThrowIfNull(issuerDidDocument, nameof(issuerDidDocument));
             ArgumentNullException.ThrowIfNull(canonicalize, nameof(canonicalize));
+            ArgumentNullException.ThrowIfNull(knownContext, nameof(knownContext));
             ArgumentNullException.ThrowIfNull(decodeProofValue, nameof(decodeProofValue));
             ArgumentNullException.ThrowIfNull(serialize, nameof(serialize));
             ArgumentNullException.ThrowIfNull(serializeProofOptions, nameof(serializeProofOptions));
@@ -425,6 +452,14 @@ public static class CredentialDataIntegrityExtensions
                 return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(outcome.FailureReason);
             }
 
+            //Data Integrity 1.0 §2.4.1: context validation runs after the proof verifies. The
+            //normative pipeline (first-entry, form, duplicates, undefined-terms position) runs
+            //before §4.6's own deep-equality comparison.
+            if(!await ContextDeepValidation.ValidateAfterProofVerifiedAsync(credential, knownContext, cancellationToken).ConfigureAwait(false))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ContextValidationFailed);
+            }
+
             //rootProvenance witnesses this exact credential instance; TryCreateBound refuses
             //otherwise, which cannot happen here since the gate above bound the same reference.
             if(rootProvenance is null
@@ -506,11 +541,27 @@ public static class CredentialDataIntegrityExtensions
         var proofOptions = ProofOptionsDocument.FromProof(proof, requiresContext ? credential.Context : null);
         var proofOptionsSerialized = serializeProofOptions(proofOptions);
 
-        //Canonicalize and hash using the cryptosuite's algorithm.
-        var credentialCanonicalization = await canonicalize(credentialWithoutProofSerialized, contextResolver, context, cancellationToken)
-            .ConfigureAwait(false);
-        var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
-            .ConfigureAwait(false);
+        //Canonicalize and hash using the cryptosuite's algorithm. The credential's own @context is
+        //untrusted caller input; a context the canonicalizer cannot load (an unresolvable remote
+        //URI, for RDFC-based cryptosuites) is a FAILED verification, per Data Integrity 1.0 §2.4.1,
+        //never an escaping exception.
+        CanonicalizationResult credentialCanonicalization;
+        CanonicalizationResult proofOptionsCanonicalization;
+        try
+        {
+            credentialCanonicalization = await canonicalize(credentialWithoutProofSerialized, contextResolver, context, cancellationToken)
+                .ConfigureAwait(false);
+            proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch(Exception)
+        {
+            return new(CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
+        }
 
         var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
         int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);

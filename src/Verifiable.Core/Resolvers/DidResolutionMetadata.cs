@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -50,6 +51,15 @@ public sealed class DidResolutionMetadata: IEquatable<DidResolutionMetadata>
     /// </para>
     /// </remarks>
     public IReadOnlyList<IReadOnlyDictionary<string, object>>? Proof { get; init; }
+
+    /// <summary>
+    /// The freshness a method's own wire fetch reports for the resolved document, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>. A method that
+    /// resolves without reaching the network (for example did:key or did:peer) and an unsuccessful
+    /// resolution both leave this at its default value — not storable, zero lifetime — so a caller
+    /// cannot infer a cacheable lifetime for a document that was never fetched over HTTP.
+    /// </summary>
+    public HttpCacheFreshness Freshness { get; init; }
 
     /// <inheritdoc />
     public bool Equals(DidResolutionMetadata? other)

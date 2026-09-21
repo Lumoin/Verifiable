@@ -2,7 +2,9 @@ using Org.BouncyCastle.Asn1.Sec;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Agreement;
+using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Generators;
+using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
@@ -726,9 +728,17 @@ public static class BouncyCastleKeyAgreementFunctions
 
 
     /// <summary>
-    /// Performs AES-GCM authenticated encryption.
+    /// Performs AES-GCM authenticated encryption using BouncyCastle's own managed <see cref="GcmBlockCipher"/>
+    /// over its AES engine, never the platform's OS-backed cipher — a host without platform AES-GCM support
+    /// (a browser-wasm runtime, for one) still resolves this provider's <see cref="AeadEncryptDelegate"/>.
     /// Matches <see cref="AeadEncryptDelegate"/>.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="pool"/>'s three rented owners are deliberately not <c>using</c> declarations: on
+    /// success their ownership transfers to the returned <see cref="AeadEncryptResult"/>, which the caller
+    /// disposes; the surrounding try/catch disposes all three only on the throw path, before the exception
+    /// propagates.
+    /// </remarks>
     /// <param name="plaintext">The plaintext bytes to encrypt.</param>
     /// <param name="key">The symmetric key to encrypt under. Must be disposed by the caller after this method returns.</param>
     /// <param name="aad">The additional authenticated data.</param>
@@ -752,19 +762,38 @@ public static class BouncyCastleKeyAgreementFunctions
         cancellationToken.ThrowIfCancellationRequested();
 
         IMemoryOwner<byte> ivOwner = pool.Rent(AesGcmIvLength);
-        RandomNumberGenerator.Fill(ivOwner.Memory.Span[..AesGcmIvLength]);
-
         IMemoryOwner<byte> ciphertextOwner = pool.Rent(plaintext.Length);
         IMemoryOwner<byte> tagOwner = pool.Rent(AesGcmTagLength);
 
-        using(var aesGcm = new AesGcm(key.AsReadOnlySpan(), AesGcmTagLength))
+        //GCM emits ciphertext (1:1 with plaintext) then the tag; the combined buffer splits at the
+        //plaintext length regardless of how the calls partition their writes.
+        IMemoryOwner<byte>? combinedOwner = null;
+        try
         {
-            aesGcm.Encrypt(
-                ivOwner.Memory.Span[..AesGcmIvLength],
-                plaintext.Span,
-                ciphertextOwner.Memory.Span[..plaintext.Length],
-                tagOwner.Memory.Span[..AesGcmTagLength],
-                aad.AsReadOnlySpan());
+            RandomNumberGenerator.Fill(ivOwner.Memory.Span[..AesGcmIvLength]);
+
+            var gcm = new GcmBlockCipher(new AesEngine());
+            gcm.Init(true, new ParametersWithIV(new KeyParameter(key.AsReadOnlySpan()), ivOwner.Memory.Span[..AesGcmIvLength]));
+            gcm.ProcessAadBytes(aad.AsReadOnlySpan());
+
+            combinedOwner = pool.Rent(plaintext.Length + AesGcmTagLength);
+
+            int written = gcm.ProcessBytes(plaintext.Span, combinedOwner.Memory.Span);
+            _ = gcm.DoFinal(combinedOwner.Memory.Span[written..]);
+
+            combinedOwner.Memory.Span[..plaintext.Length].CopyTo(ciphertextOwner.Memory.Span[..plaintext.Length]);
+            combinedOwner.Memory.Span.Slice(plaintext.Length, AesGcmTagLength).CopyTo(tagOwner.Memory.Span[..AesGcmTagLength]);
+        }
+        catch
+        {
+            ivOwner.Dispose();
+            ciphertextOwner.Dispose();
+            tagOwner.Dispose();
+            throw;
+        }
+        finally
+        {
+            combinedOwner?.Dispose();
         }
 
         return new AeadEncryptResult(
@@ -775,7 +804,9 @@ public static class BouncyCastleKeyAgreementFunctions
 
 
     /// <summary>
-    /// Performs AES-GCM authenticated decryption.
+    /// Performs AES-GCM authenticated decryption using BouncyCastle's own managed <see cref="GcmBlockCipher"/>
+    /// over its AES engine, never the platform's OS-backed cipher — a host without platform AES-GCM support
+    /// (a browser-wasm runtime, for one) still resolves this provider's <see cref="AeadDecryptDelegate"/>.
     /// Matches <see cref="AeadDecryptDelegate"/>.
     /// </summary>
     /// <param name="ciphertext">The encrypted bytes to decrypt.</param>
@@ -786,9 +817,19 @@ public static class BouncyCastleKeyAgreementFunctions
     /// <param name="pool">Memory pool for the plaintext allocation.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The decrypted plaintext. The caller owns and must dispose.</returns>
-    /// <exception cref="CryptographicException">
-    /// Thrown when authentication tag verification fails.
+    /// <exception cref="AuthenticationTagMismatchException">
+    /// Thrown when authentication tag verification fails. It is the specific
+    /// <see cref="CryptographicException"/> the platform's AES-GCM throws for the same failure, so the
+    /// <see cref="AeadDecryptDelegate"/> tag-failure contract holds and a caller's handling is the same
+    /// under either provider. BouncyCastle signals the failure with an
+    /// <see cref="InvalidCipherTextException"/>, which is carried as the inner exception.
     /// </exception>
+    /// <remarks>
+    /// <paramref name="pool"/>'s <c>plaintextOwner</c> is deliberately not a <c>using</c> declaration: on
+    /// success its ownership transfers to the returned <see cref="DecryptedContent"/>, which the caller
+    /// disposes; the surrounding catch clauses dispose it only on the throw path, before the exception
+    /// propagates.
+    /// </remarks>
     public static async ValueTask<DecryptedContent> AesGcmDecryptAsync(
         Ciphertext ciphertext,
         SymmetricKeyMemory key,
@@ -811,22 +852,45 @@ public static class BouncyCastleKeyAgreementFunctions
         cancellationToken.ThrowIfCancellationRequested();
 
         ReadOnlySpan<byte> ciphertextSpan = ciphertext.AsReadOnlySpan();
+        ReadOnlySpan<byte> tagSpan = tag.AsReadOnlySpan();
         IMemoryOwner<byte> plaintextOwner = pool.Rent(ciphertextSpan.Length);
 
+        //BouncyCastle's GCM verifies the tag from the ciphertext||tag input at DoFinal, so the two wire
+        //components are concatenated into one input buffer rented inside the try — a failed rent then
+        //disposes the plaintext owner through the catch rather than leaking it.
+        IMemoryOwner<byte>? combinedInputOwner = null;
         try
         {
-            using var aesGcm = new AesGcm(key.AsReadOnlySpan(), AesGcmTagLength);
-            aesGcm.Decrypt(
-                iv.AsReadOnlySpan(),
-                ciphertextSpan,
-                tag.AsReadOnlySpan(),
-                plaintextOwner.Memory.Span[..ciphertextSpan.Length],
-                aad.AsReadOnlySpan());
+            var gcm = new GcmBlockCipher(new AesEngine());
+            gcm.Init(false, new ParametersWithIV(new KeyParameter(key.AsReadOnlySpan()), iv.AsReadOnlySpan()));
+            gcm.ProcessAadBytes(aad.AsReadOnlySpan());
+
+            combinedInputOwner = pool.Rent(ciphertextSpan.Length + tagSpan.Length);
+            ciphertextSpan.CopyTo(combinedInputOwner.Memory.Span);
+            tagSpan.CopyTo(combinedInputOwner.Memory.Span[ciphertextSpan.Length..]);
+
+            int written = gcm.ProcessBytes(
+                combinedInputOwner.Memory.Span[..(ciphertextSpan.Length + tagSpan.Length)],
+                plaintextOwner.Memory.Span);
+            _ = gcm.DoFinal(plaintextOwner.Memory.Span[written..]);
+        }
+        catch(InvalidCipherTextException invalidCipherText)
+        {
+            plaintextOwner.Dispose();
+
+            //The AeadDecryptDelegate contract requires CryptographicException on tag-verification failure.
+            //AuthenticationTagMismatchException is the specific type the platform's AES-GCM throws for it,
+            //so a caller that handles the specific type behaves the same under either provider.
+            throw new AuthenticationTagMismatchException("AES-GCM authentication tag verification failed.", invalidCipherText);
         }
         catch
         {
             plaintextOwner.Dispose();
             throw;
+        }
+        finally
+        {
+            combinedInputOwner?.Dispose();
         }
 
         return new DecryptedContent(plaintextOwner, CryptoTags.AesGcmDecryptedContent);

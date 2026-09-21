@@ -69,7 +69,7 @@ public static class ClientIdMetadataMaterialization
                 return Passthrough(registration);
             }
 
-            AuthorizationServerIntegration oauth = context.Server!.OAuth();
+            AuthorizationServerIntegration oauth = context.RequestServer!.OAuth();
             if(oauth.ResolveClientMetadataAsync is null)
             {
                 return Passthrough(registration);
@@ -149,6 +149,7 @@ public static class ClientIdMetadataMaterialization
         ClientIdMetadataResolutionOutcome.PolicyDenied => PolicyDeniedEventName,
         ClientIdMetadataResolutionOutcome.FetchFailed => FetchFailedEventName,
         ClientIdMetadataResolutionOutcome.InvalidDocument => InvalidDocumentEventName,
+        ClientIdMetadataResolutionOutcome.Resolved => InvalidDocumentEventName,
 
         _ => InvalidDocumentEventName
     };

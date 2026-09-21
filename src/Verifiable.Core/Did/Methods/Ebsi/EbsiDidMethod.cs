@@ -1,14 +1,23 @@
 namespace Verifiable.Core.Did.Methods.Ebsi
 {
+    /// <summary>
+    /// The <c>did:ebsi</c> DID method used by the European Blockchain Services Infrastructure.
+    /// </summary>
     public record EbsiDidMethod: GenericDidMethod
     {
         /// <summary>
         /// The prefix of this particular DID method, including suffix <c>':'</c>.
         /// </summary>
-        /// <remarks>This is <see cref="WellKnownDidMethodPrefixes.Ebsi"/> with colon.</remarks>
+        /// <remarks>This is <see cref="WellKnownDidMethodPrefixes.EbsiDidMethodPrefix"/> with colon.</remarks>
         public static new string Prefix => "did:ebsi:";
 
 
+        /// <summary>
+        /// Initializes a new <see cref="EbsiDidMethod"/> from an existing <c>did:ebsi</c> DID string.
+        /// </summary>
+        /// <param name="didString">The DID string, which must start with <see cref="Prefix"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="didString"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="didString"/> does not start with <see cref="Prefix"/>.</exception>
         public EbsiDidMethod(string didString) : base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);

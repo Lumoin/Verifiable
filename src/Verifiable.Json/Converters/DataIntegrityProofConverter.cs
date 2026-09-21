@@ -30,40 +30,22 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
 
     /// <summary>
-    /// Creates a converter using the default cryptosuite factory and verification method type selector.
+    /// Creates a converter using the default cryptosuite factory.
     /// </summary>
     public DataIntegrityProofConverter()
-        : this(VerificationMethodTypeSelectors.Default, CryptosuiteInfoFactory.Default)
+        : this(CryptosuiteInfoFactory.Default)
     {
     }
 
 
     /// <summary>
-    /// Creates a converter using a custom cryptosuite factory and default VM type selector.
+    /// Creates a converter using a custom cryptosuite factory. This converter deserializes an
+    /// embedded verification method through the source-generated <see cref="VerifiableJsonContext"/>
+    /// rather than through a <see cref="VerificationMethodTypeSelector"/>.
     /// </summary>
     /// <param name="cryptosuiteFactory">The factory for resolving cryptosuite names to instances.</param>
     public DataIntegrityProofConverter(CryptosuiteInfoFactoryDelegate cryptosuiteFactory)
-        : this(VerificationMethodTypeSelectors.Default, cryptosuiteFactory)
     {
-    }
-
-
-    /// <summary>
-    /// Creates a converter with full control over both dispatch mechanisms.
-    /// </summary>
-    /// <param name="vmTypeSelector">
-    /// Accepted for symmetry with <see cref="VerificationMethodConverter"/>'s constructor; this
-    /// converter deserializes an embedded verification method through the source-generated
-    /// <see cref="VerifiableJsonContext"/> and does not read this delegate. Passing the same
-    /// instance the application wires into <see cref="VerificationMethodConverter"/> costs
-    /// nothing and keeps both constructors' shapes aligned.
-    /// </param>
-    /// <param name="cryptosuiteFactory">The factory for resolving cryptosuite names to instances.</param>
-    public DataIntegrityProofConverter(
-        VerificationMethodTypeSelector vmTypeSelector,
-        CryptosuiteInfoFactoryDelegate cryptosuiteFactory)
-    {
-        ArgumentNullException.ThrowIfNull(vmTypeSelector);
         ArgumentNullException.ThrowIfNull(cryptosuiteFactory);
         CryptosuiteFactory = cryptosuiteFactory;
     }

@@ -6,7 +6,7 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// A rotation-aware collection of key identifiers for a single protocol usage
-/// context. One of these is attached to a <see cref="ClientRecord"/> per
+/// context. One of these is attached to a <see cref="Verifiable.OAuth.Server.ClientRecord"/> per
 /// active <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/>.
 /// </summary>
 /// <remarks>
@@ -68,7 +68,7 @@ namespace Verifiable.OAuth;
 /// The library's default behaviour when publishing JWKS: emit <see cref="Incoming"/>,
 /// <see cref="Current"/>, and <see cref="Retiring"/>. Omit <see cref="Historical"/>.
 /// Applications that need different publication rules write them into their
-/// <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/> body.
+/// <see cref="Verifiable.OAuth.Server.AuthorizationServerCryptography.BuildJwksDocumentAsync"/> body.
 /// </para>
 /// <para>
 /// <strong>Multi-algorithm concurrency</strong>

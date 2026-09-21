@@ -6,11 +6,11 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// Buffer-content discriminator and pre-built <see cref="Tag"/> for the serialized snapshot envelope —
 /// the TPM-sealed content key followed by the AES-GCM IV, tag and ciphertext of the snapshot —
 /// <see cref="TpmSealedStateCustody"/> hands to a caller-supplied
-/// <see cref="StoreSealedSnapshotBlobAsyncDelegate"/> and reads back via a
-/// <see cref="TryFetchSealedSnapshotBlobAsyncDelegate"/>.
+/// <see cref="Verifiable.Fido2.Ctap.Authenticator.Custody.StoreSealedSnapshotBlobAsyncDelegate"/> and reads back via a
+/// <see cref="Verifiable.Fido2.Ctap.Authenticator.Custody.TryFetchSealedSnapshotBlobAsyncDelegate"/>.
 /// </summary>
 /// <remarks>
-/// Own numeric range (1202), clear of <see cref="CtapAuthenticatorCustodyBufferTags"/>'s own 1200-1201
+/// Own numeric range (1202), clear of <see cref="Verifiable.Fido2.Ctap.Authenticator.Custody.CtapAuthenticatorCustodyBufferTags"/>'s own 1200-1201
 /// pair and every other kind registered elsewhere in the solution, so this package's addition never
 /// collides with a kind registered by a file outside its touch scope.
 /// </remarks>
@@ -23,9 +23,9 @@ public static class TpmSealedStateCustodyBufferTags
     /// Buffer kind for a serialized snapshot envelope — a <see cref="Verifiable.Tpm.Extensions.Seal.TpmSealedBlob"/>
     /// holding the content key, then the IV, the authentication tag and the ciphertext of the snapshot — the
     /// opaque bytes <see cref="TpmSealedStateCustody"/>'s persist step hands to a
-    /// <see cref="StoreSealedSnapshotBlobAsyncDelegate"/> and its load step reads back via a
-    /// <see cref="TryFetchSealedSnapshotBlobAsyncDelegate"/>. Never the plaintext snapshot itself — that
-    /// recovered carrier carries <see cref="CtapAuthenticatorCustodyBufferTags.SnapshotPayload"/> instead.
+    /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Custody.StoreSealedSnapshotBlobAsyncDelegate"/> and its load step reads back via a
+    /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Custody.TryFetchSealedSnapshotBlobAsyncDelegate"/>. Never the plaintext snapshot itself — that
+    /// recovered carrier carries <see cref="Verifiable.Fido2.Ctap.Authenticator.Custody.CtapAuthenticatorCustodyBufferTags.SnapshotPayload"/> instead.
     /// </summary>
     public static BufferKind SealedSnapshotBlobKind { get; } = BufferKind.Create(1202);
 

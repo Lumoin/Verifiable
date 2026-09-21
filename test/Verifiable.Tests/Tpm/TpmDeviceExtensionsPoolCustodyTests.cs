@@ -46,7 +46,7 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// The Info family's verb (<see cref="TpmDeviceExtensions.GetInfoAsync"/>, composing
+    /// The Info family's verb (<see cref="Verifiable.Tpm.Extensions.Info.TpmDeviceExtensions.GetInfoAsync"/>, composing
     /// <c>TPM2_GetCapability</c> and the PCR-read verb internally) rents its scratch buffers from the device's
     /// own pool.
     /// </summary>
@@ -66,7 +66,7 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     }
 
     /// <summary>
-    /// The Pcr family's verb (<see cref="TpmDeviceExtensions.ReadAllPcrsAsync"/>, composing
+    /// The Pcr family's verb (<see cref="Verifiable.Tpm.Extensions.Pcr.TpmDeviceExtensions.ReadAllPcrsAsync"/>, composing
     /// <c>TPM2_PCR_Read</c> across every implemented bank) rents its scratch buffers from the device's own pool.
     /// </summary>
     [TestMethod]
@@ -85,7 +85,7 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     }
 
     /// <summary>
-    /// The Nv family's verb (<see cref="TpmDeviceExtensions.NvReadPublicAsync"/>, composing
+    /// The Nv family's verb (<see cref="Verifiable.Tpm.Extensions.Nv.TpmDeviceExtensions.NvReadPublicAsync"/>, composing
     /// <c>TPM2_NV_ReadPublic</c>) rents its scratch buffers from the device's own pool. The Counter family's own
     /// define and undefine verbs provision and release the Index read back — an Index's stored public area is
     /// live simulator state for as long as it is defined, so the balance is read after the whole
@@ -121,9 +121,9 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     }
 
     /// <summary>
-    /// The Counter family's verbs (<see cref="TpmDeviceExtensions.DefineCounterAsync"/>,
-    /// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/>,
-    /// <see cref="TpmDeviceExtensions.UndefineCounterAsync"/>, composing <c>TPM2_NV_DefineSpace</c>,
+    /// The Counter family's verbs (<see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>,
+    /// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>,
+    /// <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions.extension(TpmDevice).UndefineCounterAsync(ReadOnlyMemory{byte}, uint, CancellationToken)"/>, composing <c>TPM2_NV_DefineSpace</c>,
     /// <c>TPM2_NV_Increment</c> and <c>TPM2_NV_UndefineSpace</c>) rent their scratch buffers from the device's own
     /// pool across a full define-increment-undefine lifecycle.
     /// </summary>
@@ -155,7 +155,7 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     }
 
     /// <summary>
-    /// The Hierarchy family's verb (<see cref="TpmDeviceExtensions.ChangeHierarchyAuthWithPasswordAsync"/>,
+    /// The Hierarchy family's verb (<see cref="Verifiable.Tpm.Extensions.Hierarchy.TpmDeviceExtensions.ChangeHierarchyAuthWithPasswordAsync"/>,
     /// composing <c>TPM2_HierarchyChangeAuth</c> over a plaintext password session) rents its scratch buffers
     /// from the device's own pool. A non-empty hierarchy authValue is retained live simulator state until it is
     /// rotated again, so the balance is read after rotating to a real value and back to empty, not around one
@@ -185,7 +185,7 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     }
 
     /// <summary>
-    /// The Seal family's verbs (<see cref="TpmDeviceExtensions.SealAsync"/>, <see cref="TpmDeviceExtensions.UnsealAsync"/>,
+    /// The Seal family's verbs (<see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions.SealAsync"/>, <see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions.UnsealAsync"/>,
     /// composing <c>TPM2_Create</c>/<c>TPM2_Load</c> and <c>TPM2_Unseal</c>) rent their scratch buffers from the
     /// device's own pool. The storage parent is provisioned with a direct <c>TPM2_CreatePrimary</c> call against a
     /// separate, unobserved pool, so only the two verbs under test are measured for the rent-count proof.
@@ -232,8 +232,8 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     }
 
     /// <summary>
-    /// The Pin family's verbs (<see cref="TpmDeviceExtensions.DefinePinFailIndexAsync"/>,
-    /// <see cref="TpmDeviceExtensions.VerifyPinAsync"/>, <see cref="TpmDeviceExtensions.UndefinePinIndexAsync"/>,
+    /// The Pin family's verbs (<see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/>,
+    /// <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>, <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.UndefinePinIndexAsync"/>,
     /// composing <c>TPM2_NV_DefineSpace</c>, <c>TPM2_NV_Write</c> and <c>TPM2_NV_UndefineSpace</c> over a bound HMAC
     /// session) rent their scratch buffers from the device's own pool across a full define-verify-undefine
     /// lifecycle.
@@ -266,8 +266,8 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
     }
 
     /// <summary>
-    /// The Policy family's verbs (<see cref="TpmDeviceExtensions.StartTrialPolicySessionAsync"/>,
-    /// <see cref="TpmDeviceExtensions.PolicyAuthValueAsync"/>, composing <c>TPM2_StartAuthSession</c> and
+    /// The Policy family's verbs (<see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions.StartTrialPolicySessionAsync"/>,
+    /// <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions.PolicyAuthValueAsync"/>, composing <c>TPM2_StartAuthSession</c> and
     /// <c>TPM2_PolicyAuthValue</c>) rent their scratch buffers from the device's own pool.
     /// </summary>
     [TestMethod]

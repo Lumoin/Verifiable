@@ -139,16 +139,15 @@ namespace Verifiable.JCose
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.3">Digital Signature with RSASSA-PKCS1-v1_5</see>.</remarks>
         public static string Rs512 { get; } = Utf8Constants.ToInternedString(Rs512Utf8);
 
+        /// <summary>The UTF-8 source literal of <see cref="EdDsa"/>.</summary>
+        public static ReadOnlySpan<byte> EdDsaUtf8 => "EdDSA"u8;
+
         /// <summary>
         /// EdDSA using Ed25519.
         /// </summary>
         /// <remarks>
         /// See more at <a href="https://datatracker.ietf.org/doc/html/rfc8037">RFC 8037 - CFRG Elliptic Curve Diffie-Hellman (ECDH) and Signaturesin JSON Object Signing and Encryption(JOSE)</a>.
         /// </remarks>
-
-        /// <summary>The UTF-8 source literal of <see cref="EdDsa"/>.</summary>
-        public static ReadOnlySpan<byte> EdDsaUtf8 => "EdDSA"u8;
-
         public static string EdDsa { get; } = Utf8Constants.ToInternedString(EdDsaUtf8);
 
 

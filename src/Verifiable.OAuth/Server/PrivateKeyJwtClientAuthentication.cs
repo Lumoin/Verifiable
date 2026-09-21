@@ -1,8 +1,10 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.JwtBearer;
@@ -52,17 +54,21 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
     /// </summary>
     public string? ClientId { get; init; }
 
+
     /// <summary>
     /// The assertion's <c>jti</c>, surfaced so the caller can apply replay defense;
     /// <see langword="null"/> on failure.
     /// </summary>
     public string? Jti { get; init; }
 
+
     /// <summary>The assertion's expiry; <see langword="null"/> on failure.</summary>
     public DateTimeOffset? Expiration { get; init; }
 
+
     /// <summary>The reason validation failed; <see langword="null"/> on success.</summary>
     public string? FailureReason { get; init; }
+
 
     /// <summary><see langword="true"/> when the client assertion validated.</summary>
     public bool IsValid => FailureReason is null;
@@ -104,10 +110,12 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// <para>
 /// <see cref="Validate"/> is crypto-agnostic: it operates on the already signature-verified,
 /// decoded <see cref="JwtPayload"/>, mirroring <see cref="FederationClientAuthentication.Validate"/>'s
-/// shape. <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?)"/>
+/// shape. <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?)"/>
 /// and its explicit-<see cref="VerificationDelegate"/> overload compose the signature step around
 /// it: they parse the compact <c>client_assertion</c>, resolve the verification key from the
-/// registration's <see cref="ClientRecord.ClientJwks"/> via <see cref="JwkJsonReader"/> and
+/// registration's <see cref="ClientRecord.ClientJwks"/> — or, when that is absent, from
+/// <see cref="ClientRecord.ClientJwksUri"/> through the OPTIONAL wired
+/// <see cref="Pipeline.ResolveJwksUriDelegate"/> — via <see cref="JwkJsonReader"/> and
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> (through
 /// <see cref="DpopJwkUtilities.PublicKeyFromJwk"/>), verify with <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>,
 /// and only then apply <see cref="Validate"/>.
@@ -273,7 +281,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see cref="ClientRecord.ClientJwks"/>, verifies the signature via
     /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>'s
     /// registry-resolving overload, and applies <see cref="Validate"/>. Delegates the signature step
-    /// to <see cref="BuildValidator(VerificationDelegate,System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?)"/>'s
+    /// to <see cref="BuildValidator(VerificationDelegate,System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?)"/>'s
     /// shared core once the key is resolved per request, so the verification logic is written once.
     /// </summary>
     /// <param name="additionalAcceptedAudiences">
@@ -286,10 +294,23 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see cref="JtiReplayGuard.ConsultAsync"/> directly to reuse the library's <c>(issuer, jti)</c>
     /// store.
     /// </param>
+    /// <param name="resolveJwksUriAsync">
+    /// The OPTIONAL key-set resolution seam for a registration that carries a
+    /// <see cref="ClientRecord.ClientJwksUri"/> but no inline <see cref="ClientRecord.ClientJwks"/> —
+    /// the RFC 7591 §2 <c>jwks_uri</c> registration a caller never dereferenced. <see langword="null"/>
+    /// (the default) fails closed exactly as an unwired seam always has: the application owns what
+    /// reaches the wire, so nothing here dereferences <see cref="ClientRecord.ClientJwksUri"/> on its
+    /// own. Wire a delegate whose implementation calls
+    /// <see cref="Verifiable.OAuth.Server.Pipeline.JwksUriResolver.ResolveAsync"/> here to resolve
+    /// it — the caller supplies that attempt's own transport and size cap, reads the SSRF policy from
+    /// the <see cref="ExchangeContext"/> this delegate is called with, and owns whatever caching sits
+    /// in front of the attempt (see <see cref="Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate"/>).
+    /// </param>
     public static ValidateClientCredentialsDelegate BuildValidator(
         IReadOnlyCollection<string>? additionalAcceptedAudiences = null,
-        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null) =>
-        BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, verificationDelegate: null);
+        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null,
+        ResolveJwksUriDelegate? resolveJwksUriAsync = null) =>
+        BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate: null);
 
 
     /// <summary>
@@ -310,25 +331,41 @@ public static class PrivateKeyJwtClientAuthentication
     /// Replay-defense hook consulted after the claim rules pass, or <see langword="null"/> to skip
     /// replay defense.
     /// </param>
+    /// <param name="resolveJwksUriAsync">
+    /// The OPTIONAL key-set resolution seam; see the registry-resolving overload's parameter of the
+    /// same name.
+    /// </param>
     public static ValidateClientCredentialsDelegate BuildValidator(
         VerificationDelegate verificationDelegate,
         IReadOnlyCollection<string>? additionalAcceptedAudiences = null,
-        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null)
+        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null,
+        ResolveJwksUriDelegate? resolveJwksUriAsync = null)
     {
         ArgumentNullException.ThrowIfNull(verificationDelegate);
 
-        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, verificationDelegate);
+        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate);
     }
 
 
+    /// <summary>
+    /// Builds the assertion validator using the admitted request wiring and the supplied replay policy.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">RFC 7523 §3.2</see>:
+    /// "The subject MUST be the client_id of the OAuth client." <see cref="Validate"/> anchors the
+    /// assertion's <c>iss</c>/<c>sub</c> claims to the effective registration's own
+    /// <see cref="ClientRecord.ClientId"/> (below), which is client authentication (RFC 6749 §2.3),
+    /// never client identification (§2.2). This delegate does not read an accompanying
+    /// <c>client_id</c> FORM field at all — every caller runs that comparison, before this delegate
+    /// is invoked, through the shared identification helper in <c>AuthCodeEndpoints</c>.
+    /// </summary>
     private static ValidateClientCredentialsDelegate BuildValidatorCore(
         IReadOnlyCollection<string>? additionalAcceptedAudiences,
         CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync,
+        ResolveJwksUriDelegate? resolveJwksUriAsync,
         VerificationDelegate? verificationDelegate)
     {
         return async (request, fields, registration, context, cancellationToken) =>
         {
-            EndpointServer? server = context.Server;
+            EndpointServer? server = context.RequestServer;
             if(server is null)
             {
                 return false;
@@ -361,13 +398,27 @@ public static class PrivateKeyJwtClientAuthentication
             }
 
             //draft-ietf-oauth-client-id-metadata-document-02 §8.2: no published key material means
-            //the assertion cannot be verified. Fail closed rather than treat the client as
-            //unauthenticated — the caller is responsible for populating ClientJwks (directly, or from
-            //ClientJwksUri content it fetched through its own OutboundFetch-policed call) before this
-            //validator runs.
-            if(registration.ClientJwks is null)
+            //the assertion cannot be verified. RFC 7591 §2 permits the client to register a jwks_uri
+            //instead of an inline jwks; when the registration carries one and a resolver is wired,
+            //resolve it now. With no inline set, no jwks_uri, or no resolver wired, this fails closed
+            //rather than treat the client as unauthenticated — the application owns what reaches the
+            //wire, so nothing here dereferences ClientJwksUri without an explicitly supplied seam.
+            string? clientJwksJson = registration.ClientJwks;
+            if(clientJwksJson is null)
             {
-                return false;
+                if(registration.ClientJwksUri is null || resolveJwksUriAsync is null)
+                {
+                    return false;
+                }
+
+                JwksUriResolution jwksResolution = await resolveJwksUriAsync(
+                    registration.ClientJwksUri, context, cancellationToken).ConfigureAwait(false);
+                if(!jwksResolution.IsResolved || jwksResolution.Jwks is null)
+                {
+                    return false;
+                }
+
+                clientJwksJson = jwksResolution.Jwks;
             }
 
             UnverifiedJwsMessage unverified;
@@ -403,7 +454,7 @@ public static class PrivateKeyJwtClientAuthentication
                     ? kidValue
                     : null;
 
-                Dictionary<string, string>? jwkMembers = FindJwkMembers(registration.ClientJwks, kid);
+                IReadOnlyDictionary<string, string>? jwkMembers = FindJwkMembers(clientJwksJson, kid, oauth.MemoryPool!);
 
                 //A JWK carrying a private or symmetric member cannot be a verification key —
                 //draft-ietf-oauth-client-id-metadata-document-02 §4.1 (CIMD-023) already forbids this
@@ -449,34 +500,79 @@ public static class PrivateKeyJwtClientAuthentication
                         return false;
                     }
 
+                    //RFC 7519 §4: the Claim Names within a JWT Claims Set MUST be unique. Gate the
+                    //decoded payload for well-formedness before it reaches the wired deserializer,
+                    //so a duplicate claim name is refused here rather than escaping the
+                    //deserializer as an unhandled exception.
+                    if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
+                    {
+                        return false;
+                    }
+
                     JwtPayload payload;
                     try
                     {
                         payload = new(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
                     }
-                    catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+                    catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
                     {
                         return false;
                     }
 
+                    //A step endpoint (code redemption, refresh) resolves and carries the issuer
+                    //BEFORE running declared authentication — read that carried value rather than
+                    //resolving a second time for the same request. PAR, client credentials, and
+                    //the other stepless callers carry nothing, so they resolve here as before.
                     Uri issuerUri;
-                    try
+                    if(context.CorrelationStepIssuer is Uri carriedIssuer)
                     {
-                        issuerUri = oauth.ResolveIssuerAsync is not null
-                            ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
-                                .ConfigureAwait(false))!
-                            : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
-                                .ConfigureAwait(false);
+                        issuerUri = carriedIssuer;
                     }
-                    catch(InvalidOperationException)
+                    else
                     {
-                        return false;
+                        try
+                        {
+                            issuerUri = oauth.ResolveIssuerAsync is not null
+                                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                                    .ConfigureAwait(false))!
+                                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
+                                    .ConfigureAwait(false);
+                        }
+                        catch(InvalidOperationException)
+                        {
+                            return false;
+                        }
                     }
 
                     List<string> acceptedAudiences = [issuerUri.OriginalString];
                     if(additionalAcceptedAudiences is not null)
                     {
                         acceptedAudiences.AddRange(additionalAcceptedAudiences);
+                    }
+
+                    //RFC 9126 §2: "the authorization server MUST accept its issuer identifier,
+                    //token endpoint URL, or pushed authorization request endpoint URL as values
+                    //that identify it as an intended audience" — a blanket MUST on the
+                    //authorization server, not only at the PAR endpoint, so every caller of this
+                    //validator accepts the same three identities without a second wiring
+                    //parameter. The per-request EndpointChain already carries each active
+                    //endpoint's resolved URL (the same one MetadataEndpoints publishes), so the
+                    //token and PAR endpoint URLs are read from it rather than duplicated here. The
+                    //accepted string is the PUBLISHED one: RFC 7519 §2's StringOrURI is "compared
+                    //as case-sensitive strings with no transformations or canonicalizations
+                    //applied", so an `aud` copied from `MetadataEndpoints`' own
+                    //`ResolvedUri.ToString()` must be matched with the same call, never
+                    //`OriginalString`.
+                    if(context.EndpointChain is { } endpointChain)
+                    {
+                        foreach(ServerEndpoint chainEndpoint in endpointChain)
+                        {
+                            if(string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal)
+                                || string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodePar, StringComparison.Ordinal))
+                            {
+                                acceptedAudiences.Add(chainEndpoint.ResolvedUri.ToString());
+                            }
+                        }
                     }
 
                     DateTimeOffset now = server.TimeProvider.GetUtcNow();
@@ -490,9 +586,13 @@ public static class PrivateKeyJwtClientAuthentication
 
                     if(checkJtiReplayAsync is not null)
                     {
+                        //RFC 7523 §3 rule 7: the recorded jti is retained "for the length of time for
+                        //which the JWT would be considered valid based on the applicable exp instant" —
+                        //here that is exp plus the clock-skew tolerance Validate just accepted the
+                        //assertion's timing under, not the bare exp.
                         JtiReplayOutcome outcome = await checkJtiReplayAsync(
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            result.Expiration!.Value, cancellationToken).ConfigureAwait(false);
+                            result.Expiration!.Value + context.ClockSkewTolerance, cancellationToken).ConfigureAwait(false);
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove
@@ -647,128 +747,38 @@ public static class PrivateKeyJwtClientAuthentication
 
 
     /// <summary>
-    /// Locates the JWK matching <paramref name="kid"/> (or the first key when <paramref name="kid"/>
-    /// is <see langword="null"/>, mirroring <see cref="FederationKeyResolver"/>'s
-    /// absent-kid convention) inside a JWKS JSON document's <c>keys</c> array, and extracts its
-    /// string-valued members. Composes <see cref="JwkJsonReader"/> primitives the way
-    /// <see cref="ClientIdMetadataDocumentReader"/> already walks a <c>keys</c> array —
-    /// <see cref="JwkJsonReader"/> itself has no combinator for "the array element whose kid
-    /// matches."
+    /// Selects the verification key from a registered <c>ClientJwks</c> JWK Set document, eligible for
+    /// signature verification and free of private or symmetric material. When the assertion header
+    /// carried a <paramref name="kid"/>, selects by it through
+    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?, ReadOnlySpan{byte})"/> —
+    /// which refuses rather than picks a winner when the identifier appears on more than one key,
+    /// whatever each match's <c>use</c> is. Only when <paramref name="kid"/> is absent does this fall
+    /// to <see cref="JwkJsonReader.SelectSoleKey(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/>, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see> makes
+    /// <c>kid</c> optional for a legitimate single-key set; a kid-less assertion is refused UNLESS
+    /// exactly one key of the set is eligible for signature verification — a set with no <c>use</c>
+    /// member on any key is refused when it carries more than one key, but a set holding one
+    /// <c>sig</c> key and one <c>enc</c> key authenticates against the <c>sig</c> key rather than
+    /// being refused for carrying two keys. Either path refuses the whole set — this library's own
+    /// policy for a JWK Set of verification keys, not a requirement of any RFC — when any key in it
+    /// carries private or symmetric material; the caller's own refusal of a private or symmetric
+    /// SELECTED key stays in force alongside this set-wide one.
     /// </summary>
-    private static Dictionary<string, string>? FindJwkMembers(string jwksJson, string? kid)
+    /// <param name="jwksJson">The registered JWK Set document.</param>
+    /// <param name="kid">The assertion header's <c>kid</c>, or <see langword="null"/> when absent.</param>
+    /// <param name="memoryPool">The pool the UTF-8 encoding of <paramref name="jwksJson"/> rents from.</param>
+    /// <returns>The selected key's string-valued members, or <see langword="null"/> when no key was selected.</returns>
+    private static IReadOnlyDictionary<string, string>? FindJwkMembers(string jwksJson, string? kid, BaseMemoryPool memoryPool)
     {
-        ReadOnlySpan<byte> json = Encoding.UTF8.GetBytes(jwksJson);
+        int maxByteCount = Encoding.UTF8.GetMaxByteCount(jwksJson.Length);
+        using IMemoryOwner<byte> owner = memoryPool.Rent(maxByteCount);
+        int written = Encoding.UTF8.GetBytes(jwksJson, owner.Memory.Span);
+        ReadOnlySpan<byte> json = owner.Memory.Span[..written];
 
-        int keysStart = JwkJsonReader.IndexOfKey(json, WellKnownJwkMemberNames.KeysUtf8);
-        if(keysStart < 0)
-        {
-            return null;
-        }
+        JwkSelectionResult result = string.IsNullOrEmpty(kid)
+            ? JwkJsonReader.SelectSoleKey(json, WellKnownJwkValues.UseSigUtf8)
+            : JwkJsonReader.SelectKeyByKeyId(json, kid, WellKnownJwkValues.UseSigUtf8);
 
-        int afterKeysKey = keysStart + WellKnownJwkMemberNames.KeysUtf8.Length + 1;
-        afterKeysKey = JwkJsonReader.SkipWhitespaceAndColon(json, afterKeysKey);
-        if(afterKeysKey < 0 || afterKeysKey >= json.Length || json[afterKeysKey] != (byte)'[')
-        {
-            return null;
-        }
-
-        int cursor = afterKeysKey + 1;
-        while(cursor < json.Length)
-        {
-            while(cursor < json.Length && IsArraySeparator(json[cursor]))
-            {
-                cursor++;
-            }
-
-            if(cursor >= json.Length || json[cursor] == (byte)']')
-            {
-                return null;
-            }
-
-            if(json[cursor] != (byte)'{')
-            {
-                return null;
-            }
-
-            int objectStart = cursor;
-            int objectEnd = FindObjectEnd(json, objectStart);
-            if(objectEnd < 0)
-            {
-                return null;
-            }
-
-            ReadOnlySpan<byte> candidate = json[objectStart..objectEnd];
-            string? candidateKid = JwkJsonReader.ExtractStringValue(candidate, WellKnownJwkMemberNames.KidUtf8);
-
-            if(kid is null || string.Equals(candidateKid, kid, StringComparison.Ordinal))
-            {
-                return ExtractJwkStringMembers(candidate);
-            }
-
-            cursor = objectEnd;
-        }
-
-        return null;
-    }
-
-
-    //Returns the index one past the '}' that closes the object opening at objectStart, or -1 when
-    //the braces never balance. String content is skipped so a brace inside a quoted value never
-    //biases the depth counter. Mirrors ClientIdMetadataDocumentReader's identically-named helper.
-    private static int FindObjectEnd(ReadOnlySpan<byte> json, int objectStart)
-    {
-        int depth = 1;
-        int pos = objectStart + 1;
-
-        while(pos < json.Length && depth > 0)
-        {
-            byte current = json[pos];
-            if(current == (byte)'{')
-            {
-                depth++;
-            }
-            else if(current == (byte)'}')
-            {
-                depth--;
-            }
-            else if(current == (byte)'"')
-            {
-                pos++;
-                while(pos < json.Length && json[pos] != (byte)'"')
-                {
-                    if(json[pos] == (byte)'\\')
-                    {
-                        pos++;
-                    }
-
-                    pos++;
-                }
-            }
-
-            pos++;
-        }
-
-        return depth == 0 ? pos : -1;
-    }
-
-
-    private static bool IsArraySeparator(byte value) =>
-        value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)',';
-
-
-    private static Dictionary<string, string> ExtractJwkStringMembers(ReadOnlySpan<byte> jwkObject)
-    {
-        List<string> names = JwkJsonReader.GetTopLevelKeyNames(jwkObject);
-        Dictionary<string, string> members = new(names.Count, StringComparer.Ordinal);
-        foreach(string name in names)
-        {
-            string? value = JwkJsonReader.ExtractStringValue(jwkObject, Encoding.UTF8.GetBytes(name));
-            if(value is not null)
-            {
-                members[name] = value;
-            }
-        }
-
-        return members;
+        return result.IsSelected ? result.Members : null;
     }
 }

@@ -19,8 +19,7 @@ namespace Verifiable.Json;
 /// (<see href="https://www.w3.org/TR/webauthn-3/#sctn-validating-relation-origin">section 5.11.1</see>)
 /// would reject: an empty <see cref="RelatedOriginsDocument.Origins"/> (section 5.11's "one or more
 /// strings") and an entry that <see cref="RelatedOrigins.IsValidOrigin"/> rejects both throw
-/// <see cref="ArgumentException"/> naming <paramref name="document"/> at the parameter named
-/// <c>document</c> — a single exception type for both violations, since both describe a caller-supplied
+/// <see cref="ArgumentException"/> naming the parameter <c>document</c> — a single exception type for both violations, since both describe a caller-supplied
 /// <see cref="RelatedOriginsDocument"/> value that this writer refuses to serialize, as distinct from
 /// <see cref="Fido2FormatException"/>, which this codebase reserves for malformed WIRE input on the read
 /// side (see its own summary). The secure default is to never round-trip an origin string the reader — or

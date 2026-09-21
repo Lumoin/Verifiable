@@ -10,8 +10,9 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This type is returned by <see cref="CredentialEcdsaSd2023Extensions.ParseBaseProofAsync"/> and
-/// <see cref="CredentialEcdsaSd2023Extensions.VerifyBaseProofAndPrepareAsync"/>. It contains all
+/// This type is returned by
+/// <see cref="CredentialEcdsaSd2023Extensions.VerifyBaseProofVerboseAsync(DataIntegritySecuredCredential, PublicKeyMemory, VerificationDelegate, ParseBaseProofDelegate, PartitionStatementsDelegate, CanonicalizationDelegate, ContextResolverDelegate?, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/>,
+/// which both parses the base proof and verifies it. It contains all
 /// the information the holder needs to:
 /// </para>
 /// <list type="bullet">

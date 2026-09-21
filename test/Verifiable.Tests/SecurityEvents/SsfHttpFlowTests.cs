@@ -35,22 +35,29 @@ internal sealed class SsfHttpFlowTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
+    /// <summary>
+    /// The transmitter configuration served over HTTP satisfies the metadata parser's required fields.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-7">Shared Signals Framework §7</see>.
+    /// </summary>
     [TestMethod]
     public async Task DiscoveryDocumentServedOverHttpStrictParses()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterClient(
+        using VerifierKeyMaterial material = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.SsfTransmitter,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
-        app.Server.OAuth().ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new SsfTransmitterMetadataContribution
-            {
-                DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp]
-            });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new SsfTransmitterMetadataContribution
+                {
+                    DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp]
+                });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");

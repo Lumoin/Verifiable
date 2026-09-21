@@ -28,6 +28,10 @@ internal sealed class FederationListEndpointTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
 
+    /// <summary>
+    /// Serializes the application's subordinate identifiers as a JSON array.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.2.2">Federation §8.2.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task ListEndpointServesUnsignedJsonArrayOfSubordinates()
     {
@@ -47,12 +51,12 @@ internal sealed class FederationListEndpointTests
 
         Uri anchorEntityId = new("https://anchor.example.com");
 
-        using VerifierKeyMaterial anchorKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial anchorKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://anchor.example.com",
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
 
         EntityIdentifier alice = new("https://alice.example.com");
         EntityIdentifier bob = new("https://bob.example.com");
@@ -61,14 +65,17 @@ internal sealed class FederationListEndpointTests
         IReadOnlyList<EntityTypeIdentifier>? observedFilters = null;
         bool filterObserved = false;
 
-        app.Server.OAuth().ResolveSubordinateListAsync = (entityTypeFilters, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            observedFilters = entityTypeFilters;
-            filterObserved = true;
+            candidateIntegration.ResolveSubordinateListAsync = (entityTypeFilters, _, _, _) =>
+            {
+                observedFilters = entityTypeFilters;
+                filterObserved = true;
 
-            return ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>(
-                new[] { alice, bob, carol });
-        };
+                return ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>(
+                    new[] { alice, bob, carol });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -93,6 +100,10 @@ internal sealed class FederationListEndpointTests
     }
 
 
+    /// <summary>
+    /// Passes the requested entity-type filter to the application's subordinate listing.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.2.1">Federation §8.2.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task ListEndpointPassesEntityTypeFilterToDelegate()
     {
@@ -108,12 +119,12 @@ internal sealed class FederationListEndpointTests
 
         Uri anchorEntityId = new("https://anchor.example.com");
 
-        using VerifierKeyMaterial anchorKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial anchorKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://anchor.example.com",
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
 
         EntityIdentifier relyingParty = new("https://rp.example.com");
         EntityIdentifier provider = new("https://op.example.com");
@@ -122,17 +133,20 @@ internal sealed class FederationListEndpointTests
 
         //The application filters its membership by the parsed entity_type:
         //only the openid_relying_party subordinate comes back.
-        app.Server.OAuth().ResolveSubordinateListAsync = (entityTypeFilters, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            observedFilters = entityTypeFilters;
+            candidateIntegration.ResolveSubordinateListAsync = (entityTypeFilters, _, _, _) =>
+            {
+                observedFilters = entityTypeFilters;
 
-            IReadOnlyList<EntityIdentifier> result =
-                entityTypeFilters.Contains(WellKnownEntityTypeIdentifiers.OpenIdRelyingParty)
-                    ? new[] { relyingParty }
-                    : new[] { relyingParty, provider };
+                IReadOnlyList<EntityIdentifier> result =
+                    entityTypeFilters.Contains(WellKnownEntityTypeIdentifiers.OpenIdRelyingParty)
+                        ? new[] { relyingParty }
+                        : new[] { relyingParty, provider };
 
-            return ValueTask.FromResult(result);
-        };
+                return ValueTask.FromResult(result);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -158,6 +172,10 @@ internal sealed class FederationListEndpointTests
     }
 
 
+    /// <summary>
+    /// Serves an empty array when the application lists no subordinates.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.2.2">Federation §8.2.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task ListEndpointServesEmptyArrayForNoSubordinates()
     {
@@ -173,15 +191,18 @@ internal sealed class FederationListEndpointTests
 
         Uri anchorEntityId = new("https://anchor.example.com");
 
-        using VerifierKeyMaterial anchorKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial anchorKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://anchor.example.com",
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveSubordinateListAsync = (_, _, _, _) =>
-            ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>([]);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubordinateListAsync = (_, _, _, _) =>
+                ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>([]);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -195,6 +216,10 @@ internal sealed class FederationListEndpointTests
     }
 
 
+    /// <summary>
+    /// Preserves each repeated entity-type filter for application selection.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.2.1">Federation §8.2.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task ListEndpointPassesEveryEntityTypeOfARepeatedFilter()
     {
@@ -210,12 +235,12 @@ internal sealed class FederationListEndpointTests
 
         Uri anchorEntityId = new("https://anchor.example.com");
 
-        using VerifierKeyMaterial anchorKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial anchorKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://anchor.example.com",
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
 
         EntityIdentifier relyingParty = new("https://rp.example.com");
         EntityIdentifier provider = new("https://op.example.com");
@@ -223,11 +248,15 @@ internal sealed class FederationListEndpointTests
         //§8.2.1: a request with multiple entity_type parameters must filter to
         //ALL of them — the delegate sees both, and returns the union.
         IReadOnlyList<EntityTypeIdentifier>? observedFilters = null;
-        app.Server.OAuth().ResolveSubordinateListAsync = (entityTypeFilters, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            observedFilters = entityTypeFilters;
-            return ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>(new[] { relyingParty, provider });
-        };
+            candidateIntegration.ResolveSubordinateListAsync = (entityTypeFilters, _, _, _) =>
+            {
+                observedFilters = entityTypeFilters;
+
+                return ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>(new[] { relyingParty, provider });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -249,6 +278,10 @@ internal sealed class FederationListEndpointTests
     }
 
 
+    /// <summary>
+    /// Serves subordinate listing requests received through POST.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.8">Federation §8.8</see>.
+    /// </summary>
     [TestMethod]
     public async Task ListEndpointIsAlsoServedOverPost()
     {
@@ -264,15 +297,18 @@ internal sealed class FederationListEndpointTests
 
         Uri anchorEntityId = new("https://anchor.example.com");
 
-        using VerifierKeyMaterial anchorKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial anchorKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://anchor.example.com",
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveSubordinateListAsync = (_, _, _, _) =>
-            ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>([]);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubordinateListAsync = (_, _, _, _) =>
+                ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>([]);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -291,6 +327,10 @@ internal sealed class FederationListEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects unsupported filters with the unsupported_parameter error.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.2.1">Federation §8.2.1</see>.
+    /// </summary>
     [TestMethod]
     [DataRow("trust_marked=true")]
     [DataRow("trust_mark_type=https%3A%2F%2Ftrust-mark.example%2Fmark")]
@@ -309,19 +349,23 @@ internal sealed class FederationListEndpointTests
 
         Uri anchorEntityId = new("https://anchor.example.com");
 
-        using VerifierKeyMaterial anchorKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial anchorKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://anchor.example.com",
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
 
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveSubordinateListAsync = (_, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            delegateInvoked = true;
-            return ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>([]);
-        };
+            candidateIntegration.ResolveSubordinateListAsync = (_, _, _, _) =>
+            {
+                delegateInvoked = true;
+
+                return ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>([]);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");

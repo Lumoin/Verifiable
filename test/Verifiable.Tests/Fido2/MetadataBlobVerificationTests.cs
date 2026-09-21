@@ -222,7 +222,8 @@ internal sealed class MetadataBlobVerificationTests
 
     /// <summary>
     /// A resolve delegate that throws is treated identically to an unwired one — the exception never
-    /// escapes <see cref="MetadataBlobVerification.VerifyAsync"/>; verification fails closed to
+    /// escapes the <see cref="VerifyMetadataBlobAsyncDelegate"/> <see cref="MetadataBlobVerification.Build"/>
+    /// composes; verification fails closed to
     /// <see cref="MetadataBlobStoreUnavailableResult"/>.
     /// </summary>
     [TestMethod]

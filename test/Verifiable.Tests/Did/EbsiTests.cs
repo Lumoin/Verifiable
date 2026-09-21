@@ -42,7 +42,7 @@ namespace Verifiable.Tests.Did
 
             //The base DidDocument preserves members beyond the W3C core set in AdditionalData (via the
             //DidDocumentConverter), so the deprecated embedded publicKey round-trips without a bespoke type.
-            var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+            var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared);
             options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
                 VerifiableJsonContext.Default,
                 new DefaultJsonTypeInfoResolver());

@@ -14,7 +14,7 @@ namespace Verifiable.OAuth;
 /// </summary>
 /// <param name="ClaimName">
 /// The wire-format JWT claim name (e.g. <c>"email"</c>, <c>"acr"</c>) the
-/// contribution applies to. One of <see cref="WellKnownJwtClaimNames"/>.
+/// contribution applies to. One of <see cref="Verifiable.JCose.WellKnownJwtClaimNames"/>.
 /// </param>
 /// <param name="ClaimValue">
 /// The claim value to emit. String, number, boolean, array, or nested

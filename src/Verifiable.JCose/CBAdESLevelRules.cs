@@ -152,6 +152,12 @@ public static class CBAdESLevelRules
                         //synchronous rule surface). An explicit no-op arm, not a silent fall-through.
                         break;
 
+                    case CBAdESUnsignedHeaderElementSignaturePolicyStore:
+                    case CBAdESUnsignedHeaderElementCertificateChain:
+                        //Carries no level-rule obligation this synchronous surface evaluates; an explicit
+                        //no-op arm preserving this switch's original silent fall-through for these kinds.
+                        break;
+
                     case CBAdESUnsignedHeaderElementUnknown unknown:
                         CheckAlternativeMechanismDisclosed(unknown, context.AlternativeMechanismDisclosures, violations);
                         break;
@@ -194,14 +200,9 @@ public static class CBAdESLevelRules
 
         return violations;
 
-        /// <summary>
-        /// Determines whether <paramref name="unsignedHeaders"/> carries a <c>refs</c> element at some
-        /// position strictly before <paramref name="index"/> (CB-A.1.2.1-03/CB-A.1.2.2-03's generation gate,
-        /// read positionally over the append-only array).
-        /// </summary>
-        /// <param name="unsignedHeaders">The decoded <c>uHeaders</c> set.</param>
-        /// <param name="index">The exclusive upper bound — the position of the time-stamp element under check.</param>
-        /// <returns><see langword="true"/> when a <c>refs</c> element precedes <paramref name="index"/>.</returns>
+        //Determines whether unsignedHeaders carries a refs element at some
+        //position strictly before index (CB-A.1.2.1-03/CB-A.1.2.2-03's generation gate,
+        //read positionally over the append-only array). Returns true when a refs element precedes index.
         static bool HasReferencesBefore(CBAdESUnsignedHeaders unsignedHeaders, int index)
         {
             IReadOnlyList<CBAdESUnsignedHeaderElement> before = unsignedHeaders.ElementsBefore(index);
@@ -217,12 +218,9 @@ public static class CBAdESLevelRules
         }
 
 
-        /// <summary>
-        /// Appends a <see cref="CBAdESSignatureTimestampTokenCountViolation"/> when <paramref name="container"/>
-        /// does not encapsulate exactly one electronic time-stamp (CB-6.3-c).
-        /// </summary>
-        /// <param name="container">The <c>sigTst</c> instance's encapsulated <c>tstContainer</c>.</param>
-        /// <param name="collected">The violation list to append to.</param>
+        //Appends a CBAdESSignatureTimestampTokenCountViolation when container (the sigTst instance's
+        //encapsulated tstContainer) does not encapsulate exactly one electronic time-stamp (CB-6.3-c).
+        //collected: the violation list to append to.
         static void CheckTokenCount(AdESTimestampContainer container, List<CBAdESRuleViolation> collected)
         {
             if(container.TstTokens.Count != 1)
@@ -232,14 +230,10 @@ public static class CBAdESLevelRules
         }
 
 
-        /// <summary>
-        /// Appends one <see cref="CBAdESTimestampTokenNotBaselineViolation"/> per token in
-        /// <paramref name="container"/> that is not the RFC 3161(+5816) legacy shape (CB-6.3-02: <c>type</c>/
-        /// <c>encoding</c>/<c>specRef</c> all absent).
-        /// </summary>
-        /// <param name="container">The <c>tstContainer</c> to scan.</param>
-        /// <param name="kind">Which <c>uHeaders</c> element kind <paramref name="container"/> belongs to.</param>
-        /// <param name="collected">The violation list to append to.</param>
+        //Appends one CBAdESTimestampTokenNotBaselineViolation per token in
+        //container (the tstContainer to scan) that is not the RFC 3161(+5816) legacy shape (CB-6.3-02: type/
+        //encoding/specRef all absent). kind: which uHeaders element kind container belongs to.
+        //collected: the violation list to append to.
         static void CheckBaselineTokenShape(AdESTimestampContainer container, CBAdESTimestampContainerKind kind, List<CBAdESRuleViolation> collected)
         {
             for(int t = 0; t < container.TstTokens.Count; ++t)
@@ -253,14 +247,10 @@ public static class CBAdESLevelRules
         }
 
 
-        /// <summary>
-        /// Appends a <see cref="CBAdESReferencesSigningCertificateExclusionViolation"/> when any
-        /// <paramref name="refs"/> certificate reference's digest byte-matches any entry of
-        /// <paramref name="signingCertificateDigests"/> (CB-A.1.1-02).
-        /// </summary>
-        /// <param name="refs">The <c>refs</c> element to scan.</param>
-        /// <param name="signingCertificateDigests">The caller-supplied signing-certificate digest facts, or <see langword="null"/>.</param>
-        /// <param name="collected">The violation list to append to.</param>
+        //Appends a CBAdESReferencesSigningCertificateExclusionViolation when any
+        //refs certificate reference's digest byte-matches any entry of
+        //signingCertificateDigests (the caller-supplied signing-certificate digest facts, or null) (CB-A.1.1-02).
+        //collected: the violation list to append to.
         static void CheckSigningCertificateExclusion(
             CBAdESReferences refs,
             IReadOnlyList<DigestValue>? signingCertificateDigests,
@@ -286,12 +276,9 @@ public static class CBAdESLevelRules
         }
 
 
-        /// <summary>
-        /// Appends one <see cref="CBAdESRefsFamilyMd5DigestAlgorithmViolation"/> per <paramref name="refs"/>
-        /// digest-algorithm-identifier surface (<c>x5t</c>/<c>digAlgVal</c> pairs) that names MD5 (CB-6.2.1-02).
-        /// </summary>
-        /// <param name="refs">The <c>refs</c> element to scan.</param>
-        /// <param name="collected">The violation list to append to.</param>
+        //Appends one CBAdESRefsFamilyMd5DigestAlgorithmViolation per refs (the refs element to scan)
+        //digest-algorithm-identifier surface (x5t/digAlgVal pairs) that names MD5 (CB-6.2.1-02).
+        //collected: the violation list to append to.
         static void CheckRefsFamilyMd5(CBAdESReferences refs, List<CBAdESRuleViolation> collected)
         {
             if(refs.CertificateReferences is not null)
@@ -332,14 +319,10 @@ public static class CBAdESLevelRules
         }
 
 
-        /// <summary>
-        /// Determines whether <paramref name="identifier"/> names MD5 — the <c>tstr</c> arm compared
-        /// case-insensitively against <c>"MD5"</c>; the <c>int</c> arm never matches, mirroring
-        /// <c>CBAdESHeaderRules.Check</c>'s own local <c>IsMd5</c> helper (duplicated here rather than shared,
-        /// since that one is private to its own method).
-        /// </summary>
-        /// <param name="identifier">The digest-algorithm identifier to test.</param>
-        /// <returns><see langword="true"/> when <paramref name="identifier"/> names MD5.</returns>
+        //Determines whether identifier names MD5 — the tstr arm compared
+        //case-insensitively against "MD5"; the int arm never matches, mirroring
+        //CBAdESHeaderRules.Check's own local IsMd5 helper (duplicated here rather than shared,
+        //since that one is private to its own method). Returns true when identifier names MD5.
         static bool IsMd5(AdESDigestAlgorithmIdentifier identifier) => identifier switch
         {
             AdESDigestAlgorithmTextIdentifier text => string.Equals(text.Value, "MD5", StringComparison.OrdinalIgnoreCase),
@@ -347,15 +330,10 @@ public static class CBAdESLevelRules
         };
 
 
-        /// <summary>
-        /// Appends a <see cref="CBAdESUndisclosedAlternativeMechanismViolation"/> when <paramref name="registry"/>
-        /// is supplied AND carries no disclosure for <paramref name="unknown"/>'s own label (CB-E-01).
-        /// A <see langword="null"/> <paramref name="registry"/> performs no check at
-        /// all — the caller never opted in.
-        /// </summary>
-        /// <param name="unknown">The unknown-label <c>uHeaders</c> catch-all element under check.</param>
-        /// <param name="registry">The caller's opt-in Annex E registry, or <see langword="null"/> to skip this check.</param>
-        /// <param name="collected">The violation list to append to.</param>
+        //Appends a CBAdESUndisclosedAlternativeMechanismViolation when registry (the caller's opt-in
+        //Annex E registry, or null to skip this check) is supplied AND carries no disclosure for
+        //unknown's (the unknown-label uHeaders catch-all element under check) own label (CB-E-01).
+        //A null registry performs no check at all — the caller never opted in. collected: the violation list to append to.
         static void CheckAlternativeMechanismDisclosed(
             CBAdESUnsignedHeaderElementUnknown unknown,
             CBAdESAlternativeMechanismDisclosureRegistry? registry,
@@ -485,6 +463,18 @@ public static class CBAdESLevelRules
                 case CBAdESUnsignedHeaderElementArchiveTimestamp arcTstElement:
                     archiveTimestampContainers.Add(arcTstElement.ArchiveTimestamp.TimestampContainer);
                     break;
+
+                case CBAdESUnsignedHeaderElementSignatureTimestamp:
+                case CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                case CBAdESUnsignedHeaderElementReferencesTimestamp:
+                case CBAdESUnsignedHeaderElementSignaturePolicyStore:
+                case CBAdESUnsignedHeaderElementFullCounterSignature:
+                case CBAdESUnsignedHeaderElementAbbreviatedCounterSignature:
+                case CBAdESUnsignedHeaderElementCertificateChain:
+                case CBAdESUnsignedHeaderElementUnknown:
+                    //Outside this trigger's candidate collection (refs / valData / arcTst); an explicit
+                    //no-op arm preserving this switch's original silent fall-through for every other kind.
+                    break;
             }
         }
 
@@ -589,16 +579,11 @@ public static class CBAdESLevelRules
             }
         }
 
-        /// <summary>
-        /// Collects every certificate/CRL/OCSP <see cref="AdESPkiObject"/> reachable through
-        /// <paramref name="validationData"/> into the caller's aggregation lists — <c>otherCert</c>/
-        /// <c>otherVals</c> entries are opaque-format placeholders (CB-5.3.4's own extensibility notes) and
-        /// are not collected, since CB-A.1.1-30 resolution is defined over DER-encoded X.509/CRL/OCSP material.
-        /// </summary>
-        /// <param name="validationData">The decoded <c>valData</c> element.</param>
-        /// <param name="certificates">Receives every <c>x509Cert</c> entry's <see cref="AdESPkiObject"/>.</param>
-        /// <param name="crls">Receives every <c>crlVals</c> entry.</param>
-        /// <param name="ocsps">Receives every <c>ocspVals</c> entry.</param>
+        //Collects every certificate/CRL/OCSP AdESPkiObject reachable through
+        //validationData (the decoded valData element) into the caller's aggregation lists — otherCert/
+        //otherVals entries are opaque-format placeholders (CB-5.3.4's own extensibility notes) and
+        //are not collected, since CB-A.1.1-30 resolution is defined over DER-encoded X.509/CRL/OCSP material.
+        //certificates: receives every x509Cert entry. crls: receives every crlVals entry. ocsps: receives every ocspVals entry.
         static void CollectValidationDataCandidates(
             CBAdESValidationData validationData,
             List<AdESPkiObject> certificates,
@@ -905,7 +890,7 @@ public readonly record struct CBAdESLevelRuleContext
     /// <c>adoTst</c> is never reachable through <see cref="UnsignedHeaders"/> — it is carried signed, outside
     /// <c>uHeaders</c> entirely (clause 5.2.6) — so this rule surface cannot derive it from
     /// <see cref="UnsignedHeaders"/> alone; the caller supplies it from the signature's own protected-header
-    /// aggregate. Consulted only by the CB-6.3-02 baseline-token-shape narrowing (<see cref="Check"/>), which
+    /// aggregate. Consulted only by the CB-6.3-02 baseline-token-shape narrowing (<see cref="CBAdESLevelRules.Check"/>), which
     /// applies to it exactly as it does to <c>sigTst</c>/<c>arcTst</c>/<c>sigRTst</c>/<c>rfsTst</c>.
     /// </summary>
     public CBAdESPayloadTimestamp? PayloadTimestamps { get; init; }
@@ -915,7 +900,7 @@ public readonly record struct CBAdESLevelRuleContext
     /// <c>uHeaders</c> catch-all element (CB-5.3.1-11) with no disclosure registered against its own
     /// <see cref="CBAdESUnsignedHeaderElement.Label"/> collects a
     /// <see cref="CBAdESUndisclosedAlternativeMechanismViolation"/> (CB-E-01).
-    /// <see langword="null"/> (the default) means the caller never asked, so <see cref="Check"/> performs no
+    /// <see langword="null"/> (the default) means the caller never asked, so <see cref="CBAdESLevelRules.Check"/> performs no
     /// Annex E disclosure check at all — this rule surface never invents a caller-opt-in registry of its own,
     /// mirroring how <see cref="SigningCertificateDigests"/> and <see cref="AnyTimestampTokenCarriesEmbeddedValidationMaterial"/>
     /// already skip their own checks when the caller supplies nothing. Populate-at-composition, read-only

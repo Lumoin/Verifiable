@@ -14,9 +14,9 @@ namespace Verifiable.OAuth.Server;
 /// assertion and so an Identity Assertion JWT Authorization Grant redemption (RFC 7523 §3 rule 7),
 /// the DPoP proof at the token and credential endpoints (RFC 9449 §11.1), a
 /// <c>private_key_jwt</c> client assertion (RFC 7523 §2.2), and the SIOPv2 self-issued response
-/// nonce (SIOPv2 §11.2). Every path shares the same <see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/> /
-/// <see cref="AuthorizationServerIntegration.SaveFlowStateAsync"/> store, keyed by
-/// <see cref="JtiReplayGuard.CorrelationKey"/> under <see cref="FlowKind.JtiReplay"/>. A
+/// nonce (SIOPv2 §11.2). Every path shares the same <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/> /
+/// <see cref="Verifiable.Server.ServerIntegration.SaveFlowStateAsync"/> store, keyed by
+/// <see cref="JtiReplayGuard.CorrelationKey"/> under <see cref="JtiReplayFlowKind.Instance"/>. A
 /// non-null resolution at that key signals the <c>jti</c> has been seen before; a null
 /// resolution signals first use, which the guard records before returning — and then proves,
 /// by resolving the same key again and requiring it to equal the flow id it just saved. This

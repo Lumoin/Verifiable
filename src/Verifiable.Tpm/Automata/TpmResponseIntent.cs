@@ -288,7 +288,7 @@ public sealed record TpmLoadResponse(
 /// </summary>
 /// <remarks>
 /// <see cref="Context"/> is owned; <see cref="TpmSimulator"/> writes it through its own <c>WriteTo</c> and then
-/// disposes it — which releases <see cref="Structures.TpmsContext.ContextBlob"/> — as the terminal owner,
+/// disposes it — which releases <see cref="TpmsContext.ContextBlob"/> — as the terminal owner,
 /// mirroring <see cref="TpmCreatePrimaryResponse"/>'s owned-structure framing.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>

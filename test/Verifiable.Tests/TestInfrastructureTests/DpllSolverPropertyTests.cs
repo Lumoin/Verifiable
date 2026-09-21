@@ -41,7 +41,7 @@ internal sealed class DpllSolverPropertyTests
                     Assert.IsTrue(clauseSatisfied, $"Clause must be satisfied by the assignment.");
                 }
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -64,7 +64,7 @@ internal sealed class DpllSolverPropertyTests
                         $"Variable {i} must be present in the assignment.");
                 }
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -83,7 +83,7 @@ internal sealed class DpllSolverPropertyTests
 
             Assert.IsTrue(result.Satisfiable, "Single positive unit clause must be satisfiable.");
             Assert.IsTrue(result.Assignment![0], "Variable 0 must be true.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -103,7 +103,7 @@ internal sealed class DpllSolverPropertyTests
 
             Assert.IsFalse(result.Satisfiable, "Contradictory unit clauses must be unsatisfiable.");
             Assert.IsNull(result.Assignment);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -118,7 +118,7 @@ internal sealed class DpllSolverPropertyTests
             var result = DpllSolver.Solve(clauses, variableCount);
 
             Assert.IsTrue(result.Satisfiable, "Empty formula must be satisfiable.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -150,7 +150,7 @@ internal sealed class DpllSolverPropertyTests
             bool vj = result.Assignment![j];
             Assert.IsTrue(vi || vj, "At least one must be true (coverage).");
             Assert.IsFalse(vi && vj, "Both must not be true (mutual exclusion).");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -196,7 +196,7 @@ internal sealed class DpllSolverPropertyTests
             var result = DpllSolver.Solve(clauses, variableCount);
 
             Assert.IsFalse(result.Satisfiable, $"Pigeonhole({pigeons},{holes}) must be unsatisfiable.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -221,7 +221,7 @@ internal sealed class DpllSolverPropertyTests
                 Assert.IsFalse(result.Assignment![i],
                     $"Unconstrained variable {i} should default to false.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -245,7 +245,7 @@ internal sealed class DpllSolverPropertyTests
                 Assert.IsTrue(result.Assignment![i],
                     $"Variable {i} must be true when forced by unit clause.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

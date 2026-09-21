@@ -95,7 +95,7 @@ public sealed class TrustedListParseResult: IDisposable
 /// <para>
 /// This library ships no implementation: parsing is XML per the TLv6 profile (or any encoding a future
 /// specification revision adopts), and this project stays serialization-agnostic (it references neither
-/// <c>Verifiable.Json</c> nor an XML package), mirroring <see cref="Verifiable.Core.Model.DataIntegrity.CanonicalizationDelegate"/>'s
+/// <c>Verifiable.Json</c> nor an XML package), mirroring <c>Verifiable.Core.Model.DataIntegrity.CanonicalizationDelegate</c>'s
 /// "no shipped implementation" shape. A worked XML/<c>System.Security.Cryptography.Xml</c>-based
 /// implementation is staged as a promotable example under the test project.
 /// </para>

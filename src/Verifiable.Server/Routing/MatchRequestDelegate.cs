@@ -12,7 +12,7 @@ namespace Verifiable.Server.Routing;
 /// endpoint's complete acceptance test: every signal it consults — path
 /// suffix, HTTP method, body fields, headers, route values, registration
 /// capability, context state — is visible in the matcher's source.
-/// <see cref="EndpointChain.MatchAsync"/> walks the chain in order and
+/// <see cref="Verifiable.Server.Pipeline.EndpointChain.MatchAsync"/> walks the chain in order and
 /// invokes each matcher with no upstream filtering on
 /// <see cref="ServerEndpoint.HttpMethod"/> or
 /// <see cref="ServerEndpoint.Capability"/>; those fields are descriptive

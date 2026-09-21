@@ -93,6 +93,35 @@ internal sealed class WalletMetadataReaderTests
     }
 
 
+    /// <summary>
+    /// RFC 8259 §4: a Wallet-posted document repeating
+    /// <c>authorization_encrypted_response_enc</c> — the attacker's value first, the honest value
+    /// last — is refused (both slots <see langword="null"/>), while the SAME document with the
+    /// repetition removed parses normally: the refusal is attributable to the repetition alone.
+    /// </summary>
+    [TestMethod]
+    public void ParseForJarEncryptionRejectsDuplicateEncButAcceptsTheSameDocumentOnce()
+    {
+        string duplicateMetadata =
+            "{\"jwks\":{\"keys\":[]},"
+            + "\"authorization_encrypted_response_enc\":\"A128GCM\","
+            + "\"authorization_encrypted_response_enc\":\"A256GCM\"}";
+
+        (string? rejectedJwks, string? rejectedEnc) =
+            WalletMetadataReader.ParseForJarEncryption(duplicateMetadata);
+        Assert.IsNull(rejectedJwks);
+        Assert.IsNull(rejectedEnc);
+
+        string singleMetadata =
+            "{\"jwks\":{\"keys\":[]},\"authorization_encrypted_response_enc\":\"A256GCM\"}";
+
+        (string? acceptedJwks, string? acceptedEnc) =
+            WalletMetadataReader.ParseForJarEncryption(singleMetadata);
+        Assert.AreEqual("""{"keys":[]}""", acceptedJwks);
+        Assert.AreEqual(WellKnownJweEncryptionAlgorithms.A256Gcm, acceptedEnc);
+    }
+
+
     [TestMethod]
     public void ParseForJarEncryptionToleratesMalformedJwksWithoutThrowing()
     {
@@ -152,7 +181,7 @@ internal sealed class WalletMetadataReaderTests
                 """{"client_id_prefixes_supported":[]}""");
 
         Assert.IsNotNull(schemes);
-        Assert.HasCount(0, schemes);
+        Assert.IsEmpty(schemes);
     }
 
 
@@ -222,3 +251,4 @@ internal sealed class WalletMetadataReaderTests
         Assert.IsNull(WalletMetadataReader.ParseVpFormatsSupportedJson(input));
     }
 }
+

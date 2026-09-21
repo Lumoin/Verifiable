@@ -28,7 +28,7 @@ namespace Verifiable.Fido2;
 /// <see cref="StoredUserHandle"/>, and <see cref="ExpectedAppIdHash"/> — disposing it disposes all
 /// of them. The whole-ceremony
 /// scope is the natural single-owner boundary: nothing outside this record needs any of these
-/// carriers once <see cref="Fido2AssertionVerifier.VerifyAsync"/> returns, so a caller that
+/// carriers once <see cref="Fido2AssertionVerifier.VerifyAsync(Verifiable.JCose.CoseKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AssertionCeremonyInput, Verifiable.Core.Assessment.ClaimIssuer{AssertionCeremonyInput}, string, BaseMemoryPool, CancellationToken)"/> returns, so a caller that
 /// constructs one instance and disposes it when done never has to track the carriers
 /// individually. <see cref="Fido2AssertionVerifier"/> itself only borrows this record — it does
 /// not dispose it.

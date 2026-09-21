@@ -100,11 +100,19 @@ public sealed class UnverifiedJwtHeader: JoseDictionary, IEquatable<UnverifiedJw
     public override int GetHashCode() => base.GetHashCode();
 
 
+    /// <summary>Whether <paramref name="left"/> and <paramref name="right"/> carry equal header entries, or are both <see langword="null"/>.</summary>
+    /// <param name="left">The left-hand header, or <see langword="null"/>.</param>
+    /// <param name="right">The right-hand header, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when equal or both <see langword="null"/>; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator ==(UnverifiedJwtHeader? left, UnverifiedJwtHeader? right) =>
         left is null ? right is null : left.Equals(right);
 
 
+    /// <summary>Whether <paramref name="left"/> and <paramref name="right"/> are not equal per <c>operator ==</c>.</summary>
+    /// <param name="left">The left-hand header, or <see langword="null"/>.</param>
+    /// <param name="right">The right-hand header, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when not equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator !=(UnverifiedJwtHeader? left, UnverifiedJwtHeader? right) =>
         !(left == right);

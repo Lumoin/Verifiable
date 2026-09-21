@@ -48,7 +48,7 @@ public static class VcalmInteractionEndpoints
     {
         List<EndpointCandidate> candidates = [];
 
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmCoordinator))
         {
             VcalmIntegration? vcalm = server?.Vcalm();
@@ -72,7 +72,11 @@ public static class VcalmInteractionEndpoints
     };
 
 
-    //§3.7.4 GET /interactions/{localInteractionId}.
+    /// <summary>
+    /// Builds the endpoint for §3.7.4 GET /interactions/{localInteractionId}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildInteractionProtocols() =>
         new()
         {
@@ -88,7 +92,7 @@ public static class VcalmInteractionEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 VcalmIntegration vcalm = server.Vcalm();
 
                 string? interactionId = ExtractTrailingId(context);
@@ -125,7 +129,11 @@ public static class VcalmInteractionEndpoints
         };
 
 
-    //§3.7.5 POST /{localInviteId}/invite-request/response.
+    /// <summary>
+    /// Builds the endpoint for §3.7.5 POST /{localInviteId}/invite-request/response.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildInviteRequest() =>
         new()
         {
@@ -142,7 +150,7 @@ public static class VcalmInteractionEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 VcalmIntegration vcalm = server.Vcalm();
 
                 string? inviteId = ExtractInviteId(context);

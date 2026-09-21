@@ -109,14 +109,14 @@ internal sealed class CbomCliTests
 
     /// <summary>
     /// Consumer proof: <c>cbom --observe --events</c> subscribes to
-    /// <see cref="CryptographicKeyEvents"/> for the workload's duration and appends a compact provenance
+    /// <see cref="Verifiable.Cryptography.CryptographicKeyEvents"/> for the workload's duration and appends a compact provenance
     /// summary after the CBOM JSON. This is the ONLY test in the suite that can assert exact event
     /// counts — the CLI runs in its own freshly spawned process, so unlike an in-process test, nothing
-    /// else in that process can add noise to the process-wide <see cref="CryptographicKeyEvents.Events"/>
+    /// else in that process can add noise to the process-wide <see cref="Verifiable.Cryptography.CryptographicKeyEvents.Events"/>
     /// stream during the observation window. The counts prove BOTH the pre-existing choke-point path (the
     /// FIDO2 leg's <c>PrivateKey.SignAsync</c>/<c>PublicKey.VerifyAsync</c>) and the
     /// JOSE-signed widened path (the workload's new JOSE-signed leg, routed through <c>Jws.SignAsync</c>/
-    /// <c>VerifyAsync</c>'s <see cref="CryptoEventSink"/> seam) land in the same summary: two
+    /// <c>VerifyAsync</c>'s <see cref="Verifiable.Cryptography.CryptoEventSink"/> seam) land in the same summary: two
     /// <c>KeyMaterialGeneratedEvent</c>s (one per workload leg's own mint), two
     /// <c>SignatureProducedEvent</c>s, and two <c>VerificationCompletedEvent</c>s — one of each pair from
     /// each leg.

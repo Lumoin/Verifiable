@@ -47,6 +47,9 @@ public readonly struct Fido2AssertionOptionsBuildState: IEquatable<Fido2Assertio
     /// </summary>
     public Fido2LargeBlobAssertionExtensionInput? LargeBlob { get; init; }
 
+    /// <summary>The <c>prf</c> extension's assertion-side input, or <see langword="null"/> when not requested.</summary>
+    public Fido2PrfAssertionExtensionInput? Prf { get; init; }
+
 
     /// <summary>
     /// Determines whether the specified <see cref="Fido2AssertionOptionsBuildState"/> is equal to the
@@ -64,7 +67,8 @@ public readonly struct Fido2AssertionOptionsBuildState: IEquatable<Fido2Assertio
             && UserVerification == other.UserVerification
             && Hints?.Count == other.Hints?.Count
             && AppId == other.AppId
-            && Equals(LargeBlob, other.LargeBlob);
+            && Equals(LargeBlob, other.LargeBlob)
+            && Equals(Prf, other.Prf);
     }
 
 
@@ -87,6 +91,7 @@ public readonly struct Fido2AssertionOptionsBuildState: IEquatable<Fido2Assertio
         hash.Add(Hints?.Count ?? 0);
         hash.Add(AppId);
         hash.Add(LargeBlob);
+        hash.Add(Prf);
 
         return hash.ToHashCode();
     }

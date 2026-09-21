@@ -19,7 +19,7 @@ namespace Verifiable.OAuth;
 /// <c>Verifiable.OAuth.Jar</c> because <see cref="Verifiable.OAuth.Server.AuthorizationServerCodecs"/>
 /// references this type — putting it in the <c>Jar</c> namespace
 /// would force <c>Server</c> to depend on <c>Jar</c>, which is the
-/// wrong direction. Symmetric with <see cref="JwtHeaderSerializer"/>,
+/// wrong direction. Symmetric with <see cref="Verifiable.Core.Model.Credentials.JwtHeaderSerializer"/>,
 /// which lives at the same namespace level for the same reason.
 /// </remarks>
 public delegate IReadOnlyDictionary<string, object> JwtHeaderDeserializer(

@@ -309,8 +309,8 @@ public static class MetadataPolicyMerger
         //Both lists: element-wise equality (order-insensitive set comparison).
         if(left is IEnumerable<object> leftList && right is IEnumerable<object> rightList)
         {
-            HashSet<object> leftSet = new(leftList);
-            HashSet<object> rightSet = new(rightList);
+            HashSet<object> leftSet = [.. leftList];
+            HashSet<object> rightSet = [.. rightList];
             return leftSet.SetEquals(rightSet);
         }
 
@@ -342,7 +342,7 @@ public static class MetadataPolicyMerger
 
     private static List<object> IntersectPreservingOrder(IEnumerable<object> upstream, IEnumerable<object> downstream)
     {
-        HashSet<object> downSet = new(downstream);
+        HashSet<object> downSet = [.. downstream];
         List<object> result = [];
         foreach(object item in upstream)
         {

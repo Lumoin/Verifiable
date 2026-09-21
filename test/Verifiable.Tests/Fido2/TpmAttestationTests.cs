@@ -43,7 +43,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task ConformantStatementVerifiesAsAttestationCa()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         AttestationResult result = await RunAsync(scenario).ConfigureAwait(false);
 
@@ -56,7 +56,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task MissingAttestedCredentialDataIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         using AuthenticatorData noAttestedCredentialData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), null, out byte[] authDataBytes);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, authenticatorDataOverride: noAttestedCredentialData, authDataBytesOverride: authDataBytes).ConfigureAwait(false);
@@ -73,7 +73,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task PubAreaKeyMismatchIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         //A P-256 key distinct from scenario.CredentialKey, minted on the spot so its public point
         //produces a pubArea that mismatches the credential key — the PublicAreaKeyMismatch fixture.
@@ -93,7 +93,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task EmptyX5cIsRejectedWithMalformedStatement()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, x5cOverride: []).ConfigureAwait(false);
 
@@ -106,7 +106,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task NoTrustAnchorsIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, trustAnchorsOverride: []).ConfigureAwait(false);
 
@@ -119,7 +119,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task ChainValidationFailedForUnrelatedTrustAnchorIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         //Cert-factory carve-out: mints a self-signed root via CertificateRequest that the trust anchor
         //list never carries, so the AIK chain has nothing to validate against.
@@ -138,7 +138,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task NonVersion3CertificateIsRejectedWithCertificateProfileViolation()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         using X509Certificate2 version1AikCertificate = Fido2AttestationTestVectors.CreateVersion1LeafAttestationCertificate(scenario.RootCertificate, scenario.AikKey);
         Assert.AreEqual(1, version1AikCertificate.Version);
 
@@ -153,7 +153,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task NonEmptySubjectIsRejectedWithCertificateProfileViolation()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         using X509Certificate2 nonEmptySubjectCertificate = TpmAttestationTestVectors.CreateAikCertificate(scenario.RootCertificate, scenario.AikKey, emptySubject: false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, aikCertificateOverride: nonEmptySubjectCertificate).ConfigureAwait(false);
@@ -167,7 +167,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task CertificateAuthorityLeafIsRejectedWithCertificateProfileViolation()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         using X509Certificate2 caFlaggedCertificate = TpmAttestationTestVectors.CreateAikCertificate(scenario.RootCertificate, scenario.AikKey, isCertificateAuthority: true);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, aikCertificateOverride: caFlaggedCertificate).ConfigureAwait(false);
@@ -181,7 +181,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task MissingSubjectAlternativeNameIsRejectedWithCertificateProfileViolation()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         using X509Certificate2 noSanCertificate = TpmAttestationTestVectors.CreateAikCertificate(scenario.RootCertificate, scenario.AikKey, includeSubjectAlternativeName: false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, aikCertificateOverride: noSanCertificate).ConfigureAwait(false);
@@ -195,7 +195,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task SubjectAlternativeNameMissingModelAttributeIsRejectedWithCertificateProfileViolation()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         using X509Certificate2 incompleteSanCertificate = TpmAttestationTestVectors.CreateAikCertificate(scenario.RootCertificate, scenario.AikKey, tpmModel: null);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, aikCertificateOverride: incompleteSanCertificate).ConfigureAwait(false);
@@ -209,7 +209,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task MissingAikExtendedKeyUsageIsRejectedWithCertificateProfileViolation()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         using X509Certificate2 noEkuCertificate = TpmAttestationTestVectors.CreateAikCertificate(scenario.RootCertificate, scenario.AikKey, includeAikExtendedKeyUsage: false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, aikCertificateOverride: noEkuCertificate).ConfigureAwait(false);
@@ -226,7 +226,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task AaguidExtensionMismatchIsRejectedWithAaguidMismatch()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         //Cert-factory carve-out: builds the AIK certificate by hand (rather than through
         //TpmAttestationTestVectors.CreateAikCertificate) so the id-fido-gen-ce-aaguid extension can be
@@ -260,7 +260,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task AlgorithmInconsistentWithAikKeyIsRejectedWithAlgorithmMismatch()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, algOverride: WellKnownCoseAlgorithms.Rs256).ConfigureAwait(false);
 
@@ -277,11 +277,11 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task UnsupportedNameAlgorithmIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         byte[] sha1PubArea = TpmAttestationTestVectors.BuildEccPubAreaBytes(scenario.CredentialKey, TpmAlgIdConstants.TPM_ALG_SHA1);
         byte[] certifiedName = TpmAttestationTestVectors.ComputeTpmName(scenario.PubAreaBytes);
         byte[] certInfoBytes = TpmAttestationTestVectors.BuildCertifyCertInfoBytes(certifiedName, SignerName, scenario.ExtraData);
-        (byte[] r, byte[] s) = TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes);
+        (byte[] r, byte[] s) = await TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes).ConfigureAwait(false);
         byte[] sigBytes = TpmAttestationTestVectors.BuildEcdsaSignatureBytes(TpmAlgIdConstants.TPM_ALG_SHA256, r, s);
 
         //The pubArea's nameAlg is SHA-1 (unsupported), but its unique/parameters still match the
@@ -299,7 +299,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task TamperedCertInfoIsRejectedWithInvalidSignature()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         byte[] tamperedCertInfo = [.. scenario.CertInfoBytes];
         tamperedCertInfo[^1] ^= 0xFF;
 
@@ -317,14 +317,14 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task ExtraDataMismatchIsRejectedWithAttestationDigestMismatch()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         byte[] wrongExtraData = new byte[32];
 
         //Junk payload: any 32 bytes that differ from the correct extraData digest suffice.
         RandomNumberGenerator.Fill(wrongExtraData);
         byte[] certifiedName = TpmAttestationTestVectors.ComputeTpmName(scenario.PubAreaBytes);
         byte[] certInfoBytes = TpmAttestationTestVectors.BuildCertifyCertInfoBytes(certifiedName, SignerName, wrongExtraData);
-        (byte[] r, byte[] s) = TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes);
+        (byte[] r, byte[] s) = await TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes).ConfigureAwait(false);
         byte[] sigBytes = TpmAttestationTestVectors.BuildEcdsaSignatureBytes(TpmAlgIdConstants.TPM_ALG_SHA256, r, s);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, certInfoOverride: certInfoBytes, sigOverride: sigBytes).ConfigureAwait(false);
@@ -338,10 +338,10 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task NonTpmGeneratedMagicIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         byte[] certifiedName = TpmAttestationTestVectors.ComputeTpmName(scenario.PubAreaBytes);
         byte[] certInfoBytes = TpmAttestationTestVectors.BuildCertifyCertInfoBytes(certifiedName, SignerName, scenario.ExtraData, magic: 0xDEADBEEF);
-        (byte[] r, byte[] s) = TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes);
+        (byte[] r, byte[] s) = await TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes).ConfigureAwait(false);
         byte[] sigBytes = TpmAttestationTestVectors.BuildEcdsaSignatureBytes(TpmAlgIdConstants.TPM_ALG_SHA256, r, s);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, certInfoOverride: certInfoBytes, sigOverride: sigBytes).ConfigureAwait(false);
@@ -355,9 +355,9 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task NonCertifyTypeIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         byte[] certInfoBytes = TpmAttestationTestVectors.BuildQuoteCertInfoBytes(SignerName, scenario.ExtraData);
-        (byte[] r, byte[] s) = TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes);
+        (byte[] r, byte[] s) = await TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes).ConfigureAwait(false);
         byte[] sigBytes = TpmAttestationTestVectors.BuildEcdsaSignatureBytes(TpmAlgIdConstants.TPM_ALG_SHA256, r, s);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, certInfoOverride: certInfoBytes, sigOverride: sigBytes).ConfigureAwait(false);
@@ -374,7 +374,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task CertifiedNameMismatchIsRejected()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         //A P-256 key distinct from scenario.CredentialKey, minted on the spot so its Name mismatches the
         //Name pubArea itself computes — the CertifiedNameMismatch fixture. Raw ECDsa because
@@ -383,7 +383,7 @@ internal sealed class TpmAttestationTests
         using ECDsa otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         byte[] wrongName = TpmAttestationTestVectors.ComputeTpmName(TpmAttestationTestVectors.BuildEccPubAreaBytes(otherKey));
         byte[] certInfoBytes = TpmAttestationTestVectors.BuildCertifyCertInfoBytes(wrongName, SignerName, scenario.ExtraData);
-        (byte[] r, byte[] s) = TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes);
+        (byte[] r, byte[] s) = await TpmAttestationTestVectors.SignWithEcdsaP256Components(scenario.AikKey, certInfoBytes).ConfigureAwait(false);
         byte[] sigBytes = TpmAttestationTestVectors.BuildEcdsaSignatureBytes(TpmAlgIdConstants.TPM_ALG_SHA256, r, s);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, certInfoOverride: certInfoBytes, sigOverride: sigBytes).ConfigureAwait(false);
@@ -400,7 +400,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task CborParseFailureIsRejectedWithMalformedStatement()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
         AttestationVerifyDelegate verify = BuildVerifier(TpmAttestationTestVectors.CreateThrowingParser("attStmt is not a CTAP2 canonical CBOR map."));
         AttestationVerificationRequest request = Fido2AttestationTestVectors.CreateRequest(
             scenario.AuthDataBytes, scenario.AuthenticatorData, scenario.ClientDataHash, ReadOnlyMemory<byte>.Empty, [scenario.RootPki], TestClock.CanonicalEpoch);
@@ -416,7 +416,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task TruncatedPubAreaIsRejectedWithMalformedStatement()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, pubAreaOverride: new byte[] { 0x00, 0x17 }).ConfigureAwait(false);
 
@@ -429,7 +429,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task TruncatedCertInfoIsRejectedWithMalformedStatement()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, certInfoOverride: [0xFF, 0x54, 0x43, 0x47]).ConfigureAwait(false);
 
@@ -448,7 +448,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task TruncatedCertInfoAtClockInfoSafeByteBoundaryIsRejectedWithMalformedStatement()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         int offsetBeforeSafeByte = sizeof(uint) + sizeof(ushort)
             + sizeof(ushort) + SignerName.Length
@@ -473,7 +473,7 @@ internal sealed class TpmAttestationTests
     [TestMethod]
     public async Task TruncatedMlDsaPubAreaAtAllowExternalMuByteBoundaryIsRejectedWithMalformedStatement()
     {
-        using Scenario scenario = BuildConformantScenario();
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
 
         //TPMT_PUBLIC prefix (type, nameAlg, objectAttributes, an empty TPM2B_DIGEST authPolicy) followed by
         //TPMS_MLDSA_PARMS.parameterSet, deliberately stopping one byte short of allowExternalMu (TPMI_YES_NO)
@@ -537,14 +537,14 @@ internal sealed class TpmAttestationTests
 
 
     /// <summary>Builds a fully section 8.3/8.3.1-conformant scenario.</summary>
-    private static Scenario BuildConformantScenario()
+    private static async Task<Scenario> BuildConformantScenario()
     {
         //rootKey/aikKey feed the section 8.3.1 AIK certificate chain via CertificateRequest (cert-factory
-        //carve-out); aikKey separately signs certInfo directly below as the independent oracle the
-        //verifier validates against (oracle carve-out). credentialKey has no library-crypto role of its
-        //own — the same ECDsa instance is shared, unmodified, between CreateP256CoseKey and
-        //BuildEccPubAreaBytes so both wire views encode the identical public point, and both callees are
-        //typed to ECDsa.
+        //carve-out); aikKey's scalar separately signs certInfo directly below through the registered
+        //SigningDelegate seam, minting the certInfo signature TpmAttestation.VerifyAsync — the code under
+        //test — validates as its input. credentialKey has no library-crypto role of its own — the same
+        //ECDsa instance is shared, unmodified, between CreateP256CoseKey and BuildEccPubAreaBytes so both
+        //wire views encode the identical public point, and both callees are typed to ECDsa.
         ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         ECDsa credentialKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         ECDsa aikKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -565,7 +565,7 @@ internal sealed class TpmAttestationTests
         byte[] pubAreaBytes = TpmAttestationTestVectors.BuildEccPubAreaBytes(credentialKey);
         byte[] certifiedName = TpmAttestationTestVectors.ComputeTpmName(pubAreaBytes);
         byte[] certInfoBytes = TpmAttestationTestVectors.BuildCertifyCertInfoBytes(certifiedName, SignerName, extraData);
-        (byte[] r, byte[] s) = TpmAttestationTestVectors.SignWithEcdsaP256Components(aikKey, certInfoBytes);
+        (byte[] r, byte[] s) = await TpmAttestationTestVectors.SignWithEcdsaP256Components(aikKey, certInfoBytes).ConfigureAwait(false);
         byte[] signatureBytes = TpmAttestationTestVectors.BuildEcdsaSignatureBytes(TpmAlgIdConstants.TPM_ALG_SHA256, r, s);
 
         return new Scenario

@@ -111,7 +111,7 @@ internal static class OcspTestFixtures
     /// <summary>An AIA GeneralName entry using the URI-form <c>uniformResourceIdentifier</c> choice.</summary>
     /// <param name="accessMethod">The access method OID this entry is filed under.</param>
     /// <param name="uri">The URI value.</param>
-    /// <returns>The entry tuple, for <see cref="CreateAuthorityInfoAccessExtension(ValueTuple{string, Asn1Tag, string}[])"/>.</returns>
+    /// <returns>The entry tuple, for <see cref="CreateAuthorityInfoAccessExtension(System.ValueTuple{System.String, System.Formats.Asn1.Asn1Tag, System.String}[])"/>.</returns>
     internal static (string AccessMethod, Asn1Tag NameTag, string NameValue) UriAiaEntry(string accessMethod, string uri) =>
         (accessMethod, UniformResourceIdentifierTag, uri);
 
@@ -119,7 +119,7 @@ internal static class OcspTestFixtures
     /// <summary>An AIA GeneralName entry using the non-URI <c>rfc822Name</c> choice, for the "must be skipped" fixtures.</summary>
     /// <param name="accessMethod">The access method OID this entry is filed under.</param>
     /// <param name="emailAddress">The rfc822Name value.</param>
-    /// <returns>The entry tuple, for <see cref="CreateAuthorityInfoAccessExtension(ValueTuple{string, Asn1Tag, string}[])"/>.</returns>
+    /// <returns>The entry tuple, for <see cref="CreateAuthorityInfoAccessExtension(System.ValueTuple{System.String, System.Formats.Asn1.Asn1Tag, System.String}[])"/>.</returns>
     internal static (string AccessMethod, Asn1Tag NameTag, string NameValue) NonUriAiaEntry(string accessMethod, string emailAddress) =>
         (accessMethod, Rfc822NameTag, emailAddress);
 

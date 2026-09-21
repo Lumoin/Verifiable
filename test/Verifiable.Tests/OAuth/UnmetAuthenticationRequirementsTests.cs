@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
@@ -32,6 +34,17 @@ internal sealed class UnmetAuthenticationRequirementsTests
     private static Uri ClientBaseUri { get; } = new("https://client.example.com");
     private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
+    /// <summary>
+    /// Every capability the four code-issuing authorize paths need — bare PAR, direct authorize,
+    /// and the JAR (RFC 9101 request-object) entry point.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> AllPathCapabilities { get; } =
+        ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+            WellKnownCapabilityIdentifiers.OAuthDirectAuthorization,
+            WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest);
+
 
     /// <summary>
     /// <c>max_age=300</c> with an authentication 600 s old (beyond the 60 s default skew)
@@ -43,8 +56,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, maxAge: "300",
@@ -75,8 +88,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Haip10);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Haip10).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, maxAge: "300",
@@ -100,8 +113,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, maxAge: "300",
@@ -124,8 +137,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse staleResponse = await DriveToAuthorizeAsync(
             host, material, maxAge: "0",
@@ -156,8 +169,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, maxAge: "0",
@@ -182,8 +195,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //No authTime argument → the authorize context carries no auth_time at all.
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
@@ -207,14 +220,15 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(
             TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -230,6 +244,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
 
         Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
         Assert.Contains(OAuthErrors.InvalidRequest, parResponse.Body, StringComparison.Ordinal);
+        Assert.Contains("max_age must be a non-negative integer.", parResponse.Body, StringComparison.Ordinal);
     }
 
 
@@ -244,19 +259,22 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //The deployment owns the assurance-level semantics: "loa-high" is satisfied only
         //by an established acr equal to "loa-high"; anything else is denied as an unmet
         //authentication requirement.
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            static (evaluation, _, _, _) =>
-                ValueTask.FromResult(
-                    string.Equals(evaluation.EstablishedAcr, "loa-high", StringComparison.Ordinal)
-                        ? AuthorizationRequestDecision.Permit
-                        : AuthorizationRequestDecision.Deny(
-                            AuthorizationDenialReason.UnmetAuthenticationRequirements));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (evaluation, _, _, _) =>
+                    ValueTask.FromResult(
+                        string.Equals(evaluation.EstablishedAcr, "loa-high", StringComparison.Ordinal)
+                            ? AuthorizationRequestDecision.Permit()
+                            : AuthorizationRequestDecision.Deny(
+                                AuthorizationDenialReason.UnmetAuthenticationRequirements));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, acrValues: "loa-high", establishedAcr: "loa-low").ConfigureAwait(false);
@@ -279,16 +297,19 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            static (evaluation, _, _, _) =>
-                ValueTask.FromResult(
-                    string.Equals(evaluation.EstablishedAcr, "loa-high", StringComparison.Ordinal)
-                        ? AuthorizationRequestDecision.Permit
-                        : AuthorizationRequestDecision.Deny(
-                            AuthorizationDenialReason.UnmetAuthenticationRequirements));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (evaluation, _, _, _) =>
+                    ValueTask.FromResult(
+                        string.Equals(evaluation.EstablishedAcr, "loa-high", StringComparison.Ordinal)
+                            ? AuthorizationRequestDecision.Permit()
+                            : AuthorizationRequestDecision.Deny(
+                                AuthorizationDenialReason.UnmetAuthenticationRequirements));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, acrValues: "loa-high", establishedAcr: "loa-high").ConfigureAwait(false);
@@ -311,21 +332,24 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string? observedRequested = null;
         string? observedEstablished = null;
         string? observedScope = null;
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, _, _, _) =>
-            {
-                observedRequested = evaluation.RequestedAcrValues;
-                observedEstablished = evaluation.EstablishedAcr;
-                observedScope = evaluation.RequestedScope;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, _, _, _) =>
+                {
+                    observedRequested = evaluation.RequestedAcrValues;
+                    observedEstablished = evaluation.EstablishedAcr;
+                    observedScope = evaluation.RequestedScope;
 
-                return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-            };
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
 
         _ = await DriveToAuthorizeAsync(
             host, material, acrValues: "loa-substantial loa-high",
@@ -351,8 +375,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, acrValues: "loa-high", establishedAcr: "loa-low").ConfigureAwait(false);
@@ -374,13 +398,16 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            static (_, _, _, _) =>
-                ValueTask.FromResult(AuthorizationRequestDecision.Deny(
-                    AuthorizationDenialReason.AccessDenied, "Resource owner declined consent."));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) =>
+                    ValueTask.FromResult(AuthorizationRequestDecision.Deny(
+                        AuthorizationDenialReason.AccessDenied, "Resource owner declined consent."));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, establishedAcr: "loa-low").ConfigureAwait(false);
@@ -406,22 +433,26 @@ internal sealed class UnmetAuthenticationRequirementsTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string? observedScope = null;
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, _, _, _) =>
-            {
-                observedScope = evaluation.RequestedScope;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, _, _, _) =>
+                {
+                    observedScope = evaluation.RequestedScope;
 
-                return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-            };
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(
             TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -435,7 +466,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
-        using System.Text.Json.JsonDocument parBody = System.Text.Json.JsonDocument.Parse(parResponse.Body);
+        using JsonDocument parBody = JsonDocument.Parse(parResponse.Body);
         string requestUri = parBody.RootElement.GetProperty("request_uri").GetString()!;
 
         //The client (or a front-channel attacker) sends a BROADER scope on the authorize GET.
@@ -461,6 +492,460 @@ internal sealed class UnmetAuthenticationRequirementsTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>:
+    /// "scope: OPTIONAL, if identical to the scope requested by the client; otherwise,
+    /// REQUIRED." A bare <see cref="AuthorizationRequestDecision.Permit"/> never narrows —
+    /// the redeemed token response's <c>scope</c> equals the requested scope.
+    /// </summary>
+    [TestMethod]
+    public async Task BarePermitGrantsTheRequestedScopeUnchanged()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+        }).ConfigureAwait(false);
+
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = WellKnownScopes.OpenId },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using JsonDocument tokenBody = JsonDocument.Parse(result.TokenResponse.Body);
+        Assert.AreEqual(WellKnownScopes.OpenId, tokenBody.RootElement.GetProperty("scope").GetString(),
+            "RFC 6749 §5.1: a bare Permit grants the requested scope unchanged.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: "The
+    /// authorization server MAY fully or partially ignore the scope requested by the client ...
+    /// If the issued access token scope is different from the one requested by the client, the
+    /// authorization server MUST include the 'scope' response parameter to inform the client of
+    /// the actual scope granted." The seam narrows the requested scope with
+    /// <see cref="AuthorizationRequestDecision.Permit(string?)"/>; the redeemed token carries the
+    /// narrowed set.
+    /// </summary>
+    [TestMethod]
+    public async Task SeamPermitsWithNarrowerScopeRedeemsToATokenCarryingTheNarrowedScope()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Permit(WellKnownScopes.OpenId));
+        }).ConfigureAwait(false);
+
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions
+            {
+                Scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using JsonDocument tokenBody = JsonDocument.Parse(result.TokenResponse.Body);
+        Assert.AreEqual(WellKnownScopes.OpenId, tokenBody.RootElement.GetProperty("scope").GetString(),
+            "RFC 6749 §3.3: the seam narrowed the granted scope; §5.1 requires the differing scope on the response.");
+    }
+
+
+    /// <summary>
+    /// The seam's granted scope can only narrow the request, never widen it: a value outside the
+    /// requested set is a seam defect answered with <c>server_error</c>, never issued as a silent
+    /// widening.
+    /// </summary>
+    [TestMethod]
+    public async Task SeamPermittingAScopeOutsideTheRequestIsAServerErrorNotASilentWidening()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Permit($"{WellKnownScopes.OpenId} {WellKnownScopes.Email}"));
+        }).ConfigureAwait(false);
+
+        ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
+            host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+        Assert.Contains($"error={OAuthErrors.ServerError}", authorizeResponse.Location!, StringComparison.Ordinal,
+            $"A granted scope outside the requested scope is a seam defect, never a silent widening. Location: {authorizeResponse.Location}");
+        Assert.DoesNotContain("code=", authorizeResponse.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: "The
+    /// authorization server MAY fully or partially ignore the scope requested by the client."
+    /// Granting nothing is not a narrowing this seam may express — an empty
+    /// <see cref="AuthorizationRequestDecision.Permit(string?)"/> is a seam defect answered with
+    /// <c>server_error</c>, the same as a grant outside the requested scope.
+    /// </summary>
+    [TestMethod]
+    public async Task SeamPermittingAnEmptyScopeIsAServerError()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(AuthorizationRequestDecision.Permit(string.Empty));
+        }).ConfigureAwait(false);
+
+        ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
+            host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+        Assert.Contains($"error={OAuthErrors.ServerError}", authorizeResponse.Location!, StringComparison.Ordinal,
+            $"An empty granted scope is a seam defect, never an empty grant. Location: {authorizeResponse.Location}");
+        Assert.DoesNotContain("code=", authorizeResponse.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: the
+    /// seam narrows the requested scope. The effective scope the library stores is canonical —
+    /// the requested tokens' own order, deduplicated — regardless of the order or duplication
+    /// <see cref="AuthorizationRequestDecision.Permit(string?)"/> was called with.
+    /// </summary>
+    [TestMethod]
+    public async Task SeamGrantedScopeIsCanonicalizedToTheRequestOrderWithoutDuplicates()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Permit(
+                        $"{WellKnownScopes.Profile} {WellKnownScopes.OpenId} {WellKnownScopes.OpenId}"));
+        }).ConfigureAwait(false);
+
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions
+            {
+                Scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile} {WellKnownScopes.Email}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using JsonDocument tokenBody = JsonDocument.Parse(result.TokenResponse.Body);
+        Assert.AreEqual($"{WellKnownScopes.OpenId} {WellKnownScopes.Profile}",
+            tokenBody.RootElement.GetProperty("scope").GetString(),
+            "The granted scope must canonicalize to the requested tokens' own order, without duplicates.");
+    }
+
+
+    /// <summary>
+    /// <see cref="AuthorizationDenialReason.InvalidScope"/> maps to the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>
+    /// <c>invalid_scope</c> Authorization Error Response, with the request's <c>state</c> echoed.
+    /// </summary>
+    [TestMethod]
+    public async Task DenyWithInvalidScopeReasonMapsToInvalidScopeErrorWithStateEchoed()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Deny(AuthorizationDenialReason.InvalidScope));
+        }).ConfigureAwait(false);
+
+        string requestUri = await PushAsync(host, material, state: "state-scope-1", prompt: null)
+            .ConfigureAwait(false);
+        ServerHttpResponse response = await CompleteAuthorizeAsync(
+            host, material, requestUri, subjectId: SubjectId).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains($"error={OAuthErrors.InvalidScope}", response.Location!, StringComparison.Ordinal,
+            $"AuthorizationDenialReason.InvalidScope must map to invalid_scope. Location: {response.Location}");
+        Assert.Contains("state=state-scope-1", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>No subject, no <c>prompt</c>: <c>login_required</c> on the PAR-completion path.</summary>
+    [TestMethod]
+    public async Task NoSubjectNoPromptFailsWithLoginRequiredOnPushedCompletion()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        string requestUri = await PushAsync(host, material, state: "state-1", prompt: null).ConfigureAwait(false);
+        ServerHttpResponse response = await CompleteAuthorizeAsync(
+            host, material, requestUri, subjectId: null).ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-1");
+    }
+
+
+    /// <summary>No subject, no <c>prompt</c>: <c>login_required</c> on the direct authorize path.</summary>
+    [TestMethod]
+    public async Task NoSubjectNoPromptFailsWithLoginRequiredOnDirectAuthorize()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: null, prompt: null, state: "state-2",
+            redirectUri: RedirectUri).ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-2");
+    }
+
+
+    /// <summary>No subject, no <c>prompt</c>: <c>login_required</c> on a signed request by reference (JAR-PAR).</summary>
+    [TestMethod]
+    public async Task NoSubjectNoPromptFailsWithLoginRequiredOnJarByReference()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse pushResponse = await PushJarAsync(
+            host, material, state: "state-3", nonce: "nonce-3", prompt: null).ConfigureAwait(false);
+        Assert.AreEqual(201, pushResponse.StatusCode, pushResponse.Body);
+        string requestUri = ExtractRequestUri(pushResponse.Body);
+
+        ServerHttpResponse response = await CompleteAuthorizeAsync(
+            host, material, requestUri, subjectId: null).ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-3");
+    }
+
+
+    /// <summary>No subject, no <c>prompt</c>: <c>login_required</c> on a signed request by value.</summary>
+    [TestMethod]
+    public async Task NoSubjectNoPromptFailsWithLoginRequiredOnJarByValue()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await JarByValueAuthorizeAsync(
+            host, material, state: "state-4", nonce: "nonce-4", subjectId: null, prompt: null)
+            .ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-4");
+    }
+
+
+    /// <summary>No subject, <c>prompt=none</c>: <c>login_required</c>.</summary>
+    [TestMethod]
+    public async Task NoSubjectWithPromptNoneFailsWithLoginRequired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: null, prompt: WellKnownPromptValues.None, state: "state-5",
+            redirectUri: RedirectUri).ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-5");
+    }
+
+
+    /// <summary>
+    /// OIDC Core §3.1.2.1: "If this parameter contains none with any other value, an error is
+    /// returned." At the pushed endpoint directly — a bare 400, since PAR has no front channel.
+    /// </summary>
+    [TestMethod]
+    public async Task PromptWithNoneAndOtherValueIsRejectedAtPushedEndpoint()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await PushRawAsync(
+            host, material, state: "state-6",
+            prompt: $"{WellKnownPromptValues.None} {WellKnownPromptValues.Login}").ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.Contains(OAuthErrors.InvalidRequest, response.Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// OIDC Core §3.1.2.1's none-with-any-other-value rule at the authorize endpoint, as an
+    /// error redirect: <c>redirect_uri</c> is already registration-validated by this point.
+    /// </summary>
+    [TestMethod]
+    public async Task PromptWithNoneAndOtherValueIsRejectedAtDirectAuthorize()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: SubjectId,
+            prompt: $"{WellKnownPromptValues.None} {WellKnownPromptValues.Login}",
+            state: "state-7", redirectUri: RedirectUri).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains($"error={OAuthErrors.InvalidRequest}", response.Location!, StringComparison.Ordinal);
+        Assert.Contains("state=state-7", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>Subject established, <c>prompt=login</c>, no seam wired: fails closed with <c>login_required</c>.</summary>
+    [TestMethod]
+    public async Task SubjectEstablishedPromptLoginWithNoSeamFailsWithLoginRequired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: SubjectId, prompt: WellKnownPromptValues.Login,
+            state: "state-8", redirectUri: RedirectUri).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains($"error={OAuthErrors.LoginRequired}", response.Location!, StringComparison.Ordinal);
+        Assert.Contains("state=state-8", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>Subject established, <c>prompt=login</c>, a seam that permits: a code is issued.</summary>
+    [TestMethod]
+    public async Task SubjectEstablishedPromptLoginWithPermittingSeamIssuesCode()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+        }).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: SubjectId, prompt: WellKnownPromptValues.Login,
+            state: "state-9", redirectUri: RedirectUri).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains("code=", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>Subject established, <c>prompt=login</c>, a seam denying <c>LoginRequired</c>: <c>login_required</c>.</summary>
+    [TestMethod]
+    public async Task SubjectEstablishedPromptLoginWithDenyingSeamFailsWithLoginRequired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                static (_, _, _, _) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Deny(AuthorizationDenialReason.LoginRequired));
+        }).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: SubjectId, prompt: WellKnownPromptValues.Login,
+            state: "state-10", redirectUri: RedirectUri).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains($"error={OAuthErrors.LoginRequired}", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>Subject established, <c>prompt=consent</c>, no seam wired: <c>consent_required</c>.</summary>
+    [TestMethod]
+    public async Task SubjectEstablishedPromptConsentWithNoSeamFailsWithConsentRequired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: SubjectId, prompt: WellKnownPromptValues.Consent,
+            state: "state-11", redirectUri: RedirectUri).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains($"error={OAuthErrors.ConsentRequired}", response.Location!, StringComparison.Ordinal);
+        Assert.Contains("state=state-11", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>Subject established, <c>prompt=select_account</c>, no seam wired: <c>account_selection_required</c>.</summary>
+    [TestMethod]
+    public async Task SubjectEstablishedPromptSelectAccountWithNoSeamFailsWithAccountSelectionRequired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: SubjectId, prompt: WellKnownPromptValues.SelectAccount,
+            state: "state-12", redirectUri: RedirectUri).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains($"error={OAuthErrors.AccountSelectionRequired}", response.Location!, StringComparison.Ordinal);
+        Assert.Contains("state=state-12", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// RFC 9101 §6.3 via RFC 9126 §4: a pushed request without <c>prompt</c>, authorized with
+    /// <c>prompt=login</c> on the front-channel query, ignores the front-channel value and
+    /// issues a code — the pushed (absent) prompt is authoritative.
+    /// </summary>
+    [TestMethod]
+    public async Task PromptFromFrontChannelIsIgnoredOnARequestUriRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        string requestUri = await PushAsync(host, material, state: "state-13", prompt: null).ConfigureAwait(false);
+        ServerHttpResponse response = await CompleteAuthorizeAsync(
+            host, material, requestUri, subjectId: SubjectId,
+            frontChannelPrompt: WellKnownPromptValues.Login).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains("code=", response.Location!, StringComparison.Ordinal,
+            "The pushed request carried no prompt; a front-channel prompt=login must be ignored (RFC 9101 §6.3).");
+    }
+
+
+    /// <summary>
+    /// The error redirect never goes to an unvalidated <c>redirect_uri</c>: an unauthenticated
+    /// request with an unregistered <c>redirect_uri</c> still answers the existing direct 400,
+    /// never a redirect to the attacker-supplied URI.
+    /// </summary>
+    [TestMethod]
+    public async Task UnauthenticatedRequestWithUnregisteredRedirectUriStillAnswersBadRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: null, prompt: null, state: "state-14",
+            redirectUri: new Uri("https://attacker.example.com/callback")).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.IsNull(response.Location,
+            "An unregistered redirect_uri must never be redirected to, even for an unauthenticated request.");
+        Assert.Contains(OAuthErrors.InvalidRequest, response.Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
     /// Drives PAR → Authorize, pushing the requested <paramref name="maxAge"/> /
     /// <paramref name="acrValues"/> in the PAR request and stamping
     /// <paramref name="authTime"/> / <paramref name="establishedAcr"/> on the authorize-time
@@ -477,6 +962,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -500,7 +986,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
-        using System.Text.Json.JsonDocument parBody = System.Text.Json.JsonDocument.Parse(parResponse.Body);
+        using JsonDocument parBody = JsonDocument.Parse(parResponse.Body);
         string requestUri = parBody.RootElement.GetProperty("request_uri").GetString()!;
 
         RequestFields authorizeFields = new()
@@ -525,5 +1011,194 @@ internal sealed class UnmetAuthenticationRequirementsTests
             WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
             authorizeFields, authorizeContext,
             TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Registers a client with every capability the four code-issuing authorize paths need,
+    /// including a JAR signing key (<see cref="TestHostShell.RegisterClientAsync"/> configures one
+    /// unconditionally, unlike <see cref="TestHostShell.RegisterDpopClientAsync"/>).
+    /// </summary>
+    private static async Task<VerifierKeyMaterial> RegisterAllPathsClientAsync(TestHostShell host) =>
+        await host.RegisterClientAsync(ClientId, ClientBaseUri, AllPathCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+
+    private static void AssertLoginRequiredRedirect(ServerHttpResponse response, string state)
+    {
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains($"error={OAuthErrors.LoginRequired}", response.Location!, StringComparison.Ordinal,
+            $"An unestablished subject must redirect with error=login_required, never a 500. Location: {response.Location}");
+        Assert.Contains($"state={state}", response.Location!, StringComparison.Ordinal);
+        Assert.StartsWith(RedirectUri.ToString(), response.Location!, StringComparison.Ordinal,
+            "The error redirect must go to the already-validated redirect_uri.");
+    }
+
+
+    private async Task<string> PushAsync(
+        TestHostShell host, VerifierKeyMaterial material, string state, string? prompt)
+    {
+        ServerHttpResponse response = await PushRawAsync(host, material, state, prompt).ConfigureAwait(false);
+        Assert.AreEqual(201, response.StatusCode, response.Body);
+
+        return ExtractRequestUri(response.Body);
+    }
+
+
+    private async Task<ServerHttpResponse> PushRawAsync(
+        TestHostShell host, VerifierKeyMaterial material, string state, string? prompt)
+    {
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        RequestFields parFields = new()
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = state
+        };
+        if(prompt is not null)
+        {
+            parFields[OAuthRequestParameterNames.Prompt] = prompt;
+        }
+
+        return await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodePar, "POST",
+            parFields, [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    private async Task<ServerHttpResponse> CompleteAuthorizeAsync(
+        TestHostShell host, VerifierKeyMaterial material, string requestUri,
+        string? subjectId, string? frontChannelPrompt = null)
+    {
+        RequestFields authorizeFields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
+        };
+        if(frontChannelPrompt is not null)
+        {
+            authorizeFields[OAuthRequestParameterNames.Prompt] = frontChannelPrompt;
+        }
+
+        ExchangeContext authorizeContext = [];
+        if(subjectId is not null)
+        {
+            authorizeContext.SetSubjectId(subjectId);
+        }
+
+        return await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
+            authorizeFields, authorizeContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    private async Task<ServerHttpResponse> DirectAuthorizeAsync(
+        TestHostShell host, VerifierKeyMaterial material,
+        string? subjectId, string? prompt, string state, Uri redirectUri)
+    {
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = state
+        };
+        if(prompt is not null)
+        {
+            fields[OAuthRequestParameterNames.Prompt] = prompt;
+        }
+
+        ExchangeContext context = [];
+        if(subjectId is not null)
+        {
+            context.SetSubjectId(subjectId);
+        }
+
+        return await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
+            fields, context,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    private async Task<ServerHttpResponse> PushJarAsync(
+        TestHostShell host, VerifierKeyMaterial material, string state, string nonce, string? prompt)
+    {
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RedirectUri, state, nonce);
+        if(prompt is not null)
+        {
+            claims[OAuthRequestParameterNames.Prompt] = prompt;
+        }
+
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.Request] = compactJar,
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
+
+        return await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeJarPar, "POST",
+            fields, [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    private async Task<ServerHttpResponse> JarByValueAuthorizeAsync(
+        TestHostShell host, VerifierKeyMaterial material, string state, string nonce,
+        string? subjectId, string? prompt)
+    {
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RedirectUri, state, nonce);
+        if(prompt is not null)
+        {
+            claims[OAuthRequestParameterNames.Prompt] = prompt;
+        }
+
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.Request] = compactJar,
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
+        ExchangeContext context = [];
+        if(subjectId is not null)
+        {
+            context.SetSubjectId(subjectId);
+        }
+
+        return await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeAuthorize, "GET",
+            fields, context,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    private static string ExtractRequestUri(string parResponseBody)
+    {
+        using JsonDocument document = JsonDocument.Parse(parResponseBody);
+
+        return document.RootElement.GetProperty("request_uri").GetString()!;
     }
 }

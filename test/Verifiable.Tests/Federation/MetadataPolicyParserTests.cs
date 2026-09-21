@@ -55,7 +55,7 @@ internal sealed class MetadataPolicyParserTests
             new Dictionary<string, object>());
 
         Assert.IsTrue(result.IsSuccess, "Empty input should parse cleanly.");
-        Assert.HasCount(0, result.Snapshot!.EntityTypes, "Snapshot should carry zero entity-type blocks.");
+        Assert.IsEmpty(result.Snapshot!.EntityTypes, "Snapshot should carry zero entity-type blocks.");
     }
 
 
@@ -107,3 +107,4 @@ internal sealed class MetadataPolicyParserTests
         Assert.IsFalse(result.IsSuccess, "Empty entity-type key should be rejected.");
     }
 }
+

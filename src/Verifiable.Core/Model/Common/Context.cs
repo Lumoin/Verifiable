@@ -160,7 +160,7 @@ namespace Verifiable.Core.Model.Common
         /// <remarks>
         /// <para>
         /// Order is significant — earlier entries take precedence when terms conflict, and the first entry
-        /// carries the normative meaning checked by <see cref="Validation.ContextValidationRules.ValidateFirstEntry"/>
+        /// carries the normative meaning checked by <see cref="Validation.ContextValidationRules.ValidateFirstEntry(Context?, string)"/>
         /// (VC Data Model 2.0 §4.3 for credentials/presentations; DID Core for DID documents). This list is never
         /// <see langword="null"/>; an absent <c>@context</c> is the absence of a <see cref="Context"/> instance,
         /// not an instance with zero entries.

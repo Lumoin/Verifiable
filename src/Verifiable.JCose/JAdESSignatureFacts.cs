@@ -315,9 +315,19 @@ public static class JAdESSignatureFacts
                         CopyValidationData(GetDecodedValue(tstVD.Carriage), certificates, revocationLists, ocspResponses, pool);
                         break;
 
+                    case JAdESUnsignedHeaderElementAttributeCertificateValues:
+                    case JAdESUnsignedHeaderElementAttributeRevocationValues:
+                    case JAdESUnsignedHeaderElementSignaturePolicyStore:
+                    case JAdESUnsignedHeaderElementCounterSignature:
+                    case JAdESUnsignedHeaderElementCertificateReferences:
+                    case JAdESUnsignedHeaderElementRevocationReferences:
+                    case JAdESUnsignedHeaderElementAttributeCertificateReferences:
+                    case JAdESUnsignedHeaderElementAttributeRevocationReferences:
+                    case JAdESUnsignedHeaderElementUnknown:
                         //axVals/arVals (attribute-certificate material), xRefs/rRefs/axRefs/arRefs (digest-only
-                        //references), sigPSt, and cSig are the disclosed residue named in the type remarks -- not
-                        //decoded into these facts.
+                        //references), sigPSt, cSig, and unknown elements are the disclosed residue named in
+                        //the type remarks -- not decoded into these facts.
+                        break;
                 }
             }
         }
@@ -568,12 +578,24 @@ public static class JAdESSignatureFacts
                 case JAdESHttpHeadersParsNotLowercaseViolation:
                     Downgrade(attributes, "sigD");
                     break;
+
+                case JAdESX5tForbiddenViolation:
+                case JAdESSigningCertificateIdentificationViolation:
+                case JAdESIssuedAtMissingViolation:
+                case JAdESSignatureTimestampMissingViolation:
+                case JAdESArchiveTimestampMissingViolation:
+                case JAdESSignaturePolicyStoreGateViolation:
+                case JAdESTimestampValidationDataServiceViolation:
+                case JAdESReferencesSigningCertificateExclusionViolation:
+                    //No attribute this violation kind names is downgraded by this pass; an explicit no-op
+                    //arm preserving this switch's original silent fall-through for every other kind.
+                    break;
             }
         }
 
-        /// <summary>Replaces the named attribute's entry with an <c>IsWellFormed = false</c> copy, when present.</summary>
-        /// <param name="candidates">The attributes to search and update in place.</param>
-        /// <param name="identifier">The wire header-parameter name to downgrade.</param>
+        //Replaces the named attribute's entry with an IsWellFormed = false copy, when present.
+        //candidates: the attributes to search and update in place.
+        //identifier: the wire header-parameter name to downgrade.
         static void Downgrade(List<SignatureAttributeFacts> candidates, string identifier)
         {
             for(int i = 0; i < candidates.Count; ++i)

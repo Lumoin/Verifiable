@@ -32,6 +32,25 @@ namespace Verifiable.OAuth.Jar;
 /// </remarks>
 public static class JarVerification
 {
+    /// <summary>
+    /// Verifies <paramref name="compactJar"/>'s signature, JOSE header, and <c>iat</c>/<c>nbf</c>/<c>exp</c>
+    /// timing claims per the class remarks, returning a discriminated result the caller maps to an OAuth
+    /// wire error response.
+    /// </summary>
+    /// <param name="compactJar">The compact-serialized JWT Authorization Request to verify.</param>
+    /// <param name="signingPublicKey">The public key the request's signature is checked against.</param>
+    /// <param name="now">The instant timing claims are evaluated relative to.</param>
+    /// <param name="clockSkew">The tolerance applied around <paramref name="now"/> when checking <c>nbf</c>.</param>
+    /// <param name="maximumLifetime">The maximum accepted <c>exp - iat</c> span.</param>
+    /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
+    /// <param name="headerDeserializer">Deserializes the decoded protected header bytes.</param>
+    /// <param name="payloadDeserializer">Deserializes the decoded payload bytes.</param>
+    /// <param name="memoryPool">Memory pool for verification allocation.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// A <see cref="JarVerificationResult"/> naming the failed check, or success with the verified header and
+    /// payload.
+    /// </returns>
     public static async ValueTask<JarVerificationResult> VerifyAsync(
         string compactJar,
         PublicKeyMemory signingPublicKey,
@@ -122,17 +141,17 @@ public static class JarVerification
             }
 
             // Step 4 — parse the payload now that the signature is verified.
-            // A duplicate top-level key is rejected first: the span scanner that
+            // A duplicate member name, at any nesting depth, is rejected first: the span scanner that
             // re-slices native-JSON claims (e.g. RFC 9396 authorization_details) reads the
             // FIRST occurrence while a deserializer keeps the LAST, so a signed payload with
-            // a repeated key is a validate-one / act-on-another smuggling vector. There is no
-            // legitimate reason for a signed Request Object to carry a duplicate top-level
+            // a repeated name is a validate-one / act-on-another smuggling vector. There is no
+            // legitimate reason for a signed Request Object to carry a duplicate
             // claim, so it is refused rather than silently resolved.
-            if(JwkJsonReader.HasDuplicateTopLevelKeys(unverified.Payload.Span))
+            if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    "JAR payload carries a duplicate top-level claim name.");
+                    "JAR payload is not well-formed JSON, or carries a duplicate claim name.");
             }
 
             IReadOnlyDictionary<string, object> claims;
@@ -140,7 +159,7 @@ public static class JarVerification
             {
                 claims = payloadDeserializer(unverified.Payload.Span);
             }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+            catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,

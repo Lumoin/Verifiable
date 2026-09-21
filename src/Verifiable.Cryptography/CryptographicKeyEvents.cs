@@ -151,8 +151,8 @@ public static class CryptographicKeyEvents
     /// This is the choke point for freshly-minted key material — mirroring <see cref="GenerateNonce"/>'s
     /// shape for the same reason: the registered creation delegate is resolved, invoked once, and its event
     /// emitted directly here, unconditionally, because this method (unlike the widened JOSE/COSE/APDU call
-    /// sites) IS the seam, not a caller reaching through it. <see cref="CryptographicKeyFactory.CreatePrivateKey"/>/
-    /// <see cref="CryptographicKeyFactory.CreatePublicKey"/> deliberately do NOT also emit
+    /// sites) IS the seam, not a caller reaching through it. <see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, Tag, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/>/
+    /// <see cref="CryptographicKeyFactory.CreatePublicKey(PublicKeyMemory, string, Tag, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/> deliberately do NOT also emit
     /// <see cref="KeyMaterialGeneratedEvent"/>: those two methods bind both freshly-minted and
     /// loaded/parsed/stored key material indistinguishably, so emitting there would mislabel every loaded
     /// key as newly generated. Call this method instead of a backend <c>Create*Keys</c> static directly when

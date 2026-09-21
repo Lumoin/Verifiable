@@ -237,7 +237,7 @@ internal sealed class DcqlMdocPresentationFlowTests
                 metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
                 claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
-            Assert.HasCount(0, matches);
+            Assert.IsEmpty(matches);
         }
         finally
         {
@@ -341,3 +341,4 @@ internal sealed class DcqlMdocPresentationFlowTests
             validFrom: new DateTimeOffset(2026, 5, 25, 8, 0, 0, TimeSpan.Zero),
             validUntil: new DateTimeOffset(2027, 5, 25, 8, 0, 0, TimeSpan.Zero));
 }
+

@@ -1,16 +1,21 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Security;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
+using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
+using Verifiable.Cryptography.Context;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
@@ -25,6 +30,7 @@ using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.Federation;
 using Verifiable.Tests.TestDataProviders;
@@ -69,6 +75,14 @@ internal sealed class Oid4VpFlowIntegrationTests
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
+
+    //A client_metadata jwks whose "keys" array holds one JWK object, itself a
+    //nested JSON object two levels below client_metadata — the shape a live
+    //conformant Verifier serves and a plain reader must see kept intact.
+    private const string ClientMetadataJwksWithEcKey =
+        /*lang=json,strict*/ "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\"," +
+        "\"x\":\"MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4\"," +
+        "\"y\":\"4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM\",\"kid\":\"jar-jwks-key-1\"}]}";
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
@@ -142,8 +156,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task CrossDeviceFlowBothPdasReachAcceptState()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -222,6 +236,135 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
+    /// <summary>
+    /// The house's real-wire E2E for SD-JWT VC draft-19 §2.5/§4: the verifier's
+    /// <see cref="ResolveIssuerKeyDelegate"/> resolves the issuer's signing key from JWT VC Issuer
+    /// Metadata served by a real HTTPS loopback listener — first through an inline <c>jwks</c>, then,
+    /// after the same document is republished carrying <c>jwks_uri</c> instead, through
+    /// <see cref="JwtVcIssuerMetadataDocuments.SelectKeyAsync"/>'s <c>jwks_uri</c> fetch — both via
+    /// <see cref="JwtVcIssuerMetadataDocuments.ResolveAsync"/> and the selection helper, never a
+    /// pinned in-memory trust store.
+    /// </summary>
+    [TestMethod]
+    public async Task IssuerKeyResolvesFromJwtVcIssuerMetadataOverRealWireThenViaJwksUri()
+    {
+        await using StaticContentHost issuerHost = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await using StaticContentHost jwksHost = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        using System.Net.Http.HttpClient issuerHttpClient = LoopbackTls.CreateSingleHopPinnedHttpClient(issuerHost.Certificate);
+        using System.Net.Http.HttpClient jwksHttpClient = LoopbackTls.CreateSingleHopPinnedHttpClient(jwksHost.Certificate);
+        Verifiable.Core.OutboundFetch.OutboundTransportDelegate issuerTransport =
+            GuardedHttpClientTransport.BuildSingleHopTransport(issuerHttpClient);
+        Verifiable.Core.OutboundFetch.OutboundTransportDelegate jwksTransport =
+            GuardedHttpClientTransport.BuildSingleHopTransport(jwksHttpClient);
+
+        string issuerId = issuerHost.BaseAddress.OriginalString.TrimEnd('/');
+        const string issuerKeyId = "jwt-vc-issuer-key-1";
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await SdJwtVpFixture.IssuePidCredentialWithClaimsAsync(
+                TimeProvider, "Erika", "Mustermann", issuerId, issuerKeyId, Pool, status: null,
+                TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+
+        Dictionary<string, object> issuerJwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+            issuerKey.Tag.Get<CryptoAlgorithm>(), issuerKey.Tag.Get<Purpose>(),
+            issuerKey.AsReadOnlySpan(), TestSetup.Base64UrlEncoder);
+        issuerJwk[WellKnownJwkMemberNames.Kid] = issuerKeyId;
+
+        Dictionary<string, object> jwksObject = new() { ["keys"] = new object[] { issuerJwk } };
+        string jwksJson = JsonSerializer.Serialize(jwksObject, TestSetup.DefaultSerializationOptions);
+
+        string inlineDocumentJson = JsonSerializer.Serialize(
+            new Dictionary<string, object> { ["issuer"] = issuerId, ["jwks"] = jwksObject },
+            TestSetup.DefaultSerializationOptions);
+
+        issuerHost.Publish(
+            "/.well-known/jwt-vc-issuer", Encoding.UTF8.GetBytes(inlineDocumentJson), "application/json");
+
+        async ValueTask<PublicKeyMemory?> ResolveIssuerKey(
+            string candidateIssuerId, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken cancellationToken)
+        {
+            context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+
+            JwtVcIssuerMetadataResolution resolution = await JwtVcIssuerMetadataDocuments.ResolveAsync(
+                new Uri(candidateIssuerId), context, issuerTransport,
+                new JwtVcIssuerMetadataDocumentResolverOptions(), cancellationToken).ConfigureAwait(false);
+
+            return await JwtVcIssuerMetadataDocuments.SelectKeyAsync(
+                resolution, keyId,
+                (jwksUri, jwksContext, jwksCancellationToken) => JwksUriResolver.ResolveAsync(
+                    jwksUri, jwksContext, jwksTransport, new JwksUriResolverOptions(), jwksCancellationToken),
+                context, Pool, TestSetup.Base64UrlDecoder, cancellationToken).ConfigureAwait(false);
+        }
+
+        await using TestHostShell app = new(TimeProvider, resolveIssuerKey: ResolveIssuerKey);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        Oid4VpWalletClient walletClient =
+            await app.CreateHttpBackedOid4VpWalletClientAsync(
+                verifierKeys, serializedSdJwt, holderKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, string parHandle) = await app.HandleParAsync(verifierKeys,
+            new TransactionNonce("nonce-jwt-vc-issuer-metadata-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PresentationResult result = await walletClient.PresentJarAsync(
+            new PresentJarOptions
+            {
+                CompactJar = compactJar,
+                RequestUri = requestUri,
+                ExpectedVerifierClientId = VerifierClientId,
+                FlowId = $"wallet-jwt-vc-issuer-metadata-{Guid.NewGuid():N}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+            "Wallet PDA must reach ResponseSent after the HTTP response POST.");
+
+        PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
+            "The issuer key resolved from JWT VC Issuer Metadata's inline jwks must verify the credential.");
+        Assert.IsTrue(issuerHost.WasRequested("/.well-known/jwt-vc-issuer"),
+            "The resolution must have crossed the real HTTPS loopback socket.");
+
+        //Republish the SAME issuer identity's document carrying jwks_uri instead of inline jwks, and
+        //serve the key set itself from the second loopback host — proving the jwks_uri path resolves
+        //through the real wire too, via the same attempt and selection helper.
+        jwksHost.Publish("/keys.jwks", Encoding.UTF8.GetBytes(jwksJson), "application/json");
+
+        string jwksUriDocumentJson = JsonSerializer.Serialize(
+            new Dictionary<string, object>
+            {
+                ["issuer"] = issuerId,
+                ["jwks_uri"] = jwksHost.BaseAddress.OriginalString.TrimEnd('/') + "/keys.jwks"
+            },
+            TestSetup.DefaultSerializationOptions);
+        issuerHost.Publish(
+            "/.well-known/jwt-vc-issuer", Encoding.UTF8.GetBytes(jwksUriDocumentJson), "application/json");
+
+        ExchangeContext jwksUriContext = [];
+        using PublicKeyMemory? resolvedViaJwksUri = await ResolveIssuerKey(
+            issuerId, issuerKeyId, x5c: null, jwksUriContext, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(resolvedViaJwksUri, "The jwks_uri path must resolve the same issuer key over the real wire.");
+        Assert.IsTrue(
+            issuerKey.AsReadOnlySpan().SequenceEqual(resolvedViaJwksUri.AsReadOnlySpan()),
+            "The jwks_uri-resolved key must be byte-identical to the issuer's own public key.");
+        Assert.IsTrue(jwksHost.WasRequested("/keys.jwks"),
+            "The jwks_uri fetch must have crossed the second loopback socket.");
+    }
+
+
     //Cross-device flow with A256GCM — HAIP 1.0 §5.1.
     //
     //HAIP 1.0 requires the Verifier to advertise both A128GCM and A256GCM in
@@ -234,8 +377,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task CrossDeviceFlowWithA256GcmBothPdasReachAcceptState()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -312,8 +455,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task CrossDeviceFlowWithEncryptedJarAndRequestUriMethodPostReachesAccept()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -380,8 +523,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task RequestUriPostWithIncompleteWalletMetadataIsRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //Start the in-process Kestrel so the §5.10 POST travels over real HTTP.
         _ = await app.CreateOAuthClientAndRegistrationAsync(
@@ -429,8 +572,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task RequestUriPostWithNonSchemeAuthorizationEndpointIsRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         _ = await app.CreateOAuthClientAndRegistrationAsync(
             verifierKeys.Registration,
@@ -479,8 +622,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task RequestUriPostWithNonHttpsIssuerIsRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         _ = await app.CreateOAuthClientAndRegistrationAsync(
             verifierKeys.Registration,
@@ -530,8 +673,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task EncryptedJarWithA256GcmRoundTrips()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -591,8 +734,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task EncryptedJarWithTamperedCiphertextRejectsAtWallet()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -646,8 +789,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task EncryptedJarWithMismatchedExchangePrivateKeyRejectsAtWallet()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -706,8 +849,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task EncryptedJarWithMissingExchangePrivateKeyThrows()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -813,8 +956,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task RedirectUriPrefixInlineParametersFlowReachesAccept()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -914,8 +1057,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task RedirectUriPrefixUnsignedJarFlowReachesAccept()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1010,8 +1153,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task RedirectUriPrefixWithMismatchedResponseUriIsRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1074,8 +1217,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task InlineRequestWithNonRedirectUriPrefixIsRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1170,8 +1313,8 @@ internal sealed class Oid4VpFlowIntegrationTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> verifierJarSigningKeys =
             CreateSigningKeyMaterial(algorithm);
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterJarSigningClient(
-            VerifierClientId, VerifierBaseUri, verifierJarSigningKeys, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterJarSigningClientAsync(
+            VerifierClientId, VerifierBaseUri, verifierJarSigningKeys, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1261,8 +1404,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task MultiCredentialFlowAggregatesPerCredentialClaims()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //Two independent PID credentials, distinct given/family names, same
         //issuer + holder key. Each will travel under its own credential
@@ -1392,8 +1535,8 @@ internal sealed class Oid4VpFlowIntegrationTests
         using(holderPrivateKey)
         using(issuerPublicKey)
         {
-            PublicKeyMemory? IssuerLookup(string iss) =>
-                string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null;
+            ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
+                ValueTask.FromResult(string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null);
 
             VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
                 serializedSdJwt,
@@ -1407,7 +1550,10 @@ internal sealed class Oid4VpFlowIntegrationTests
                 TestSetup.Base64UrlEncoder,
                 Pool,
                 saltReuseSeam: null,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                parseX5c: null,
+                resolveTrustedAuthorityEvidence: null,
+                context: new ExchangeContext(),
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify.");
             Assert.IsNotNull(parsed.Credential.Status?.StatusList, "The verifier must surface the credential's status_list reference.");
@@ -1471,8 +1617,8 @@ internal sealed class Oid4VpFlowIntegrationTests
         }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: resolveStatusList);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialWithClaimsAsync(
@@ -1580,8 +1726,8 @@ internal sealed class Oid4VpFlowIntegrationTests
         }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: resolveStatusList);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialWithClaimsAsync(
@@ -1642,11 +1788,13 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //Fail-closed configuration guard: a credential whose issuer gated its validity on a status list is
-    //NOT accepted when the verifier executor was constructed without a status resolver to read it. The
-    //executor throws server-side (mirroring the mdoc / SD-CWT / disclosure seams), so the verifier's
-    //flow never reaches PresentationVerified — silently treating an unreadable status as valid would be
-    //a security gap.
+    /// <summary>
+    /// A status-bearing credential cannot reach an accepted presentation when its status cannot be resolved.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-8.3">Token Status List §8.3</see>:
+    /// "Resolve the Status List Token from the provided URI".
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "A status-bearing presentation with no status resolver is refused and its captured fault names the missing resolver."
+    /// </summary>
     [TestMethod]
     public async Task ExecutorFailsClosedWhenCredentialReferencesStatusListButNoResolverWired()
     {
@@ -1655,8 +1803,8 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         //No status resolver wired — yet the issued credential references a status list.
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialWithClaimsAsync(
@@ -1702,6 +1850,11 @@ internal sealed class Oid4VpFlowIntegrationTests
         {
             //Tolerated: the verifier's fail-closed guard surfaced to the wallet as an error response.
         }
+
+        Assert.IsTrue(app.Host("default").HttpFaults.TryDequeue(out Exception? fault));
+        _ = Assert.IsInstanceOfType<InvalidOperationException>(fault);
+        Assert.Contains("without a status resolver", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("resolveVerifiedStatusListToken", fault.Message, StringComparison.Ordinal);
 
         Assert.IsFalse(
             app.GetFlowState(parHandle).State is PresentationVerifiedState,
@@ -1764,8 +1917,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task SameDeviceFlowBothPdasReachAcceptState()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1783,7 +1936,10 @@ internal sealed class Oid4VpFlowIntegrationTests
         //Per OID4VP §8.2 the redirect_uri must contain a fresh random value
         //of at least 128 bits so the Verifier can bind the redirect-back to
         //the correct session and reject session fixation attempts.
-        string sessionToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+        FillEntropyDelegate fillEntropy = System.Security.Cryptography.RandomNumberGenerator.Fill;
+        byte[] sessionTokenBytes = new byte[16];
+        fillEntropy(sessionTokenBytes);
+        string sessionToken = Convert.ToHexString(sessionTokenBytes);
         Uri sameDeviceRedirectUri = new($"https://verifier.example.com/complete?session={sessionToken}");
 
 
@@ -1897,8 +2053,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task LocalAppToAppFlowBothPdasReachAcceptState()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1972,8 +2128,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task TamperedJweCiphertextIsRejectedByVerifier()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -2083,6 +2239,376 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
+    //Interoperability: dcql_query and client_metadata land in the signed
+    //Request Object payload as JSON objects (OID4VP 1.0 §6.1 / §11), not as
+    //JSON strings that themselves carry JSON text. Decodes the raw payload
+    //bytes with a plain System.Text.Json reader — no model converters, no
+    //round trip through this library's own wallet-side parse — the only way
+    //to see the shape a wire counterparty actually receives.
+
+    [TestMethod]
+    public async Task SignedJarCarriesDcqlQueryAndClientMetadataAsJsonObjects()
+    {
+        VerifierClientMetadata clientMetadata =
+            HaipProfile.CreateVerifierClientMetadata(
+                VerifierClientId,
+                /*lang=json,strict*/ "{\"keys\":[]}");
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        AuthorizationRequestObject requestObject =
+            HaipProfile.CreateAuthorizationRequestObject(
+                clientId: VerifierClientId,
+                responseUri: new Uri(VerifierBaseUri, "/cb"),
+                nonce: "nonce-wire-shape-01",
+                dcqlQuery: DcqlFixtures.PidGivenAndFamilyName(),
+                clientMetadata: clientMetadata,
+                state: "state-wire-shape-01",
+                iat: now,
+                nbf: now,
+                exp: now + TimingPolicy.Default.Oid4VpRequestObjectLifetime);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+
+        using SignedJar signedJar = await requestObject.SignJarAsync(
+            privateKey,
+            header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+            payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+            q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
+            m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using JsonDocument payloadDocument = JsonDocument.Parse(signedJar.Message.Payload);
+        JsonValueKind dcqlQueryKind = payloadDocument.RootElement.GetProperty(
+            Oid4VpAuthorizationRequestParameterNames.DcqlQuery).ValueKind;
+        JsonValueKind clientMetadataKind = payloadDocument.RootElement.GetProperty(
+            Oid4VpAuthorizationRequestParameterNames.ClientMetadata).ValueKind;
+
+        //Both value kinds are captured before either is asserted, so a
+        //difference between the two claims shows up in the failure message
+        //instead of being hidden behind whichever assertion runs first.
+        Assert.IsTrue(dcqlQueryKind == JsonValueKind.Object && clientMetadataKind == JsonValueKind.Object,
+            $"'{Oid4VpAuthorizationRequestParameterNames.DcqlQuery}' must be a JSON object per OID4VP 1.0 " +
+            $"§6.1 (observed: {dcqlQueryKind}) and '{Oid4VpAuthorizationRequestParameterNames.ClientMetadata}' " +
+            $"must be a JSON object per OID4VP 1.0 §11 (observed: {clientMetadataKind}); " +
+            "neither may be a JSON string.");
+    }
+
+
+    //Same interoperability defect on the redirect_uri unsigned path (OID4VP
+    //1.0 §5.9.3): BuildUnsignedJarCompact carries the same two claims through
+    //the same serializer delegates, so it must land the same JSON-object
+    //shape on the wire.
+
+    [TestMethod]
+    public void UnsignedJarCarriesDcqlQueryAndClientMetadataAsJsonObjects()
+    {
+        VerifierClientMetadata clientMetadata =
+            HaipProfile.CreateVerifierClientMetadata(
+                VerifierClientId,
+                /*lang=json,strict*/ "{\"keys\":[]}");
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        AuthorizationRequestObject requestObject =
+            HaipProfile.CreateAuthorizationRequestObject(
+                clientId: VerifierClientId,
+                responseUri: new Uri(VerifierBaseUri, "/cb"),
+                nonce: "nonce-wire-shape-02",
+                dcqlQuery: DcqlFixtures.PidGivenAndFamilyName(),
+                clientMetadata: clientMetadata,
+                state: "state-wire-shape-02",
+                iat: now,
+                nbf: now,
+                exp: now + TimingPolicy.Default.Oid4VpRequestObjectLifetime,
+                responseMode: WellKnownResponseModes.DirectPost);
+
+        string compactJar = requestObject.BuildUnsignedJarCompact(
+            header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+            payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+            q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
+            m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
+            TestSetup.Base64UrlEncoder);
+
+        string[] parts = compactJar.Split('.');
+        Assert.HasCount(3, parts, $"Unsigned compact JAR must have shape 'header.payload.'. Got: {compactJar}");
+
+        using IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        using JsonDocument payloadDocument = JsonDocument.Parse(payloadBytes.Memory);
+        JsonValueKind dcqlQueryKind = payloadDocument.RootElement.GetProperty(
+            Oid4VpAuthorizationRequestParameterNames.DcqlQuery).ValueKind;
+        JsonValueKind clientMetadataKind = payloadDocument.RootElement.GetProperty(
+            Oid4VpAuthorizationRequestParameterNames.ClientMetadata).ValueKind;
+
+        Assert.IsTrue(dcqlQueryKind == JsonValueKind.Object && clientMetadataKind == JsonValueKind.Object,
+            $"'{Oid4VpAuthorizationRequestParameterNames.DcqlQuery}' must be a JSON object per OID4VP 1.0 " +
+            $"§6.1 (observed: {dcqlQueryKind}) and '{Oid4VpAuthorizationRequestParameterNames.ClientMetadata}' " +
+            $"must be a JSON object per OID4VP 1.0 §11 (observed: {clientMetadataKind}); " +
+            "neither may be a JSON string.");
+    }
+
+
+    //Nested-member proof: the consumer's live counterparty served a request
+    //object whose client_metadata.jwks member is ITSELF a JSON object, read
+    //with an accessor that only succeeds on an object. The outer-shape checks
+    //above cannot catch a writer that flattens or re-stringifies anything
+    //beneath the outer object, so this walks one level further: into
+    //client_metadata.jwks and the JWK object inside its "keys" array, and
+    //into dcql_query.credentials[0].meta — the PidGivenAndFamilyName fixture's
+    //own nested object (its vct_values type constraint).
+
+    [TestMethod]
+    public async Task SignedJarNestedClientMetadataAndDcqlQueryMembersStayJsonObjects()
+    {
+        VerifierClientMetadata clientMetadata =
+            HaipProfile.CreateVerifierClientMetadata(VerifierClientId, ClientMetadataJwksWithEcKey);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        AuthorizationRequestObject requestObject =
+            HaipProfile.CreateAuthorizationRequestObject(
+                clientId: VerifierClientId,
+                responseUri: new Uri(VerifierBaseUri, "/cb"),
+                nonce: "nonce-nested-shape-01",
+                dcqlQuery: DcqlFixtures.PidGivenAndFamilyName(),
+                clientMetadata: clientMetadata,
+                state: "state-nested-shape-01",
+                iat: now,
+                nbf: now,
+                exp: now + TimingPolicy.Default.Oid4VpRequestObjectLifetime);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+
+        using SignedJar signedJar = await requestObject.SignJarAsync(
+            privateKey,
+            header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+            payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+            q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
+            m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using JsonDocument payloadDocument = JsonDocument.Parse(signedJar.Message.Payload);
+        JsonElement clientMetadataElement = payloadDocument.RootElement.GetProperty(
+            Oid4VpAuthorizationRequestParameterNames.ClientMetadata);
+        JsonElement dcqlQueryElement = payloadDocument.RootElement.GetProperty(
+            Oid4VpAuthorizationRequestParameterNames.DcqlQuery);
+
+        JsonElement jwksElement = clientMetadataElement.GetProperty(Oid4VpClientMetadataParameterNames.Jwks);
+        JsonValueKind jwksKind = jwksElement.ValueKind;
+        JsonValueKind firstJwkKind = jwksElement.GetProperty("keys")[0].ValueKind;
+        JsonValueKind metaKind = dcqlQueryElement
+            .GetProperty(DcqlParameterNames.Credentials)[0]
+            .GetProperty(DcqlParameterNames.Meta)
+            .ValueKind;
+
+        Assert.AreEqual(JsonValueKind.Object, jwksKind,
+            $"'client_metadata.jwks' must stay a JSON object (observed: {jwksKind}); a writer that " +
+            "flattens or re-stringifies a nested member would still pass an outer-shape-only check.");
+        Assert.AreEqual(JsonValueKind.Object, firstJwkKind,
+            $"'client_metadata.jwks.keys[0]' must stay a JSON object (observed: {firstJwkKind}).");
+        Assert.AreEqual(JsonValueKind.Object, metaKind,
+            $"'dcql_query.credentials[0].meta' must stay a JSON object (observed: {metaKind}).");
+    }
+
+
+    //Reader-side pin for the primary, conformant shape: a dcql_query/
+    //client_metadata claim arriving as a JSON object (OID4VP 1.0 §6.1/§11 —
+    //and the shape SignJarAsync now writes) must parse into a populated
+    //DcqlQuery/VerifierClientMetadata, not be silently left null. Also proves
+    //the round trip preserves nesting: client_metadata.jwks (an object two
+    //levels below client_metadata) and dcql_query.credentials[0].meta (the
+    //fixture's own nested object) must reach the parsed model with their
+    //content intact, not flattened or re-stringified along the way.
+
+    [TestMethod]
+    public async Task ParsedRequestObjectPopulatesDcqlQueryAndClientMetadataFromTheJsonObjectShape()
+    {
+        VerifierClientMetadata clientMetadata =
+            HaipProfile.CreateVerifierClientMetadata(VerifierClientId, ClientMetadataJwksWithEcKey);
+        DcqlQuery dcqlQuery = DcqlFixtures.PidGivenAndFamilyName();
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        AuthorizationRequestObject requestObject =
+            HaipProfile.CreateAuthorizationRequestObject(
+                clientId: VerifierClientId,
+                responseUri: new Uri(VerifierBaseUri, "/cb"),
+                nonce: "nonce-object-shape-01",
+                dcqlQuery: dcqlQuery,
+                clientMetadata: clientMetadata,
+                state: "state-object-shape-01",
+                iat: now,
+                nbf: now,
+                exp: now + TimingPolicy.Default.Oid4VpRequestObjectLifetime);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+
+        using SignedJar signedJar = await requestObject.SignJarAsync(
+            privateKey,
+            header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+            payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+            q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
+            m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string compactJar = JwsSerialization.SerializeCompact(signedJar.Message, TestSetup.Base64UrlEncoder);
+
+        AuthorizationRequestObject parsedRequest = await JarExtensions.VerifyAndParseJarAsync(
+            compactJar,
+            publicKey,
+            TestSetup.Base64UrlDecoder,
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Header JSON parsed to null."),
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Payload JSON parsed to null."),
+            json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!,
+            json => JsonSerializer.Deserialize<VerifierClientMetadata>(json, TestSetup.DefaultSerializationOptions)!,
+            StateParameterPolicy.Required,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(parsedRequest.DcqlQuery,
+            "A dcql_query claim carried as a JSON object must parse into a populated DcqlQuery.");
+        Assert.AreEqual(DcqlFixtures.PidCredentialId, parsedRequest.DcqlQuery!.Credentials![0].Id);
+        Assert.IsNotNull(parsedRequest.ClientMetadata,
+            "A client_metadata claim carried as a JSON object must parse into populated metadata.");
+        Assert.AreEqual(VerifierClientId, parsedRequest.ClientMetadata!.ClientId);
+
+        //Nested round trip: client_metadata.jwks must reach the parsed model
+        //as the object it was on the wire, not a flattened or re-stringified
+        //copy — VerifierClientMetadata.Jwks carries jwks's raw JSON text by
+        //design (see VerifierClientMetadataConverter), so parse that text and
+        //check its own nested shape and content.
+        Assert.IsNotNull(parsedRequest.ClientMetadata!.Jwks,
+            "The parsed client_metadata must still carry the jwks member's JSON text.");
+        using JsonDocument parsedJwksDocument = JsonDocument.Parse(parsedRequest.ClientMetadata!.Jwks!);
+        Assert.AreEqual(JsonValueKind.Object, parsedJwksDocument.RootElement.ValueKind,
+            "The round trip must keep client_metadata.jwks a JSON object.");
+        Assert.AreEqual("jar-jwks-key-1",
+            parsedJwksDocument.RootElement.GetProperty("keys")[0].GetProperty("kid").GetString(),
+            "The JWK object nested inside jwks.keys must reach the parsed model with its own content intact.");
+
+        //Nested round trip: dcql_query.credentials[0].meta must reach the
+        //parsed model as a populated CredentialQueryMeta with the original
+        //vct_values, not null or a flattened copy.
+        Assert.IsNotNull(parsedRequest.DcqlQuery!.Credentials![0].Meta,
+            "The round trip must keep dcql_query.credentials[0].meta populated.");
+        Assert.IsTrue(
+            dcqlQuery.Credentials![0].Meta!.VctValues!.SequenceEqual(
+                parsedRequest.DcqlQuery!.Credentials![0].Meta!.VctValues!),
+            "The nested meta.vct_values array must reach the parsed model unchanged.");
+    }
+
+
+    //Reader-side pin for the legacy tolerance: a dcql_query/client_metadata
+    //claim arriving as a JSON string carrying the claim's JSON text — the
+    //shape this library used to write and some deployment's Request Object
+    //may still carry — must still parse into a populated DcqlQuery/
+    //VerifierClientMetadata. The payload is built directly (not through
+    //SignJarAsync, which now writes the JSON-object shape) so this pins the
+    //string path deliberately rather than by accident.
+
+    [TestMethod]
+    public async Task ParsedRequestObjectPopulatesDcqlQueryAndClientMetadataFromTheLegacyJsonStringShape()
+    {
+        VerifierClientMetadata clientMetadata =
+            HaipProfile.CreateVerifierClientMetadata(
+                VerifierClientId,
+                /*lang=json,strict*/ "{\"keys\":[]}");
+        DcqlQuery dcqlQuery = DcqlFixtures.PidGivenAndFamilyName();
+
+        string dcqlQueryJson = JsonSerializer.Serialize(dcqlQuery, TestSetup.DefaultSerializationOptions);
+        string clientMetadataJson = JsonSerializer.Serialize(clientMetadata, TestSetup.DefaultSerializationOptions);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
+        JwtHeader header = new()
+        {
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
+        };
+
+        JwtPayload payload = new()
+        {
+            [OAuthRequestParameterNames.ResponseType] = Oid4VpAuthorizationRequestParameterValues.ResponseTypeVpToken,
+            [OAuthRequestParameterNames.ResponseMode] = WellKnownResponseModes.DirectPostJwt,
+            [WellKnownJwtClaimNames.ClientId] = VerifierClientId,
+            [Oid4VpAuthorizationRequestParameterNames.ResponseUri] = new Uri(VerifierBaseUri, "/cb").ToString(),
+            [WellKnownJwtClaimNames.Nonce] = "nonce-legacy-string-shape-01",
+            [OAuthRequestParameterNames.State] = "state-legacy-string-shape-01",
+            [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = (now + TimingPolicy.Default.Oid4VpRequestObjectLifetime).ToUnixTimeSeconds(),
+            //The legacy shape this test pins: dcql_query/client_metadata as a
+            //JSON string carrying JSON text, rather than as a JSON object.
+            [Oid4VpAuthorizationRequestParameterNames.DcqlQuery] = dcqlQueryJson,
+            [Oid4VpAuthorizationRequestParameterNames.ClientMetadata] = clientMetadataJson
+        };
+
+        UnsignedJwt unsigned = new(header, payload);
+        using JwsMessage signed = await unsigned.SignAsync(
+            privateKey,
+            h => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)h, TestSetup.DefaultSerializationOptions),
+            p => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)p, TestSetup.DefaultSerializationOptions),
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string compactJar = JwsSerialization.SerializeCompact(signed, TestSetup.Base64UrlEncoder);
+
+        AuthorizationRequestObject parsedRequest = await JarExtensions.VerifyAndParseJarAsync(
+            compactJar,
+            publicKey,
+            TestSetup.Base64UrlDecoder,
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Header JSON parsed to null."),
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Payload JSON parsed to null."),
+            json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!,
+            json => JsonSerializer.Deserialize<VerifierClientMetadata>(json, TestSetup.DefaultSerializationOptions)!,
+            StateParameterPolicy.Required,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(parsedRequest.DcqlQuery,
+            "A dcql_query claim carried as a legacy JSON string must still parse into a populated DcqlQuery.");
+        Assert.AreEqual(DcqlFixtures.PidCredentialId, parsedRequest.DcqlQuery!.Credentials![0].Id);
+        Assert.IsNotNull(parsedRequest.ClientMetadata,
+            "A client_metadata claim carried as a legacy JSON string must still parse into populated metadata.");
+        Assert.AreEqual(VerifierClientId, parsedRequest.ClientMetadata!.ClientId);
+    }
+
+
     //request_uri_method=post + wallet_nonce — OID4VP 1.0 §5.10.
     //
     //The Wallet POSTs to request_uri carrying wallet_nonce; the Verifier echoes
@@ -2100,8 +2626,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task RequestUriMethodPostWithWalletNonceBothPdasReachAcceptState()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -2398,8 +2924,8 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Decrypted vp_token must contain a 'pid' credential presentation.");
 
         //Use the production extraction path to surface the bound hashes.
-        PublicKeyMemory? IssuerLookup(string iss) =>
-            string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerKey : null;
+        ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
+            ValueTask.FromResult(string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerKey : null);
 
         VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
             compactPresentation,
@@ -2413,7 +2939,10 @@ internal sealed class Oid4VpFlowIntegrationTests
             TestSetup.Base64UrlEncoder,
             Pool,
             saltReuseSeam: null,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            parseX5c: null,
+            resolveTrustedAuthorityEvidence: null,
+            context: new ExchangeContext(),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(parsed.KbJwtTransactionDataHashes,
             "KB-JWT must carry transaction_data_hashes when the JAR carried transaction_data.");
@@ -2474,8 +3003,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task TransactionDataServerSideEnforcementReachesAccept()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -2603,8 +3132,8 @@ internal sealed class Oid4VpFlowIntegrationTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> verifierSigningKeyPair =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterJarSigningClient(
-            VerifierClientId, VerifierBaseUri, verifierSigningKeyPair, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterJarSigningClientAsync(
+            VerifierClientId, VerifierBaseUri, verifierSigningKeyPair, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -2622,7 +3151,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         MintedChain mintedChain = await FederationTestRing.BuildDirectChainAsync(
             verifierNode, anchorNode, now, now.AddHours(1),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //HTTP-backed wallet (starts the verifier's Kestrel + aligns issuer/
         //response URIs to the listener authority).
@@ -2731,24 +3260,287 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //Federation HTTP-wire E2E with two Kestrels (verifier + anchor) —
-    //all three chain links fetched over the wire.
-    //
-    //Composes §3a (multi-host), §3e (well-known EC endpoint), and the
-    //§8.1 federation_fetch_endpoint to drive a complete federation
-    //topology entirely over HTTP. Differs from the §3c interim shape:
-    //
-    //  - Anchor host now carries BOTH PublishEntityConfiguration AND
-    //    PublishSubordinateStatement capabilities. Its EC publishes a
-    //    federation_fetch_endpoint URL in metadata.federation_entity;
-    //    its federation_fetch endpoint signs Subordinate Statements
-    //    about its subordinates on demand.
-    //  - The wallet fetches all three chain elements over HTTP from
-    //    their respective Kestrels: verifier EC from default host,
-    //    anchor EC from anchor host, and the SS from the anchor's
-    //    federation_fetch endpoint. Nothing in the JAR header is
-    //    pre-minted in-test.
+    /// <summary>
+    /// The paired positive control for the subject-jwks-override tests below: routing the SAME clean
+    /// key through <see cref="FederationTestRing.BuildDirectChainAsync"/>'s override still resolves
+    /// the chain and yields the JAR-signing public key over the HTTP-carried JAR flow — the override
+    /// plumbing itself changes nothing when the published key is unremarkable.
+    /// </summary>
+    [TestMethod]
+    public async Task FederationTrustChainAcceptsWhenTheOverriddenSubjectChainKeyIsClean()
+    {
+        using PublicKeyMemory resolvedKey = await ResolveFederationChainKeyOverHttpAsync(
+            (verifierNode, _) => BuildFederationJwksObject(BuildFederationSubjectJwk(verifierNode)),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
+        Assert.IsGreaterThan(0, resolvedKey.AsReadOnlySpan().Length,
+            "A clean subject chain key routed through the override must still resolve.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-5.1">RFC 7517 §5.1</see>: the
+    /// selection this caller runs judges the whole re-emitted <c>keys</c> array of the statement that
+    /// carries the subject's key. The subject's chain-signing key is published with a fabricated
+    /// private scalar alongside its real coordinates: the chain resolver refuses to resolve any key
+    /// from that statement, so the trust chain itself fails to validate. This selection reads the
+    /// library's re-emission of the parsed <c>jwks</c> claim, not the original wire bytes, and is
+    /// distinct from the JAR's own signing key, which a different, unfiltered picker resolves. The
+    /// selection by <c>kid</c> alone accepts this key set.
+    /// </summary>
+    [TestMethod]
+    public async Task FederationTrustChainRefusesWhenTheSubjectsChainKeyCarriesPrivateMaterial()
+    {
+        SecurityException exception = await Assert.ThrowsExactlyAsync<SecurityException>(async () =>
+            await ResolveFederationChainKeyOverHttpAsync(
+                (verifierNode, _) => BuildFederationJwksObject(
+                    BuildFederationSubjectJwk(verifierNode, privateMember: "a-private-scalar-that-must-refuse-the-whole-set")),
+                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.IsNotNull(exception.Message);
+    }
+
+
+    /// <summary>
+    /// RFC 7517 §4.2's <c>use</c> filter reaches the chain-signature resolver too: marked
+    /// <c>"use":"enc"</c>, the subject's chain-signing key is not eligible for signature
+    /// verification and the chain fails to resolve. This caller's key selection reads the library's
+    /// re-emission of the parsed <c>jwks</c> claim. A selection by <c>kid</c> alone selects this key;
+    /// the JWK-to-algorithm mapping tags an <c>enc</c>-marked P-256 key for
+    /// <see cref="Verifiable.Cryptography.Context.Purpose.Exchange"/>, the function registry holds no
+    /// verification function for that purpose, and the chain validation ends in an escaping
+    /// <see cref="ArgumentException"/> where a refusal belongs. The selection's <c>use</c> filter
+    /// answers with the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task FederationTrustChainRefusesWhenTheSubjectsChainKeyIsMarkedForEncryption()
+    {
+        SecurityException exception = await Assert.ThrowsExactlyAsync<SecurityException>(async () =>
+            await ResolveFederationChainKeyOverHttpAsync(
+                (verifierNode, _) => BuildFederationJwksObject(
+                    BuildFederationSubjectJwk(verifierNode, use: WellKnownJwkValues.UseEnc)),
+                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.IsNotNull(exception.Message);
+    }
+
+
+    /// <summary>
+    /// The set-wide refusal is distinct from a per-key check: an UNRELATED element (a different
+    /// <c>kid</c>, never matched by the JAR header) carrying a private scalar refuses resolution of
+    /// the clean, matching chain-signing key too — the array this caller judges is the whole
+    /// re-emitted <c>keys</c> claim, not the one element a <c>kid</c> lookup would otherwise narrow
+    /// to. The selection by <c>kid</c> alone accepts this key set: it selects the matching key by
+    /// <c>kid</c> and never inspects the other element.
+    /// </summary>
+    [TestMethod]
+    public async Task FederationTrustChainRefusesWhenAnUnrelatedSubjectChainKeyCarriesPrivateMaterial()
+    {
+        SecurityException exception = await Assert.ThrowsExactlyAsync<SecurityException>(async () =>
+            await ResolveFederationChainKeyOverHttpAsync(
+                (verifierNode, anchorNode) => BuildFederationJwksObject(
+                    BuildFederationSubjectJwk(verifierNode),
+                    BuildFederationSubjectJwk(anchorNode, kidOverride: "an-unrelated-chain-key-id",
+                        privateMember: "a-private-scalar-on-a-key-nobody-requested")),
+                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.IsNotNull(exception.Message);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>
+    /// requires every key in an entity's set to carry a unique <c>kid</c>: two chain-signing key
+    /// entries sharing one <c>kid</c>, one <c>sig</c> and one <c>enc</c>, refuse resolution whatever
+    /// each entry's <c>use</c> is — <c>use</c> never narrows a duplicate-<c>kid</c> refusal, since a
+    /// member of the same attacker-influenced document must not decide which of two same-named keys
+    /// wins. The selection by <c>kid</c> alone refuses this key set too: it refuses a duplicate
+    /// <c>kid</c> match unconditionally, before it ever looks at <c>use</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task FederationTrustChainRefusesWhenTwoSubjectChainKeysShareTheKidSigThenEnc()
+    {
+        SecurityException exception = await Assert.ThrowsExactlyAsync<SecurityException>(async () =>
+            await ResolveFederationChainKeyOverHttpAsync(
+                (verifierNode, anchorNode) => BuildFederationJwksObject(
+                    BuildFederationSubjectJwk(verifierNode, use: WellKnownJwkValues.UseSig),
+                    BuildFederationSubjectJwk(anchorNode, use: WellKnownJwkValues.UseEnc, kidOverride: verifierNode.Kid)),
+                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.IsNotNull(exception.Message);
+    }
+
+
+    /// <summary>
+    /// The array-order-independent twin of
+    /// <see cref="FederationTrustChainRefusesWhenTwoSubjectChainKeysShareTheKidSigThenEnc"/>: the
+    /// same duplicate-<c>kid</c> pair, <c>enc</c> published before <c>sig</c>, refuses resolution the
+    /// same way — document order is attacker-controlled input, never a tiebreaker. The selection by
+    /// <c>kid</c> alone refuses this key set too.
+    /// </summary>
+    [TestMethod]
+    public async Task FederationTrustChainRefusesWhenTwoSubjectChainKeysShareTheKidEncThenSig()
+    {
+        SecurityException exception = await Assert.ThrowsExactlyAsync<SecurityException>(async () =>
+            await ResolveFederationChainKeyOverHttpAsync(
+                (verifierNode, anchorNode) => BuildFederationJwksObject(
+                    BuildFederationSubjectJwk(anchorNode, use: WellKnownJwkValues.UseEnc, kidOverride: verifierNode.Kid),
+                    BuildFederationSubjectJwk(verifierNode, use: WellKnownJwkValues.UseSig)),
+                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.IsNotNull(exception.Message);
+    }
+
+
+    /// <summary>
+    /// Mints a direct subject→anchor chain whose subject-carrying statements publish the <c>jwks</c>
+    /// <paramref name="buildSubjectJwksOverride"/> builds from the fixture's two nodes, serves the
+    /// resulting JAR over a real HTTPS loopback listener exactly as
+    /// <see cref="FederationTrustChainInlineInJarHeaderOverHttpReachesAccept"/> does, and resolves the
+    /// wallet's chain-bound JAR signing key from the fetched header — the seam every override test
+    /// above exercises. Returns the resolved key on success; a chain or key-extraction failure
+    /// surfaces as the <see cref="SecurityException"/> <see cref="FederationBoundJarKeyResolver.ResolveAsync"/> throws.
+    /// </summary>
+    private async Task<PublicKeyMemory> ResolveFederationChainKeyOverHttpAsync(
+        Func<FederationTestRingNode, FederationTestRingNode, Dictionary<string, object>> buildSubjectJwksOverride,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+
+        await using TestHostShell app = new(TimeProvider);
+        _ = app.AddHost("anchor");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> verifierSigningKeyPair =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial verifierKeys = await app.RegisterJarSigningClientAsync(
+            VerifierClientId, VerifierBaseUri, verifierSigningKeyPair, Oid4VpCapabilities).ConfigureAwait(false);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialAsync(cancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        using FederationTestRingNode verifierNode = FederationTestRing.CreateNodeFromKey(
+            new EntityIdentifier(VerifierClientId), verifierKeys.SigningPrivateKey);
+        using FederationTestRingNode anchorNode = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://anchor.example.com"));
+
+        Dictionary<string, object> subjectJwksOverride = buildSubjectJwksOverride(verifierNode, anchorNode);
+
+        MintedChain mintedChain = await FederationTestRing.BuildDirectChainAsync(
+            verifierNode, anchorNode, now, now.AddHours(1),
+            cancellationToken: cancellationToken, subjectJwksOverride: subjectJwksOverride).ConfigureAwait(false);
+
+        Oid4VpWalletClient walletClient =
+            await app.CreateHttpBackedOid4VpWalletClientAsync(
+                verifierKeys, serializedSdJwt, holderKey, cancellationToken).ConfigureAwait(false);
+        _ = walletClient;
+
+        JwtHeader jarAdditionalHeaderClaims = new()
+        {
+            [WellKnownFederationClaimNames.TrustChain] = new List<object>(mintedChain.CompactJwsByPosition)
+        };
+
+        (Uri requestUri, string _) = await app.HandleParAsync(verifierKeys,
+            new TransactionNonce($"nonce-fed-http-override-{Guid.NewGuid():N}"),
+            CreatePreparedQuery(),
+            transactionData: null,
+            jarAdditionalHeaderClaims: jarAdditionalHeaderClaims,
+            cancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, cancellationToken).ConfigureAwait(false);
+        _ = jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+        using UnverifiedJwsMessage unverifiedJar = JwsParsing.ParseCompact(
+            compactJar,
+            TestSetup.Base64UrlDecoder,
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                bytes, TestSetup.DefaultSerializationOptions)!,
+            Pool);
+        UnverifiedJwtHeader jarHeader = unverifiedJar.Signatures[0].ProtectedHeader;
+
+        Assert.IsTrue(jarHeader.TryGetValue(WellKnownFederationClaimNames.TrustChain, out object? chainObj),
+            "JAR header must carry trust_chain from additionalHeaderClaims.");
+
+        List<string> walletChainValues = [];
+        foreach(object entry in (IEnumerable<object>)chainObj!)
+        {
+            walletChainValues.Add((string)entry);
+        }
+
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, Pool));
+
+        return await FederationBoundJarKeyResolver.ResolveAsync(
+            walletChainValues,
+            verifierNode.Identifier,
+            new[] { anchorNode.Identifier },
+            now,
+            TimeSpan.FromMinutes(5),
+            jarHeader,
+            validateChain,
+            TestSetup.Base64UrlDecoder,
+            Pool,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds the chain-carried JWK for <paramref name="node"/>'s own P-256 signing key, with
+    /// <paramref name="kidOverride"/> replacing its <c>kid</c> and, when supplied, a <c>use</c> member
+    /// and a fabricated private-scalar member — the shape the subject-jwks-override real-wire tests
+    /// publish in place of <see cref="FederationTestRingNode.JwksObject"/>.
+    /// </summary>
+    private static Dictionary<string, object> BuildFederationSubjectJwk(
+        FederationTestRingNode node, string? use = null, string? privateMember = null, string? kidOverride = null)
+    {
+        ECParameters parameters = node.SigningKey.ExportParameters(includePrivateParameters: false);
+        Dictionary<string, object> jwk = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkMemberNames.Kid] = kidOverride ?? node.Kid,
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256,
+            [WellKnownJwkMemberNames.X] = TestSetup.Base64UrlEncoder(parameters.Q.X),
+            [WellKnownJwkMemberNames.Y] = TestSetup.Base64UrlEncoder(parameters.Q.Y)
+        };
+
+        if(use is not null)
+        {
+            jwk[WellKnownJwkMemberNames.Use] = use;
+        }
+
+        if(privateMember is not null)
+        {
+            jwk[WellKnownJwkMemberNames.D] = privateMember;
+        }
+
+        return jwk;
+    }
+
+
+    /// <summary>Wraps <paramref name="keys"/> as a JWK Set object — the shape a statement's <c>jwks</c> claim carries.</summary>
+    private static Dictionary<string, object> BuildFederationJwksObject(params Dictionary<string, object>[] keys)
+    {
+        return new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Keys] = keys.Cast<object>().ToList()
+        };
+    }
+
+
+    /// <summary>
+    /// The wallet accepts the verifier after fetching and validating every statement in its trust chain over HTTP.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-10.1">Federation §10.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task FederationChainAcrossTwoKestrelsReachesAccept()
     {
@@ -2776,12 +3568,12 @@ internal sealed class Oid4VpFlowIntegrationTests
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         Uri verifierEntityId = new("https://verifier.example.com");
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial verifierKeys = await app.RegisterFederationCapableClientAsync(
             clientId: VerifierClientId,
             baseUri: VerifierBaseUri,
             federationEntityId: verifierEntityId,
             federationSigningKeyPair: verifierFederationKeys,
-            baseCapabilities: Oid4VpCapabilities);
+            baseCapabilities: Oid4VpCapabilities).ConfigureAwait(false);
 
         //Anchor registration on the anchor host with BOTH federation
         //capabilities — publishes its own EC and serves Subordinate
@@ -2793,13 +3585,13 @@ internal sealed class Oid4VpFlowIntegrationTests
         ImmutableHashSet<CapabilityIdentifier> anchorBaselineCapabilities =
             ImmutableHashSet.Create(WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement);
 
-        using VerifierKeyMaterial anchorKeys = app.RegisterFederationCapableClientOnHost(
+        using VerifierKeyMaterial anchorKeys = await app.RegisterFederationCapableClientOnHostAsync(
             hostName: "anchor",
             clientId: anchorEntityId.ToString(),
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: anchorFederationKeys,
-            baseCapabilities: anchorBaselineCapabilities);
+            baseCapabilities: anchorBaselineCapabilities).ConfigureAwait(false);
 
         //Align the anchor's registration to its own Kestrel base — the
         //ResolveEndpointUriAsync delegate composes URLs from
@@ -2815,17 +3607,20 @@ internal sealed class Oid4VpFlowIntegrationTests
         Uri anchorFederationFetchUrl = new(anchorHost.HttpBaseAddress!,
             $"/connect/{anchorSegment}/federation_fetch");
 
-        anchorHost.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
-            ValueTask.FromResult(new FederationEntityConfigurationContribution
-            {
-                Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+        await TestHostShell.AlterAsync(anchorHost.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeFederationMetadataAsync = (_, _, _) =>
+                ValueTask.FromResult(new FederationEntityConfigurationContribution
                 {
-                    [WellKnownEntityTypeIdentifiers.FederationEntity] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
                     {
-                        ["federation_fetch_endpoint"] = anchorFederationFetchUrl.ToString()
+                        [WellKnownEntityTypeIdentifiers.FederationEntity] = new Dictionary<string, object>(StringComparer.Ordinal)
+                        {
+                            ["federation_fetch_endpoint"] = anchorFederationFetchUrl.ToString()
+                        }
                     }
-                }
-            });
+                });
+        }).ConfigureAwait(false);
 
         //Anchor's federation_fetch handler — emits a Subordinate Statement
         //whose jwks publishes the verifier's federation signing key when
@@ -2833,19 +3628,23 @@ internal sealed class Oid4VpFlowIntegrationTests
         //returns 404).
         Dictionary<string, object> verifierSubjectJwks =
             OAuthJwksFixtures.BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
-        anchorHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        await TestHostShell.AlterAsync(anchorHost.Server, candidateIntegration =>
         {
-            if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
+            candidateIntegration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
             {
-                return ValueTask.FromResult<SubordinateStatementContribution?>(null);
-            }
-
-            return ValueTask.FromResult<SubordinateStatementContribution?>(
-                new SubordinateStatementContribution
+                if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
                 {
-                    Jwks = verifierSubjectJwks
-                });
-        };
+
+                    return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+                }
+
+                return ValueTask.FromResult<SubordinateStatementContribution?>(
+                    new SubordinateStatementContribution
+                    {
+                        Jwks = verifierSubjectJwks
+                    });
+            };
+        }).ConfigureAwait(false);
 
         //Wallet fetches all three chain elements over HTTP — verifier EC
         //from default host, anchor EC and SS from anchor host.
@@ -3016,8 +3815,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task DirectPostUnencryptedBothPdasReachAcceptState()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -3091,8 +3890,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task QueryResponseModeBuildsRedirectUrlWithVpTokenAndState()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -3171,8 +3970,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task FragmentResponseModeBuildsRedirectUrlWithFragmentSeparator()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -3283,8 +4082,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task DirectPostSurfacesTheReleasedClaimsUnderTheCredentialQueryIdentifier()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -3363,8 +4162,8 @@ internal sealed class Oid4VpFlowIntegrationTests
     public async Task TwoCredentialQueriesEachSurfaceTheirOwnCredentialRecord()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string primarySerializedSdJwt, PrivateKeyMemory primaryHolder, PublicKeyMemory primaryIssuerPub) =
             await IssuePidCredentialWithClaimsAsync(
@@ -3491,6 +4290,116 @@ internal sealed class Oid4VpFlowIntegrationTests
         Assert.AreSame(credentials, verified.Credentials,
             "The verified presentation publishes the very map the verification keyed by credential query " +
             "identifier, so nothing between the two can re-key or drop an entry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7516#section-4">RFC 7516 §4</see> gates the JWE
+    /// protected header for well-formedness before <c>enc</c> is read — a header repeating the
+    /// <c>enc</c> Header Parameter is rejected by <see cref="HaipProfile.DecryptResponseAsync"/>
+    /// rather than left for the allowlist peek and the authoritative parse to silently act on
+    /// different occurrences. The same header with the duplicate removed decrypts. A custom
+    /// <see cref="JwtHeaderSerializer"/> builds the protected header JSON by hand — never through
+    /// this repository's serializers — while every cryptographic step (ECDH-ES key agreement,
+    /// Concat KDF, AES-GCM) is the project's own genuine primitive, so only the header
+    /// well-formedness gate — not a broken authentication tag — can be responsible for the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsDirectPostJwtHeaderWithDuplicateEncMember()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> recipientKeys =
+            TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
+        using PublicKeyMemory recipientPublicKey = recipientKeys.PublicKey;
+        using PrivateKeyMemory recipientPrivateKey = recipientKeys.PrivateKey;
+
+        ReadOnlyMemory<byte> plaintext = Encoding.UTF8.GetBytes("{\"vp_token\":{}}");
+
+        string duplicateCompactJwe = await HaipProfile.EncryptResponseAsync(
+            recipientPublicKey,
+            WellKnownJweEncryptionAlgorithms.A128Gcm,
+            plaintext,
+            BuildDuplicateEncHeader,
+            CryptoFormatConversions.DefaultTagToEpkCrvConverter,
+            BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
+            ConcatKdf.DefaultKeyDerivationDelegate,
+            BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        FormatException duplicateException = await Assert.ThrowsExactlyAsync<FormatException>(() =>
+            HaipProfile.DecryptResponseAsync(
+                duplicateCompactJwe,
+                recipientPrivateKey,
+                [WellKnownJweEncryptionAlgorithms.A128Gcm],
+                TestSetup.Base64UrlDecoder,
+                BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
+                ConcatKdf.DefaultKeyDerivationDelegate,
+                BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
+                Pool,
+                TestContext.CancellationToken).AsTask());
+
+        Assert.Contains("duplicate", duplicateException.Message, StringComparison.Ordinal);
+
+        string acceptedCompactJwe = await HaipProfile.EncryptResponseAsync(
+            recipientPublicKey,
+            WellKnownJweEncryptionAlgorithms.A128Gcm,
+            plaintext,
+            BuildSingleEncHeader,
+            CryptoFormatConversions.DefaultTagToEpkCrvConverter,
+            BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
+            ConcatKdf.DefaultKeyDerivationDelegate,
+            BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using DecryptedContent accepted = await HaipProfile.DecryptResponseAsync(
+            acceptedCompactJwe,
+            recipientPrivateKey,
+            [WellKnownJweEncryptionAlgorithms.A128Gcm],
+            TestSetup.Base64UrlDecoder,
+            BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
+            ConcatKdf.DefaultKeyDerivationDelegate,
+            BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.Contains("vp_token", Encoding.UTF8.GetString(accepted.AsReadOnlySpan()), StringComparison.Ordinal);
+
+        //Builds the ECDH-ES JWE protected header by hand, repeating "enc" — never through this
+        //repository's JSON serializers.
+        static ReadOnlySpan<byte> BuildDuplicateEncHeader(JwtHeader header)
+        {
+            string alg = (string)header[WellKnownJoseHeaderNames.Alg];
+            string enc = (string)header[WellKnownJoseHeaderNames.Enc];
+            var epk = (Dictionary<string, object>)header[WellKnownJoseHeaderNames.Epk];
+            string headerJson =
+                "{\"alg\":\"" + alg + "\",\"enc\":\"" + enc + "\"," +
+                "\"epk\":{\"kty\":\"" + epk[WellKnownJwkMemberNames.Kty] + "\"," +
+                "\"crv\":\"" + epk[WellKnownJwkMemberNames.Crv] + "\"," +
+                "\"x\":\"" + epk[WellKnownJwkMemberNames.X] + "\"," +
+                "\"y\":\"" + epk[WellKnownJwkMemberNames.Y] + "\"}," +
+                "\"enc\":\"" + enc + "\"}";
+
+            return Encoding.UTF8.GetBytes(headerJson);
+        }
+
+        //The same header with the duplicate "enc" removed — otherwise byte-identical in content.
+        static ReadOnlySpan<byte> BuildSingleEncHeader(JwtHeader header)
+        {
+            string alg = (string)header[WellKnownJoseHeaderNames.Alg];
+            string enc = (string)header[WellKnownJoseHeaderNames.Enc];
+            var epk = (Dictionary<string, object>)header[WellKnownJoseHeaderNames.Epk];
+            string headerJson =
+                "{\"alg\":\"" + alg + "\",\"enc\":\"" + enc + "\"," +
+                "\"epk\":{\"kty\":\"" + epk[WellKnownJwkMemberNames.Kty] + "\"," +
+                "\"crv\":\"" + epk[WellKnownJwkMemberNames.Crv] + "\"," +
+                "\"x\":\"" + epk[WellKnownJwkMemberNames.X] + "\"," +
+                "\"y\":\"" + epk[WellKnownJwkMemberNames.Y] + "\"}}";
+
+            return Encoding.UTF8.GetBytes(headerJson);
+        }
     }
 
 

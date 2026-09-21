@@ -39,6 +39,21 @@ internal sealed class WellKnownPathsTests
         Assert.AreEqual("https://example.com/.well-known/oauth-authorization-server/region/eu/tenant1", result.ToString());
     }
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.1">RFC 8414 §3.1</see>: "If the
+    /// issuer identifier value contains a path component, any terminating '/' MUST be removed before
+    /// inserting '/.well-known/' and the well-known URI suffix between the host component and the
+    /// path component." A path-bearing issuer carrying a terminating slash must produce the same URL
+    /// as the same issuer without one.
+    /// </summary>
+    [TestMethod]
+    public void OAuthAuthorizationServerPathIssuerWithTrailingSlashRemovesItBeforeInsertion()
+    {
+        Uri result = WellKnownPaths.OAuthAuthorizationServer.ComputeUri("https://example.com/tenant1/");
+
+        Assert.AreEqual("https://example.com/.well-known/oauth-authorization-server/tenant1", result.ToString());
+    }
+
     [TestMethod]
     public void OAuthAuthorizationServerThrowsForEmptyIdentifier()
     {
@@ -158,6 +173,62 @@ internal sealed class WellKnownPathsTests
         Assert.AreEqual("openid-credential-issuer", WellKnownPaths.OpenIdCredentialIssuer.Name);
         Assert.AreEqual("OID4VCI 1.0", WellKnownPaths.OpenIdCredentialIssuer.SpecificationReference);
     }
+
+    //SD-JWT VC draft-19 §4: "Issuers publishing JWT VC Issuer Metadata MUST make a JWT VC Issuer
+    //Metadata configuration available at the location formed by inserting the well-known string
+    ///.well-known/jwt-vc-issuer between the host component and the path component (if any) of the
+    //iss claim value in the JWT." §4.1's first worked example: iss https://example.com.
+    [TestMethod]
+    public void JwtVcIssuerHostOnlyIdentifierProducesWellKnownSuffix()
+    {
+        Uri result = WellKnownPaths.JwtVcIssuer.ComputeUri("https://example.com");
+
+        Assert.AreEqual("https://example.com/.well-known/jwt-vc-issuer", result.ToString());
+    }
+
+    //§4.1's second worked example: iss https://example.com/tenant/1234 — the suffix is INSERTED
+    //before the path component, not appended at the end.
+    [TestMethod]
+    public void JwtVcIssuerPathIdentifierInsertsWellKnownBeforePath()
+    {
+        Uri result = WellKnownPaths.JwtVcIssuer.ComputeUri("https://example.com/tenant/1234");
+
+        Assert.AreEqual("https://example.com/.well-known/jwt-vc-issuer/tenant/1234", result.ToString());
+    }
+
+    //§4.1: "If the iss value contains a path component, any terminating / MUST be removed before
+    //inserting /.well-known/ and the well-known URI suffix between the host component and the path
+    //component."
+    [TestMethod]
+    public void JwtVcIssuerPathIdentifierWithTrailingSlashRemovesItBeforeInsertion()
+    {
+        Uri result = WellKnownPaths.JwtVcIssuer.ComputeUri("https://example.com/tenant/1234/");
+
+        Assert.AreEqual("https://example.com/.well-known/jwt-vc-issuer/tenant/1234", result.ToString());
+    }
+
+    [TestMethod]
+    public void JwtVcIssuerIgnoresTrailingSlashOnRootIdentifier()
+    {
+        Uri result = WellKnownPaths.JwtVcIssuer.ComputeUri("https://example.com/");
+
+        Assert.AreEqual("https://example.com/.well-known/jwt-vc-issuer", result.ToString());
+    }
+
+    [TestMethod]
+    public void JwtVcIssuerThrowsForEmptyIdentifier()
+    {
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
+            WellKnownPaths.JwtVcIssuer.ComputeUri(string.Empty));
+    }
+
+    [TestMethod]
+    public void JwtVcIssuerHasCorrectNameAndSpecReference()
+    {
+        Assert.AreEqual("jwt-vc-issuer", WellKnownPaths.JwtVcIssuer.Name);
+        Assert.AreEqual("SD-JWT VC draft-19", WellKnownPaths.JwtVcIssuer.SpecificationReference);
+    }
+
 
     [TestMethod]
     public void DidWebRootDomainProducesWellKnownDidJson()

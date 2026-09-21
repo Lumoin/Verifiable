@@ -51,7 +51,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
             WellKnownCapabilityIdentifiers.OAuthRefreshToken);
 
 
-
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>: a
     /// resource value the authorization server fails to parse is rejected with
@@ -61,8 +60,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestRejectsNonAbsoluteResourceWithInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(host, material, "not-a-uri").ConfigureAwait(false);
 
@@ -84,12 +83,13 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestRejectsEmptyResourceOccurrenceMixedWithValidOne()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -118,8 +118,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestRejectsResourceWithFragmentWithInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(
             host, material, "https://api.example.com/orders#frag").ConfigureAwait(false);
@@ -139,8 +139,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestRejectsRelativeResourceWithInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(host, material, "/relative/path").ConfigureAwait(false);
 
@@ -161,8 +161,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestAcceptsNonAllowlistedSchemeAbsoluteUri()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(
             host, material, "mailto:resource-owner@example.com").ConfigureAwait(false);
@@ -182,8 +182,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestAcceptsResourceWithQueryComponent()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(
             host, material, "https://api.example.com/orders?scope=read").ConfigureAwait(false);
@@ -205,8 +205,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestRejectsWindowsStylePathWithInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(host, material, @"C:\Windows\System32").ConfigureAwait(false);
 
@@ -226,8 +226,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task PushedAuthorizationRequestAcceptsExplicitFileSchemeResource()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(
             host, material, "file:///srv/resources/orders").ConfigureAwait(false);
@@ -247,12 +247,13 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task DirectAuthorizeRejectsMalformedResourceWithInvalidTargetRedirect()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -288,12 +289,13 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task DirectAuthorizeRejectsUnregisteredRedirectUriWithMalformedResourceAsBadRequest()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -312,6 +314,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
         Assert.IsNull(response.Location,
             "An unregistered redirect_uri must never be redirected to, regardless of any other request defect.");
         AssertErrorCode(response, OAuthErrors.InvalidRequest);
+        Assert.Contains("not among the registered redirect URIs", response.Body, StringComparison.Ordinal,
+            $"The refusal must name the unregistered redirect_uri, not a different bare-400 gate. Body: {response.Body}");
     }
 
 
@@ -327,7 +331,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task JarParRejectsMalformedResourceClaimWithInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, Capabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -420,7 +424,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task JarByValueRejectsMalformedResourceClaimWithInvalidTargetRedirect()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, Capabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, Capabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -448,7 +452,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
     }
 
 
-
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>: "If the
     /// authorization server ... does not consider the resource(s) acceptable, it should reject the
@@ -463,14 +466,17 @@ internal sealed class Rfc8707ResourceIndicatorTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, _, _, _) => ValueTask.FromResult(
-                evaluation.RequestedResource is { Count: > 0 }
-                    ? AuthorizationRequestDecision.Deny(AuthorizationDenialReason.InvalidTarget)
-                    : AuthorizationRequestDecision.Permit);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, _, _, _) => ValueTask.FromResult(
+                    evaluation.RequestedResource is { Count: > 0 }
+                        ? AuthorizationRequestDecision.Deny(AuthorizationDenialReason.InvalidTarget)
+                        : AuthorizationRequestDecision.Permit());
+        }).ConfigureAwait(false);
 
         string requestUri = await ExtractRequestUriAsync(
             await PushAsync(host, material, UngrantedResource).ConfigureAwait(false)).ConfigureAwait(false);
@@ -493,7 +499,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
     }
 
 
-
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>: no
     /// token-request <c>resource</c> — the full PAR-granted set applies. Named for the
@@ -504,8 +509,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task CodeRedemptionWithNoRequestResourceAppliesTheFullGrantedSetAsArrayAud()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -532,8 +537,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task CodeRedemptionWithSubsetRequestResourceNarrowsAud()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -557,8 +562,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task CodeRedemptionWithResourceNotInGrantedSetIsRefusedInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
@@ -568,6 +573,12 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         Assert.AreEqual(400, tokenResponse.StatusCode);
         AssertErrorCode(tokenResponse, OAuthErrors.InvalidTarget);
+
+        //Discriminator: the refusal did not consume the code — a resource inside the granted set
+        //still redeems it.
+        ServerHttpResponse redeemedResponse = await TokenAsync(
+            host, material, code, verifier, requestResource: ResourceA).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedResponse.StatusCode, redeemedResponse.Body);
     }
 
 
@@ -583,8 +594,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task CodeRedemptionWithResourceButNothingGrantedIsRefusedInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, resource: null).ConfigureAwait(false);
@@ -594,6 +605,11 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         Assert.AreEqual(400, tokenResponse.StatusCode);
         AssertErrorCode(tokenResponse, OAuthErrors.InvalidTarget);
+
+        //Discriminator: the refusal did not consume the code — a resourceless redemption (nothing
+        //to narrow, nothing requested) still succeeds.
+        ServerHttpResponse redeemedResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedResponse.StatusCode, redeemedResponse.Body);
     }
 
 
@@ -610,8 +626,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task NoResourceAnywhereFallsBackToScopeToAudienceAsArray()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -637,8 +653,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task GrantedResourceTakesPrecedenceOverScopeToAudience()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -654,7 +670,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
     }
 
 
-
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>: a
     /// refresh-request resource narrows the refreshed access token to that subset (Figure 5/6's
@@ -664,8 +679,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task RefreshWithSubsetResourceNarrowsAud()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -694,8 +709,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task RefreshTokenStaysBoundToFullGrantAcrossANarrowedRefresh()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -728,8 +743,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task RefreshWithResourceNotInGrantedSetIsRefusedInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
@@ -741,8 +756,13 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         Assert.AreEqual(400, refreshResponse.StatusCode);
         AssertErrorCode(refreshResponse, OAuthErrors.InvalidTarget);
-    }
 
+        //Discriminator: the refusal did not consume the refresh token — a resource inside the
+        //granted set still refreshes it.
+        ServerHttpResponse refreshedResponse = await RefreshAsync(
+            host, material, refreshToken, requestResource: ResourceA).ConfigureAwait(false);
+        Assert.AreEqual(200, refreshedResponse.StatusCode, refreshedResponse.Body);
+    }
 
 
     /// <summary>
@@ -756,9 +776,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task JarParArrayFormResourceClaimReachesTheGrantedSet()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        UpgradeToJarSigningCapable(host, material);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        await UpgradeToJarSigningCapableAsync(host, material).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -807,7 +827,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
     }
 
 
-
     /// <summary>
     /// A <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>
     /// <c>resource</c> present on the direct (non-JAR) authorize path and its JAR-by-value twin
@@ -819,14 +838,15 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task ResourceOnDirectAuthorizeAndItsJarByValueTwinBehaveIdentically()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        UpgradeToJarSigningCapable(host, material);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        await UpgradeToJarSigningCapableAsync(host, material).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         PkceParameters directPkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields directFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = directPkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -881,7 +901,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
     }
 
 
-
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Multiple
     /// 'resource' parameters MAY be used" — the direct (non-PAR) authorize path's own
@@ -891,13 +910,14 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task RepeatedResourceParametersAggregateAtDirectAuthorize()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -935,8 +955,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task RepeatedResourceParametersNarrowAtCodeRedemption()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         const string ResourceC = "https://files.example.com/";
@@ -963,8 +983,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task RepeatedResourceParametersNarrowAtRefresh()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         const string ResourceC = "https://files.example.com/";
@@ -997,8 +1017,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task SpaceJoinedSingleResourceValueFailsShapeGateAtPushedAuthorizationRequest()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(
             host, material, $"{ResourceA} {ResourceB}").ConfigureAwait(false);
@@ -1018,8 +1038,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task EmptyResourceValueIsMalformedAtPushedAuthorizationRequest()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(host, material, "").ConfigureAwait(false);
 
@@ -1031,25 +1051,245 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <summary>
     /// The token-request twin of <see cref="EmptyResourceValueIsMalformedAtPushedAuthorizationRequest"/> —
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>'s
-    /// <c>invalid_target</c> ("missing, unknown, or malformed") covers a present-but-empty
-    /// <c>resource</c> at CODE REDEMPTION too — refused by <c>ResolveEffectiveResource</c>, not
-    /// treated as "no narrowing requested".
+    /// <c>invalid_target</c> ("missing, unknown, or malformed") covers a present-but-empty or
+    /// all-whitespace <c>resource</c> at CODE REDEMPTION too, refused by the step's own
+    /// request-only shape check (<c>ValidateRequestOnlyResourceShape</c>) before the presented
+    /// <c>code</c> is ever looked up — so the refusal is byte-identical for a code that was never
+    /// issued and one that was; a subsequent presentation with a correctly-shaped
+    /// <c>resource</c> still redeems the live code.
     /// </summary>
     [TestMethod]
     public async Task EmptyResourceValueIsMalformedAtCodeRedemption()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
 
-        ServerHttpResponse tokenResponse = await TokenAsync(
+        ServerHttpResponse emptyResourceResponse = await TokenAsync(
             host, material, code, verifier, requestResource: "").ConfigureAwait(false);
+        ServerHttpResponse unknownCodeEmptyResourceResponse = await TokenAsync(
+            host, material, "code-never-issued-by-this-host", verifier, requestResource: "").ConfigureAwait(false);
 
-        Assert.AreEqual(400, tokenResponse.StatusCode);
-        AssertErrorCode(tokenResponse, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(400, emptyResourceResponse.StatusCode);
+        AssertErrorCode(emptyResourceResponse, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(unknownCodeEmptyResourceResponse.StatusCode, emptyResourceResponse.StatusCode);
+        Assert.AreEqual(unknownCodeEmptyResourceResponse.Body, emptyResourceResponse.Body,
+            "A live code's existence must not be discoverable from an empty resource value's refusal.");
+
+        ServerHttpResponse whitespaceResourceResponse = await TokenAsync(
+            host, material, code, verifier, requestResource: "   ").ConfigureAwait(false);
+        ServerHttpResponse unknownCodeWhitespaceResourceResponse = await TokenAsync(
+            host, material, "code-never-issued-by-this-host", verifier, requestResource: "   ").ConfigureAwait(false);
+
+        Assert.AreEqual(400, whitespaceResourceResponse.StatusCode);
+        AssertErrorCode(whitespaceResourceResponse, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(unknownCodeWhitespaceResourceResponse.StatusCode, whitespaceResourceResponse.StatusCode);
+        Assert.AreEqual(unknownCodeWhitespaceResourceResponse.Body, whitespaceResourceResponse.Body,
+            "A live code's existence must not be discoverable from an all-whitespace resource value's refusal.");
+
+        ServerHttpResponse successfulRedemption = await TokenAsync(
+            host, material, code, verifier, requestResource: ResourceA).ConfigureAwait(false);
+        Assert.AreEqual(200, successfulRedemption.StatusCode, successfulRedemption.Body);
+    }
+
+
+    /// <summary>
+    /// The refresh-grant twin of <see cref="EmptyResourceValueIsMalformedAtCodeRedemption"/> —
+    /// a present-but-empty or all-whitespace <c>resource</c> at REFRESH is refused by the same
+    /// request-only shape check, before the presented <c>refresh_token</c> is ever looked up, so
+    /// the refusal is byte-identical for a refresh token that was never issued and one that was;
+    /// a subsequent presentation with a correctly-shaped <c>resource</c> still refreshes.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResourceValueIsMalformedAtRefresh()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
+        ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
+        string refreshToken = ExtractStringProperty(tokenResponse.Body, "refresh_token");
+
+        ServerHttpResponse emptyResourceRefresh = await RefreshAsync(
+            host, material, refreshToken, requestResource: "").ConfigureAwait(false);
+        ServerHttpResponse unknownTokenEmptyResourceRefresh = await RefreshAsync(
+            host, material, "refresh-token-never-issued-by-this-host", requestResource: "").ConfigureAwait(false);
+
+        Assert.AreEqual(400, emptyResourceRefresh.StatusCode);
+        AssertErrorCode(emptyResourceRefresh, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(unknownTokenEmptyResourceRefresh.StatusCode, emptyResourceRefresh.StatusCode);
+        Assert.AreEqual(unknownTokenEmptyResourceRefresh.Body, emptyResourceRefresh.Body,
+            "A live refresh token's existence must not be discoverable from an empty resource value's refusal.");
+
+        ServerHttpResponse whitespaceResourceRefresh = await RefreshAsync(
+            host, material, refreshToken, requestResource: "   ").ConfigureAwait(false);
+        ServerHttpResponse unknownTokenWhitespaceResourceRefresh = await RefreshAsync(
+            host, material, "refresh-token-never-issued-by-this-host", requestResource: "   ").ConfigureAwait(false);
+
+        Assert.AreEqual(400, whitespaceResourceRefresh.StatusCode);
+        AssertErrorCode(whitespaceResourceRefresh, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(unknownTokenWhitespaceResourceRefresh.StatusCode, whitespaceResourceRefresh.StatusCode);
+        Assert.AreEqual(unknownTokenWhitespaceResourceRefresh.Body, whitespaceResourceRefresh.Body,
+            "A live refresh token's existence must not be discoverable from an all-whitespace resource value's refusal.");
+
+        ServerHttpResponse successfulRefresh = await RefreshAsync(
+            host, material, refreshToken, requestResource: ResourceA).ConfigureAwait(false);
+        Assert.AreEqual(200, successfulRefresh.StatusCode, successfulRefresh.Body);
+    }
+
+
+    /// <summary>
+    /// The real-wire twin of <see cref="EmptyResourceValueIsMalformedAtCodeRedemption"/>: the same
+    /// step-level refusal, proven through actual HTTP <c>application/x-www-form-urlencoded</c>
+    /// decoding rather than <see cref="RequestFields"/> built directly — an empty value, an
+    /// all-whitespace value, and a MIXED valid-then-malformed repeated <c>resource</c> occurrence
+    /// (the genuine RFC 8707 §2 multi-value wire form: two separate <c>resource=</c> parameters,
+    /// never one space-joined value) — byte-identical for an unknown code and the still-unconsumed
+    /// live one, touching NO grant-store operation on the refusal, with a successful
+    /// correctly-shaped control.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResourceValueIsMalformedAtCodeRedemptionOverRealWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+
+        (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+
+        async Task<(int Status, string Body)> PostTokenAsync(string presentedCode, IReadOnlyList<string> resources)
+        {
+            List<KeyValuePair<string, string>> fields =
+            [
+                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.AuthorizationCode),
+                new(OAuthRequestParameterNames.Code, presentedCode),
+                new(OAuthRequestParameterNames.CodeVerifier, verifier),
+                new(OAuthRequestParameterNames.ClientId, ClientId),
+                new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString)
+            ];
+            foreach(string resource in resources)
+            {
+                fields.Add(new(OAuthRequestParameterNames.Resource, resource));
+            }
+
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                hosted.SharedHttpClient!, tokenUri, fields, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            return ((int)response.StatusCode, body);
+        }
+
+        foreach(string[] malformedResources in new[] { new[] { "" }, new[] { "   " }, new[] { ResourceA, "" } })
+        {
+            int beforeLive = hosted.StorageObservations.Count;
+            (int liveStatus, string liveBody) = await PostTokenAsync(code, malformedResources).ConfigureAwait(false);
+            hosted.AssertNoFlowStateStoreOperationTouched(beforeLive,
+                $"a malformed resource occurrence over the real wire at code redemption, live code ('{string.Join(",", malformedResources)}')");
+
+            int beforeUnknown = hosted.StorageObservations.Count;
+            (int unknownStatus, string unknownBody) = await PostTokenAsync(
+                "code-never-issued-by-this-host", malformedResources).ConfigureAwait(false);
+            hosted.AssertNoFlowStateStoreOperationTouched(beforeUnknown,
+                $"a malformed resource occurrence over the real wire at code redemption, unknown code ('{string.Join(",", malformedResources)}')");
+
+            Assert.AreEqual(400, liveStatus, liveBody);
+            Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", liveBody, StringComparison.Ordinal);
+            Assert.AreEqual(unknownStatus, liveStatus);
+            Assert.AreEqual(unknownBody, liveBody,
+                "A live code's existence must not be discoverable from a malformed resource value's refusal over the real wire.");
+        }
+
+        (int okStatus, string okBody) = await PostTokenAsync(code, [ResourceA]).ConfigureAwait(false);
+        Assert.AreEqual(200, okStatus, okBody);
+    }
+
+
+    /// <summary>
+    /// The real-wire twin of <see cref="EmptyResourceValueIsMalformedAtRefresh"/>: the same
+    /// refusal proven through actual HTTP form decoding — an empty value, an all-whitespace value,
+    /// and a MIXED valid-then-malformed repeated <c>resource</c> occurrence — byte-identical for an
+    /// unknown refresh token and the still-usable live one, touching NO grant-store operation on
+    /// the refusal, with a successful correctly-shaped control.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResourceValueIsMalformedAtRefreshOverRealWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+
+        (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
+        ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+        string refreshToken = ExtractStringProperty(tokenResponse.Body, "refresh_token");
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+
+        async Task<(int Status, string Body)> PostRefreshAsync(string presentedRefreshToken, IReadOnlyList<string> resources)
+        {
+            List<KeyValuePair<string, string>> fields =
+            [
+                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.RefreshToken),
+                new(OAuthRequestParameterNames.RefreshToken, presentedRefreshToken),
+                new(OAuthRequestParameterNames.ClientId, ClientId)
+            ];
+            foreach(string resource in resources)
+            {
+                fields.Add(new(OAuthRequestParameterNames.Resource, resource));
+            }
+
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                hosted.SharedHttpClient!, tokenUri, fields, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            return ((int)response.StatusCode, body);
+        }
+
+        foreach(string[] malformedResources in new[] { new[] { "" }, new[] { "   " }, new[] { ResourceA, "" } })
+        {
+            int beforeLive = hosted.StorageObservations.Count;
+            (int liveStatus, string liveBody) = await PostRefreshAsync(refreshToken, malformedResources).ConfigureAwait(false);
+            hosted.AssertNoFlowStateStoreOperationTouched(beforeLive,
+                $"a malformed resource occurrence over the real wire at refresh, live token ('{string.Join(",", malformedResources)}')");
+
+            int beforeUnknown = hosted.StorageObservations.Count;
+            (int unknownStatus, string unknownBody) = await PostRefreshAsync(
+                "refresh-token-never-issued-by-this-host", malformedResources).ConfigureAwait(false);
+            hosted.AssertNoFlowStateStoreOperationTouched(beforeUnknown,
+                $"a malformed resource occurrence over the real wire at refresh, unknown token ('{string.Join(",", malformedResources)}')");
+
+            Assert.AreEqual(400, liveStatus, liveBody);
+            Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", liveBody, StringComparison.Ordinal);
+            Assert.AreEqual(unknownStatus, liveStatus);
+            Assert.AreEqual(unknownBody, liveBody,
+                "A live refresh token's existence must not be discoverable from a malformed resource value's refusal over the real wire.");
+        }
+
+        (int okStatus, string okBody) = await PostRefreshAsync(refreshToken, [ResourceA]).ConfigureAwait(false);
+        Assert.AreEqual(200, okStatus, okBody);
     }
 
 
@@ -1062,8 +1302,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task DuplicateResourceIndicatorsAreDeduplicatedInAud()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -1088,14 +1328,17 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task ClientCredentialsWithResourceProducesArrayAudience()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
-            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials));
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
         const string ClientSecret = "s3cret-for-client-credentials";
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
@@ -1127,14 +1370,17 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task ClientCredentialsRejectsMalformedResourceWithInvalidTarget()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
-            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials));
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
         const string ClientSecret = "s3cret-for-client-credentials";
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
@@ -1167,14 +1413,17 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task ClientCredentialsWithRepeatedResourceProducesArrayAudience()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
-            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials));
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
         const string ClientSecret = "s3cret-for-client-credentials";
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
@@ -1209,7 +1458,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task TokenExchangeRefreshMintCarriesGrantForLaterNarrowing()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
             //BuildRefreshToken (the redemption endpoint refreshing this exchange-minted token
             //below) is gated by OAuthAuthorizationCode, not OAuthRefreshToken — refresh redemption
@@ -1218,23 +1467,28 @@ internal sealed class Rfc8707ResourceIndicatorTests
             capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
-                WellKnownCapabilityIdentifiers.OAuthRefreshToken));
+                WellKnownCapabilityIdentifiers.OAuthRefreshToken)).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
-        host.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectId, Scope = WellKnownScopes.OpenId });
-        host.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = subject.Scope ?? string.Empty,
-                        Audience = [ResourceA, ResourceB],
-                        IssuedTokenType = TokenType.RefreshToken
-                    });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectId, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = subject.Scope ?? string.Empty,
+                            Audience = [ResourceA, ResourceB],
+                            IssuedTokenType = TokenType.RefreshToken
+                        });
+        }).ConfigureAwait(false);
 
         RequestFields exchangeFields = new()
         {
@@ -1282,8 +1536,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task SuppressedAudPolicyOmitsAudEvenWithValidatedResource()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
@@ -1293,11 +1547,14 @@ internal sealed class Rfc8707ResourceIndicatorTests
         //pre-dispatch ExchangeContext would be clobbered before the token endpoint ever reads it.
         //Wrap the profile's own resolver instead: run the normal profile resolution, then override
         //just this one axis to Suppressed for this request.
-        host.Server.OAuth().ResolvePolicyAsync = async (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct).ConfigureAwait(false);
-            ctx.SetAccessTokenAudPolicy(AccessTokenAudPolicy.Suppressed);
-        };
+            candidateIntegration.ResolvePolicyAsync = async (registration, ctx, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct).ConfigureAwait(false);
+                ctx.SetAccessTokenAudPolicy(AccessTokenAudPolicy.Suppressed);
+            };
+        }).ConfigureAwait(false);
 
         RequestFields tokenFields = new()
         {
@@ -1331,6 +1588,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -1367,6 +1625,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -1542,24 +1801,25 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
     /// <summary>
     /// Adds the <see cref="KeyUsageContext.JarSigning"/> slot (reusing <paramref name="material"/>'s
-    /// already-registered signing key) to a <see cref="TestHostShell.RegisterDpopClient"/>
+    /// already-registered signing key) to a <see cref="TestHostShell.RegisterDpopClientAsync"/>
     /// registration, so a single client can both sign a JAR and receive an access token —
-    /// <see cref="TestHostShell.RegisterClient"/>/<see cref="TestHostShell.RegisterJarSigningClient"/>
+    /// <see cref="TestHostShell.RegisterClientAsync"/>/<see cref="TestHostShell.RegisterJarSigningClientAsync"/>
     /// register JAR verification only, with no <see cref="KeyUsageContext.AccessTokenIssuance"/> key.
     /// </summary>
-    private static void UpgradeToJarSigningCapable(TestHostShell host, VerifierKeyMaterial material)
+    private static async Task UpgradeToJarSigningCapableAsync(TestHostShell host, VerifierKeyMaterial material)
     {
-        ClientRecord previous = material.Registration;
-        Dictionary<KeyUsageContext, SigningKeySet> signingKeys = new(previous.SigningKeys)
+        _ = await host.UpdateAsync(material, previous =>
         {
-            [KeyUsageContext.JarSigning] = new SigningKeySet { Current = [material.SigningKeyId] }
-        };
-        ClientRecord updated = previous with
-        {
-            SigningKeys = signingKeys
-        };
-        host.Server.UpdateClient(previous, updated, []);
-        material.Registration = updated;
+            Dictionary<KeyUsageContext, SigningKeySet> signingKeys = new(previous.SigningKeys)
+            {
+                [KeyUsageContext.JarSigning] = new SigningKeySet { Current = [material.SigningKeyId] }
+            };
+
+            return previous with
+            {
+                SigningKeys = signingKeys
+            };
+        }).ConfigureAwait(false);
     }
 
 

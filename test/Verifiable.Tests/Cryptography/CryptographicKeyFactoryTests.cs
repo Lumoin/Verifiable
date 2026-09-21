@@ -138,4 +138,19 @@ internal sealed class CryptographicKeyFactoryTests
         Func<int, int>? controlResolved = CryptographicKeyFactory.GetFunction<Func<int, int>>(functionType, controlQualifier);
         Assert.AreSame(controlDelegate, controlResolved, "The control key's delegate must be unchanged by the race.");
     }
+
+
+    /// <summary>
+    /// <see cref="CryptographicKeyFactory.IsInitialized"/> is <see langword="true"/> once
+    /// <c>TestSetup</c>'s module initializer has run — the factory's own doc comment states it takes
+    /// its initialization from the already-initialized
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>. The process-wide
+    /// <c>[ModuleInitializer]</c> runs before any test, so only the true-after state is observable
+    /// here without disturbing the other tests' process-wide registration.
+    /// </summary>
+    [TestMethod]
+    public void IsInitializedIsTrueAfterProcessWideSetup()
+    {
+        Assert.IsTrue(CryptographicKeyFactory.IsInitialized);
+    }
 }

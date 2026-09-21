@@ -138,7 +138,7 @@ internal sealed class AcdcReaderTests
         Assert.IsNull(acdc.Attribute, "An aggregate ACDC carries no attribute section.");
         Assert.IsNotNull(acdc.Aggregate, "The aggregate section is read into the typed message.");
         Assert.AreEqual("EAggregateIdentifierCompactPlaceholderValueXXXXXXXXX", acdc.Aggregate.Agid);
-        Assert.HasCount(0, acdc.Aggregate.Blocks);
+        Assert.IsEmpty(acdc.Aggregate.Blocks);
     }
 
 
@@ -182,3 +182,4 @@ internal sealed class AcdcReaderTests
         Assert.AreEqual(expectedSaid, compact.Said);
     }
 }
+

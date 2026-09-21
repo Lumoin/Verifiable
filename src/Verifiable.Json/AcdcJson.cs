@@ -93,6 +93,9 @@ public static class AcdcJson
             JsonValueKind.False => false,
             JsonValueKind.Null => null,
             JsonValueKind.Number => JsonElementConversion.NarrowNumber(element),
+            JsonValueKind.Undefined => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}."),
+            JsonValueKind.Object => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}."),
+            JsonValueKind.Array => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}."),
             _ => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}.")
         };
     }

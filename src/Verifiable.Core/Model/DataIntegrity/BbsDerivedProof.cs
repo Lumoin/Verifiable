@@ -32,7 +32,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 ///       In SD-JWT, the holder selects which disclosures to include. The presentation is
 ///       <c>&lt;JWT&gt;~&lt;Disclosure1&gt;~&lt;Disclosure2&gt;~</c>. Unlike BBS-2023,
 ///       SD-JWT reveals claim structure through <c>_sd</c> arrays even for undisclosed claims.
-///       See <see cref="Verifiable.JCose.Sd.SdJwtToken"/>.
+///       See <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdJwtIssuanceExtensions"/>.
 ///     </description>
 ///   </item>
 ///   <item>

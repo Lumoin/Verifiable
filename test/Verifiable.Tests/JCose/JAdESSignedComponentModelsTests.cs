@@ -124,7 +124,7 @@ internal sealed class JAdESSignedComponentModelsTests
     }
 
 
-    /// <summary>A <see langword="null"/> <paramref name="thumbprints"/>-equivalent argument fails closed.</summary>
+    /// <summary>A <see langword="null"/> thumbprints argument fails closed.</summary>
     [TestMethod]
     public void ConstructingCertificateThumbprintsWithNullListThrows()
     {

@@ -43,7 +43,7 @@ public sealed record VerifierParReceivedState: FlowState
     /// <remarks>
     /// The token is unrelated to <see cref="FlowState.FlowId"/>; the flow
     /// identifier never leaves the server process. The application's
-    /// <see cref="Verifiable.OAuth.Server.AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/>
     /// maps inbound tokens back to flow identifiers.
     /// </remarks>
     public required string ParHandle { get; init; }

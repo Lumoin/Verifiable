@@ -104,4 +104,106 @@ public static class OAuthEventNames
     /// <see cref="IdentityScopesDroppedForNonEndUserGrant"/> event.
     /// </summary>
     public static string DroppedScopesTagName { get; } = "oauth.token.dropped_scopes";
+
+    /// <summary>The UTF-8 source literal of <see cref="SsfRequestDenied"/>.</summary>
+    public static ReadOnlySpan<byte> SsfRequestDeniedUtf8 =>
+        "ssf.stream_management.request_denied"u8;
+
+    /// <summary>
+    /// A Stream Management API request (<see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8-3">SSF 1.0 §8</see>)
+    /// was denied at the <c>AuthorizeSsfRequestAsync</c> seam, for any
+    /// <c>SsfRequestDenialReason</c> — authentication, scope, tenant authority or
+    /// stream-to-Receiver binding alike. The wire response carries a fixed,
+    /// reason-specific description that never names the tenant, client or stream reached
+    /// for; the application's own denial description (which might name any of those) rides
+    /// this event's <see cref="SsfRequestDenialDescriptionTagName"/> tag instead, for
+    /// deployments that want the detail in their own traces. Recorded only when the
+    /// application supplied a description.
+    /// </summary>
+    public static string SsfRequestDenied { get; } =
+        Utf8Constants.ToInternedString(SsfRequestDeniedUtf8);
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the
+    /// application's own denial description for a <see cref="SsfRequestDenied"/> event.
+    /// </summary>
+    public static string SsfRequestDenialDescriptionTagName { get; } =
+        "ssf.stream_management.request_denial_description";
+
+    /// <summary>The UTF-8 source literal of <see cref="AuthorizationServerMetadataResolutionFailed"/>.</summary>
+    public static ReadOnlySpan<byte> AuthorizationServerMetadataResolutionFailedUtf8 =>
+        "oauth.client.authorization_server_metadata_resolution_failed"u8;
+
+    /// <summary>
+    /// A client flow's <c>ResolveAuthorizationServerMetadataAsync</c> call ended with a
+    /// non-<c>Resolved</c> outcome. The flow's own wire response never names the outcome or the
+    /// resolver's internal defect text, since the metadata document a defect quotes from is served
+    /// from a URL the authorization server itself controls; both ride this event's
+    /// <see cref="AuthorizationServerMetadataResolutionOutcomeTagName"/> and
+    /// <see cref="AuthorizationServerMetadataResolutionDefectTagName"/> tags instead, for
+    /// deployments that want the detail in their own traces.
+    /// </summary>
+    public static string AuthorizationServerMetadataResolutionFailed { get; } =
+        Utf8Constants.ToInternedString(AuthorizationServerMetadataResolutionFailedUtf8);
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the resolution
+    /// outcome's name for an <see cref="AuthorizationServerMetadataResolutionFailed"/> event.
+    /// </summary>
+    public static string AuthorizationServerMetadataResolutionOutcomeTagName { get; } =
+        "oauth.client.authorization_server_metadata_resolution_outcome";
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the resolver's
+    /// internal defect text for an <see cref="AuthorizationServerMetadataResolutionFailed"/> event.
+    /// Recorded only when the resolution supplied one.
+    /// </summary>
+    public static string AuthorizationServerMetadataResolutionDefectTagName { get; } =
+        "oauth.client.authorization_server_metadata_resolution_defect";
+
+    /// <summary>The UTF-8 source literal of <see cref="OutboundFetchPolicyDenied"/>.</summary>
+    public static ReadOnlySpan<byte> OutboundFetchPolicyDeniedUtf8 =>
+        "oauth.client.outbound_fetch_policy_denied"u8;
+
+    /// <summary>
+    /// A client flow refused to dial a metadata-discovered endpoint (a token, PAR, or other
+    /// client-side POST target) because <c>OutboundFetchPolicy.Evaluate</c> denied it. The
+    /// endpoint came from a document the authorization server itself controls, so the wire
+    /// response never names it; the reason and the denied endpoint ride this event's
+    /// <see cref="OutboundFetchPolicyDenialReasonTagName"/> and
+    /// <see cref="OutboundFetchPolicyDenialEndpointTagName"/> tags instead, for deployments that
+    /// want the detail in their own traces.
+    /// </summary>
+    public static string OutboundFetchPolicyDenied { get; } =
+        Utf8Constants.ToInternedString(OutboundFetchPolicyDeniedUtf8);
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the policy's deny
+    /// reason for an <see cref="OutboundFetchPolicyDenied"/> event.
+    /// </summary>
+    public static string OutboundFetchPolicyDenialReasonTagName { get; } =
+        "oauth.client.outbound_fetch_policy_denial_reason";
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the denied
+    /// endpoint's URL for an <see cref="OutboundFetchPolicyDenied"/> event.
+    /// </summary>
+    public static string OutboundFetchPolicyDenialEndpointTagName { get; } =
+        "oauth.client.outbound_fetch_policy_denial_endpoint";
+
+    /// <summary>The UTF-8 source literal of <see cref="SeamGrantedScopeExceedsRequest"/>.</summary>
+    public static ReadOnlySpan<byte> SeamGrantedScopeExceedsRequestUtf8 =>
+        "oauth.authorize.seam_granted_scope_exceeds_request"u8;
+
+    /// <summary>
+    /// The application's <see cref="Server.EvaluateAuthorizationRequestDelegate"/> called
+    /// <see cref="Server.AuthorizationRequestDecision.Permit(string?)"/> with a scope value
+    /// outside the client's requested scope, or with an empty or whitespace scope. Per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see> the
+    /// seam may only narrow the requested scope, never widen it, and never to nothing; the
+    /// library refuses the request with <c>server_error</c> rather than issue a silently
+    /// widened or empty grant, and surfaces the defect here for deployments to alert on.
+    /// </summary>
+    public static string SeamGrantedScopeExceedsRequest { get; } =
+        Utf8Constants.ToInternedString(SeamGrantedScopeExceedsRequestUtf8);
 }

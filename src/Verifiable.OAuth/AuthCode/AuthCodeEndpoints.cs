@@ -29,7 +29,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// <remarks>
 /// <para>
 /// Produces PAR, Authorize (PAR-backed), Direct Authorize, and Token endpoints.
-/// Register at startup via <see cref="EndpointServer.EndpointBuilders"/>:
+/// Register at startup via <see cref="ServerConfiguration.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// server.EndpointBuilders.AddRange([
@@ -74,7 +74,7 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="EndpointServer.EndpointBuilders"/>.
+    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
@@ -115,9 +115,67 @@ public static class AuthCodeEndpoints
             ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials) ||
             ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange);
 
-        if(hasTokenCapability)
+        //Grant types this registration actually materializes a candidate for below.
+        //BuildTokenGrantTypeRefusal reads this set to tell "this registration is not
+        //registered for this grant type" (RFC 6749 §5.2 unauthorized_client) apart from
+        //"this server's wiring does not serve it at all" (§5.2 unsupported_grant_type),
+        //which serverServedGrantTypes below answers instead.
+        HashSet<string> registeredGrantTypes = new(StringComparer.Ordinal);
+
+        //Server-wiring seams, independent of any registration's allowed capabilities.
+        //serverServedGrantTypes below reads these to tell a grant type THIS server never
+        //serves (RFC 6749 §5.2 unsupported_grant_type) apart from one it serves that a
+        //particular registration is not registered for (§5.2 unauthorized_client) —
+        //conflating the two would answer unauthorized_client for a grant type the library
+        //implements but this server's wiring does not serve, such as token exchange
+        //without its validation seam.
+        bool clientCredentialsSeamWired = context.RequestServer?.OAuth().ValidateClientCredentialsAsync is not null;
+        bool tokenExchangeSeamWired = clientCredentialsSeamWired
+            && context.RequestServer?.OAuth().ValidateTokenExchangeTokenAsync is not null
+            && context.RequestServer?.OAuth().AuthorizeTokenExchangeAsync is not null;
+        bool jwtBearerSeamWired = context.RequestServer?.OAuth().ValidateJwtBearerAssertionAsync is not null;
+        bool preAuthorizedCodeSeamWired = context.RequestServer?.OAuth().ValidatePreAuthorizedCodeAsync is not null;
+
+        //Authorization code and refresh token need no external seam — this module
+        //implements their token issuance directly — so both are always server-served,
+        //regardless of any registration's allowed capabilities.
+        HashSet<string> serverServedGrantTypes = new(StringComparer.Ordinal)
+        {
+            WellKnownGrantTypes.AuthorizationCode,
+            WellKnownGrantTypes.RefreshToken
+        };
+
+        if(clientCredentialsSeamWired)
+        {
+            _ = serverServedGrantTypes.Add(WellKnownGrantTypes.ClientCredentials);
+        }
+
+        if(tokenExchangeSeamWired)
+        {
+            _ = serverServedGrantTypes.Add(WellKnownGrantTypes.TokenExchange);
+        }
+
+        if(jwtBearerSeamWired)
+        {
+            _ = serverServedGrantTypes.Add(WellKnownGrantTypes.JwtBearer);
+        }
+
+        if(preAuthorizedCodeSeamWired)
+        {
+            _ = serverServedGrantTypes.Add(WellKnownGrantTypes.PreAuthorizedCode);
+        }
+
+        //The code-grant candidate, and the ownership registeredGrantTypes records for it, are
+        //gated on the capability the candidate itself declares (OAuthAuthorizationCode), not on
+        //the broader hasTokenCapability, which also holds for a registration allowed only
+        //client_credentials or only token_exchange. A grant type is owned by a candidate only
+        //when that candidate survives EndpointChain's capability filter for THIS registration;
+        //otherwise the grant_type refusal below answers it with unauthorized_client
+        //(RFC 6749 §5.2).
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
         {
             candidates.Add(BuildToken());
+            _ = registeredGrantTypes.Add(WellKnownGrantTypes.AuthorizationCode);
         }
 
         //client_credentials grant (RFC 6749 §4.4) — machine-to-machine token
@@ -126,9 +184,10 @@ public static class AuthCodeEndpoints
         //seam are present: an unauthenticated client-credentials grant would
         //mint tokens for anyone claiming a client_id.
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
-            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null)
+            && clientCredentialsSeamWired)
         {
             candidates.Add(BuildClientCredentials());
+            _ = registeredGrantTypes.Add(WellKnownGrantTypes.ClientCredentials);
         }
 
         //Token Exchange grant (RFC 8693 §2.1) — impersonation only — shares the token
@@ -138,11 +197,10 @@ public static class AuthCodeEndpoints
         //an advertised grant missing either seam would mint tokens for any subject-token
         //string or skip the authorization decision (fail-closed, like client_credentials).
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange)
-            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null
-            && context.Server?.OAuth().ValidateTokenExchangeTokenAsync is not null
-            && context.Server?.OAuth().AuthorizeTokenExchangeAsync is not null)
+            && tokenExchangeSeamWired)
         {
             candidates.Add(BuildTokenExchange());
+            _ = registeredGrantTypes.Add(WellKnownGrantTypes.TokenExchange);
         }
 
         //JWT Bearer authorization grant (RFC 7523 §2.1/§3.1) — shares the token endpoint URL,
@@ -153,9 +211,10 @@ public static class AuthCodeEndpoints
         //so the client-authentication seam is NOT required to materialize it — the assertion is the
         //grant; the endpoint validates client credentials only if the request carries them.
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtBearer)
-            && context.Server?.OAuth().ValidateJwtBearerAssertionAsync is not null)
+            && jwtBearerSeamWired)
         {
             candidates.Add(BuildJwtBearer());
+            _ = registeredGrantTypes.Add(WellKnownGrantTypes.JwtBearer);
         }
 
         //OID4VCI 1.0 §6 Pre-Authorized Code grant — shares the token endpoint URL,
@@ -164,9 +223,10 @@ public static class AuthCodeEndpoints
         //pre-authorized grant with no seam would mint access tokens for any code string
         //(fail-closed, like client_credentials).
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant)
-            && context.Server?.OAuth().ValidatePreAuthorizedCodeAsync is not null)
+            && preAuthorizedCodeSeamWired)
         {
             candidates.Add(BuildPreAuthorizedCodeToken());
+            _ = registeredGrantTypes.Add(WellKnownGrantTypes.PreAuthorizedCode);
         }
 
         //Refresh-token grant per RFC 6749 §6 is enabled whenever the
@@ -175,6 +235,29 @@ public static class AuthCodeEndpoints
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
         {
             candidates.Add(BuildRefreshToken());
+            _ = registeredGrantTypes.Add(WellKnownGrantTypes.RefreshToken);
+        }
+
+        //RFC 6749 §5.2 grant_type refusal — the token endpoint's residual arm for a
+        //grant_type none of the candidates above accepted. Added last so every specific
+        //grant candidate gets first refusal; live-configuration correct because it reads
+        //serverServedGrantTypes and registeredGrantTypes captured from THIS request's own
+        //wiring, not a fixed list. Appended for EVERY registration allowed any
+        //token-serving capability — hasTokenCapability alone misses a registration whose
+        //only such capability is JWT bearer or pre-authorized code, which would otherwise
+        //fall through every candidate above and reach the host's generic 404.
+        bool hasAnyTokenServingCapability =
+            hasTokenCapability ||
+            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtBearer) ||
+            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant);
+
+        if(hasAnyTokenServingCapability)
+        {
+            CapabilityIdentifier tokenEndpointCapability =
+                SelectTokenEndpointCapability((ClientRecord)registration);
+
+            candidates.Add(BuildTokenGrantTypeRefusal(
+                tokenEndpointCapability, serverServedGrantTypes, registeredGrantTypes));
         }
 
         //Token revocation (RFC 7009). Activates only when the capability is
@@ -183,8 +266,8 @@ public static class AuthCodeEndpoints
         //cannot revoke would be a silent no-op that misleads clients into
         //believing their tokens were killed (fail-closed, like client_credentials).
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenRevocation)
-            && context.Server?.OAuth().RevokeTokenAsync is not null
-            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null)
+            && context.RequestServer?.OAuth().RevokeTokenAsync is not null
+            && context.RequestServer?.OAuth().ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildRevocation());
         }
@@ -195,8 +278,8 @@ public static class AuthCodeEndpoints
         //state, and one with no store to read could only answer active:false —
         //both fail-closed, like revocation above.
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)
-            && context.Server?.OAuth().IntrospectTokenAsync is not null
-            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null)
+            && context.RequestServer?.OAuth().IntrospectTokenAsync is not null
+            && context.RequestServer?.OAuth().ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildIntrospection());
         }
@@ -261,7 +344,7 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
@@ -269,6 +352,30 @@ public static class AuthCodeEndpoints
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing client_id."));
+                }
+
+                //RFC 9126 §2.1: "the client_id parameter is defined with the same semantics for
+                //both authorization requests and requests to the token endpoint; as a required
+                //authorization request parameter, it is similarly required in a pushed
+                //authorization request" — identification against the tenant's ALREADY
+                //SELECTED registration, never a substitute for client authentication and never
+                //substituted BY it. This matcher already asserts context.ClientRegistration is
+                //non-null, so the read is unconditional here.
+                ClientRecord registration = context.ClientRegistration!;
+                if(!IsPresentedClientIdentifierTheRegistration(registration, clientId))
+                {
+                    return (null, UnknownClientResponse(context.IncomingRequest));
+                }
+
+                //RFC 9126 §2: "the rules for client authentication ... for token endpoint requests
+                //... apply for the PAR endpoint as well" — the declared method authenticates here
+                //exactly as it would at the token endpoint, before any pushed-request effect (no
+                //request_uri generated, no state saved).
+                ServerHttpResponse? parAuthenticationFailure = await RequireClientAuthenticationIfDeclaredAsync(
+                    oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                if(parAuthenticationFailure is not null)
+                {
+                    return (null, parAuthenticationFailure);
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
@@ -279,11 +386,11 @@ public static class AuthCodeEndpoints
                 }
 
                 _ = fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
-                if(!IsAcceptedPkceMethod(method, context))
+                if(!IsAcceptedPkceMethod(method))
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
-                        "code_challenge_method is not accepted under the active policy."));
+                        "only the S256 code challenge method is supported"));
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
@@ -296,11 +403,8 @@ public static class AuthCodeEndpoints
                 //RFC 9700 §2.1 + OAuth 2.1 §2.3.1 — redirect_uri exact-match
                 //against the registered set, per RedirectUriMatching (simple
                 //string comparison, not Uri equality), with the RFC 8252 §7.3
-                //loopback fallback for a public PKCE-S256 client. Parallel to the
-                //JAR-PAR check around line 988; this matcher's
-                //MatchesRequest already asserts context.ClientRegistration is
-                //non-null, so the read is unconditional here.
-                ClientRecord registration = context.ClientRegistration!;
+                //loopback fallback for a public PKCE-S256 client. The direct
+                //authorization request applies the same gate to its own redirect_uri.
                 if(!IsAcceptableRedirectUri(
                     registration.AllowedRedirectUris, redirectUri, registration.TokenEndpointAuthMethod, method, context))
                 {
@@ -309,11 +413,18 @@ public static class AuthCodeEndpoints
                         $"redirect_uri '{redirectUri}' is not among the registered redirect URIs."));
                 }
 
-                //RFC 6749 §4.1.1 — response_type selects which grant the request is
-                //for; RFC 9126 §2.3 error responses at the PAR endpoint use the same
+                //RFC 6749 §4.1.1 / OAuth 2.1 §4.1.1 — response_type is REQUIRED; an absent
+                //value is a malformed request rather than an implicit request for the code
+                //grant. RFC 9126 §2.3 error responses at the PAR endpoint use the same
                 //error registry as the authorization endpoint, returned directly (PAR
                 //has no redirect leg of its own).
                 _ = fields.TryGetValue(OAuthRequestParameterNames.ResponseType, out string? responseType);
+                if(string.IsNullOrEmpty(responseType))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing response_type."));
+                }
+
                 if(IsUnsupportedResponseType(responseType))
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -346,6 +457,18 @@ public static class AuthCodeEndpoints
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "max_age must be a non-negative integer."));
+                }
+
+                //OIDC Core §3.1.2.1: "If this parameter contains none with any other value, an
+                //error is returned." PAR has no front channel to redirect through (RFC 9126
+                //§2.3), so — like every other malformed-request rejection at this leg — the
+                //answer is a bare 400.
+                _ = fields.TryGetValue(OAuthRequestParameterNames.Prompt, out string? prompt);
+                if(HasNoneWithOtherPromptValues(prompt))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "prompt must not contain \"none\" together with any other value."));
                 }
 
                 //JARM / FAPI 2.0 Message Signing §5.4 — a response_mode requesting a
@@ -385,6 +508,25 @@ public static class AuthCodeEndpoints
                     return (null, resourceShapeFailure);
                 }
 
+                //Resolved once here and stamped onto ExpectedIssuer so a later redemption
+                //(BuildInputAsync of BuildAuthCodeToken) can compare the issuer it resolves for
+                //the PRESENTING request against the issuer resolved when the grant was issued —
+                //OpenID Connect Core 1.0 §12.2 / RFC 9700 §4.4 mix-up defense.
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
                 string flowId = context.FlowId!;
@@ -408,12 +550,13 @@ public static class AuthCodeEndpoints
                     Scope: scope,
                     ClientId: clientId,
                     Nonce: nonce,
-                    ExpectedIssuer: clientId,
+                    ExpectedIssuer: issuerUri.OriginalString,
                     ReceivedAt: now,
                     ExpiresAt: expiresAt,
                     ExpiresIn: expiresIn,
                     AcrValues: acrValues,
                     MaxAge: maxAge,
+                    Prompt: prompt,
                     State: requestState,
                     AuthorizationDetails: authorizationDetails,
                     ResponseMode: responseMode,
@@ -442,6 +585,53 @@ public static class AuthCodeEndpoints
         };
 
 
+    /// <summary>
+    /// The <c>request_uri</c> completion endpoint's pre-correlation step: the outer
+    /// <c>client_id</c>'s presence and its identification against the tenant's already-selected
+    /// registration, run before the pushed request is ever looked up. Wired as
+    /// <see cref="EndpointCandidate.BeforeCorrelationAsync"/> on <see cref="BuildAuthorize"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>, restated
+    /// for the pushed request by <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC
+    /// 9126 §2.1</see>: <c>client_id</c> is REQUIRED on the authorization request that presents a
+    /// <c>request_uri</c>, "as a required authorization request parameter". A missing field answers
+    /// "Missing client_id."; a present field naming a registration other than the tenant's own
+    /// answers <see cref="PushedRequestClientMismatchDescription"/> — the SAME constant the handler
+    /// answers with when the field agrees with the registration but disagrees with the PUSHED
+    /// request's own <c>client_id</c>, a comparison that needs the loaded record and stays there.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see> carries only the
+    /// separate rule that the authorization server MUST validate a pushed request "as it would any
+    /// other authorization request" — the identification this step and the handler together perform.
+    /// </remarks>
+    private static ValueTask<ServerHttpResponse?> BeforeAuthorizeCompletionCorrelationAsync(
+        ServerEndpoint endpoint, RequestFields fields, ExchangeContext context, CancellationToken cancellationToken)
+    {
+        if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? outerClientId)
+            || string.IsNullOrWhiteSpace(outerClientId))
+        {
+            return ValueTask.FromResult<ServerHttpResponse?>(ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "Missing client_id."));
+        }
+
+        ClientRecord? requestUriRegistration = context.ClientRegistration;
+        if(requestUriRegistration is null)
+        {
+            return ValueTask.FromResult<ServerHttpResponse?>(UnidentifiedClientDirectResponse());
+        }
+
+        if(!IsPresentedClientIdentifierTheRegistration(requestUriRegistration, outerClientId))
+        {
+            return ValueTask.FromResult<ServerHttpResponse?>(ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest,
+                PushedRequestClientMismatchDescription));
+        }
+
+        return ValueTask.FromResult<ServerHttpResponse?>(null);
+    }
+
+
+    /// <summary>Builds authorization of a pushed request using the admitted host seams.</summary>
     private static EndpointCandidate BuildAuthorize() =>
         new()
         {
@@ -451,6 +641,14 @@ public static class AuthCodeEndpoints
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.AuthorizationEndpoint,
+
+            //A present-but-blank request_uri matches (the acceptance test below only requires the
+            //field's presence) then falls through here to null — the parameter this endpoint keys
+            //its continuing flow on is known, so the refusal names it rather than falling back to
+            //the host's generic "Cannot determine correlation key."
+            MissingCorrelationKeyErrorDescription = "Missing request_uri.",
+
+            BeforeCorrelationAsync = BeforeAuthorizeCompletionCorrelationAsync,
 
             ExtractCorrelationKey = static (path, fields, context) =>
             {
@@ -499,7 +697,7 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 if(currentState is not ParRequestReceivedState)
@@ -508,14 +706,34 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidRequest, "Flow not in expected state."));
                 }
 
+                //RFC 6749 §3.1: the authorization server MUST first authenticate the resource
+                //owner. An unestablished subject is not surfaced here as a server fault — the
+                //shared EvaluateAuthenticationRequirementsAsync helper below answers the RFC 6749
+                //§4.1.2.1 login_required redirect for it, uniformly across every code-issuing
+                //authorize path.
                 string? subjectId = context.SubjectId;
-                if(string.IsNullOrWhiteSpace(subjectId))
-                {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "Subject not authenticated."));
-                }
 
                 ParRequestReceivedState parState = (ParRequestReceivedState)currentState;
+
+                //RFC 6749 §4.1.1 / RFC 9126 §2.1: "client_id" is REQUIRED on the authorization
+                //request that presents a request_uri. RFC 9126 §4 is the separate rule that the
+                //authorization server MUST validate that request as it
+                //would any other — identification against the tenant's ALREADY SELECTED
+                //registration, AND agreement with the client the request_uri was pushed for
+                //(RFC 9101 §6.3's outer/inner agreement, applied here to outer/pushed). The field's
+                //presence and its identification against the registration already ran, in
+                //BeforeAuthorizeCompletionCorrelationAsync, the endpoint's pre-correlation step;
+                //this is the second, record-dependent comparison — agreement with the PUSHED
+                //request's own client_id — which needs parState and so stays here. Both answer the
+                //SAME body: a direct refusal, RFC 6749 §4.1.2.1, with no redirect and no
+                //consumption of the pushed request.
+                _ = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? outerClientId);
+                if(!string.Equals(outerClientId, parState.ClientId, StringComparison.Ordinal))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        PushedRequestClientMismatchDescription));
+                }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
                 DateTimeOffset authTime = context.AuthTime ?? now;
@@ -537,7 +755,8 @@ public static class AuthCodeEndpoints
                             OAuthEventNames.ExtraneousAuthorizeParameters)));
                 }
 
-                ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
+                (string effectiveScope, ServerHttpResponse? requirementFailure) =
+                    await EvaluateAuthenticationRequirementsAsync(
                     server, context, parState.AcrValues, parState.MaxAge, grantedScope,
                     subjectId, now, parState.RedirectUri, parState.State,
                     requestedAuthorizationDetails: parState.AuthorizationDetails,
@@ -545,11 +764,15 @@ public static class AuthCodeEndpoints
                     clientId: parState.ClientId,
                     requestedIssuerState: parState.IssuerState,
                     requestedResource: parState.Resource,
+                    //RFC 9101 §6.3 via RFC 9126 §4 — the pushed prompt is authoritative; a
+                    //front-channel prompt on this request_uri completion is never read.
+                    requestedPrompt: parState.Prompt,
                     cancellationToken: ct).ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
                     return (null, requirementFailure);
                 }
+                grantedScope = effectiveScope;
 
                 //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for authorization codes.
                 //Library policy lives in policy.AuthorizationCodeLifetime (default 600s) — the
@@ -626,7 +849,9 @@ public static class AuthCodeEndpoints
 
                 FlowInput input = new ServerAuthorizeCompleted(
                     CodeHash: codeHash,
-                    SubjectId: subjectId,
+                    //Non-null here: EvaluateAuthenticationRequirementsAsync above answers
+                    //login_required and returns before this point whenever subjectId is null.
+                    SubjectId: subjectId!,
                     AuthTime: authTime,
                     Scope: grantedScope,
                     CompletedAt: now,
@@ -649,6 +874,16 @@ public static class AuthCodeEndpoints
         };
 
 
+    /// <summary>
+    /// Builds direct authorization using the admitted policy and registration snapshot.
+    /// Client and redirect-URI validation precede PKCE-method refusal. A validated destination
+    /// receives <c>invalid_request</c> with the request's state in an error redirect per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
+    /// "the authorization server informs the client by adding the following parameters to the
+    /// query component of the redirection URI using the "application/x-www-form-urlencoded" format".
+    /// An invalid client or redirect URI receives a direct refusal: "MUST NOT automatically
+    /// redirect the user-agent to the invalid redirection URI".
+    /// </summary>
     private static EndpointCandidate BuildDirectAuthorize() =>
         new()
         {
@@ -695,7 +930,7 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
@@ -703,6 +938,19 @@ public static class AuthCodeEndpoints
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing client_id."));
+                }
+
+                //RFC 6749 §4.1.2.1 / draft-ietf-oauth-v2-1-16 §4.1.2.1: "if the client identifier
+                //is missing or invalid, the authorization server ... MUST NOT automatically
+                //redirect the user agent to the invalid redirect URI" — identification
+                //against the tenant's ALREADY SELECTED registration is a DIRECT refusal, never a
+                //redirect, and comes before the redirect_uri is even trusted enough to build an
+                //error redirect through. The dispatcher guarantees context.ClientRegistration is
+                //non-null before this handler runs.
+                ClientRecord directRegistration = context.ClientRegistration!;
+                if(!IsPresentedClientIdentifierTheRegistration(directRegistration, clientId))
+                {
+                    return (null, UnidentifiedClientDirectResponse());
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
@@ -713,11 +961,35 @@ public static class AuthCodeEndpoints
                 }
 
                 _ = fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
-                if(!IsAcceptedPkceMethod(method, context))
+                if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
+                    || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing or invalid redirect_uri."));
+                }
+
+                //RFC 9700 §2.1 + OAuth 2.1 §2.3.1 — redirect_uri exact-match against the
+                //registered set, per RedirectUriMatching (simple string comparison, not
+                //Uri equality), with the RFC 8252 §7.3 loopback fallback for a public
+                //PKCE-S256 client. The pushed request applies the same gate to its own
+                //redirect_uri; every redirect issued below this point (unsupported response_type,
+                //invalid_target, authentication-requirement failures, and the final
+                //success redirect) is only safe to emit once the destination is known
+                //to be registered.
+                if(!IsAcceptableRedirectUri(
+                    directRegistration.AllowedRedirectUris, redirectUri, directRegistration.TokenEndpointAuthMethod, method, context))
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
-                        "code_challenge_method is not accepted under the active policy."));
+                        $"redirect_uri '{redirectUri}' is not among the registered redirect URIs."));
+                }
+
+                _ = fields.TryGetValue(OAuthRequestParameterNames.State, out string? requestState);
+                if(!IsAcceptedPkceMethod(method))
+                {
+                    return (null, BuildAuthorizeErrorRedirect(
+                        redirectUri, OAuthErrors.InvalidRequest,
+                        "only the S256 code challenge method is supported", requestState, context));
                 }
 
                 //FAPI 2.0 §5.2.2 — when the profile mandates PAR, the direct Authorize
@@ -730,37 +1002,12 @@ public static class AuthCodeEndpoints
                         + "authorization request is not accepted (FAPI 2.0 §5.2.2)."));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
-                    || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
-                {
-                    return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidRequest, "Missing or invalid redirect_uri."));
-                }
-
-                //RFC 9700 §2.1 + OAuth 2.1 §2.3.1 — redirect_uri exact-match against the
-                //registered set, per RedirectUriMatching (simple string comparison, not
-                //Uri equality), with the RFC 8252 §7.3 loopback fallback for a public
-                //PKCE-S256 client. Parallel to the PAR path's gate around line 311; every
-                //redirect issued below this point (unsupported response_type,
-                //invalid_target, authentication-requirement failures, and the final
-                //success redirect) is only safe to emit once the destination is known
-                //to be registered. The matcher asserts context.ClientRegistration is
-                //non-null before this handler runs.
-                ClientRecord directRegistration = context.ClientRegistration!;
-                if(!IsAcceptableRedirectUri(
-                    directRegistration.AllowedRedirectUris, redirectUri, directRegistration.TokenEndpointAuthMethod, method, context))
-                {
-                    return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidRequest,
-                        $"redirect_uri '{redirectUri}' is not among the registered redirect URIs."));
-                }
-
+                //RFC 6749 §3.1: the authorization server MUST first authenticate the resource
+                //owner. An unestablished subject is not surfaced here as a server fault — the
+                //shared EvaluateAuthenticationRequirementsAsync helper below answers the RFC 6749
+                //§4.1.2.1 login_required redirect for it, uniformly across every code-issuing
+                //authorize path.
                 string? subjectId = context.SubjectId;
-                if(string.IsNullOrWhiteSpace(subjectId))
-                {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "Subject not authenticated."));
-                }
 
                 _ = fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
                 scope ??= string.Empty;
@@ -773,13 +1020,14 @@ public static class AuthCodeEndpoints
                 //is a non-negative integer (OIDC Core §3.1.2.1); a malformed value is a
                 //request error.
                 _ = fields.TryGetValue(OAuthRequestParameterNames.AcrValues, out string? acrValues);
-                _ = fields.TryGetValue(OAuthRequestParameterNames.State, out string? requestState);
                 (int? maxAge, bool isMaxAgeWellFormed) = ReadRequestedMaxAge(fields);
                 if(!isMaxAgeWellFormed)
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "max_age must be a non-negative integer."));
                 }
+
+                _ = fields.TryGetValue(OAuthRequestParameterNames.Prompt, out string? prompt);
 
                 //JARM / FAPI 2.0 Message Signing §5.4 — same servability gate as the PAR
                 //path; on the direct authorization request the parameter arrives on the
@@ -791,11 +1039,30 @@ public static class AuthCodeEndpoints
                     return (null, responseModeFailure);
                 }
 
-                //RFC 6749 §4.1.1 / §4.1.2.1 — response_type selects which grant the
-                //request is for. redirect_uri is already parsed at this point, so an
-                //unsupported response_type is reported as an Authorization Error
-                //Response redirect rather than a bare 400, per §4.1.2.1.
+                //OIDC Core §3.1.2.1: "If this parameter contains none with any other value, an
+                //error is returned." redirect_uri is already registration-matched above, so this
+                //is reported as an Authorization Error Response redirect (RFC 6749 §4.1.2.1).
+                if(HasNoneWithOtherPromptValues(prompt))
+                {
+                    return (null, await BuildAuthorizeErrorResponseAsync(
+                        server, context, redirectUri, OAuthErrors.InvalidRequest,
+                        "prompt must not contain \"none\" together with any other value.",
+                        requestState, responseMode, clientId, ct).ConfigureAwait(false));
+                }
+
+                //RFC 6749 §4.1.1 / OAuth 2.1 §4.1.1 — response_type is REQUIRED; an absent
+                //value is a malformed request rather than an implicit request for the code
+                //grant. redirect_uri is already parsed and registration-matched at this
+                //point, so both the missing- and unsupported-value cases are reported as an
+                //Authorization Error Response redirect per §4.1.2.1 rather than a bare 400.
                 _ = fields.TryGetValue(OAuthRequestParameterNames.ResponseType, out string? responseType);
+                if(string.IsNullOrEmpty(responseType))
+                {
+                    return (null, await BuildAuthorizeErrorResponseAsync(
+                        server, context, redirectUri, OAuthErrors.InvalidRequest, "Missing response_type.",
+                        requestState, responseMode, clientId, ct).ConfigureAwait(false));
+                }
+
                 if(IsUnsupportedResponseType(responseType))
                 {
                     return (null, await BuildAuthorizeErrorResponseAsync(
@@ -838,22 +1105,44 @@ public static class AuthCodeEndpoints
                         requestState, responseMode, clientId, ct).ConfigureAwait(false));
                 }
 
+                //Resolved once here and stamped onto ExpectedIssuer so a later redemption can
+                //compare the issuer it resolves for the PRESENTING request against the issuer
+                //resolved when the grant was issued — OpenID Connect Core 1.0 §12.2 / RFC 9700
+                //§4.4 mix-up defense.
+                Uri directIssuerUri;
+                try
+                {
+                    directIssuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(directRegistration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(directRegistration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
                 DateTimeOffset authTime = context.AuthTime ?? now;
 
-                ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
+                (string effectiveScope, ServerHttpResponse? requirementFailure) =
+                    await EvaluateAuthenticationRequirementsAsync(
                     server, context, acrValues, maxAge, scope, subjectId, now, redirectUri, requestState,
                     cancellationToken: ct,
                     requestedAuthorizationDetails: authorizationDetails,
                     responseMode: responseMode,
                     clientId: clientId,
                     requestedIssuerState: issuerState,
-                    requestedResource: resource)
+                    requestedResource: resource,
+                    requestedPrompt: prompt)
                     .ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
                     return (null, requirementFailure);
                 }
+                scope = effectiveScope;
 
                 string flowId = context.FlowId!;
 
@@ -903,9 +1192,11 @@ public static class AuthCodeEndpoints
                     Scope: scope,
                     ClientId: clientId,
                     Nonce: nonce,
-                    SubjectId: subjectId,
+                    //Non-null here: EvaluateAuthenticationRequirementsAsync above answers
+                    //login_required and returns before this point whenever subjectId is null.
+                    SubjectId: subjectId!,
                     AuthTime: authTime,
-                    ExpectedIssuer: clientId,
+                    ExpectedIssuer: directIssuerUri.OriginalString,
                     CompletedAt: now,
                     ExpiresAt: expiresAt,
                     SessionId: context.SessionId,
@@ -983,6 +1274,153 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// Picks the <see cref="CapabilityIdentifier"/> the token endpoint's grant_type
+    /// refusal candidate (<see cref="BuildTokenGrantTypeRefusal"/>) advertises, from the
+    /// first token-serving capability <paramref name="registration"/> is allowed, in a
+    /// fixed precedence order.
+    /// </summary>
+    /// <param name="registration">The registration the token endpoint is building candidates for.</param>
+    /// <returns>The first allowed capability among the token-serving capabilities, in precedence order.</returns>
+    /// <remarks>
+    /// The tag must be one <paramref name="registration"/> is actually allowed:
+    /// <see cref="EndpointChain"/> filters every candidate in a chain by whether its
+    /// <see cref="EndpointCandidate.Capability"/> is allowed, so a tag the registration
+    /// is not allowed would make the refusal candidate itself unreachable. Called only
+    /// when the builder already found at least one token-serving capability allowed, so
+    /// the loop always returns before falling through.
+    /// </remarks>
+    private static CapabilityIdentifier SelectTokenEndpointCapability(ClientRecord registration)
+    {
+        CapabilityIdentifier[] tokenServingCapabilitiesInPrecedenceOrder =
+        [
+            WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+            WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+            WellKnownCapabilityIdentifiers.OAuthJwtBearer,
+            WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant
+        ];
+
+        foreach(CapabilityIdentifier capability in tokenServingCapabilitiesInPrecedenceOrder)
+        {
+            if(registration.IsCapabilityAllowed(capability))
+            {
+
+                return capability;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "SelectTokenEndpointCapability requires the registration to allow at least one token-serving capability.");
+    }
+
+
+    /// <summary>
+    /// Builds the token endpoint's grant_type refusal per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
+    /// </summary>
+    /// <param name="capability">
+    /// A capability this registration is actually allowed, chosen by
+    /// <see cref="SelectTokenEndpointCapability"/>, so this candidate survives
+    /// <see cref="EndpointChain"/>'s own per-request capability filter alongside the grant
+    /// candidates above.
+    /// </param>
+    /// <param name="serverServedGrantTypes">
+    /// Every grant_type value this authorization server's own wiring serves, captured from
+    /// the seam checks above, independent of any registration's allowed capabilities.
+    /// </param>
+    /// <param name="registeredGrantTypes">
+    /// The grant_type values this registration and request actually materialized a
+    /// candidate for above, captured from the same capability and seam checks — the
+    /// live wiring for this request, not a fixed list.
+    /// </param>
+    /// <remarks>
+    /// Added last among the token endpoint's candidates so every specific grant matcher
+    /// gets first refusal. <see cref="EndpointChain"/> requires every candidate in a chain
+    /// to be mutually disjoint (at most one match per request), so this matcher explicitly
+    /// declines any <c>grant_type</c> already in <paramref name="registeredGrantTypes"/> —
+    /// that value's own candidate owns every request naming it, matching or not, rather
+    /// than letting this one double-match a request the owning candidate merely declined
+    /// for some other reason (for example a missing correlation handle). It accepts only a
+    /// missing/blank <c>grant_type</c> or one no candidate above claimed, then
+    /// <see cref="EndpointCandidate.BuildInputAsync"/> classifies the refusal: missing/blank is
+    /// <c>invalid_request</c> ("the request is missing a required parameter"); a value
+    /// outside <paramref name="serverServedGrantTypes"/> is <c>unsupported_grant_type</c>
+    /// ("the authorization grant type is not supported by the authorization server"); a
+    /// server-served value this registration did not materialize a candidate for is
+    /// <c>unauthorized_client</c> ("the authenticated client is not authorized to use this
+    /// authorization grant type").
+    /// </remarks>
+    private static EndpointCandidate BuildTokenGrantTypeRefusal(
+        CapabilityIdentifier capability,
+        HashSet<string> serverServedGrantTypes,
+        HashSet<string> registeredGrantTypes) =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeToken,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = capability,
+            StartsNewFlow = false,
+            Kind = FlowKind.Stateless,
+            //DiscoveryMetadataKey null — this guards the token endpoint URL BuildToken
+            //already advertises; it is not an independently advertised endpoint.
+
+            MatchesRequest = (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                //Disjointness: a grant_type one of the candidates above already owns is that
+                //candidate's request to accept or decline, never this one's to double-match.
+                if(fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? ownedGrantType)
+                    && !string.IsNullOrWhiteSpace(ownedGrantType)
+                    && registeredGrantTypes.Contains(ownedGrantType))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = (fields, context, currentState, ct) =>
+            {
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || string.IsNullOrWhiteSpace(grantType))
+                {
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>(
+                        (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest, "Missing grant_type.")));
+                }
+
+                //MatchesRequest already excluded every grantType in registeredGrantTypes, so
+                //reaching here means either a value this server's wiring does not serve at all
+                //(unsupported_grant_type) or one it serves that this registration is not
+                //registered for (unauthorized_client).
+                ServerHttpResponse response = !serverServedGrantTypes.Contains(grantType)
+                    ? ServerHttpResponse.BadRequest(
+                        OAuthErrors.UnsupportedGrantType,
+                        $"grant_type '{grantType}' is not supported by this authorization server.")
+                    : ServerHttpResponse.BadRequest(
+                        OAuthErrors.UnauthorizedClient,
+                        $"This client is not authorized to use the '{grantType}' grant type.");
+
+                return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null, response));
+            },
+
+            //Never reached — BuildInputAsync always returns the early-exit response.
+            BuildResponse = static (_, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Unreachable."),
+        };
+
+
+    /// <summary>
     /// Builds the JAR-PAR endpoint per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see> +
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>:
@@ -1033,11 +1471,12 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
-                    await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
+                    await VerifyAndValidateAuthCodeJarAsync(
+                        fields, context, server, requireDeclaredClientAuthentication: true, ct)
                         .ConfigureAwait(false);
 
                 if(earlyExit is not null)
@@ -1067,6 +1506,36 @@ public static class AuthCodeEndpoints
                     return (null, resourceShapeFailure);
                 }
 
+                //OIDC Core §3.1.2.1 — same none-with-other-value gate as the bare PAR path;
+                //JAR-PAR answers 400 directly like every other malformed-request rejection at
+                //this leg (no front channel to redirect through).
+                if(HasNoneWithOtherPromptValues(ro.Prompt))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "prompt must not contain \"none\" together with any other value."));
+                }
+
+                //Resolved once here and stamped onto ExpectedIssuer so a later redemption can
+                //compare the issuer it resolves for the PRESENTING request against the issuer
+                //resolved when the grant was issued — OpenID Connect Core 1.0 §12.2 / RFC 9700
+                //§4.4 mix-up defense, the same pattern the bare PAR path above uses.
+                ClientRecord registration = context.ClientRegistration!;
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
                 string flowId = context.FlowId!;
@@ -1088,17 +1557,18 @@ public static class AuthCodeEndpoints
                     FlowId: flowId,
                     RequestUri: requestUri,
                     CodeChallenge: ro.CodeChallenge,
-                    CodeChallengeMethod: ro.CodeChallengeMethod,
+                    CodeChallengeMethod: ro.CodeChallengeMethod!,
                     RedirectUri: ro.RedirectUri,
                     Scope: ro.Scope,
                     ClientId: ro.ClientId,
                     Nonce: ro.Nonce,
-                    ExpectedIssuer: ro.ClientId,
+                    ExpectedIssuer: issuerUri.OriginalString,
                     ReceivedAt: now,
                     ExpiresAt: expiresAt,
                     ExpiresIn: expiresIn,
                     AcrValues: ro.AcrValues,
                     MaxAge: ro.MaxAge,
+                    Prompt: ro.Prompt,
                     State: ro.State,
                     AuthorizationDetails: ro.AuthorizationDetails,
                     ResponseMode: ro.ResponseMode,
@@ -1183,11 +1653,12 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
-                    await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
+                    await VerifyAndValidateAuthCodeJarAsync(
+                        fields, context, server, requireDeclaredClientAuthentication: false, ct)
                         .ConfigureAwait(false);
 
                 if(earlyExit is not null)
@@ -1222,6 +1693,17 @@ public static class AuthCodeEndpoints
                         ro.State, ro.ResponseMode, ro.ClientId, ct).ConfigureAwait(false));
                 }
 
+                //OIDC Core §3.1.2.1 — same none-with-other-value gate as the direct PKCE path:
+                //ro.RedirectUri is already registration-validated, so the error is safe to
+                //redirect (RFC 6749 §4.1.2.1).
+                if(HasNoneWithOtherPromptValues(ro.Prompt))
+                {
+                    return (null, await BuildAuthorizeErrorResponseAsync(
+                        server, context, ro.RedirectUri, OAuthErrors.InvalidRequest,
+                        "prompt must not contain \"none\" together with any other value.",
+                        ro.State, ro.ResponseMode, ro.ClientId, ct).ConfigureAwait(false));
+                }
+
                 //FAPI 2.0 §5.2.2 — when the profile mandates PAR, the JAR-by-value path
                 //is refused; the client must push the request first.
                 if(context.RequirePushedAuthorizationRequests)
@@ -1233,18 +1715,38 @@ public static class AuthCodeEndpoints
                             + "authorization request is not accepted (FAPI 2.0 §5.2.2)."));
                 }
 
+                //RFC 6749 §3.1: the authorization server MUST first authenticate the resource
+                //owner. An unestablished subject is not surfaced here as a server fault — the
+                //shared EvaluateAuthenticationRequirementsAsync helper below answers the RFC 6749
+                //§4.1.2.1 login_required redirect for it, uniformly across every code-issuing
+                //authorize path.
                 string? subjectId = context.SubjectId;
-                if(string.IsNullOrWhiteSpace(subjectId))
+
+                //Resolved once here and stamped onto ExpectedIssuer so a later redemption can
+                //compare the issuer it resolves for the PRESENTING request against the issuer
+                //resolved when the grant was issued — OpenID Connect Core 1.0 §12.2 / RFC 9700
+                //§4.4 mix-up defense.
+                ClientRecord jarDirectRegistration = context.ClientRegistration!;
+                Uri jarDirectIssuerUri;
+                try
                 {
-                    return (null,
-                        ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError, "Subject not authenticated."));
+                    jarDirectIssuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(jarDirectRegistration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(jarDirectRegistration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
                 DateTimeOffset authTime = context.AuthTime ?? now;
 
-                ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
+                (string effectiveScope, ServerHttpResponse? requirementFailure) =
+                    await EvaluateAuthenticationRequirementsAsync(
                     server, context, ro.AcrValues, ro.MaxAge, ro.Scope, subjectId, now,
                     ro.RedirectUri, ro.State,
                     cancellationToken: ct,
@@ -1252,7 +1754,8 @@ public static class AuthCodeEndpoints
                     responseMode: ro.ResponseMode,
                     clientId: ro.ClientId,
                     requestedIssuerState: ro.IssuerState,
-                    requestedResource: ro.Resource).ConfigureAwait(false);
+                    requestedResource: ro.Resource,
+                    requestedPrompt: ro.Prompt).ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
                     return (null, requirementFailure);
@@ -1301,14 +1804,16 @@ public static class AuthCodeEndpoints
                     FlowId: flowId,
                     CodeHash: codeHash,
                     CodeChallenge: ro.CodeChallenge,
-                    CodeChallengeMethod: ro.CodeChallengeMethod,
+                    CodeChallengeMethod: ro.CodeChallengeMethod!,
                     RedirectUri: ro.RedirectUri,
-                    Scope: ro.Scope,
+                    Scope: effectiveScope,
                     ClientId: ro.ClientId,
                     Nonce: ro.Nonce,
-                    SubjectId: subjectId,
+                    //Non-null here: EvaluateAuthenticationRequirementsAsync above answers
+                    //login_required and returns before this point whenever subjectId is null.
+                    SubjectId: subjectId!,
                     AuthTime: authTime,
-                    ExpectedIssuer: ro.ClientId,
+                    ExpectedIssuer: jarDirectIssuerUri.OriginalString,
                     CompletedAt: now,
                     ExpiresAt: expiresAt,
                     SessionId: context.SessionId,
@@ -1354,9 +1859,19 @@ public static class AuthCodeEndpoints
     /// <para>
     /// The <c>aud</c> check enforces the RFC 9101 §10.2 reading: <c>aud</c> must
     /// equal the AS issuer URL resolved through
-    /// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>. The
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/>. The
     /// EUDI/Microsoft <c>aud == client_id</c> reading is rejected; tenant-divergent
     /// audience policy is a planned future extension point and is not in scope here.
+    /// </para>
+    /// <para>
+    /// <paramref name="requireDeclaredClientAuthentication"/> is <see langword="true"/> for
+    /// JAR-PAR: <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see>
+    /// applies the token endpoint's client-authentication rules to every pushed request, JAR-carrying
+    /// or not, and a valid signed request object is not the separately declared client credential.
+    /// It is <see langword="false"/> for JAR-by-value direct Authorize, which never authenticates a
+    /// declared method — only PAR does. The check runs immediately after identification, before the
+    /// JAR's signature is verified, before its replay identifier is consulted, and before any handle
+    /// is generated.
     /// </para>
     /// </remarks>
     private static async ValueTask<(AuthCodeRequestObject? RequestObject, ServerHttpResponse? EarlyExit)>
@@ -1364,6 +1879,7 @@ public static class AuthCodeEndpoints
             RequestFields fields,
             ExchangeContext context,
             EndpointServer server,
+            bool requireDeclaredClientAuthentication,
             CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
@@ -1389,14 +1905,27 @@ public static class AuthCodeEndpoints
         ClientRecord? registration = context.ClientRegistration;
         if(registration is null)
         {
-            return (null, ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidClient, "Unknown client."));
+            return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
         }
 
-        if(!string.Equals(outerClientId, registration.ClientId, StringComparison.Ordinal))
+        //RFC 9101 §6.3: the outer client_id and the request object's must agree; the comparison
+        //is identification, the one IsPresentedClientIdentifierTheRegistration applies
+        //everywhere else.
+        if(!IsPresentedClientIdentifierTheRegistration(registration, outerClientId))
         {
             return (null, ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequest, "Outer client_id does not match the registered client."));
+        }
+
+        if(requireDeclaredClientAuthentication)
+        {
+            ServerHttpResponse? jarParAuthenticationFailure = await RequireClientAuthenticationIfDeclaredAsync(
+                oauth, context.IncomingRequest, fields, registration, context, cancellationToken)
+                .ConfigureAwait(false);
+            if(jarParAuthenticationFailure is not null)
+            {
+                return (null, jarParAuthenticationFailure);
+            }
         }
 
         //Resolve the JAR signing public key for this registration. The library
@@ -1465,6 +1994,17 @@ public static class AuthCodeEndpoints
         }
 
         JarVerified verified = (JarVerified)verification;
+
+        //RFC 7636 §4.4.1 assigns invalid_request to an unsupported transformation.
+        //RFC 9101 §6.3 routes verified request-parameter errors to RFC 6749 §5.2.
+        if(!IsAcceptedPkceMethod(JwtClaimReaders.OptionalClaim(
+            verified.Claims, OAuthRequestParameterNames.CodeChallengeMethod)))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest,
+                "only the S256 code challenge method is supported"));
+        }
+
 
         //RFC 9396 §3: inside a Request Object, authorization_details is a native JSON
         //array. The verbatim array text is re-sliced from the now-verified payload so the
@@ -1557,16 +2097,6 @@ public static class AuthCodeEndpoints
             return (null, ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequestObject,
                 "scope is required under the active policy."));
-        }
-
-        //FAPI 2.0 §5.2.2, HAIP §3 — code_challenge_method MUST be S256 in the
-        //strict default. Permissive deployments via policy.AllowedPkceMethods
-        //may also accept "plain".
-        if(!IsAcceptedPkceMethod(requestObject.CodeChallengeMethod, context))
-        {
-            return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidRequestObject,
-                "code_challenge_method is not accepted under the active policy."));
         }
 
         //RFC 9396 / OID4VCI 1.0 §5.1.1 — the signed request's authorization_details is
@@ -1836,7 +2366,7 @@ public static class AuthCodeEndpoints
     /// <see cref="AuthorizationServerCryptography.SigningKeyResolver"/>), algorithm derivation,
     /// <see cref="TokenProducer.BuildAsync"/>, the claim-contributor merge
     /// (<see cref="BuildTargetForProducer"/> + <see cref="MergeContributedClaimsAsync"/>),
-    /// <see cref="UnsignedJwt.SignAsync"/>, and compact serialization. Shared by all six grants
+    /// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>, and compact serialization. Shared by all six grants
     /// that mint tokens through the producer set — the walk is identical across grants; only
     /// the <see cref="IssuanceContext"/> construction before it and the response shaping after
     /// it are grant-specific.
@@ -1940,6 +2470,23 @@ public static class AuthCodeEndpoints
             }
         }
 
+        //Every grant calls this one function to issue its tokens, so tagging the dispatch span
+        //here — from the already-typed IssuanceContext and the audits just recorded — carries
+        //grant type, client id, granted scope and the issued access token's jti for every grant
+        //alike, with no new parsing and no widened signature.
+        System.Diagnostics.Activity? activity = System.Diagnostics.Activity.Current;
+        if(activity is not null)
+        {
+            _ = activity.SetTag(OAuthTagNames.GrantType, issuance.GrantType);
+            _ = activity.SetTag(OAuthTagNames.ClientId, issuance.ClientId);
+            _ = activity.SetTag(OAuthTagNames.GrantedScope, issuance.Scope);
+
+            if(issuedAudits.TryGetValue(WellKnownTokenTypes.AccessToken, out IssuedTokenAudit? accessTokenAudit))
+            {
+                _ = activity.SetTag(OAuthTagNames.AccessTokenJti, accessTokenAudit.Jti);
+            }
+        }
+
         return (new TokenIssuanceResult
         {
             IssuedTokens = issuedTokens,
@@ -2014,6 +2561,162 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// The code-redemption endpoint's pre-correlation step: identification, issuer resolution,
+    /// PKCE presentation shape, declared client authentication, the <c>client_id</c>-required
+    /// rule, the <c>resource</c> and <c>authorization_details</c> request-only shapes, and DPoP —
+    /// run, in that order, before the presented <c>code</c> is ever looked up. Wired as
+    /// <see cref="EndpointCandidate.BeforeCorrelationAsync"/> on <see cref="BuildToken"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every check here reads only <paramref name="fields"/>, <paramref name="endpoint"/>,
+    /// <paramref name="context"/>'s registration, and the server — never the stored GRANT record,
+    /// since none is loaded yet. The authentication stores (a client assertion's <c>jti</c>, a
+    /// DPoP proof's <c>jti</c>, a nonce) ARE reached, through the same
+    /// <c>LoadFlowStateAsync</c>/<c>SaveFlowStateAsync</c> delegates the grant store uses, as
+    /// <see cref="BeforeCorrelationDelegate"/>'s remarks describe. Identification, the
+    /// <c>code_verifier</c>'s absence, and a resolver fault or decline each answer
+    /// <paramref name="endpoint"/>'s own
+    /// <see cref="ServerEndpoint.HandleNotFoundError"/> / <see cref="ServerEndpoint.HandleNotFoundErrorDescription"/>
+    /// (falling back to <see cref="CodeGrantNotFoundDescription"/> when the endpoint sets
+    /// neither) — identical for a <c>code</c> that does not correlate to any flow, so a caller
+    /// with no credentials cannot distinguish the two. A grammatically malformed
+    /// <c>code_verifier</c> answers its own <c>invalid_grant</c> "PKCE verification failed.",
+    /// distinct from that constant, since the grammar itself — never the endpoint's identity —
+    /// decides it. Declared client authentication runs here, in the step, and answers its own
+    /// <c>401 invalid_client</c> untranslated; <see cref="VerifyCodeGrantPresentation"/> performs
+    /// no authentication of its own.
+    /// </para>
+    /// <para>
+    /// The issuer is resolved and carried (<c>SetCorrelationStepIssuer</c>) BEFORE declared
+    /// authentication and the <c>authorization_details</c> decision, both of which read the
+    /// carried value instead of resolving a second time for the same request —
+    /// <see cref="PrivateKeyJwtClientAuthentication"/>'s assertion validator reads it via
+    /// <c>context.CorrelationStepIssuer</c>, and
+    /// <see cref="ValidateAndCarryTokenRequestAuthorizationDetailsAsync"/> takes it as a
+    /// parameter, never resolving on its own. <see cref="BuildToken"/> and
+    /// <see cref="HandleAuthorizationCodeReplayAsync"/> read the same carried issuer once the code
+    /// state is loaded.
+    /// </para>
+    /// <para>
+    /// The request-only half of DPoP validation runs last, through
+    /// <see cref="DpopTokenEndpointValidation.ValidatePresentedProofAsync"/>: a proof is
+    /// validated, or its absence answered, entirely from the request and the registration's
+    /// profile, exactly once. <see cref="BuildToken"/>'s <c>BuildInputAsync</c> reads the carried
+    /// outcome through <see cref="DpopTokenEndpointValidation.BindValidatedProofAsync"/> once the
+    /// code state is loaded; it never re-runs proof or nonce validation.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<ServerHttpResponse?> BeforeCodeRedemptionCorrelationAsync(
+        ServerEndpoint endpoint, RequestFields fields, ExchangeContext context, CancellationToken cancellationToken)
+    {
+        //The dispatcher runs this step, for a continuing-flow endpoint, only after its own
+        //handle-presence refusal ("Missing code.") has already found a `code` field present —
+        //see BeforeCorrelationDelegate's remarks — so this step never needs its own presence
+        //guard for the correlation key itself.
+        EndpointServer server = context.RequestServer!;
+        var oauth = server.OAuth();
+
+        ClientRecord? registration = context.ClientRegistration;
+        if(registration is null)
+        {
+            return ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client.");
+        }
+
+        if(RefuseUnidentifiedClient(registration, fields, context.IncomingRequest) is not null)
+        {
+            return ServerHttpResponse.BadRequest(
+                endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
+                endpoint.HandleNotFoundErrorDescription ?? CodeGrantNotFoundDescription);
+        }
+
+        //Resolved and carried BEFORE declared authentication and the authorization_details
+        //decision below, both of which read it (PrivateKeyJwtClientAuthentication's assertion
+        //validator; ValidateAndCarryTokenRequestAuthorizationDetailsAsync) — never resolving a
+        //second time for the same request. BuildToken and HandleAuthorizationCodeReplayAsync read
+        //the same carried value once the code state is loaded.
+        Uri? resolvedIssuerUri;
+        try
+        {
+            resolvedIssuerUri = oauth.ResolveIssuerAsync is not null
+                ? await oauth.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false)
+                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken).ConfigureAwait(false);
+        }
+        catch(InvalidOperationException)
+        {
+            //Folded onto the endpoint's own constant, exactly as an unknown code is answered — a
+            //caller with no credentials must not learn whether a resolver fault or a nonexistent
+            //code produced this response, and this step runs identically for both.
+            return ServerHttpResponse.BadRequest(
+                endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
+                endpoint.HandleNotFoundErrorDescription ?? CodeGrantNotFoundDescription);
+        }
+
+        if(resolvedIssuerUri is not Uri issuerUri)
+        {
+            //ResolveServerIssuerDelegate explicitly permits a null result (a declined
+            //resolution); folded onto the same constant for the same reason.
+            return ServerHttpResponse.BadRequest(
+                endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
+                endpoint.HandleNotFoundErrorDescription ?? CodeGrantNotFoundDescription);
+        }
+
+        context.SetCorrelationStepIssuer(issuerUri);
+
+        if(!fields.TryGetValue(OAuthRequestParameterNames.CodeVerifier, out string? verifier)
+            || string.IsNullOrWhiteSpace(verifier))
+        {
+            return ServerHttpResponse.BadRequest(
+                endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
+                endpoint.HandleNotFoundErrorDescription ?? CodeGrantNotFoundDescription);
+        }
+
+        if(!IsValidCodeVerifierGrammar(verifier))
+        {
+            return ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, "PKCE verification failed.");
+        }
+
+        ServerHttpResponse? clientAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
+            oauth, context.IncomingRequest, fields, registration, context, cancellationToken).ConfigureAwait(false);
+        if(clientAuthFailure is not null)
+        {
+            return clientAuthFailure;
+        }
+
+        bool hasFieldClientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? fieldClientId)
+            && !string.IsNullOrEmpty(fieldClientId);
+        if(!hasFieldClientId && !HasClientCredentials(context.IncomingRequest, fields))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "client_id is required for a client that is not authenticating.");
+        }
+
+        ServerHttpResponse? resourceShapeFailure = ValidateRequestOnlyResourceShape(fields);
+        if(resourceShapeFailure is not null)
+        {
+            return resourceShapeFailure;
+        }
+
+        string? tokenRequestAuthorizationDetails = ReadAuthorizationDetails(fields);
+        if(tokenRequestAuthorizationDetails is not null)
+        {
+            ServerHttpResponse? detailsShapeFailure = await ValidateAndCarryTokenRequestAuthorizationDetailsAsync(
+                server, tokenRequestAuthorizationDetails, registration, context, issuerUri, cancellationToken)
+                .ConfigureAwait(false);
+            if(detailsShapeFailure is not null)
+            {
+                return detailsShapeFailure;
+            }
+        }
+
+        bool proofRequiredByRegistration = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+        return await DpopTokenEndpointValidation.ValidatePresentedProofAsync(
+            server, context, registration, issuerUri, server.TimeProvider.GetUtcNow(),
+            proofRequiredByRegistration, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Re-runs the token-request checks a code-grant presentation must pass, shared by the
     /// code's first presentation and, per
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
@@ -2022,6 +2725,21 @@ public static class AuthCodeEndpoints
     /// accepted) by exactly the rule a first presentation would have been.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// Identification of a presented <c>client_id</c>, the <c>code_verifier</c>'s presence and
+    /// grammar, and declared client authentication answer at
+    /// <see cref="BeforeCodeRedemptionCorrelationAsync"/>, the endpoint's pre-correlation step —
+    /// every one of those checks reads only the request and the registration, so it runs before
+    /// this method, and before the presented <c>code</c> is ever looked up. A field naming a
+    /// registration other than the one this tenant selected answers the SAME body as an unknown,
+    /// expired, or already-redeemed code (<see cref="CodeGrantNotFoundDescription"/>) —
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> names
+    /// <c>invalid_grant</c> for a grant "issued to another client" — so a presenter with no
+    /// credentials cannot distinguish a wrong <c>client_id</c> on a live code from one on a code
+    /// that never existed. This method performs the checks that need the stored code state: the
+    /// PKCE digest, the grant-binding comparison, and the <c>redirect_uri</c> comparison.
+    /// </para>
+    /// <para>
     /// PKCE verification per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>
     /// dispatches on <paramref name="codeChallengeMethod"/> — the method PERSISTED at
@@ -2032,47 +2750,43 @@ public static class AuthCodeEndpoints
     /// present -> must equal <paramref name="boundRedirectUri"/>'s <see cref="Uri.OriginalString"/>
     /// exactly; absent -> accepted without re-validation against the registered set. Returns the
     /// authenticated client registration alongside a <see langword="null"/> failure on success.
+    /// </para>
     /// </remarks>
-    private static async ValueTask<(ClientRecord? Registration, ServerHttpResponse? Failure)>
-        VerifyCodeGrantPresentationAsync(
+    private static (ClientRecord? Registration, ServerHttpResponse? Failure)
+        VerifyCodeGrantPresentation(
             AuthorizationServerIntegration oauth,
             RequestFields fields,
             ExchangeContext context,
             string codeChallenge,
             string codeChallengeMethod,
             string boundClientId,
-            Uri boundRedirectUri,
-            CancellationToken ct)
+            Uri boundRedirectUri)
     {
-        if(!fields.TryGetValue(OAuthRequestParameterNames.CodeVerifier, out string? verifier)
-            || string.IsNullOrWhiteSpace(verifier))
+        //The dispatcher already loaded the registration for this tenant onto the context. Use
+        //that rather than re-loading by client_id; doing the lookup again under a different
+        //identifier would conflate clientId and tenantId, which the protocol layer keeps distinct.
+        //BeforeCodeRedemptionCorrelationAsync already verified: registration is non-null, a
+        //presented client_id (if any) names this registration, code_verifier is present and
+        //well-formed, and declared client authentication passed — so every read below is trusted.
+        //A step that did not run answers ServerError here, the same fail-closed treatment the
+        //carried issuer and DPoP outcome get, never a null-forgiving throw.
+        if(context.ClientRegistration is not ClientRecord registration)
         {
-            //RFC 9700 §2.1.1: "the authorization server MUST enforce the correct usage of
-            //code_verifier at the token endpoint" — read as a grant failure, not a request
-            //failure, so a missing code_verifier answers with the SAME error and description an
-            //unknown/expired/already-used code does (HandleNotFoundError above). An unauthenticated
-            //party holding only a candidate `code` string must not be able to distinguish "this
-            //code exists" from "this code does not exist" by sending no code_verifier at all.
-            return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, "The authorization code is unknown, expired, or already used."));
+            return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                "The endpoint's pre-correlation step recorded no client registration."));
         }
 
-        //RFC 7636 §4.1: "code-verifier = 43*128unreserved". A presented verifier outside this
-        //shape cannot be one this flow's code_challenge was ever computed from — every verifier
-        //this library generates or accepts from a compliant client is drawn from that same
-        //alphabet and length range — so it fails PKCE verification exactly as a wrong-but-well-formed
-        //verifier does, before ComputeDigestBase64Url ever hashes it.
-        if(!IsValidCodeVerifierGrammar(verifier))
+        if(!fields.TryGetValue(OAuthRequestParameterNames.CodeVerifier, out string? verifier)
+            || verifier is null)
         {
-            return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, "PKCE verification failed."));
+            return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                "The endpoint's pre-correlation step recorded no code_verifier."));
         }
 
         //Fixed-time: this comparison decides the grant, so a match-length timing oracle on it
         //must not exist even though the challenge itself transited the front channel. Any
-        //persisted method other than S256/plain is unreachable: IsAcceptedPkceMethod gates every
-        //method the authorize/PAR endpoints could have stored.
-        bool pkceVerified = codeChallengeMethod switch
+        //persisted method other than S256 is refused, including a storage-corrupted value.
+        bool isPkceVerified = codeChallengeMethod switch
         {
             string method when WellKnownCodeChallengeMethods.IsS256(method) =>
                 FixedTimeComparison.AreEqual(
@@ -2084,49 +2798,44 @@ public static class AuthCodeEndpoints
                         oauth.Codecs.Encoder!,
                         oauth.MemoryPool!),
                     codeChallenge),
-            string method when WellKnownCodeChallengeMethods.IsPlain(method) =>
-                FixedTimeComparison.AreEqual(verifier, codeChallenge),
             _ => false
         };
-        if(!pkceVerified)
+        if(!isPkceVerified)
         {
+            //A refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §5.2's invalid_grant.
             return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, "PKCE verification failed."));
+                OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
         }
 
-        if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
-            || !string.Equals(clientId, boundClientId, StringComparison.Ordinal))
+        //RFC 6749 §4.1.3 / draft-ietf-oauth-v2-1-16 §4.1.3: "client_id: REQUIRED, if the client
+        //is not authenticating with the authorization server" — present or absent; the field's
+        //identity and the declared client authentication were already checked by
+        //BeforeCodeRedemptionCorrelationAsync.
+        bool hasFieldClientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? fieldClientId)
+            && !string.IsNullOrEmpty(fieldClientId);
+
+        //Grant binding: the EFFECTIVE identity — the field when present (already identified,
+        //above, as the registration's own) or the authenticated registration's when the field is
+        //absent — must be the client this code was issued to. A stored client that is not the
+        //registration's own (a legacy or hostile record) is never "repaired"; it answers
+        //RFC 6749 §5.2's invalid_grant "issued to another client".
+        string effectiveClientId = hasFieldClientId ? fieldClientId! : registration.ClientId;
+        if(!string.Equals(effectiveClientId, boundClientId, StringComparison.Ordinal))
         {
+            //A refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §5.2's invalid_grant.
             return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, "client_id mismatch."));
+                OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
         }
 
         if(fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? tokenRedirectUri)
             && !string.Equals(tokenRedirectUri, boundRedirectUri.OriginalString, StringComparison.Ordinal))
         {
+            //A refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §4.1.3's redirect_uri comparison.
             return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant,
-                "redirect_uri does not match the value presented when the authorization code was issued."));
-        }
-
-        //The dispatcher already loaded the registration for this tenant onto the context. Use
-        //that rather than re-loading by client_id; doing the lookup again under a different
-        //identifier would conflate clientId and tenantId, which the protocol layer keeps distinct.
-        ClientRecord? registration = context.ClientRegistration;
-        if(registration is null)
-        {
-            return (null, ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidClient, "Unknown client."));
-        }
-
-        //draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049/050): a registration
-        //that declares a non-None token_endpoint_auth_method is a confidential client, and every
-        //token-endpoint communication MUST include client authentication of that type.
-        ServerHttpResponse? clientAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
-            oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
-        if(clientAuthFailure is not null)
-        {
-            return (null, clientAuthFailure);
+                OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
         }
 
         return (registration, null);
@@ -2137,7 +2846,7 @@ public static class AuthCodeEndpoints
     /// Handles a code-grant token request whose correlation key resolved to an ALREADY-REDEEMED
     /// flow (<see cref="ServerTokenIssuedState"/>) instead of a live <see cref="ServerCodeIssuedState"/> —
     /// a replay of a spent authorization code. Re-verifies the presentation exactly as a first
-    /// presentation would be verified via <see cref="VerifyCodeGrantPresentationAsync"/>.
+    /// presentation would be verified via <see cref="VerifyCodeGrantPresentation"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2150,31 +2859,42 @@ public static class AuthCodeEndpoints
     /// could deny service to its legitimate holder by presenting it with wrong parameters.
     /// </para>
     /// <para>
-    /// A VALID replay — every check in <see cref="VerifyCodeGrantPresentationAsync"/> passes —
+    /// Before any revocation, the issuer resolved for THIS replay presentation is compared against
+    /// <see cref="FlowState.ExpectedIssuer"/> — the issuer resolved when the code was originally
+    /// issued — per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse">OpenID
+    /// Connect Core 1.0 §12.2</see> and the <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC
+    /// 9700 §4.4</see> mix-up defense it generalizes. A mismatch — including a declined or faulting
+    /// resolution — answers the same constant <c>invalid_grant</c> body as an invalid presentation,
+    /// revoking nothing, before <see cref="RevokeGrantAsync"/> ever runs.
+    /// </para>
+    /// <para>
+    /// A VALID replay — every check in <see cref="VerifyCodeGrantPresentation"/> passes —
     /// revokes the tokens the legitimate redemption issued per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>
     /// ("SHOULD revoke (when possible)") through the optional
     /// <see cref="AuthorizationServerIntegration.RevokeIssuedTokenAsync"/> delegate, keyed by each
     /// audited token's <c>jti</c> since the compact JWS bytes themselves are never persisted
     /// (see <see cref="ServerTokenIssuedState"/>) — see that delegate's remarks for the documented
-    /// degradation when it is left unwired. The sibling refresh token — a separate persisted
-    /// record at <see cref="ServerTokenIssuedState.RefreshFlowId"/>, not covered by the jti-keyed
-    /// audit set — is revoked by walking forward from that record to the grant family's live
-    /// refresh token (<see cref="RevokeRefreshTokenChainAsync"/>, shared with
-    /// <see cref="HandleRefreshTokenReuseAsync"/>'s own family revocation) and deleting it through
-    /// the required <see cref="ServerIntegration.DeleteFlowStateAsync"/> after claiming that live
-    /// record, even when the code-issued refresh token has itself rotated. The response is
-    /// <c>invalid_grant</c> — <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC
-    /// 6749 §5.2</see>'s "provided authorization grant ... is invalid, expired, revoked."
+    /// degradation when it is left unwired. Every other record of the grant — including the
+    /// sibling refresh token, never covered by the jti-keyed audit set — is revoked by the one
+    /// read <see cref="RevokeGrantAsync"/> makes through
+    /// <see cref="Verifiable.OAuth.Server.LoadGrantFlowStatesDelegate"/>, shared with
+    /// <see cref="HandleRefreshTokenReuseAsync"/>'s own grant revocation, which claims and deletes
+    /// the grant's live refresh record through the required
+    /// <see cref="ServerIntegration.DeleteFlowStateAsync"/>, even when the code-issued refresh
+    /// token has itself rotated since. The response is <c>invalid_grant</c> —
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>'s
+    /// "provided authorization grant ... is invalid, expired, revoked."
     /// </para>
     /// <para>
-    /// The first VALID replay whose refresh-chain walk reports a COMPLETED outcome writes
+    /// The first VALID replay whose grant revocation reports a COMPLETED outcome writes
     /// <see cref="ServerTokenIssuedState.RevokedAt"/> through <see cref="ServerAuthorizationCodeReplayDetected"/>
     /// — returned here as the stepped input rather than an early-exit response, so
     /// <see cref="EndpointServer"/>'s runner persists the marker via the same unconditional save
-    /// every other transition uses. When the walk instead gives up on its bounded claim retry, this
-    /// method answers the same <c>invalid_grant</c> refusal WITHOUT persisting the marker, so a
-    /// later presentation of the same code re-runs the walk rather than early-exiting on a marker
+    /// every other transition uses. When revocation instead gives up on its bounded claim retry,
+    /// this method answers the same <c>invalid_grant</c> refusal WITHOUT persisting the marker, so a
+    /// later presentation of the same code re-runs it rather than early-exiting on a marker
     /// that recorded revocation which never happened. A SECOND and every later valid presentation
     /// after a COMPLETED replay observes <see cref="ServerTokenIssuedState.RevokedAt"/> already set
     /// and answers <c>invalid_grant</c> as an early exit — no PDA step, no re-run of revocation: per
@@ -2206,16 +2926,18 @@ public static class AuthCodeEndpoints
             //This ServerTokenIssuedState was reached via refresh-token rotation, not a code
             //grant — a `code` correlation key can never resolve to it (the code index and the
             //refresh-token index are disjoint, and a code grant's flowId never changes across
-            //redemption), so this branch is defensive rather than reachable from client input.
+            //redemption), so this branch is defensive rather than reachable from client input. A
+            //refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §5.2's invalid_grant.
 
             return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, "Flow not in expected state."));
+                OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
         }
 
         (ClientRecord? registration, ServerHttpResponse? presentationFailure) =
-            await VerifyCodeGrantPresentationAsync(
+            VerifyCodeGrantPresentation(
                 oauth, fields, context, codeChallenge, codeChallengeMethod,
-                boundClientId, boundRedirectUri, ct).ConfigureAwait(false);
+                boundClientId, boundRedirectUri);
         if(presentationFailure is not null)
         {
             return (null, presentationFailure);
@@ -2223,31 +2945,47 @@ public static class AuthCodeEndpoints
 
         if(replayedState.RevokedAt is not null)
         {
+            //A refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §4.1.2 / RFC 9700 §4.5.3's replay defense.
             return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, "The authorization code has already been redeemed."));
+                OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
         }
 
-        await RevokeAuditedTokensAsync(
-            oauth, registration!, replayedState.IssuedTokens, context, ct).ConfigureAwait(false);
-
-        if(replayedState.RefreshFlowId is string refreshFlowId)
+        //OpenID Connect Core 1.0 §12.2 / RFC 9700 §4.4 mix-up defense: the issuer resolved for
+        //THIS replay presentation must be the same issuer resolved when the code was originally
+        //issued. BeforeCodeRedemptionCorrelationAsync already resolved it once for this request
+        //and carried it — a missing carry means the endpoint's step did not run as the dispatcher
+        //requires, and is answered as a server fault rather than resolving it a second time.
+        if(context.CorrelationStepIssuer is not Uri issuerUri)
         {
-            //RefreshFlowId names the refresh record the CODE issuance itself produced — by the
-            //time a replay is presented, that record may already have rotated one or more times
-            //(BuildRefreshToken retires a rotated-out record in place rather than deleting it), so
-            //walking the chain rather than deleting only this immediate record is what actually
-            //reaches — and revokes the audits of, and deletes — the family's still-live refresh
-            //token per RFC 6749 §4.1.2 / OAuth 2.1 §4.1.3's SHOULD-revoke. As with refresh reuse,
-            //an incomplete walk must not be recorded as a completed replay revocation, or a race
-            //with an in-flight legitimate rotation could leave the family alive with the marker
-            //already consumed and no further attempt to revoke it.
-            bool isChainRevoked = await RevokeRefreshTokenChainAsync(
-                oauth, registration!, refreshFlowId, context, ct).ConfigureAwait(false);
-            if(!isChainRevoked)
-            {
-                return (null, ServerHttpResponse.BadRequest(
-                    OAuthErrors.InvalidGrant, "The authorization code has already been redeemed."));
-            }
+            return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                "The endpoint's pre-correlation step recorded no resolved issuer."));
+        }
+
+        if(!IsSameIssuerAsIssuance(issuerUri, replayedState.ExpectedIssuer))
+        {
+            //A refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §4.1.2 / RFC 9700 §4.5.3's replay defense.
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
+        }
+
+        //GrantKeyOf resolves the grant this terminal state itself roots (its own FlowId, since a
+        //code redemption's terminal state always carries GrantFlowId = FlowId) — the single read
+        //RevokeGrantAsync makes reaches every sibling record of the grant, including a refresh
+        //token that has itself rotated one or more times since this code was redeemed. An
+        //incomplete revocation must not be recorded as a completed replay, or a race with an
+        //in-flight legitimate rotation could leave the grant alive with the marker already
+        //consumed and no further attempt to revoke it.
+        string grantFlowId = GrantKeyOf(replayedState);
+        bool isGrantRevoked = await RevokeGrantAsync(
+            oauth, registration!, replayedState, grantFlowId, context, ct).ConfigureAwait(false);
+        if(!isGrantRevoked)
+        {
+            //A refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §4.1.2 / RFC 9700 §4.5.3's replay defense.
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
         }
 
         return (new ServerAuthorizationCodeReplayDetected(context.VerifiedAt!.Value), null);
@@ -2255,38 +2993,187 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Authenticates and identifies the client presenting a live or retired refresh token.
-    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
-    /// draft-16 §4.3.1</see> requires the authorization server "MUST" apply this rule:
-    /// "if client authentication is included in the request, ensure that the refresh token was
-    /// issued to the authenticated client, OR if a client_id is included in the request, ensure
-    /// the refresh token was issued to the matching client". Validated credentials identify the
-    /// registration; otherwise the form must identify the bound client. A missing identity is
-    /// refused. Confidential registrations must also satisfy their declared authentication method.
+    /// The refresh endpoint's pre-correlation step: identification, issuer resolution, declared
+    /// client authentication, the <c>client_id</c>-required rule, the <c>resource</c> and
+    /// <c>authorization_details</c> request-only shapes, and DPoP, run, in that order, before the
+    /// presented <c>refresh_token</c> is ever looked up. Wired as
+    /// <see cref="EndpointCandidate.BeforeCorrelationAsync"/> on <see cref="BuildRefreshToken"/>.
+    /// Answers a live presentation, a retired (reuse) presentation, and an unknown handle alike,
+    /// since none of them is distinguished until the handle is resolved.
     /// </summary>
-    private static async ValueTask<ServerHttpResponse?> VerifyRefreshClientAsync(
-        AuthorizationServerIntegration oauth,
-        RequestFields fields,
-        ClientRecord registration,
-        string? boundClientId,
-        ExchangeContext context,
-        CancellationToken ct)
+    /// <remarks>
+    /// <para>
+    /// Every check here reads only <paramref name="fields"/>, <paramref name="endpoint"/>,
+    /// <paramref name="context"/>'s registration, and the server — never the stored GRANT record,
+    /// since none is loaded yet. The authentication stores (a client assertion's <c>jti</c>, a
+    /// DPoP proof's <c>jti</c>, a nonce) ARE reached, through the same
+    /// <c>LoadFlowStateAsync</c>/<c>SaveFlowStateAsync</c> delegates the grant store uses, as
+    /// <see cref="BeforeCorrelationDelegate"/>'s remarks describe.
+    /// </para>
+    /// <para>
+    /// Identification of a present <c>client_id</c> field against the effective registration runs
+    /// FIRST — before authentication — and a mismatch answers the SAME body
+    /// <see cref="RefreshTokenNotFoundDescription"/> an unknown, expired, retired, or revoked
+    /// refresh token receives from the dispatcher, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>'s
+    /// <c>invalid_grant</c> "issued to another client": a presenter with no credentials cannot
+    /// distinguish a wrong <c>client_id</c> on a live token from one on a token that never
+    /// existed. The issuer is resolved and carried (<c>SetCorrelationStepIssuer</c>) next, BEFORE
+    /// declared authentication and the <c>authorization_details</c> decision, both of which read
+    /// the carried value instead of resolving a second time for the same request.
+    /// <see cref="RequireClientAuthenticationIfDeclaredAsync"/> then authenticates the declared
+    /// method, answering its own <c>401 invalid_client</c> untranslated.
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
+    /// §4.3.1</see>'s stored-grant binding rule — "if client authentication is included in the
+    /// request, ensure that the refresh token was issued to the authenticated client, OR if a
+    /// client_id is included in the request, ensure the refresh token was issued to the matching
+    /// client" — has a request-only half decidable without any record: this library reads
+    /// "neither identity" (no <c>client_id</c> field and no declared credentials) as fail-closed,
+    /// and answers its own <c>invalid_request</c> next, mirroring
+    /// <see cref="BeforeCodeRedemptionCorrelationAsync"/>'s identical rule; the record-dependent
+    /// half, against the record's own bound client id, stays in <see cref="VerifyRefreshClient"/>,
+    /// once the record is loaded, and is never satisfied by relabelling a stored record to the
+    /// registration's identifier.
+    /// </para>
+    /// <para>
+    /// <see cref="DpopTokenEndpointValidation.ValidatePresentedProofAsync"/> runs last, deciding
+    /// the request-only half of DPoP from the registration's profile alone; the handler reads the
+    /// carried outcome through <see cref="DpopTokenEndpointValidation.BindValidatedProofAsync"/>
+    /// once it knows whether the stored record itself binds a proof.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<ServerHttpResponse?> BeforeRefreshCorrelationAsync(
+        ServerEndpoint endpoint, RequestFields fields, ExchangeContext context, CancellationToken cancellationToken)
     {
+        EndpointServer server = context.RequestServer!;
+        var oauth = server.OAuth();
+
+        ClientRecord? registration = context.ClientRegistration;
+        if(registration is null)
+        {
+            return ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client.");
+        }
+
+        if(RefuseUnidentifiedClient(registration, fields, context.IncomingRequest) is not null)
+        {
+            return ServerHttpResponse.BadRequest(
+                endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
+                endpoint.HandleNotFoundErrorDescription ?? RefreshTokenNotFoundDescription);
+        }
+
+        //Resolved and carried BEFORE declared authentication and the authorization_details
+        //decision below, both of which read it — never resolving a second time for the same
+        //request. BuildRefreshToken and HandleRefreshTokenReuseAsync read the same carried value
+        //once the stored record is loaded.
+        Uri? resolvedIssuerUri;
+        try
+        {
+            resolvedIssuerUri = oauth.ResolveIssuerAsync is not null
+                ? await oauth.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false)
+                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken).ConfigureAwait(false);
+        }
+        catch(InvalidOperationException)
+        {
+            //Folded onto the endpoint's own constant, exactly as an unknown refresh token is
+            //answered — a caller with no credentials must not learn whether a resolver fault or
+            //a nonexistent token produced this response, and this step runs identically for both.
+            return ServerHttpResponse.BadRequest(
+                endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
+                endpoint.HandleNotFoundErrorDescription ?? RefreshTokenNotFoundDescription);
+        }
+
+        if(resolvedIssuerUri is not Uri issuerUri)
+        {
+            //ResolveServerIssuerDelegate explicitly permits a null result (a declined
+            //resolution); folded onto the same constant for the same reason.
+            return ServerHttpResponse.BadRequest(
+                endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
+                endpoint.HandleNotFoundErrorDescription ?? RefreshTokenNotFoundDescription);
+        }
+
+        context.SetCorrelationStepIssuer(issuerUri);
+
         ServerHttpResponse? authenticationFailure = await RequireClientAuthenticationIfDeclaredAsync(
-            oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+            oauth, context.IncomingRequest, fields, registration, context, cancellationToken).ConfigureAwait(false);
         if(authenticationFailure is not null)
         {
             return authenticationFailure;
         }
 
+        //OAuth 2.1 draft-16 §4.3.1's stored-grant binding rule has a request-only half this
+        //library reads as fail-closed on neither identity: no client_id field and no declared
+        //credentials is decidable from the request alone, mirroring
+        //BeforeCodeRedemptionCorrelationAsync's identical rule. The record-dependent half — the
+        //presented identity against the token's BOUND client — stays in VerifyRefreshClient, once
+        //the record is loaded.
+        bool hasFieldClientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? fieldClientId)
+            && !string.IsNullOrEmpty(fieldClientId);
+        if(!hasFieldClientId && !HasClientCredentials(context.IncomingRequest, fields))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "client_id is required for a client that is not authenticating.");
+        }
+
+        ServerHttpResponse? resourceShapeFailure = ValidateRequestOnlyResourceShape(fields);
+        if(resourceShapeFailure is not null)
+        {
+            return resourceShapeFailure;
+        }
+
+        string? tokenRequestAuthorizationDetails = ReadAuthorizationDetails(fields);
+        if(tokenRequestAuthorizationDetails is not null)
+        {
+            ServerHttpResponse? detailsShapeFailure = await ValidateAndCarryTokenRequestAuthorizationDetailsAsync(
+                server, tokenRequestAuthorizationDetails, registration, context, issuerUri, cancellationToken)
+                .ConfigureAwait(false);
+            if(detailsShapeFailure is not null)
+            {
+                return detailsShapeFailure;
+            }
+        }
+
+        bool proofRequiredByRegistration = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+        return await DpopTokenEndpointValidation.ValidatePresentedProofAsync(
+            server, context, registration, issuerUri, server.TimeProvider.GetUtcNow(),
+            proofRequiredByRegistration, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The stored-grant binding comparison a refresh presentation must still pass once the
+    /// record is loaded: the effective client identity must be the one this refresh token was
+    /// issued to. Identification, declared authentication, and the request-only
+    /// <c>client_id</c>-required rule already ran, in <see cref="BeforeRefreshCorrelationAsync"/>,
+    /// the endpoint's pre-correlation step.
+    /// </summary>
+    /// <remarks>
+    /// This comparison IS purely record-dependent: <see cref="BeforeRefreshCorrelationAsync"/>
+    /// already refused a request presenting neither a <c>client_id</c> field nor declared
+    /// credentials (<c>invalid_request</c>), so every <paramref name="fields"/>/
+    /// <paramref name="context"/> pair reaching here yields a non-null, non-empty
+    /// <c>clientId</c> — the only fact left to decide is whether it equals
+    /// <paramref name="boundClientId"/>, which needs the stored record. Never satisfied by
+    /// relabelling a stored record to the registration's own identifier — a stored client id
+    /// that is not <paramref name="boundClientId"/> answers RFC 6749 §5.2's <c>invalid_grant</c>
+    /// under <see cref="RefreshTokenNotFoundDescription"/>: a refusal that reads the record
+    /// answers the endpoint's constant so the answer never tells whether the record exists.
+    /// </remarks>
+    private static ServerHttpResponse? VerifyRefreshClient(
+        RequestFields fields,
+        ClientRecord registration,
+        string? boundClientId,
+        ExchangeContext context)
+    {
         string? clientId = HasClientCredentials(context.IncomingRequest, fields)
             ? registration.ClientId
             : fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? formClientId)
                 ? formClientId : null;
-        if(string.IsNullOrEmpty(clientId) || !string.Equals(clientId, boundClientId, StringComparison.Ordinal))
+        if(!string.Equals(clientId, boundClientId, StringComparison.Ordinal))
         {
+            //A refusal that reads the record answers the endpoint's constant so the answer never
+            //tells whether the record exists — RFC 6749 §5.2's invalid_grant.
             return ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, "client_id does not match the refresh token's bound client.");
+                OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription);
         }
 
         return null;
@@ -2295,7 +3182,7 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// Handles reuse of a retired refresh token by verifying the client and proof before revoking
-    /// its family. The presented token is refused with a constant invalid_grant response.
+    /// its grant. The presented token is refused with a constant invalid_grant response.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2304,14 +3191,23 @@ public static class AuthCodeEndpoints
     /// refresh token replay by malicious actors for public clients". With rotation, "The
     /// authorization server cannot determine which party submitted the invalid refresh token,
     /// but it will revoke the active refresh token as well as the access authorization grant
-    /// associated with it." <see cref="VerifyRefreshClientAsync"/> and
-    /// <see cref="DpopTokenEndpointValidation.ValidateAsync"/> apply the same client identity,
-    /// authentication and proof checks as live refresh, including validation of any presented
-    /// proof on an unbound token. Invalid presentations revoke nothing, applying
+    /// associated with it." <see cref="BeforeRefreshCorrelationAsync"/> applies the same client
+    /// identity and authentication checks as live refresh before this method ever runs, and
+    /// <see cref="DpopTokenEndpointValidation.BindValidatedProofAsync"/> applies the same proof
+    /// check here, including the carried outcome for a request presenting no proof at all on an
+    /// unbound token. Invalid presentations revoke nothing, applying
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
     /// draft-16 §7.5.3</see>'s denial-of-service reasoning: "The authorization server SHOULD NOT
     /// revoke any issued tokens when receiving a replayed authorization code that contains
     /// invalid parameters".
+    /// </para>
+    /// <para>
+    /// The issuer resolved for THIS reuse presentation is compared against
+    /// <see cref="FlowState.ExpectedIssuer"/> — the issuer resolved when the retired token's grant
+    /// was issued — before the DPoP check, per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse">OpenID
+    /// Connect Core 1.0 §12.2</see> and the RFC 9700 §4.4 mix-up defense it generalizes. A mismatch
+    /// answers the same constant <c>invalid_grant</c> body as every other refusal here.
     /// </para>
     /// <para>
     /// All refusal exits reachable by an INVALID presentation — including issuer-resolution
@@ -2327,15 +3223,15 @@ public static class AuthCodeEndpoints
     /// an existence oracle for a retired token in a faulting deployment.
     /// </para>
     /// <para>
-    /// A valid reuse revokes the predecessor's paired-token audit, this record's audits, and the
-    /// successor chain through <see cref="RevokeRefreshTokenFamilyAsync"/>. Only when that walk
-    /// reports a completed outcome does this method return <see cref="ServerRefreshTokenReuseDetected"/>
+    /// A valid reuse revokes this record's own audits and, through <see cref="RevokeGrantAsync"/>,
+    /// every other record of the grant read in that one call. Only when that revocation reports a
+    /// completed outcome does this method return <see cref="ServerRefreshTokenReuseDetected"/>
     /// so the pure transition and runner persist <see cref="ServerTokenIssuedState.RevokedAt"/>.
-    /// When the walk gives up on its bounded claim retry without reaching the family's live end,
+    /// When revocation gives up on its bounded claim retry without claiming the grant's live end,
     /// this method returns the same constant <c>invalid_grant</c> refusal WITHOUT persisting the
-    /// marker, so the next presentation of this same retired token re-runs the walk rather than
+    /// marker, so the next presentation of this same retired token re-runs it rather than
     /// early-exiting on a marker that recorded work which never happened. Subsequent presentations
-    /// after a COMPLETED reuse early-exit without repeating that walk. The once-only marker
+    /// after a COMPLETED reuse early-exit without repeating it. The once-only marker
     /// guarantee is sequential: concurrent valid presentations can repeat audit revocations, so the
     /// optional delegate must be idempotent, consistent with
     /// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.2">RFC 7009 §2.2</see>: "the
@@ -2344,7 +3240,7 @@ public static class AuthCodeEndpoints
     /// <para>
     /// A legitimate client presenting one refresh token concurrently can lose its grant. A request
     /// loading the retired record after another request rotates it is a reuse under the strict
-    /// OAuth 2.1 §4.3.1 rule above and revokes the successful request's family. A request that loaded
+    /// OAuth 2.1 §4.3.1 rule above and revokes the successful request's grant. A request that loaded
     /// the live record instead competes for the rotation claim; a losing claim has no side effects.
     /// </para>
     /// </remarks>
@@ -2352,19 +3248,16 @@ public static class AuthCodeEndpoints
         AuthorizationServerIntegration oauth,
         RequestFields fields,
         ServerTokenIssuedState retiredState,
-        string successorFlowId,
         ExchangeContext context,
         CancellationToken ct)
     {
-        const string InvalidGrantDescription = "The refresh token is unknown, expired, or has been revoked.";
-
         if(retiredState.RevokedAt is not null)
         {
             //Already revoked by an earlier valid reuse — RFC 7009 §2.2's "the purpose of the
             //revocation request ... is already achieved" applies identically to a repeat reuse
             //presentation, so there is nothing further to run.
 
-            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, InvalidGrantDescription));
+            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
         }
 
         ClientRecord? registration = context.ClientRegistration;
@@ -2373,76 +3266,83 @@ public static class AuthCodeEndpoints
             //An INVALID presentation: revoke nothing. Collapsed onto the same body as every other
             //refusal below — see the remarks on why this method never distinguishes them.
 
-            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, InvalidGrantDescription));
+            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
         }
 
-        ServerHttpResponse? clientFailure = await VerifyRefreshClientAsync(
-            oauth, fields, registration, retiredState.ClientId, context, ct).ConfigureAwait(false);
+        ServerHttpResponse? clientFailure = VerifyRefreshClient(
+            fields, registration, retiredState.ClientId, context);
         if(clientFailure is not null)
         {
-            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, InvalidGrantDescription));
+            //Identification and declared authentication already ran, in
+            //BeforeRefreshCorrelationAsync, before this presentation was even known to be a reuse
+            //of a retired token — reaching here means both passed. Only the stored-grant binding
+            //mismatch remains, and it collapses onto this reuse path's own constant invalid_grant
+            //body: an unauthenticated observer must not be able to tell it apart from an unknown,
+            //expired, or already-revoked token.
+            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
         }
 
-        EndpointServer server = context.Server!;
+        EndpointServer server = context.RequestServer!;
         ConfirmationMethod? boundConfirmation = retiredState.Confirmation;
 
-        Uri? resolvedIssuerUri;
-        try
+        //BeforeRefreshCorrelationAsync already resolved the issuer once for this request and
+        //carried it. A missing carry means the endpoint's step did not run as the dispatcher
+        //requires; answered as a server fault rather than a divergent second resolution that
+        //could also fingerprint a retired token by a distinguishable response.
+        if(context.CorrelationStepIssuer is not Uri issuerUri)
         {
-            resolvedIssuerUri = oauth.ResolveIssuerAsync is not null
-                ? await oauth.ResolveIssuerAsync(registration, context, ct).ConfigureAwait(false)
-                : await DefaultIssuerResolver.ResolveAsync(registration, context, ct).ConfigureAwait(false);
-        }
-        catch(InvalidOperationException)
-        {
-            //A server-side configuration fault, not a property of the presentation. Collapsed onto
-            //the constant body rather than a distinct ServerError carrying the exception text: the
-            //token is retired either way, so a divergent exit here would both leak configuration
-            //detail and give an attacker a fifth, distinguishable way to fingerprint a retired
-            //token.
-
-            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, InvalidGrantDescription));
+            return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                "The endpoint's pre-correlation step recorded no resolved issuer."));
         }
 
-        if(resolvedIssuerUri is not Uri issuerUri)
+        //OpenID Connect Core 1.0 §12.2 / RFC 9700 §4.4 mix-up defense: the issuer resolved for
+        //THIS reuse presentation must be the same issuer resolved when retiredState's grant was
+        //issued. Collapsed onto the same constant invalid_grant body as every other refusal in
+        //this method — a distinct exit here would fingerprint a retired token.
+        if(!IsSameIssuerAsIssuance(issuerUri, retiredState.ExpectedIssuer))
         {
-            //ResolveServerIssuerDelegate explicitly permits a null result (an application seam
-            //declining to resolve an issuer for this presentation). Folded onto the same constant
-            //body as the exception path above: a distinguishable exit here would fingerprint a
-            //retired token exactly as a divergent exception exit would.
-
-            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, InvalidGrantDescription));
+            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
         }
 
         //Runs unconditionally — including for an unbound (Bearer) retired token — mirroring
-        //BuildRefreshToken's own unconditional call: a malformed DPoP proof attached to a Bearer
-        //presentation must refuse it exactly as a live Bearer rotation would, rather than being
-        //silently ignored because no thumbprint was ever bound to compare against.
-        DateTimeOffset now = server.TimeProvider.GetUtcNow();
-        DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
-            server, context, registration, issuerUri, now,
+        //BuildRefreshToken's own unconditional call. A malformed or invalid DPoP proof was already
+        //refused in BeforeRefreshCorrelationAsync's step, before this presentation was even known
+        //to be a reuse — this method's call never parses a proof and cannot refuse one; it reads
+        //the carried outcome and applies only the record-dependent remainder: a bound (non-Bearer)
+        //retired token presented with no carried proof still answers the fresh-nonce challenge,
+        //and a carried proof whose thumbprint disagrees with the retired record's own still answers
+        //the thumbprint mismatch. A missing carry is a server fault, not a silent Bearer fallback.
+        if(context.DpopStepOutcome is not DpopValidationOutcome carriedDpopOutcome)
+        {
+            return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                "The endpoint's pre-correlation step recorded no DPoP outcome."));
+        }
+
+        DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.BindValidatedProofAsync(
+            server, context, registration, issuerUri, carriedDpopOutcome,
             expectedThumbprint: boundConfirmation?.JwkThumbprint,
-            dpopRequired: boundConfirmation is { IsEmpty: false }, ct).ConfigureAwait(false);
+            proofRequiredByRecord: boundConfirmation is { IsEmpty: false }, ct).ConfigureAwait(false);
         if(!dpopOutcome.IsSuccess)
         {
             //An INVALID presentation: revoke nothing. Collapsed onto the constant body rather
             //than dpopOutcome.FailureResponse — a distinct invalid_dpop_proof response here
             //would tell an attacker the presented token IS a real, retired one.
 
-            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, InvalidGrantDescription));
+            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
         }
 
-        //A VALID presentation of a retired refresh token: revoke the grant family, then persist
-        //the once-only marker exactly as a code replay does — but ONLY when the walk actually
-        //reached and revoked the family's live end. An incomplete walk (the bounded-retry
-        //give-up) must not be recorded as a completed reuse revocation: doing so would make the
-        //live record's survival permanent and silent, since every later presentation of this same
-        //retired token would then early-exit on RevokedAt before ever re-running the walk.
-        bool isFamilyRevoked = await RevokeRefreshTokenFamilyAsync(
-            oauth, registration, retiredState, successorFlowId, context, ct).ConfigureAwait(false);
-        if(!isFamilyRevoked)
+        //A VALID presentation of a retired refresh token: revoke the grant, then persist the
+        //once-only marker exactly as a code replay does — but ONLY when revocation actually
+        //claimed and deleted the grant's live end. An incomplete revocation (the bounded-retry
+        //give-up) must not be recorded as a completed reuse: doing so would make the live
+        //record's survival permanent and silent, since every later presentation of this same
+        //retired token would then early-exit on RevokedAt before ever re-running it.
+        string grantFlowId = GrantKeyOf(retiredState);
+        bool isGrantRevoked = await RevokeGrantAsync(
+            oauth, registration, retiredState, grantFlowId, context, ct).ConfigureAwait(false);
+        if(!isGrantRevoked)
         {
-            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, InvalidGrantDescription));
+            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
         }
 
         return (new ServerRefreshTokenReuseDetected(context.VerifiedAt!.Value), null);
@@ -2450,138 +3350,129 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Revokes the audit on the reused record's predecessor, then its own audit and successor
-    /// chain. The predecessor holds the access token minted alongside the presented refresh
-    /// token, including the code-grant token when this is the first refresh record. Missing or
-    /// expired predecessor storage does not prevent forward revocation. This implements
-    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
-    /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
-    /// authorization grant associated with it."
+    /// Whether <paramref name="resolvedIssuerUri"/> — the issuer resolved for the request now
+    /// presenting a code or refresh token — is the same issuer under which the presented grant was
+    /// issued. Every <see cref="FlowState"/> carries the issuer resolved at issuance on
+    /// <see cref="FlowState.ExpectedIssuer"/> (<see cref="Uri.OriginalString"/> at the time it was
+    /// stamped); the comparison here uses that same string form, ordinally, per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse">OpenID
+    /// Connect Core 1.0 §12.2</see>'s ID Token <c>iss</c> rule and the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC 9700 §4.4</see> mix-up
+    /// defense it generalizes to every grant redemption, not only a refreshed ID Token.
     /// </summary>
-    /// <returns>
-    /// The completion signal from <see cref="RevokeRefreshTokenChainAsync"/>: <see langword="false"/>
-    /// when the family's live refresh token could not be claimed and therefore was not revoked, so
-    /// the caller must not treat this presentation as a completed reuse revocation.
-    /// </returns>
-    private static async ValueTask<bool> RevokeRefreshTokenFamilyAsync(
-        AuthorizationServerIntegration oauth,
-        ClientRecord registration,
-        ServerTokenIssuedState retiredState,
-        string successorFlowId,
-        ExchangeContext context,
-        CancellationToken ct)
-    {
-        if(retiredState.PredecessorFlowId is string predecessorFlowId)
-        {
-            (FlowState? predecessor, _) = await oauth.LoadFlowStateAsync!(
-                registration.TenantId, predecessorFlowId, context, ct).ConfigureAwait(false);
-            if(predecessor is ServerTokenIssuedState issuance)
-            {
-                await RevokeAuditedTokensAsync(
-                    oauth, registration, issuance.IssuedTokens, context, ct).ConfigureAwait(false);
-            }
-        }
-
-        await RevokeAuditedTokensAsync(
-            oauth, registration, retiredState.IssuedTokens, context, ct).ConfigureAwait(false);
-
-        return await RevokeRefreshTokenChainAsync(
-            oauth, registration, successorFlowId, context, ct).ConfigureAwait(false);
-    }
+    private static bool IsSameIssuerAsIssuance(Uri resolvedIssuerUri, string expectedIssuer) =>
+        string.Equals(resolvedIssuerUri.OriginalString, expectedIssuer, StringComparison.Ordinal);
 
 
     /// <summary>
-    /// Walks successor links, revoking each retired record's audits and claiming the loaded live
-    /// record before deleting it. Shared by code replay and refresh reuse to implement
+    /// The grant key a record belongs to — its own <see cref="ServerTokenIssuedState.GrantFlowId"/>
+    /// or <see cref="ServerRefreshTokenIssuedState.GrantFlowId"/> when set, its own
+    /// <see cref="FlowState.FlowId"/> otherwise. The one place both fields resolve to the value
+    /// <see cref="Verifiable.OAuth.Server.LoadGrantFlowStatesDelegate"/> is called with.
+    /// </summary>
+    private static string GrantKeyOf(FlowState state) =>
+        state switch
+        {
+            ServerTokenIssuedState issued => issued.GrantFlowId ?? issued.FlowId,
+            ServerRefreshTokenIssuedState refresh => refresh.GrantFlowId ?? refresh.FlowId,
+            _ => state.FlowId
+        };
+
+
+    /// <summary>
+    /// Revokes a grant by one read of every retained record sharing its grant key, rather than by
+    /// following links between records. Revokes the audits of <paramref name="presentedState"/>
+    /// (the record the dispatcher already loaded), then reads the grant once through
+    /// <see cref="Verifiable.OAuth.Server.LoadGrantFlowStatesDelegate"/>, revokes every accepted
+    /// <see cref="ServerTokenIssuedState"/>'s audits, and claims and deletes every accepted live
+    /// <see cref="ServerRefreshTokenIssuedState"/>. Shared by code replay and refresh reuse to
+    /// implement
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
     /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
     /// authorization grant associated with it."
     /// </summary>
     /// <remarks>
-    /// There is no arbitrary hop cap. The retained records' ExpiresAt values naturally bound the
-    /// walk, and a visited set stops a cycle caused by storage corruption while preserving work
-    /// already completed. A lost claim reloads the same flow once and follows its retired successor
-    /// link. If that reload is still live and cannot be claimed, the walk stops without deleting
-    /// unclaimed state — and reports that it did NOT complete, so a caller that would otherwise
-    /// persist a completion marker knows not to: see the <see langword="false"/> return below.
-    /// Missing or unexpected records also stop traversal, but count as complete — there is nothing
-    /// live left in the chain for the walk to have missed. The bounded retry avoids spinning when a
-    /// competing claim has not yet published a successor or storage cannot progress.
+    /// A returned record is accepted only when its own type is one of the two grant record types,
+    /// its <c>ClientId</c> equals <paramref name="registration"/>'s, and its own grant key
+    /// (<see cref="GrantKeyOf"/>) equals <paramref name="grantFlowId"/> — a store fault that
+    /// returns a foreign record never reaches another client's tokens: an ignored record is
+    /// neither revoked nor deleted. A returned <see cref="ServerTokenIssuedState"/> whose own flow
+    /// id equals <paramref name="presentedState"/>'s is also skipped: its audits were already
+    /// revoked once, before the grant read, and are not revoked a second time when the grant read
+    /// returns that same record. A lost claim on a live record re-reads the grant once more and
+    /// retries whatever it still reports live; a record that still cannot be claimed after that
+    /// leaves this call reporting NOT completed, so the caller must not persist a completion
+    /// marker for it.
     /// </remarks>
     /// <returns>
-    /// <see langword="true"/> when the walk reached a terminal outcome — the live record was
-    /// claimed and deleted, or nothing live remained to delete. <see langword="false"/> only on
-    /// the bounded-retry give-up, meaning a live record exists that this walk could not claim and
-    /// therefore did not revoke.
+    /// <see langword="true"/> when no accepted live record is left unclaimed — including when the
+    /// grant read returns no live record at all. <see langword="false"/> only when a live record
+    /// still could not be claimed after the one retry.
     /// </returns>
-    private static async ValueTask<bool> RevokeRefreshTokenChainAsync(
+    private static async ValueTask<bool> RevokeGrantAsync(
         AuthorizationServerIntegration oauth,
         ClientRecord registration,
-        string startFlowId,
+        ServerTokenIssuedState presentedState,
+        string grantFlowId,
         ExchangeContext context,
         CancellationToken ct)
     {
-        HashSet<string> visitedFlowIds = new(StringComparer.Ordinal);
-        string currentFlowId = startFlowId;
+        await RevokeAuditedTokensAsync(
+            oauth, registration, presentedState.IssuedTokens, context, ct).ConfigureAwait(false);
+
         bool isRetryAfterLostClaim = false;
 
         while(true)
         {
-            if(!isRetryAfterLostClaim && !visitedFlowIds.Add(currentFlowId))
+            IReadOnlyList<(string FlowId, FlowState State, int StepCount)> records =
+                await oauth.LoadGrantFlowStatesAsync!(
+                    registration.TenantId, grantFlowId, context, ct).ConfigureAwait(false);
+
+            bool isFullyClaimed = true;
+
+            foreach((string flowId, FlowState state, int stepCount) in records)
             {
-                //A repeated flow id can only arise from storage corruption forming a cycle in the
-                //chain — stop here; everything reached before the cycle was already revoked above.
-
-                return true;
-            }
-
-            bool isReloadAfterLostClaim = isRetryAfterLostClaim;
-            isRetryAfterLostClaim = false;
-
-            (FlowState? state, int stepCount) = await oauth.LoadFlowStateAsync!(
-                registration.TenantId, currentFlowId, context, ct).ConfigureAwait(false);
-
-            if(state is ServerRefreshTokenIssuedState)
-            {
-                //The live end of the chain: the grant family's current, un-redeemed refresh token.
-                //Claim the EXACT record this load observed before deleting it — see the remarks
-                //above for why a lost claim retries from the same flow id instead of deleting.
-                bool isClaimed = await oauth.ClaimFlowStateAsync!(
-                    registration.TenantId, currentFlowId, stepCount, context, ct).ConfigureAwait(false);
-                if(!isClaimed)
+                if(state is ServerTokenIssuedState issuedRecord)
                 {
-                    if(isReloadAfterLostClaim)
+                    if(string.Equals(flowId, presentedState.FlowId, StringComparison.Ordinal)
+                        || !string.Equals(issuedRecord.ClientId, registration.ClientId, StringComparison.Ordinal)
+                        || !string.Equals(GrantKeyOf(issuedRecord), grantFlowId, StringComparison.Ordinal))
                     {
-                        //A second live observation with a lost claim cannot authorize deletion —
-                        //and the walk did not reach a terminal outcome, so the caller must not
-                        //persist a completion marker for it.
-
-                        return false;
+                        continue;
                     }
 
-                    isRetryAfterLostClaim = true;
+                    await RevokeAuditedTokensAsync(
+                        oauth, registration, issuedRecord.IssuedTokens, context, ct).ConfigureAwait(false);
+
+                    continue;
+                }
+
+                if(state is not ServerRefreshTokenIssuedState liveRecord
+                    || !string.Equals(liveRecord.ClientId, registration.ClientId, StringComparison.Ordinal)
+                    || !string.Equals(GrantKeyOf(liveRecord), grantFlowId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                bool isClaimed = await oauth.ClaimFlowStateAsync!(
+                    registration.TenantId, flowId, stepCount, context, ct).ConfigureAwait(false);
+                if(!isClaimed)
+                {
+                    isFullyClaimed = false;
 
                     continue;
                 }
 
                 await oauth.DeleteFlowStateAsync!(
-                    registration.TenantId, currentFlowId, context, ct).ConfigureAwait(false);
-
-                return true;
+                    registration.TenantId, flowId, context, ct).ConfigureAwait(false);
             }
 
-            if(state is not ServerTokenIssuedState { SuccessorRefreshFlowId: string nextFlowId } intermediate)
+            if(isFullyClaimed || isRetryAfterLostClaim)
             {
-                //A dangling link, a code-grant terminal state, or a missing record: nothing
-                //further to revoke.
-
-                return true;
+                return isFullyClaimed;
             }
 
-            await RevokeAuditedTokensAsync(
-                oauth, registration, intermediate.IssuedTokens, context, ct).ConfigureAwait(false);
-
-            currentFlowId = nextFlowId;
+            isRetryAfterLostClaim = true;
         }
     }
 
@@ -2640,7 +3531,9 @@ public static class AuthCodeEndpoints
             //fallback (invalid_request) is correct for a malformed request but wrong for a grant the
             //request named correctly and that simply is not good anymore.
             HandleNotFoundError = OAuthErrors.InvalidGrant,
-            HandleNotFoundErrorDescription = "The authorization code is unknown, expired, or already used.",
+            HandleNotFoundErrorDescription = CodeGrantNotFoundDescription,
+
+            BeforeCorrelationAsync = BeforeCodeRedemptionCorrelationAsync,
 
             //RFC 6749 §5.2: "invalid_request ... The request is missing a required parameter" — a
             //code-grant token request missing `code` must still be identified as THIS endpoint so
@@ -2648,7 +3541,11 @@ public static class AuthCodeEndpoints
             //refresh-token matcher (different grant_type) and the OID4VP token matcher (different
             //path) is enforced by the grant_type filter alone; a missing `code` fails correlation-key
             //resolution in EndpointServer.HandleCoreAsync with invalid_request before BuildInputAsync
-            //ever runs (ExtractCorrelationKey below returns null).
+            //ever runs (ExtractCorrelationKey below returns null). The description names the
+            //parameter this endpoint alone knows is missing, in the style of "Missing grant_type."
+            //below, rather than the host-generic "Cannot determine correlation key."
+            MissingCorrelationKeyErrorDescription = "Missing code.",
+
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -2695,7 +3592,7 @@ public static class AuthCodeEndpoints
                     return NonExistentAuthorizationCodeCorrelationKey;
                 }
 
-                var oauth = context.Server!.OAuth();
+                var oauth = context.RequestServer!.OAuth();
 
                 return ComputeDigestBase64Url(
                     code,
@@ -2707,7 +3604,7 @@ public static class AuthCodeEndpoints
             },
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 if(currentState is ServerTokenIssuedState replayedState)
@@ -2718,49 +3615,70 @@ public static class AuthCodeEndpoints
 
                 if(currentState is not ServerCodeIssuedState codeState)
                 {
+                    //A refusal that reads the record answers the endpoint's constant so the answer
+                    //never tells whether the record exists — RFC 6749 §5.2's invalid_grant.
                     return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidGrant, "Flow not in expected state."));
+                        OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
                 }
 
                 (ClientRecord? verifiedRegistration, ServerHttpResponse? presentationFailure) =
-                    await VerifyCodeGrantPresentationAsync(
+                    VerifyCodeGrantPresentation(
                         oauth, fields, context, codeState.CodeChallenge, codeState.CodeChallengeMethod,
-                        codeState.ClientId, codeState.RedirectUri, ct).ConfigureAwait(false);
+                        codeState.ClientId, codeState.RedirectUri);
                 if(presentationFailure is not null)
                 {
                     return (null, presentationFailure);
                 }
 
+                //The redeemed code's PKCE method is typed here at the code grant's own token
+                //endpoint, where codeState already carries it — IssueTokensAsync below tags the
+                //other four OAuth wire facts from IssuanceContext, common to every grant, but
+                //PKCE is specific to this one.
+                _ = (System.Diagnostics.Activity.Current?.SetTag(
+                    OAuthTagNames.PkceMethod, codeState.CodeChallengeMethod));
+
                 ClientRecord registration = verifiedRegistration!;
 
-                Uri issuerUri;
-                try
+                //BeforeCodeRedemptionCorrelationAsync already resolved the issuer once for this
+                //request and carried it; a missing carry means the endpoint's step did not run
+                //as the dispatcher requires, and is answered as a server fault rather than
+                //silently resolving a second, possibly different, issuer.
+                if(context.CorrelationStepIssuer is not Uri issuerUri)
                 {
-                    issuerUri = oauth.ResolveIssuerAsync is not null
-                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false))!
-                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
-                            .ConfigureAwait(false);
+                    return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                        "The endpoint's pre-correlation step recorded no resolved issuer."));
                 }
-                catch(InvalidOperationException ex)
+
+                //OpenID Connect Core 1.0 §12.2 / RFC 9700 §4.4 mix-up defense: the issuer resolved
+                //for THIS redemption request must be the same issuer resolved when the code was
+                //issued (codeState.ExpectedIssuer, stamped at the authorization request). A
+                //mismatch is an INVALID presentation, refused before any DPoP check or claim,
+                //minting nothing.
+                if(!IsSameIssuerAsIssuance(issuerUri, codeState.ExpectedIssuer))
                 {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, ex.Message));
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
-                //RFC 9449 DPoP enforcement at the token endpoint. The helper
-                //returns a shaped failure response on any rejection path
-                //(missing proof, nonce challenge, invalid proof, jti replay)
-                //and the established Confirmation on success. Code-grant
-                //passes expectedThumbprint=null because the binding is being
-                //established here; refresh-grant verifies against the stored
-                //thumbprint in BuildRefreshToken.
-                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
-                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
-                    server, context, registration, issuerUri, now,
-                    expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
+                //RFC 9449 DPoP enforcement at the token endpoint. The request-only decision ran
+                //once already, in BeforeCodeRedemptionCorrelationAsync; this reads the outcome it
+                //carried and applies the record-dependent remainder. Code-grant passes
+                //expectedThumbprint: null and proofRequiredByRecord: false because the binding is
+                //being ESTABLISHED here, never verified against a prior record — refresh-grant
+                //verifies against the stored thumbprint in BuildRefreshToken. A missing carry means
+                //the step did not run as the dispatcher requires, and is a server fault rather than
+                //a silent Bearer fallback.
+                if(context.DpopStepOutcome is not DpopValidationOutcome carriedDpopOutcome)
+                {
+                    return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                        "The endpoint's pre-correlation step recorded no DPoP outcome."));
+                }
+
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.BindValidatedProofAsync(
+                    server, context, registration, issuerUri, carriedDpopOutcome,
+                    expectedThumbprint: null, proofRequiredByRecord: false, ct).ConfigureAwait(false);
 
                 if(!dpopOutcome.IsSuccess)
                 {
@@ -2782,6 +3700,7 @@ public static class AuthCodeEndpoints
                         codeState.SubjectId,
                         registration,
                         context,
+                        context.AuthorizationDetailsStepOutcome,
                         ct).ConfigureAwait(false);
                 if(detailsFailure is not null)
                 {
@@ -2842,9 +3761,11 @@ public static class AuthCodeEndpoints
                     //(HandleAuthorizationCodeReplayAsync, reached once ServerTokenIssuedState has
                     //been saved) — a claim lost to a concurrent winner returns invalid_grant here
                     //without revoking anything, since no ServerTokenIssuedState carrying the
-                    //winner's issued tokens exists yet for this caller to read.
+                    //winner's issued tokens exists yet for this caller to read. A refusal that
+                    //reads the record answers the endpoint's constant so the answer never tells
+                    //whether the record exists.
                     return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidGrant, "The authorization code has already been redeemed."));
+                        OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
                 }
 
                 IssuanceContext issuance = new()
@@ -2910,11 +3831,6 @@ public static class AuthCodeEndpoints
                     .ConfigureAwait(false);
                 DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
 
-                //Recorded onto ServerTokenIssuedState.RefreshFlowId below so a later VALID
-                //replay of this code (OAuth 2.1 §7.5.3) can revoke the refresh token by deleting
-                //its backing record — null when refresh-token issuance is not configured.
-                string? issuedRefreshFlowId = null;
-
                 if(oauth.SaveFlowStateAsync is not null)
                 {
                     string refreshFlowId = await oauth.GenerateIdentifierAsync!(
@@ -2923,7 +3839,11 @@ public static class AuthCodeEndpoints
                     ServerRefreshTokenIssuedState refreshState = new()
                     {
                         FlowId = refreshFlowId,
-                        PredecessorFlowId = codeState.FlowId,
+
+                        //The code flow's own id names the grant this refresh token is born
+                        //into — a later VALID replay of this code (OAuth 2.1 §7.5.3) or reuse of
+                        //this refresh token reads every record under this key in one call.
+                        GrantFlowId = codeState.FlowId,
                         ExpectedIssuer = issuerUri.OriginalString,
                         EnteredAt = now,
                         ExpiresAt = refreshExpiresAt,
@@ -2955,7 +3875,6 @@ public static class AuthCodeEndpoints
                     await oauth.SaveFlowStateAsync(
                         registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, ct)
                         .ConfigureAwait(false);
-                    issuedRefreshFlowId = refreshFlowId;
                 }
 
                 issuedTokens[WellKnownTokenTypes.RefreshToken] = refreshToken;
@@ -2974,8 +3893,7 @@ public static class AuthCodeEndpoints
                     ClientId = codeState.ClientId,
                     RedirectUri = codeState.RedirectUri,
                     CodeChallenge = codeState.CodeChallenge,
-                    CodeChallengeMethod = codeState.CodeChallengeMethod,
-                    RefreshFlowId = issuedRefreshFlowId
+                    CodeChallengeMethod = codeState.CodeChallengeMethod
                 }, null);
             },
             BuildResponse = static (state, flowKindName, context) =>
@@ -3054,6 +3972,9 @@ public static class AuthCodeEndpoints
                             refreshToken, ref first);
                     }
 
+                    //RFC 6749 §5.1: "scope: OPTIONAL, if identical to the scope requested by the
+                    //client; otherwise, REQUIRED." Echoing scope whenever the grant carries one
+                    //satisfies both branches with no state to track.
                     string? scope = issued.Scope;
                     if(!string.IsNullOrEmpty(scope))
                     {
@@ -3088,21 +4009,21 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Refresh-token grant per RFC 6749 §6 + RFC 9700 §2.2.2 rotation.
-    /// Endpoint Kind is <see cref="FlowKind.RefreshToken"/> so the AS's
-    /// correlation-key resolver looks up the refresh-token string in the
-    /// refresh-token secondary index. The matcher is path+method+grant_type-
-    /// disjoint from BuildToken (which handles authorization_code grant).
-    /// </summary>
-    /// <summary>
     /// Builds the <c>client_credentials</c> grant candidate (RFC 6749 §4.4) on
     /// the shared token endpoint URL. Stateless: the client authenticates
     /// through the application's
     /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
     /// seam, the requested scope is validated against the registration's
-    /// allowed scopes, and the configured token producers mint the access token
-    /// directly into the response — no flow state, no refresh token, no
-    /// end-user subject (the <c>sub</c> is the client itself per RFC 9068 §3).
+    /// allowed scopes, and a presented proof runs through
+    /// <see cref="DpopTokenEndpointValidation.ValidateAsync"/> exactly as it does
+    /// for the Pre-Authorized Code, Token Exchange and JWT-bearer grants — endpoints with no
+    /// pre-correlation step, unlike the authorization-code and refresh-token grants, which run
+    /// the same request-only decision earlier, through
+    /// <see cref="DpopTokenEndpointValidation.ValidatePresentedProofAsync"/> (<see
+    /// href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>:
+    /// "This is applicable for all access token requests regardless of grant
+    /// type") — no flow state, no refresh token, no end-user subject (the
+    /// <c>sub</c> is the client itself per RFC 9068 §3).
     /// </summary>
     private static EndpointCandidate BuildClientCredentials() =>
         new()
@@ -3142,21 +4063,30 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                }
+
+                //Identification of an optional client_id form field runs before every other
+                //check: a field that names another registration is refused invalid_client here,
+                //never forwarded into the declared-method check or the authentication seam.
+                ServerHttpResponse? clientCredentialsIdentificationFailure =
+                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
+                if(clientCredentialsIdentificationFailure is not null)
+                {
+                    return (null, clientCredentialsIdentificationFailure);
                 }
 
                 //draft-ietf-oauth-client-id-metadata-document-02 §8.2: a registration declaring a
                 //confidential method this endpoint does not advertise is refused before the validator
                 //runs, so the advertisement and the judgment are one set at every grant.
                 ServerHttpResponse? undeclaredMethodRefusal =
-                    RefuseUndeclaredClientAuthenticationMethod(oauth, registration);
+                    RefuseUndeclaredClientAuthenticationMethod(oauth, registration, context.IncomingRequest);
                 if(undeclaredMethodRefusal is not null)
                 {
                     return (null, undeclaredMethodRefusal);
@@ -3169,8 +4099,8 @@ public static class AuthCodeEndpoints
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                    return (null, ClientAuthenticationFailureResponse(
+                        context.IncomingRequest, "Client authentication failed."));
                 }
 
                 //RFC 6749 §3.3: requested scope tokens must each be allowed for
@@ -3266,9 +4196,27 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
-                //No end-user is involved: the token's subject is the client
-                //itself (RFC 9068 §3 for client_credentials), with no nonce,
-                //auth_time, or proof-of-possession binding in this grant shape.
+                //RFC 9449 §5: the same DPoP enforcement the authorization-code and
+                //Pre-Authorized Code grants run, at the same point — after client
+                //authentication and the scope, authorization-details, and resource
+                //checks, after issuer resolution, before issuance. expectedThumbprint
+                //is null because this grant establishes no prior binding to verify
+                //against.
+                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
+
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
+                }
+
+                ConfirmationMethod? confirmation = dpopOutcome.Confirmation;
+
+                //No end-user is involved: the token's subject is the client itself
+                //(RFC 9068 §3 for client_credentials), with no nonce or auth_time in
+                //this grant shape.
                 IssuanceContext issuance = new()
                 {
                     Registration = registration,
@@ -3279,6 +4227,7 @@ public static class AuthCodeEndpoints
                     ClientId = registration.ClientId,
                     GrantType = WellKnownGrantTypes.ClientCredentials,
                     IssuedAt = now,
+                    Confirmation = confirmation,
                     Audience = clientCredentialsAudience
                 };
 
@@ -3314,6 +4263,13 @@ public static class AuthCodeEndpoints
                     ? (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds
                     : 0;
 
+                //RFC 9449 §5: token_type is "DPoP" when the request bound the token, the
+                //RFC 6750 "Bearer" default otherwise — the rule every other grant's token
+                //response applies.
+                string tokenTypeWireName = confirmation is { IsEmpty: false }
+                    ? WellKnownAuthenticationSchemes.DPoP
+                    : WellKnownAuthenticationSchemes.Bearer;
+
                 //RFC 6749 §4.4.3/§5.1: access_token, token_type, expires_in, and
                 //the granted scope; the response is stateless and uncacheable.
                 StringBuilder sb = JsonAppender.Rent();
@@ -3323,8 +4279,7 @@ public static class AuthCodeEndpoints
                     _ = sb.Append('{');
                     bool first = true;
                     JsonAppender.AppendStringField(sb, WellKnownTokenTypes.AccessToken, accessToken, ref first);
-                    JsonAppender.AppendStringField(sb, "token_type",
-                        WellKnownAuthenticationSchemes.Bearer, ref first);
+                    JsonAppender.AppendStringField(sb, "token_type", tokenTypeWireName, ref first);
                     JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
                     JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.Scope, grantedScope, ref first);
                     _ = sb.Append('}');
@@ -3405,21 +4360,30 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                }
+
+                //Identification of an optional client_id form field runs before every other
+                //check: a field that names another registration is refused invalid_client here,
+                //never forwarded into the declared-method check or the authentication seam.
+                ServerHttpResponse? tokenExchangeIdentificationFailure =
+                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
+                if(tokenExchangeIdentificationFailure is not null)
+                {
+                    return (null, tokenExchangeIdentificationFailure);
                 }
 
                 //draft-ietf-oauth-client-id-metadata-document-02 §8.2: a registration declaring a
                 //confidential method this endpoint does not advertise is refused before the validator
                 //runs, so the advertisement and the judgment are one set at every grant.
                 ServerHttpResponse? undeclaredMethodRefusal =
-                    RefuseUndeclaredClientAuthenticationMethod(oauth, registration);
+                    RefuseUndeclaredClientAuthenticationMethod(oauth, registration, context.IncomingRequest);
                 if(undeclaredMethodRefusal is not null)
                 {
                     return (null, undeclaredMethodRefusal);
@@ -3433,8 +4397,48 @@ public static class AuthCodeEndpoints
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                    return (null, ClientAuthenticationFailureResponse(
+                        context.IncomingRequest, "Client authentication failed."));
+                }
+
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //RFC 9449 §5: "This is applicable for all access token requests regardless of grant
+                //type ... and extension grants such as the JWT authorization grant [RFC7523]" — Token
+                //Exchange is such an extension grant, and this call enforces the registration's own
+                //mandate (ClientPolicyProfiles.RequiresDpop) exactly as the authorization-code and
+                //client_credentials grants do. It runs BEFORE the subject-token, actor-token, and
+                //authorization seams below: each MAY be implemented with a side effect, so a
+                //use_dpop_nonce challenge (RFC 9449 §8) or a rejected proof MUST NOT consume any of
+                //them — the caller retries the same request once it has satisfied the challenge. The
+                //obligation the matrix below applies attaches to the subject_token being presented,
+                //not to which of the three issuance branches serves it: validate any presented proof
+                //once, then apply the same §9.8.1.2-shaped matrix the ID-JAG mint and redemption legs
+                //use — a bound subject token requires a matching proof, an unbound one may still opt a
+                //fresh key in, and an unbound token with no proof is refused only when the
+                //registration's own profile mandates DPoP.
+                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
                 }
 
                 //RFC 8693 §2.1: subject_token is REQUIRED.
@@ -3516,9 +4520,7 @@ public static class AuthCodeEndpoints
                 //whitespace. Past that check every value is non-blank and space-free, so joining with
                 //a space and splitting back via ParseResourceIndicators (the convention the library
                 //also uses for scope / acr_values) recovers exactly the individual RFC 8707 §2
-                //absolute-URI indicators. audience values are logical names that MAY contain spaces, so
-                //they are NOT space-split and stay single-valued at this boundary; a deployment that
-                //needs multiple audiences carries them through the authorization seam's own shaping.
+                //absolute-URI indicators.
                 IReadOnlyList<string> resource = [];
                 IReadOnlyList<string> resourceValues = fields.GetValues(OAuthRequestParameterNames.Resource);
                 if(resourceValues.Count > 0)
@@ -3573,22 +4575,63 @@ public static class AuthCodeEndpoints
                     resource = DeduplicateOrdinal(resourceIndicators);
                 }
 
-                IReadOnlyList<string> audience = [];
-                if(fields.TryGetValue(OAuthRequestParameterNames.Audience, out string? audienceValue)
-                    && !string.IsNullOrEmpty(audienceValue))
+                //RFC 8693 §2.1: "Multiple "audience" parameters may be used to indicate that the
+                //issued token is intended to be used at the multiple audiences listed" — every
+                //occurrence is read (RequestFields.GetValues, the same multi-valued read "resource"
+                //uses above), never folded into one value by TryGetValue's exactly-one semantics.
+                //audience values are logical names that MAY contain spaces, so an occurrence is never
+                //space-split the way a resource occurrence is joined and reparsed; each occurrence IS
+                //one audience. §2.2.2 registers no audience-specific error code for a malformed
+                //occurrence the way RFC 8707 §2 registers invalid_target for "resource" — a null,
+                //empty, or whitespace-only occurrence is simply a request that is "not... valid" under
+                //§2.2.2's general rule, so it is invalid_request. §2's audience set is a SET —
+                //deduplicate (ordinal) so a repeated value never reaches the authorization seam twice.
+                string[] audience = [];
+                IReadOnlyList<string> audienceValues = fields.GetValues(OAuthRequestParameterNames.Audience);
+                if(audienceValues.Count > 0)
                 {
-                    audience = [audienceValue];
+                    foreach(string rawValue in audienceValues)
+                    {
+                        if(string.IsNullOrWhiteSpace(rawValue))
+                        {
+                            return (null, ServerHttpResponse.BadRequest(
+                                OAuthErrors.InvalidRequest,
+                                "The audience parameter must not contain a null, empty, or "
+                                + "whitespace-only occurrence."));
+                        }
+                    }
+
+                    audience = DeduplicateOrdinal([.. audienceValues]);
                 }
 
                 //ID-JAG §4.3: when an Identity Assertion JWT Authorization Grant is requested
-                //(requested_token_type=id-jag), audience is REQUIRED — it names the Resource
-                //Authorization Server the grant is minted for and becomes the JAG's aud claim. A
-                //missing audience is a malformed request (invalid_request), not a grant failure.
-                if(requestedTokenType == TokenType.IdJag && audience.Count == 0)
+                //(requested_token_type=id-jag), audience is REQUIRED and names THE Resource
+                //Authorization Server the grant is minted for — the §4.3 profile paragraph speaks of
+                //"the Resource Authorization Server to which the ID-JAG is issued", one identifier
+                //that becomes the JAG's aud claim. A missing audience is a malformed request
+                //(invalid_request), not a grant failure. More than one audience is equally malformed
+                //against that singular definition — RFC 8693 §2.2.2's "If the request itself is not
+                //valid... MUST... invalid_request" — and is refused here, before the subject token is
+                //validated or the authorization seam runs: neither identity resolution nor the policy
+                //decision is meaningful when the mint does not yet know which single Resource
+                //Authorization Server it is for.
+                if(requestedTokenType == TokenType.IdJag)
                 {
-                    return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidRequest,
-                        "The audience parameter is required when requesting an id-jag token type."));
+                    if(audience.Length == 0)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "The audience parameter is required when requesting an id-jag token type."));
+                    }
+
+                    if(audience.Length > 1)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "The audience parameter must name exactly one Resource Authorization "
+                            + "Server when requesting an id-jag token type; this request named more "
+                            + "than one."));
+                    }
                 }
 
                 string? requestedScope = null;
@@ -3722,22 +4765,28 @@ public static class AuthCodeEndpoints
                         "This authorization server issues only access tokens, id-jag grants, or refresh tokens for token exchange; this issued_token_type is not supported."));
                 }
 
-                Uri issuerUri;
-                try
+                //ID-JAG §9.8.1.2-shaped proof-of-possession matrix: reads the proof outcome already
+                //validated above, before the subject-token, actor-token, and authorization seams.
+                IdJagDpopDecision subjectDpopDecision = IdJagDpopDecision.Evaluate(
+                    validatedSubject.RequiredKeyThumbprint,
+                    dpopOutcome.Confirmation?.JwkThumbprint,
+                    resourceServerRequiresSenderConstrained: false);
+                if(subjectDpopDecision.IsRejected)
                 {
-                    issuerUri = oauth.ResolveIssuerAsync is not null
-                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false))!
-                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
-                            .ConfigureAwait(false);
-                }
-                catch(InvalidOperationException ex)
-                {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, ex.Message));
+                    string dpopRefusal = subjectDpopDecision.Kind switch
+                    {
+                        IdJagDpopDecisionKind.RejectProofRequired => "Proof of possession required for this subject token.",
+                        IdJagDpopDecisionKind.RejectKeyMismatch => "The DPoP proof key does not match the subject token's bound key.",
+                        _ => "Sender-constrained tokens are required for this exchange."
+                    };
+
+                    return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, dpopRefusal)
+                        .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
                 }
 
-                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                ConfirmationMethod? tokenConfirmation = subjectDpopDecision.BoundKeyThumbprint is { } subjectBoundThumbprint
+                    ? new ConfirmationMethod { JwkThumbprint = subjectBoundThumbprint }
+                    : null;
 
                 //ID-JAG §4.3.4: when the authorization seam selected the id-jag issued type, mint and
                 //return the Identity Assertion JWT Authorization Grant directly — a precise §3.1 claim
@@ -3751,7 +4800,7 @@ public static class AuthCodeEndpoints
                     //— the mint threads that one value rather than deriving a second, so a JAG and an
                     //access token minted from the same exchange record the identical acting party.
                     return await BuildIdJagMintResponseAsync(
-                        server, registration, context, exchangeRequest, authorization, act, issuerUri, now, ct)
+                        server, registration, context, exchangeRequest, authorization, act, tokenConfirmation, issuerUri, now, ct)
                         .ConfigureAwait(false);
                 }
 
@@ -3762,7 +4811,7 @@ public static class AuthCodeEndpoints
                 if(authorization.IssuedTokenType == TokenType.RefreshToken)
                 {
                     return await BuildRefreshTokenExchangeResponseAsync(
-                        server, registration, context, authorization, issuerUri, now, ct)
+                        server, registration, context, authorization, tokenConfirmation, issuerUri, now, ct)
                         .ConfigureAwait(false);
                 }
 
@@ -3786,7 +4835,12 @@ public static class AuthCodeEndpoints
                     //RFC 8693 §2.1.1: when the authorization seam shaped the issued token for explicit
                     //target(s), those become the access token's aud verbatim — the scope→audience
                     //resolver is bypassed. An empty override leaves Audience null so the resolver runs.
-                    Audience = authorization.Audience is { Count: > 0 } ? authorization.Audience : null
+                    Audience = authorization.Audience is { Count: > 0 } ? authorization.Audience : null,
+
+                    //RFC 9449 §6.1: a subject token bound key that a presented proof matched (or a
+                    //fresh key an unbound subject token's proof opted into) sender-constrains the
+                    //issued access token; the CnfClaimContributor stamps cnf from this slot.
+                    Confirmation = tokenConfirmation
                 };
 
                 IReadOnlyList<TokenProducer> producers =
@@ -3822,8 +4876,14 @@ public static class AuthCodeEndpoints
                     : 0;
 
                 //RFC 8693 §2.2.1: access_token, issued_token_type, token_type, expires_in, scope.
-                //token_type is Bearer (RFC 6750); issued_token_type is the wire URI of the type the
-                //authorization seam decided. The response is stateless and uncacheable.
+                //issued_token_type is the wire URI of the type the authorization seam decided.
+                //token_type is DPoP (RFC 9449 §6.1) when the subject token's binding (or a fresh
+                //proof under an unbound one) sender-constrained this issuance, else the RFC 6750
+                //Bearer default. The response is stateless and uncacheable.
+                string tokenTypeWireName = tokenConfirmation is { IsEmpty: false }
+                    ? WellKnownAuthenticationSchemes.DPoP
+                    : WellKnownAuthenticationSchemes.Bearer;
+
                 StringBuilder sb = JsonAppender.Rent();
                 string responseJson;
                 try
@@ -3834,7 +4894,7 @@ public static class AuthCodeEndpoints
                     JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.IssuedTokenType,
                         TokenTypeNames.GetName(authorization.IssuedTokenType), ref first);
                     JsonAppender.AppendStringField(sb, "token_type",
-                        WellKnownAuthenticationSchemes.Bearer, ref first);
+                        tokenTypeWireName, ref first);
                     JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
                     JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.Scope, authorization.Scope, ref first);
                     _ = sb.Append('}');
@@ -3904,18 +4964,36 @@ public static class AuthCodeEndpoints
     /// <remarks>
     /// The application is the trust authority for the §4.5 MUST that the SAML Audience / SPEntityID maps
     /// to the authenticated client — it enforces that in its
-    /// <see cref="Server.ValidateTokenExchangeTokenDelegate"/> before authorizing the exchange (the
+    /// <see cref="ValidateTokenExchangeTokenDelegate"/> before authorizing the exchange (the
     /// library never parses SAML). This branch mints an opaque Refresh Token through the same identifier
     /// seam and <see cref="Server.States.ServerRefreshTokenIssuedState"/> storage the authorization-code
     /// and refresh-rotation flows use, so a later <c>refresh_token</c> grant or §4.3.2 refresh-token
     /// subject-token exchange can validate it, and returns it in the <c>access_token</c> field with
-    /// <c>issued_token_type</c> the refresh_token URN and <c>token_type</c> <c>N_A</c>.
+    /// <c>issued_token_type</c> the refresh_token URN and <c>token_type</c> <c>N_A</c>. Per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see> the minted Refresh
+    /// Token itself carries <paramref name="confirmation"/> when the subject token's binding (or a
+    /// fresh proof under an unbound one) sender-constrained this issuance, so a later
+    /// <c>refresh_token</c> grant enforces the same binding the code grant already does.
     /// </remarks>
+    /// <param name="server">The endpoint server.</param>
+    /// <param name="registration">The authenticated client requesting the exchange.</param>
+    /// <param name="context">The per-request context bag.</param>
+    /// <param name="authorization">The authorization seam's verdict, which shapes the minted Refresh Token's subject and scope.</param>
+    /// <param name="confirmation">
+    /// The RFC 9449 §6.1 confirmation the exchange established for this issuance (the subject token's
+    /// bound key matched by a presented proof, or a fresh key an unbound subject token's proof opted
+    /// into), or <see langword="null"/> when the issuance is unbound.
+    /// </param>
+    /// <param name="issuerUri">The resolved issuer identifier.</param>
+    /// <param name="now">The current instant.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The mint response, or the early-exit failure response.</returns>
     private static async ValueTask<(FlowInput? Input, ServerHttpResponse? EarlyExit)> BuildRefreshTokenExchangeResponseAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         TokenExchange.TokenExchangeAuthorization authorization,
+        ConfirmationMethod? confirmation,
         Uri issuerUri,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -3935,6 +5013,10 @@ public static class AuthCodeEndpoints
             ServerRefreshTokenIssuedState refreshState = new()
             {
                 FlowId = refreshFlowId,
+
+                //This record is the grant's own root: no code precedes it, so its own flow id
+                //is the grant key every later rotation of it carries forward.
+                GrantFlowId = refreshFlowId,
                 ExpectedIssuer = issuerUri.OriginalString,
                 EnteredAt = now,
                 ExpiresAt = refreshExpiresAt,
@@ -3965,7 +5047,9 @@ public static class AuthCodeEndpoints
                 Resource = authorization.Audience is { Count: > 0 } audienceEntries
                     && audienceEntries.All(IsAbsoluteResourceIndicatorUri)
                     ? string.Join(' ', audienceEntries)
-                    : null
+                    : null,
+
+                Confirmation = confirmation
             };
             await oauth.SaveFlowStateAsync(
                 registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
@@ -4033,6 +5117,12 @@ public static class AuthCodeEndpoints
     /// <see cref="TokenExchange.TokenExchangeAuthorization.Actor"/> overrides it when the seam shapes
     /// the actor itself (§9.7 leaves the derivation to the profile).
     /// </param>
+    /// <param name="confirmation">
+    /// The RFC 9449 §6.1 confirmation the Token Exchange grant's shared DPoP validation established
+    /// for this issuance (the subject token's bound key matched by a presented proof, or a fresh key an
+    /// unbound subject token's proof opted into), or <see langword="null"/> when the issuance is
+    /// unbound. Stamped onto the JAG's <c>cnf</c> claim per §9.8.1.1.
+    /// </param>
     /// <param name="issuerUri">The resolved IdP issuer identifier.</param>
     /// <param name="now">The current instant.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -4044,6 +5134,7 @@ public static class AuthCodeEndpoints
         TokenExchange.TokenExchangeRequest exchangeRequest,
         TokenExchange.TokenExchangeAuthorization authorization,
         IReadOnlyDictionary<string, object>? act,
+        ConfirmationMethod? confirmation,
         Uri issuerUri,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -4059,18 +5150,6 @@ public static class AuthCodeEndpoints
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "The authorization seam selected the id-jag issued type but the client lacks the id-jag capability."));
-        }
-
-        //§9.8.1.1: when the request carries a DPoP proof the IdP MUST validate it (htm=POST, htu=token
-        //endpoint) and bind the issued grant by stamping cnf.jkt with the proof's JWK thumbprint; when
-        //no proof is presented the grant is issued without a cnf claim. An invalid proof is refused by
-        //the shared validator. dpopRequired is false — id-jag binding at the mint is client-opt-in.
-        DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
-            server, context, registration, issuerUri, now,
-            expectedThumbprint: null, dpopRequired: false, cancellationToken).ConfigureAwait(false);
-        if(!dpopOutcome.IsSuccess)
-        {
-            return (null, dpopOutcome.FailureResponse!);
         }
 
         //§3.1 aud / §4.3: the audience is the Resource Authorization Server's issuer identifier. The
@@ -4212,7 +5291,7 @@ public static class AuthCodeEndpoints
         //§9.8.1.1: a validated DPoP proof binds the grant — cnf carries the proof's JWK SHA-256
         //thumbprint as jkt (RFC 9449 §6.1), which the Resource Authorization Server compares by string
         //equality against the proof presented on redemption.
-        if(dpopOutcome.Confirmation is { JwkThumbprint: { } boundThumbprint })
+        if(confirmation is { JwkThumbprint: { } boundThumbprint })
         {
             extraClaims ??= new(StringComparer.Ordinal);
             extraClaims[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -4371,7 +5450,7 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 //RFC 9068 constraint: a JWT access token requires a client_id, and IssuanceContext.ClientId
@@ -4380,8 +5459,8 @@ public static class AuthCodeEndpoints
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Client identification is required for the jwt-bearer grant."));
+                    return (null, ClientAuthenticationFailureResponse(
+                        context.IncomingRequest, "Client identification is required for the jwt-bearer grant."));
                 }
 
                 //RFC 7523 §3.1 composed with draft-ietf-oauth-client-id-metadata-document-02 §8.2
@@ -4403,10 +5482,20 @@ public static class AuthCodeEndpoints
                 //credentials are never validated twice.
                 if(HasClientCredentials(context.IncomingRequest, fields))
                 {
+                    //Identification of an optional client_id form field before authentication:
+                    //a field that names another registration is refused invalid_client here, never
+                    //forwarded into the authentication seam.
+                    ServerHttpResponse? jwtBearerIdentificationFailure =
+                        RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
+                    if(jwtBearerIdentificationFailure is not null)
+                    {
+                        return (null, jwtBearerIdentificationFailure);
+                    }
+
                     if(oauth.ValidateClientCredentialsAsync is null)
                     {
-                        return (null, ServerHttpResponse.Unauthorized(
-                            OAuthErrors.InvalidClient,
+                        return (null, ClientAuthenticationFailureResponse(
+                            context.IncomingRequest,
                             "Client credentials were presented but client authentication is not configured for this authorization server."));
                     }
 
@@ -4414,8 +5503,8 @@ public static class AuthCodeEndpoints
                         context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                     if(!isClientAuthenticated)
                     {
-                        return (null, ServerHttpResponse.Unauthorized(
-                            OAuthErrors.InvalidClient, "Client authentication failed."));
+                        return (null, ClientAuthenticationFailureResponse(
+                            context.IncomingRequest, "Client authentication failed."));
                     }
                 }
                 else
@@ -4444,19 +5533,6 @@ public static class AuthCodeEndpoints
                     requestedScope = scopeValue;
                 }
 
-                //RFC 7523 §3: validate the assertion JWT against the processing rules. The application
-                //is the trust authority; the builder guarantees the seam is wired. A null result is a
-                //§3 failure — invalid signature (rule 9), untrusted iss (rule 1), an aud that does not
-                //name this AS (rule 3), an expired/not-yet-valid window (rules 4–5), or any other JWT
-                //defect. Per §3.1 the error MUST be invalid_grant (NOT invalid_request).
-                JwtBearerGrant? grant = await oauth.ValidateJwtBearerAssertionAsync!(
-                    assertion, requestedScope, registration, context, ct).ConfigureAwait(false);
-                if(grant is null)
-                {
-                    return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidGrant, "The JWT assertion is not valid."));
-                }
-
                 Uri issuerUri;
                 try
                 {
@@ -4474,6 +5550,36 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
+                //RFC 9449 §5: "This is applicable for all access token requests regardless of grant
+                //type ... and extension grants such as the JWT authorization grant [RFC7523]" — this
+                //grant runs the SAME validation the authorization-code grant's token endpoint runs,
+                //with the SAME expectedThumbprint=null (the binding is being established here). It
+                //runs BEFORE the assertion-validation seam below: the assertion's jti is single-use
+                //(RFC 7523 §3 rule 7 / JtiReplayGuard consumes it), so a use_dpop_nonce challenge
+                //(RFC 9449 §8) or a rejected proof MUST NOT consume it — the caller retries the same
+                //assertion once it has satisfied the challenge.
+                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
+                }
+
+                //RFC 7523 §3: validate the assertion JWT against the processing rules. The application
+                //is the trust authority; the builder guarantees the seam is wired. A null result is a
+                //§3 failure — invalid signature (rule 9), untrusted iss (rule 1), an aud that does not
+                //name this AS (rule 3), an expired/not-yet-valid window (rules 4–5), or any other JWT
+                //defect. Per §3.1 the error MUST be invalid_grant (NOT invalid_request).
+                JwtBearerGrant? grant = await oauth.ValidateJwtBearerAssertionAsync!(
+                    assertion, requestedScope, registration, context, ct).ConfigureAwait(false);
+                if(grant is null)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, "The JWT assertion is not valid."));
+                }
+
                 //RFC 7523 §3 (rule 7): when the validated assertion carries a jti (an ID-JAG always does,
                 //§3.1), apply the shared (issuer, jti) replay defense — the same JtiReplayGuard the JAR and
                 //DPoP paths use, governed by JtiReplayPolicy and keyed on the assertion's own iss so
@@ -4483,9 +5589,15 @@ public static class AuthCodeEndpoints
                     && grant.Issuer is { } assertionIssuer
                     && grant.Expiration is { } assertionExpiry)
                 {
+                    //RFC 7523 §3 rule 7: the recorded jti is retained "for the length of time for
+                    //which the JWT would be considered valid based on the applicable exp instant" —
+                    //the application's ValidateJwtBearerAssertionDelegate is the trust authority for
+                    //that instant (§3 rules 4-5) and the library cannot read its timing tolerance, so
+                    //the recorded window floors at the library's own clock-skew tolerance, never
+                    //shorter than what the JAR and private_key_jwt callers honour.
                     JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
                         server, context, registration.TenantId,
-                        assertionIssuer, assertionJti, assertionExpiry, ct).ConfigureAwait(false);
+                        assertionIssuer, assertionJti, assertionExpiry + context.ClockSkewTolerance, ct).ConfigureAwait(false);
 
                     ServerHttpResponse? jtiFailure = jtiOutcome switch
                     {
@@ -4525,6 +5637,10 @@ public static class AuthCodeEndpoints
                     {
                         IdJagActorDecisionKind.RefuseUnauthorizedActor => "The client is not authorized to act for the subject of this authorization grant.",
                         IdJagActorDecisionKind.RefuseMalformedActor => "The authorization grant's act claim does not identify an actor.",
+                        IdJagActorDecisionKind.NoDelegation or
+                        IdJagActorDecisionKind.ChainPreserved or
+                        IdJagActorDecisionKind.ChainExtended or
+                        IdJagActorDecisionKind.DelegationRecorded => "The authorization grant's act claim does not identify an actor.",
 
                         _ => "The authorization grant's act claim does not identify an actor."
                     };
@@ -4541,20 +5657,12 @@ public static class AuthCodeEndpoints
                     context.SetGrantedAuthorizationDetailsClaim(grant.AuthorizationDetailsClaim);
                 }
 
-                //ID-JAG §9.8.1.2 proof-of-possession matrix. Validate a presented DPoP proof (htm=POST,
-                //htu=token endpoint) via the shared validator — a present-but-invalid proof is refused
-                //there — then combine the proof's key thumbprint with the grant's bound thumbprint
-                //(cnf.jkt) and the Resource Server's sender-constraint requirement to decide Bearer vs
-                //DPoP-bound vs reject. A grant with neither a bound key nor a constraint requirement and
-                //no presented proof yields the Bearer flow unchanged.
-                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
-                    server, context, registration, issuerUri, now,
-                    expectedThumbprint: null, dpopRequired: false, ct).ConfigureAwait(false);
-                if(!dpopOutcome.IsSuccess)
-                {
-                    return (null, dpopOutcome.FailureResponse!);
-                }
-
+                //ID-JAG §9.8.1.2 proof-of-possession matrix: combines the proof's key thumbprint
+                //(already validated above, before the assertion seam) with the grant's bound
+                //thumbprint (cnf.jkt) and the Resource Server's sender-constraint requirement to
+                //decide Bearer vs DPoP-bound vs reject. A grant with neither a bound key nor a
+                //constraint requirement and no presented proof yields the Bearer flow unless the
+                //registration's own profile mandates DPoP.
                 IdJagDpopDecision dpopDecision = IdJagDpopDecision.Evaluate(
                     grant.RequiredKeyThumbprint,
                     dpopOutcome.Confirmation?.JwkThumbprint,
@@ -4566,6 +5674,8 @@ public static class AuthCodeEndpoints
                         IdJagDpopDecisionKind.RejectProofRequired => "Proof of possession required for this authorization grant.",
                         IdJagDpopDecisionKind.RejectKeyMismatch => "The DPoP proof key does not match the grant's bound key.",
                         IdJagDpopDecisionKind.RejectSenderConstrainedRequired => "Sender-constrained tokens are required for this resource server.",
+                        IdJagDpopDecisionKind.BearerToken or
+                        IdJagDpopDecisionKind.SenderConstrainedToken => "Sender-constrained tokens are required for this resource server.",
 
                         _ => "Sender-constrained tokens are required for this resource server."
                     };
@@ -4681,6 +5791,224 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// Identification (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.2">RFC 6749
+    /// §2.2</see>): whether <paramref name="presentedClientId"/> IS the identifier of
+    /// <paramref name="registration"/> — the registration ALREADY SELECTED for this request. This
+    /// is never client authentication (§2.3, validated through
+    /// <see cref="RequireClientAuthenticationIfDeclaredAsync"/> /
+    /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>) and never the
+    /// binding of a stored grant to the client it was issued to (§4.1.2, §4.1.3, §5.2 "issued to
+    /// another client"), which each redemption path keeps as its own separate comparison. A Client
+    /// ID Metadata Document registration (<see cref="ClientRecord.ClientMetadataUri"/> non-null)
+    /// compares with the ordinal-equality
+    /// <see cref="ClientIdentifierUrl.IsMatch(string, string)"/> the materialization path already
+    /// applies to that identifier URL (<see cref="Verifiable.OAuth.Server.Pipeline.ClientIdMetadataMaterialization"/>); every
+    /// other registration compares <paramref name="presentedClientId"/> ordinally against
+    /// <see cref="ClientRecord.ClientId"/>. The one comparison every identification call site in
+    /// this file uses.
+    /// </summary>
+    private static bool IsPresentedClientIdentifierTheRegistration(
+        ClientRecord registration, string presentedClientId) =>
+        registration.ClientMetadataUri is not null
+            ? ClientIdentifierUrl.IsMatch(presentedClientId, registration.ClientId)
+            : string.Equals(presentedClientId, registration.ClientId, StringComparison.Ordinal);
+
+
+    /// <summary>
+    /// The description text <see cref="UnknownClientResponse"/> answers with, at the endpoints
+    /// that START a grant or authenticate independently of one — the pushed request, the direct
+    /// and <c>request_uri</c> authorization requests, client credentials, token exchange, the
+    /// jwt-bearer grant, revocation, and introspection.
+    /// </summary>
+    private const string UnknownClientDescription = "Unknown client.";
+
+
+    /// <summary>
+    /// The body <see cref="BeforeCodeRedemptionCorrelationAsync"/> answers a <c>client_id</c>
+    /// naming a registration other than this tenant's own, or an absent <c>code_verifier</c>,
+    /// with — byte-identical to the dispatcher's own answer for an unknown, expired, or
+    /// already-redeemed code (<see cref="BuildToken"/>'s <c>HandleNotFoundErrorDescription</c>).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> names
+    /// <c>invalid_grant</c> for a grant "issued to another client", which is what a caller
+    /// presenting a foreign <c>client_id</c> for this code is told — the same body an existence
+    /// or state oracle would otherwise leak through.
+    /// </summary>
+    /// <remarks>
+    /// Every refusal in <see cref="VerifyCodeGrantPresentation"/> that reads
+    /// <see cref="ServerCodeIssuedState"/> or the replayed <see cref="ServerTokenIssuedState"/>
+    /// answers this same body, never text of its own: the PKCE digest compare
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>), the
+    /// stored-client and <c>redirect_uri</c> comparisons
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see>),
+    /// every exit of <see cref="HandleAuthorizationCodeReplayAsync"/>'s replay defense
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see> /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.5.3">RFC 9700 §4.5.3</see>,
+    /// including a stored record shaped by refresh-token rotation rather than a code grant),
+    /// <see cref="BuildToken"/>'s own "not the expected record type" and lost-claim exits. A
+    /// caller who reaches a distinguishable answer at any of these sites has proven the code
+    /// exists; this constant is why none of them can. A refusal reachable only after a caller has
+    /// already proven possession of the grant's secrets — the <see cref="ResolveEffectiveResource"/>
+    /// granted-set subset refusal
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>), the
+    /// <see cref="ResolveGrantedAuthorizationDetailsAsync"/> narrowing-beyond-grant refusal
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9396#section-6">RFC 9396 §6</see>), and the
+    /// application's own
+    /// <see cref="AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync"/> denial —
+    /// tells the caller nothing about the code's existence that it did not already know, so it
+    /// keeps its own body instead of this one.
+    /// </remarks>
+    private const string CodeGrantNotFoundDescription = "The authorization code is unknown, expired, or already used.";
+
+
+    /// <summary>
+    /// The body <see cref="BeforeRefreshCorrelationAsync"/> answers a <c>client_id</c> naming a
+    /// registration other than this tenant's own with — byte-identical to the dispatcher's own
+    /// answer for an unknown, expired, retired, or revoked refresh token
+    /// (<see cref="BuildRefreshToken"/>'s <c>HandleNotFoundErrorDescription</c>), for the same
+    /// reason <see cref="CodeGrantNotFoundDescription"/> exists.
+    /// </summary>
+    /// <remarks>
+    /// Every refusal that reads the stored <see cref="ServerRefreshTokenIssuedState"/> or the
+    /// retired <see cref="ServerTokenIssuedState"/> answers this same body, never text of its own:
+    /// <see cref="VerifyRefreshClient"/>'s stored-grant binding comparison
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>,
+    /// live and reuse alike), <see cref="BuildRefreshToken"/>'s and
+    /// <see cref="HandleRefreshTokenReuseAsync"/>'s own "not the expected record type" and every
+    /// other exit of the reuse defense
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>),
+    /// and the two DPoP binding refusals internal to
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation.BindValidatedProofAsync"/>:
+    /// a DPoP-bound refresh token presented with no proof under a profile that does not itself
+    /// require DPoP (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>
+    /// names no error for a missing proof; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">§8</see>
+    /// governs a proof presented without a nonce, not a request presenting no proof at all), and a
+    /// valid proof bound to a key other than the one the record itself names
+    /// (RFC 9449 §5 prescribes <c>invalid_dpop_proof</c> for an INVALID proof — already answered
+    /// before correlation — and prescribes nothing for a valid proof with the wrong key). A caller
+    /// who reaches a distinguishable answer at any of these sites has proven the refresh token
+    /// exists; this constant, referenced rather than copied, is why none of them can. Internal
+    /// rather than private so the DPoP helper above — a different class in the same assembly —
+    /// references the one constant instead of copying its text. A refusal reachable only after a
+    /// caller has already proven possession of the grant's secrets — the bound client's identity
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>) — such as
+    /// the <see cref="ResolveEffectiveResource"/> granted-set subset refusal
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>), the
+    /// sibling <see cref="ResolveEffectiveScope"/> granted-set subset refusal (RFC 6749 §6 /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">§5.2</see>'s
+    /// <c>invalid_scope</c>), the
+    /// <see cref="ResolveGrantedAuthorizationDetailsAsync"/> narrowing-beyond-grant refusal
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9396#section-6">RFC 9396 §6</see>), and the
+    /// application's own
+    /// <see cref="AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync"/> denial —
+    /// tells the caller nothing about the refresh token's existence that it did not already know,
+    /// so it keeps its own body instead of this one.
+    /// </remarks>
+    internal const string RefreshTokenNotFoundDescription = "The refresh token is unknown, expired, or has been revoked.";
+
+
+    /// <summary>
+    /// The body both the <c>request_uri</c> completion's pre-correlation step (its registration
+    /// comparison, <see cref="BeforeAuthorizeCompletionCorrelationAsync"/>) and
+    /// <see cref="BuildAuthorize"/>'s handler (its pushed-request <c>ClientId</c> comparison)
+    /// answer with — referenced from both sites so the two comparisons this security invariant
+    /// depends on staying byte-identical can never drift apart by a one-character edit to a
+    /// copied literal.
+    /// </summary>
+    private const string PushedRequestClientMismatchDescription = "client_id does not match the pushed authorization request.";
+
+
+    /// <summary>
+    /// Adds the <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>
+    /// <c>WWW-Authenticate</c> challenge to <paramref name="response"/> when
+    /// <paramref name="request"/> attempted authentication through the <c>Authorization: Basic</c>
+    /// header — the one place every <c>invalid_client</c> response this file answers with, whether
+    /// a mismatch against a resolved registration (<see cref="UnknownClientResponse"/>) or any
+    /// other identification or authentication failure (<see cref="ClientAuthenticationFailureResponse"/>),
+    /// applies the challenge from. A continuing grant's <c>invalid_grant</c> refusal never calls this.
+    /// </summary>
+    private static ServerHttpResponse AddBasicChallengeIfAttempted(ServerHttpResponse response, IncomingRequest? request)
+    {
+        if(request is not null
+            && request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
+            && !string.IsNullOrEmpty(authHeader)
+            && authHeader.StartsWith(WellKnownAuthenticationSchemes.Basic, StringComparison.OrdinalIgnoreCase))
+        {
+            return response.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, WellKnownAuthenticationSchemes.Basic);
+        }
+
+        return response;
+    }
+
+
+    /// <summary>
+    /// The wire body <see cref="UnknownClientDescription"/> names — the identification refusal at
+    /// the endpoints listed on that constant's own doc —
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>
+    /// <c>invalid_client</c> — so the body never discloses whether the presented identifier
+    /// belongs to another registration. Carries the <see cref="AddBasicChallengeIfAttempted"/>
+    /// challenge when <paramref name="request"/> attempted <c>Authorization: Basic</c>. The
+    /// continuing-grant endpoints (code redemption, refresh) answer their own identification
+    /// mismatch with <see cref="CodeGrantNotFoundDescription"/> / <see cref="RefreshTokenNotFoundDescription"/>
+    /// instead, never through this response.
+    /// </summary>
+    private static ServerHttpResponse UnknownClientResponse(IncomingRequest? request) =>
+        AddBasicChallengeIfAttempted(
+            ServerHttpResponse.Unauthorized(OAuthErrors.InvalidClient, UnknownClientDescription),
+            request);
+
+
+    /// <summary>
+    /// The <c>401 invalid_client</c> response every client-authentication failure and every site
+    /// that finds no registration to identify against in this file answers with —
+    /// <paramref name="description"/> names the specific failure. Carries the
+    /// <see cref="AddBasicChallengeIfAttempted"/> challenge when <paramref name="request"/>
+    /// attempted <c>Authorization: Basic</c>, exactly as <see cref="UnknownClientResponse"/> does
+    /// for a mismatch against a resolved registration —
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> draws no
+    /// distinction between the failure kinds for the challenge requirement.
+    /// </summary>
+    private static ServerHttpResponse ClientAuthenticationFailureResponse(IncomingRequest? request, string description) =>
+        AddBasicChallengeIfAttempted(
+            ServerHttpResponse.Unauthorized(OAuthErrors.InvalidClient, description),
+            request);
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
+    /// "if the client identifier is missing or invalid, the authorization server ... MUST NOT
+    /// automatically redirect the user agent to the invalid redirection URI" — the authorization
+    /// endpoint's own identification refusal, a direct response with no redirect, distinct from
+    /// the token endpoint family's <see cref="UnknownClientResponse"/>.
+    /// </summary>
+    private static ServerHttpResponse UnidentifiedClientDirectResponse() =>
+        ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, UnknownClientDescription);
+
+
+    /// <summary>
+    /// Identification at every site that reads an OPTIONAL <c>client_id</c> field: when the
+    /// field is present it MUST be <paramref name="registration"/>'s own identifier
+    /// (<see cref="IsPresentedClientIdentifierTheRegistration"/>); an absent field is not a
+    /// failure here — a caller with its own required-field rule (a public client, or a request
+    /// that never authenticates) enforces that separately. Runs BEFORE the declared
+    /// authentication method and before any grant-binding comparison, per the
+    /// identification-then-authentication-then-binding order client authentication for this
+    /// authorization server follows throughout.
+    /// </summary>
+    private static ServerHttpResponse? RefuseUnidentifiedClient(
+        ClientRecord registration, RequestFields fields, IncomingRequest? request)
+    {
+        if(fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? presentedClientId)
+            && !string.IsNullOrEmpty(presentedClientId)
+            && !IsPresentedClientIdentifierTheRegistration(registration, presentedClientId))
+        {
+            return UnknownClientResponse(request);
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
     /// Reports whether the request carries client credentials — the §3.1 "if client credentials are
     /// present" predicate for the jwt-bearer grant. A credential is present when the request bears an
     /// <c>Authorization</c> header (<c>client_secret_basic</c> / <c>private_key_jwt</c> / mTLS surface)
@@ -4722,17 +6050,19 @@ public static class AuthCodeEndpoints
     /// </summary>
     /// <param name="oauth">The authorization server integration whose advertised methods bound the declaration.</param>
     /// <param name="registration">The effective client registration whose declared method is judged.</param>
+    /// <param name="request">The incoming request, so a Basic-attempted refusal carries the challenge.</param>
     /// <returns>A <c>401 invalid_client</c> response when the declared method is unadvertised; otherwise <see langword="null"/>.</returns>
     private static ServerHttpResponse? RefuseUndeclaredClientAuthenticationMethod(
         AuthorizationServerIntegration oauth,
-        ClientRecord registration)
+        ClientRecord registration,
+        IncomingRequest? request)
     {
         if(registration.TokenEndpointAuthMethod is { } authMethod
             && authMethod != ClientAuthenticationMethod.None
             && !oauth.ClientAuthenticationMethodsSupported.Contains(authMethod))
         {
-            return ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidClient,
+            return ClientAuthenticationFailureResponse(
+                request,
                 "The client's declared token_endpoint_auth_method is not supported by this "
                 + "token endpoint.");
         }
@@ -4775,6 +6105,12 @@ public static class AuthCodeEndpoints
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        ServerHttpResponse? identificationFailure = RefuseUnidentifiedClient(registration, fields, request);
+        if(identificationFailure is not null)
+        {
+            return identificationFailure;
+        }
+
         if(registration.TokenEndpointAuthMethod is not { } authMethod
             || authMethod == ClientAuthenticationMethod.None)
         {
@@ -4785,8 +6121,8 @@ public static class AuthCodeEndpoints
 
             if(oauth.ValidateClientCredentialsAsync is null)
             {
-                return ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidClient,
+                return ClientAuthenticationFailureResponse(
+                    request,
                     "Client credentials were presented but this authorization server has no client "
                     + "authentication configured to validate them.");
             }
@@ -4795,14 +6131,13 @@ public static class AuthCodeEndpoints
                 request, fields, registration, context, cancellationToken).ConfigureAwait(false);
             if(!arePresentedCredentialsAuthenticated)
             {
-                return ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidClient, "Client authentication failed.");
+                return ClientAuthenticationFailureResponse(request, "Client authentication failed.");
             }
 
             return null;
         }
 
-        ServerHttpResponse? undeclaredMethodRefusal = RefuseUndeclaredClientAuthenticationMethod(oauth, registration);
+        ServerHttpResponse? undeclaredMethodRefusal = RefuseUndeclaredClientAuthenticationMethod(oauth, registration, request);
         if(undeclaredMethodRefusal is not null)
         {
             return undeclaredMethodRefusal;
@@ -4810,8 +6145,8 @@ public static class AuthCodeEndpoints
 
         if(oauth.ValidateClientCredentialsAsync is null)
         {
-            return ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidClient,
+            return ClientAuthenticationFailureResponse(
+                request,
                 "This client declared a confidential token_endpoint_auth_method but client "
                 + "authentication is not configured for this authorization server.");
         }
@@ -4820,8 +6155,7 @@ public static class AuthCodeEndpoints
             request, fields, registration, context, cancellationToken).ConfigureAwait(false);
         if(!isClientAuthenticated)
         {
-            return ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidClient, "Client authentication failed.");
+            return ClientAuthenticationFailureResponse(request, "Client authentication failed.");
         }
 
         return null;
@@ -4888,14 +6222,13 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
                 }
 
                 //§6.1: pre-authorized_code MUST be present when this grant type is used.
@@ -4913,6 +6246,42 @@ public static class AuthCodeEndpoints
                 string? clientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? cid)
                     && !string.IsNullOrWhiteSpace(cid) ? cid : null;
 
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //RFC 9449 §5: "This is applicable for all access token requests regardless of
+                //grant type" — this grant runs the SAME validation the authorization-code grant's
+                //token endpoint runs, with the SAME expectedThumbprint=null (the binding is being
+                //established here). It runs BEFORE the code-validation seam below: the
+                //pre-authorized_code is single-use and the seam may consume it, so a
+                //use_dpop_nonce challenge (RFC 9449 §8) or a rejected proof MUST NOT consume it
+                //— the Wallet retries the same code once it has satisfied the challenge.
+                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
+
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
+                }
+
+                ConfirmationMethod? confirmation = dpopOutcome.Confirmation;
+
                 //The application owns the pre-authorized code store; the builder guarantees
                 //the seam is wired. It resolves the subject and tells the library which §6.3
                 //error a refusal maps to.
@@ -4921,7 +6290,7 @@ public static class AuthCodeEndpoints
 
                 if(!decision.IsGranted)
                 {
-                    return (null, MapPreAuthorizedCodeDenial(decision));
+                    return (null, MapPreAuthorizedCodeDenial(decision, context.IncomingRequest));
                 }
 
                 string? subject = decision.Subject;
@@ -4944,6 +6313,7 @@ public static class AuthCodeEndpoints
                         subject,
                         registration,
                         context,
+                        stepOutcome: null,
                         ct).ConfigureAwait(false);
                 if(detailsFailure is not null)
                 {
@@ -4957,30 +6327,12 @@ public static class AuthCodeEndpoints
                     context.SetGrantedAuthorizationDetailsClaim(grantedDetailsClaim);
                 }
 
-                Uri issuerUri;
-                try
-                {
-                    issuerUri = oauth.ResolveIssuerAsync is not null
-                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false))!
-                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
-                            .ConfigureAwait(false);
-                }
-                catch(InvalidOperationException ex)
-                {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, ex.Message));
-                }
-
-                DateTimeOffset now = server.TimeProvider.GetUtcNow();
-
                 //OID4VCI 1.0 §13.10 — the Pre-Authorized Code grant always mints an Access Token
-                //giving access to Credentials and the pre-authorized token response is a plain
-                //bearer token (no DPoP binding on this path). A long-lived bearer Credential token
-                //MUST NOT be issued; refuse unless the access-token lifetime is within the §13.10
-                //threshold.
+                //giving access to Credentials. A long-lived bearer Credential token MUST NOT be
+                //issued unless sender-constrained; the DPoP enforcement above set the
+                //confirmation when it bound the token.
                 ServerHttpResponse? protectionFailure = GuardCredentialAccessTokenProtection(
-                    server, registration, isSenderConstrained: false);
+                    server, registration, isSenderConstrained: confirmation is { IsEmpty: false });
                 if(protectionFailure is not null)
                 {
                     return (null, protectionFailure);
@@ -5006,7 +6358,8 @@ public static class AuthCodeEndpoints
                     Scope = grantedScope,
                     ClientId = clientId ?? registration.ClientId,
                     GrantType = WellKnownGrantTypes.PreAuthorizedCode,
-                    IssuedAt = now
+                    IssuedAt = now,
+                    Confirmation = confirmation
                 };
 
                 IReadOnlyList<TokenProducer> producers =
@@ -5041,6 +6394,13 @@ public static class AuthCodeEndpoints
                     ? (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds
                     : 0;
 
+                //RFC 9449 §5: token_type is "DPoP" when the request bound the token, the
+                //RFC 6750 "Bearer" default otherwise — the rule every other grant's token
+                //response applies.
+                string tokenTypeWireName = confirmation is { IsEmpty: false }
+                    ? WellKnownAuthenticationSchemes.DPoP
+                    : WellKnownAuthenticationSchemes.Bearer;
+
                 //§6.2/RFC 6749 §5.1: access_token, token_type, expires_in, and the granted
                 //scope when one was requested. The c_nonce is deliberately absent — OID4VCI
                 //1.0 moved it to the Nonce Endpoint (§7). The response is uncacheable.
@@ -5051,8 +6411,7 @@ public static class AuthCodeEndpoints
                     _ = sb.Append('{');
                     bool first = true;
                     JsonAppender.AppendStringField(sb, WellKnownTokenTypes.AccessToken, accessToken, ref first);
-                    JsonAppender.AppendStringField(sb, "token_type",
-                        WellKnownAuthenticationSchemes.Bearer, ref first);
+                    JsonAppender.AppendStringField(sb, "token_type", tokenTypeWireName, ref first);
                     JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
                     if(!string.IsNullOrEmpty(grantedScope))
                     {
@@ -5087,9 +6446,13 @@ public static class AuthCodeEndpoints
     /// <summary>
     /// Maps an OID4VCI 1.0 §6.3 Pre-Authorized Code denial to the corresponding OAuth 2.0
     /// Token Error Response. A denial with no reason set defaults to <c>invalid_grant</c>,
-    /// the spec's catch-all for an unaccepted Pre-Authorized Code.
+    /// the spec's catch-all for an unaccepted Pre-Authorized Code. <paramref name="request"/>
+    /// carries the <see cref="ClientAuthenticationFailureResponse"/> challenge on the
+    /// <see cref="PreAuthorizedCodeDenialReason.ClientAuthenticationRequired"/> branch, the
+    /// one <c>invalid_client</c> answer this mapping can produce.
     /// </summary>
-    private static ServerHttpResponse MapPreAuthorizedCodeDenial(PreAuthorizedCodeDecision decision) =>
+    private static ServerHttpResponse MapPreAuthorizedCodeDenial(
+        PreAuthorizedCodeDecision decision, IncomingRequest? request) =>
         decision.DenialReason switch
         {
             //A denial with no reason set, and an explicit InvalidCode denial, share the
@@ -5108,7 +6471,7 @@ public static class AuthCodeEndpoints
                 ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant,
                     decision.DenialDescription ?? "The Transaction Code is invalid."),
             PreAuthorizedCodeDenialReason.ClientAuthenticationRequired =>
-                ServerHttpResponse.Unauthorized(OAuthErrors.InvalidClient,
+                ClientAuthenticationFailureResponse(request,
                     decision.DenialDescription ?? "Anonymous access is not supported; a client_id is required."),
 
             _ => ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant,
@@ -5307,6 +6670,49 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// The request-only half of an inbound token-request <c>resource</c> field's shape: present
+    /// but empty is malformed, the same fact <see cref="ResolveEffectiveResource"/> also checks —
+    /// duplicated here, in each step endpoint's pre-correlation step, so the answer is
+    /// byte-identical for a grant that does not exist and one that does. Reads only
+    /// <paramref name="fields"/>.
+    /// </summary>
+    /// <param name="fields">The inbound token request's form fields.</param>
+    /// <returns>
+    /// The <c>invalid_target</c> refusal when the request's own <c>resource</c> field is present
+    /// but empty, all-whitespace, or carries a malformed raw occurrence (<see cref="ReadResource"/>'s
+    /// <see cref="MalformedResourceIndicatorSentinel"/>); <see langword="null"/> when the field is
+    /// absent or well-formed — the granted-set subset comparison that also lives in
+    /// <see cref="ResolveEffectiveResource"/> stays there, since it needs the stored grant.
+    /// </returns>
+    private static ServerHttpResponse? ValidateRequestOnlyResourceShape(RequestFields fields)
+    {
+        string? requestedResource = ReadResource(fields);
+        if(requestedResource is null)
+        {
+            return null;
+        }
+
+        //ReadResource collapses ANY malformed raw occurrence — present but empty, all-whitespace,
+        //or embedding whitespace — into MalformedResourceIndicatorSentinel, discarding every other
+        //occurrence in the same request. Splitting that sentinel string yields one non-empty
+        //element, so the parsed-length-zero check below alone can never see it; it is checked
+        //directly, first.
+        if(string.Equals(requestedResource, MalformedResourceIndicatorSentinel, StringComparison.Ordinal))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidTarget, "The resource parameter, when present, must not be empty.");
+        }
+
+        string[] requested = ParseResourceIndicators(requestedResource) ?? [];
+
+        return requested.Length == 0
+            ? ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidTarget, "The resource parameter, when present, must not be empty.")
+            : null;
+    }
+
+
+    /// <summary>
     /// Resolves the effective RFC 8707 §2.2 resource set for a token-endpoint response from the
     /// granted set carried on the code/refresh state and an optional token-request <c>resource</c>.
     /// No token-request value leaves the full <paramref name="grantedResource"/> set (possibly
@@ -5317,7 +6723,9 @@ public static class AuthCodeEndpoints
     /// every granted indicator was already shape-validated at PAR/authorize
     /// (<see cref="ValidateResourceIndicatorsShape"/>), a malformed token-request value can never
     /// match a granted one and is rejected by the same subset check — no separate shape check is
-    /// needed here. §2's resource set is a SET — the granted and requested indicator lists are
+    /// needed here (the request-only empty-value case is <see cref="ValidateRequestOnlyResourceShape"/>'s,
+    /// which the endpoint's pre-correlation step already ran before this method is ever reached).
+    /// §2's resource set is a SET — the granted and requested indicator lists are
     /// each deduplicated (ordinal) before use, via <see cref="DeduplicateOrdinal"/>, so a client or
     /// stored grant that repeated an indicator never surfaces a duplicate <c>aud</c> member. Shared
     /// by the <c>authorization_code</c> grant (<see cref="BuildToken"/>) and the
@@ -5397,9 +6805,11 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// Removes ordinal-duplicate entries from <paramref name="indicators"/>, preserving the first
-    /// occurrence's position. RFC 8707 §2's resource indicator set is a SET — a client repeating an
-    /// indicator (or a stored grant that accumulated one) must never surface as a duplicate
-    /// <c>aud</c> member.
+    /// occurrence's position. Shared by the two space-delimited token sets this endpoint narrows at
+    /// the token boundary: RFC 8707 §2's resource indicators (a client repeating an indicator, or a
+    /// stored grant that accumulated one, must never surface as a duplicate <c>aud</c> member) and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>'s scope
+    /// tokens (a repeated token adds no additional access range beyond what the set already has).
     /// </summary>
     private static string[] DeduplicateOrdinal(string[] indicators)
     {
@@ -5419,6 +6829,60 @@ public static class AuthCodeEndpoints
         }
 
         return [.. deduplicated];
+    }
+
+
+    /// <summary>
+    /// Resolves the effective <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749
+    /// §6</see> scope for a refresh-grant response from the scope carried on the presented
+    /// <see cref="ServerRefreshTokenIssuedState"/> and an optional token-request
+    /// <c>scope</c>. Mirrors <see cref="ResolveEffectiveResource"/>'s narrowing shape: no
+    /// token-request value leaves the full <paramref name="grantedScope"/> in force ("if omitted is
+    /// treated as equal to the scope originally granted by the resource owner"); a token-request
+    /// value MUST be a subset of the granted set ("The requested scope MUST NOT include any scope
+    /// not originally granted"), compared as a case-sensitive SET of space-delimited tokens per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">§3.3</see> — order and
+    /// repetition carry no meaning (<see cref="DeduplicateOrdinal"/>). Any requested token outside
+    /// the granted set fails closed with <see cref="OAuthErrors.InvalidScope"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">§5.2</see>: "exceeds the
+    /// scope granted by the resource owner"), reachable only after
+    /// <see cref="VerifyRefreshClient"/> and the DPoP binding have already passed — the criterion
+    /// <see cref="RefreshTokenNotFoundDescription"/>'s remarks state for a refusal that keeps its
+    /// own body instead of that constant. A present but blank or all-whitespace token-request
+    /// <c>scope</c> is treated the same as an absent one: §3.3's grammar
+    /// (<c>scope-token = 1*( ... )</c>) requires at least one character per token, so a blank value
+    /// carries no scope-token at all, textually indistinguishable from omission. This method never
+    /// narrows the STORED refresh record itself — the caller alone decides what to persist onto
+    /// <see cref="ServerRefreshTokenIssuedState.Scope"/>, which §6 requires stay "identical to
+    /// that of the refresh token included by the client in the request" across rotation, however
+    /// narrow this request was.
+    /// </summary>
+    /// <param name="grantedScope">The scope stored on the presented refresh record.</param>
+    /// <param name="requestedScope">The token request's own <c>scope</c> field, or <see langword="null"/> when absent.</param>
+    private static (string EffectiveScope, ServerHttpResponse? Failure) ResolveEffectiveScope(
+        string grantedScope, string? requestedScope)
+    {
+        if(string.IsNullOrWhiteSpace(requestedScope))
+        {
+            return (grantedScope, null);
+        }
+
+        string[] requested = DeduplicateOrdinal(
+            requestedScope.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        HashSet<string> grantedTokens = new(
+            grantedScope.Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal);
+
+        foreach(string token in requested)
+        {
+            if(!grantedTokens.Contains(token))
+            {
+                return (string.Empty, ServerHttpResponse.BadRequest(
+                    OAuthErrors.InvalidScope,
+                    $"The scope parameter must be a subset of the scope originally granted; '{token}' was not granted."));
+            }
+        }
+
+        return (string.Join(' ', requested), null);
     }
 
 
@@ -5470,6 +6934,70 @@ public static class AuthCodeEndpoints
         {
             return ServerHttpResponse.BadRequest(OAuthErrors.InvalidAuthorizationDetails, shapeError);
         }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// The token-endpoint step's own <c>authorization_details</c> decision — run ONCE, in a step
+    /// endpoint's pre-correlation step, after the step has already resolved and carried the
+    /// issuer. Unlike <see cref="ValidateAuthorizationDetailsShapeAsync"/> (shared by PAR, direct
+    /// authorize and the <c>request_uri</c> completion, none of which ever resolve credential
+    /// authorization), this also runs the token endpoint's SUPPORT decision —
+    /// <see cref="AuthorizationServerIntegration.ParseAuthorizationDetailsAsync"/> AND
+    /// <see cref="AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync"/> both wired
+    /// — exactly as <see cref="ResolveGrantedAuthorizationDetailsAsync"/> decides it from
+    /// configuration, so a permitted deployment shape (a parser wired for a registered type beyond
+    /// the built-in <c>openid_credential</c>, with no credential resolver) answers the SAME
+    /// <c>invalid_authorization_details</c> "not supported" refusal for an unknown and a live
+    /// grant alike, rather than only for a live one. The <c>locations</c> requirement is resolved
+    /// and checked here, once, for this step's own shape refusal; it is not itself carried. On
+    /// success, carries the parsed details on <paramref name="context"/> via
+    /// <see cref="ExchangeContextAuthorizationDetailsExtensions.SetAuthorizationDetailsStepOutcome"/>
+    /// for <see cref="ResolveGrantedAuthorizationDetailsAsync"/> to read instead of re-parsing the
+    /// request for the same request.
+    /// </summary>
+    /// <returns>The refusal to answer with, or <see langword="null"/> to proceed.</returns>
+    private static async ValueTask<ServerHttpResponse?> ValidateAndCarryTokenRequestAuthorizationDetailsAsync(
+        EndpointServer server,
+        string authorizationDetailsJson,
+        ClientRecord registration,
+        ExchangeContext context,
+        Uri issuerUri,
+        CancellationToken cancellationToken)
+    {
+        var oauth = server.OAuth();
+        ParseAuthorizationDetailListDelegate? parse = oauth.ParseAuthorizationDetailsAsync;
+        ResolveCredentialAuthorizationDelegate? resolve = oauth.ResolveCredentialAuthorizationAsync;
+        if(parse is null || resolve is null)
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidAuthorizationDetails,
+                "authorization_details is not supported by this authorization server.");
+        }
+
+        IReadOnlyList<AuthorizationDetail>? details = await parse(
+            authorizationDetailsJson, context, cancellationToken).ConfigureAwait(false);
+        if(details is null)
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidAuthorizationDetails,
+                "authorization_details could not be parsed.");
+        }
+
+        string? requiredLocation = await ResolveRequiredAuthorizationDetailsLocationAsync(
+            server, registration, context, issuerUri, cancellationToken).ConfigureAwait(false);
+
+        string? shapeError = AuthorizationDetailsShapeError(
+            oauth.AuthorizationDetailTypes, details, requiredLocation,
+            registration.AllowedAuthorizationDetailsTypes);
+        if(shapeError is not null)
+        {
+            return ServerHttpResponse.BadRequest(OAuthErrors.InvalidAuthorizationDetails, shapeError);
+        }
+
+        context.SetAuthorizationDetailsStepOutcome(new AuthorizationDetailsStepOutcome(details));
 
         return null;
     }
@@ -5547,11 +7075,19 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Resolves the OID4VCI 1.0 §5.1.1 / §6.1.1 <c>locations</c> requirement: when the
-    /// deployment's Credential Issuer metadata declares an <c>authorization_servers</c>
-    /// parameter, returns the Credential Issuer Identifier value every <c>openid_credential</c>
-    /// authorization details object MUST carry in its <c>locations</c> element; otherwise
-    /// <see langword="null"/> (the AS is the issuer, so no <c>locations</c> is required).
+    /// Resolves the OID4VCI 1.0 §5.1.1 / §6.1.1 <c>locations</c> requirement for a caller with no
+    /// already-resolved issuer of its own (PAR, direct authorize, the <c>request_uri</c>
+    /// completion, and the pre-authorized code grant — none carries an issuer from an earlier
+    /// step). Metadata-first: when the deployment declares no
+    /// <see cref="AuthorizationServerIntegration.ContributeCredentialIssuerMetadataAsync"/> seam,
+    /// or the seam's contribution declares no <c>authorization_servers</c>, returns
+    /// <see langword="null"/> WITHOUT resolving an issuer at all — an issuer resolution these
+    /// callers do not otherwise need, and, for the pre-authorized code grant, one that would run
+    /// AFTER <see cref="AuthorizationServerIntegration.ValidatePreAuthorizedCodeAsync"/> may
+    /// already have consumed the code. A step endpoint, which has already resolved and carried an
+    /// issuer for the request, calls the
+    /// <see cref="ResolveRequiredAuthorizationDetailsLocationAsync(EndpointServer, ClientRecord, ExchangeContext, Uri, CancellationToken)"/>
+    /// overload instead, never this one.
     /// </summary>
     private static async ValueTask<string?> ResolveRequiredAuthorizationDetailsLocationAsync(
         EndpointServer server,
@@ -5580,6 +7116,42 @@ public static class AuthCodeEndpoints
                 .ConfigureAwait(false);
 
         return issuer.OriginalString;
+    }
+
+
+    /// <summary>
+    /// Resolves the OID4VCI 1.0 §5.1.1 / §6.1.1 <c>locations</c> requirement against
+    /// <paramref name="issuerUri"/>: when the deployment's Credential Issuer metadata declares an
+    /// <c>authorization_servers</c> parameter, returns <paramref name="issuerUri"/>'s
+    /// <see cref="Uri.OriginalString"/> — the Credential Issuer Identifier value every
+    /// <c>openid_credential</c> authorization details object MUST carry in its <c>locations</c>
+    /// element; otherwise <see langword="null"/> (the AS is the issuer, so no <c>locations</c> is
+    /// required). Never resolves an issuer of its own — a step endpoint's pre-correlation step
+    /// passes the issuer it already resolved and carried, so this decision costs no second
+    /// resolution for the same request.
+    /// </summary>
+    private static async ValueTask<string?> ResolveRequiredAuthorizationDetailsLocationAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        Uri issuerUri,
+        CancellationToken cancellationToken)
+    {
+        var oauth = server.OAuth();
+        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
+        {
+            return null;
+        }
+
+        CredentialIssuerMetadataContribution contribution =
+            await oauth.ContributeCredentialIssuerMetadataAsync(
+                registration, context, cancellationToken).ConfigureAwait(false);
+        if(contribution.AuthorizationServers is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        return issuerUri.OriginalString;
     }
 
 
@@ -5649,6 +7221,15 @@ public static class AuthCodeEndpoints
     /// <see langword="null"/> failure on success; a <c>(null, null, null)</c> tuple when no
     /// authorization details are in play; a failure response otherwise.
     /// </returns>
+    /// <remarks>
+    /// The trailing <c>stepOutcome</c> argument is the endpoint's pre-correlation step's
+    /// already-validated request-only decision
+    /// (<see cref="ValidateAndCarryTokenRequestAuthorizationDetailsAsync"/>), when one ran and the
+    /// token-request <c>authorization_details</c> value is not <see langword="null"/>: the parse
+    /// and shape check below are skipped and <see cref="AuthorizationDetailsStepOutcome.Details"/>
+    /// is projected directly. <see langword="null"/> for the callers with no pre-correlation step
+    /// (the pre-authorized code grant), which parse and shape-check that value here as before.
+    /// </remarks>
     private static async ValueTask<(string? ResponseJson, IReadOnlyList<object>? ClaimDetails, ServerHttpResponse? Failure)> ResolveGrantedAuthorizationDetailsAsync(
         EndpointServer server,
         string? tokenRequestDetailsJson,
@@ -5656,6 +7237,7 @@ public static class AuthCodeEndpoints
         string subject,
         ClientRecord registration,
         ExchangeContext context,
+        AuthorizationDetailsStepOutcome? stepOutcome,
         CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
@@ -5673,36 +7255,49 @@ public static class AuthCodeEndpoints
                 "authorization_details is not supported by this authorization server."));
         }
 
-        //OID4VCI 1.0 §6.1.1: "If the Token Request contains an authorization_details parameter ...
-        //of type openid_credential and the Credential Issuer's metadata contains an
-        //authorization_servers parameter, the authorization_details object MUST contain the
-        //Credential Issuer's identifier in the locations element." The grant-carried value was
-        //already enforced at the authorization endpoint (§5.1.1), so the requirement is applied to
-        //the token-request value here.
-        string? requiredLocation = await ResolveRequiredAuthorizationDetailsLocationAsync(
-            server, registration, context, cancellationToken).ConfigureAwait(false);
-
         IReadOnlyList<CredentialAuthorizationDetail>? requested = null;
         if(tokenRequestDetailsJson is not null)
         {
-            IReadOnlyList<AuthorizationDetail>? parsed = await parse(
-                tokenRequestDetailsJson, context, cancellationToken).ConfigureAwait(false);
-            if(parsed is null)
+            IReadOnlyList<AuthorizationDetail> parsedRequested;
+            if(stepOutcome is not null)
             {
-                return (null, null, ServerHttpResponse.BadRequest(
-                    OAuthErrors.InvalidAuthorizationDetails,
-                    "authorization_details could not be parsed."));
+                //The pre-correlation step already parsed and shape-validated this exact value,
+                //against the SAME issuer that step resolved and carried — never re-run either
+                //delegate a second time for the same request.
+                parsedRequested = stepOutcome.Details;
+            }
+            else
+            {
+                //OID4VCI 1.0 §6.1.1: "If the Token Request contains an authorization_details
+                //parameter ... of type openid_credential and the Credential Issuer's metadata
+                //contains an authorization_servers parameter, the authorization_details object
+                //MUST contain the Credential Issuer's identifier in the locations element." No
+                //pre-correlation step ran for this caller, so the requirement and the parse both
+                //run here, exactly as before.
+                string? requiredLocation = await ResolveRequiredAuthorizationDetailsLocationAsync(
+                    server, registration, context, cancellationToken).ConfigureAwait(false);
+
+                IReadOnlyList<AuthorizationDetail>? parsed = await parse(
+                    tokenRequestDetailsJson, context, cancellationToken).ConfigureAwait(false);
+                if(parsed is null)
+                {
+                    return (null, null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidAuthorizationDetails,
+                        "authorization_details could not be parsed."));
+                }
+
+                string? shapeError = AuthorizationDetailsShapeError(
+                    oauth.AuthorizationDetailTypes, parsed, requiredLocation,
+                    registration.AllowedAuthorizationDetailsTypes);
+                if(shapeError is not null)
+                {
+                    return (null, null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidAuthorizationDetails, shapeError));
+                }
+
+                parsedRequested = parsed;
             }
 
-            string? shapeError = AuthorizationDetailsShapeError(
-                oauth.AuthorizationDetailTypes, parsed, requiredLocation,
-                registration.AllowedAuthorizationDetailsTypes);
-            if(shapeError is not null)
-            {
-                return (null, null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidAuthorizationDetails, shapeError));
-            }
-
-            requested = ProjectOpenIdCredentialDetails(parsed);
+            requested = ProjectOpenIdCredentialDetails(parsedRequested);
         }
 
         IReadOnlyList<CredentialAuthorizationDetail>? authorized = null;
@@ -5710,7 +7305,10 @@ public static class AuthCodeEndpoints
         {
             //The grant-carried value was shape-validated at receipt; a parse failure here
             //means the stored value and the wired parser have diverged — a deployment
-            //inconsistency, not a client error.
+            //inconsistency, not a client error. This is a SEPARATE parse of a DIFFERENT value
+            //(the stored baseline, not the token-request value the step above may have already
+            //parsed and carried) — the "once per request" guarantee upstream is once per request
+            //VALUE, not a bound on how many distinct values this function parses.
             IReadOnlyList<AuthorizationDetail>? parsed = await parse(
                 authorizedDetailsJson, context, cancellationToken).ConfigureAwait(false);
             if(parsed is null)
@@ -5919,6 +7517,7 @@ public static class AuthCodeEndpoints
     }
 
 
+    /// <summary>Builds refresh-token redemption using one admitted storage and authentication composition.</summary>
     private static EndpointCandidate BuildRefreshToken() =>
         new()
         {
@@ -5936,7 +7535,15 @@ public static class AuthCodeEndpoints
             //invalid_grant, not the host-generic invalid_request a correlation-handle miss would
             //otherwise produce.
             HandleNotFoundError = OAuthErrors.InvalidGrant,
-            HandleNotFoundErrorDescription = "The refresh token is unknown, expired, or has been revoked.",
+            HandleNotFoundErrorDescription = RefreshTokenNotFoundDescription,
+
+            //A present-but-blank refresh_token matches (the acceptance test below only requires the
+            //field's presence) then falls through here to null — the parameter this endpoint keys
+            //its continuing flow on is known, so the refusal names it rather than falling back to
+            //the host's generic "Cannot determine correlation key."
+            MissingCorrelationKeyErrorDescription = "Missing refresh_token.",
+
+            BeforeCorrelationAsync = BeforeRefreshCorrelationAsync,
 
             //Acceptance test: POST to /token with grant_type=refresh_token and
             //a refresh_token parameter. Disjointness vs the code-grant matcher
@@ -5971,7 +7578,7 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 //ResolveCorrelationKeyAsync + LoadFlowStateAsync delivered the persisted
@@ -5982,59 +7589,74 @@ public static class AuthCodeEndpoints
                 //reuse-detection path per RFC 9700 §4.14.2 (distinct from a code-grant terminal
                 //state, whose SuccessorRefreshFlowId is always null and which a refresh_token
                 //correlation key can never resolve to, since the two index spaces are disjoint).
-                if(currentState is ServerTokenIssuedState { SuccessorRefreshFlowId: string successorFlowId } retiredState)
+                if(currentState is ServerTokenIssuedState { SuccessorRefreshFlowId: not null } retiredState)
                 {
                     return await HandleRefreshTokenReuseAsync(
-                        oauth, fields, retiredState, successorFlowId, context, ct).ConfigureAwait(false);
+                        oauth, fields, retiredState, context, ct).ConfigureAwait(false);
                 }
 
                 if(currentState is not ServerRefreshTokenIssuedState storedRefresh)
                 {
+                    //A refusal that reads the record answers the endpoint's constant so the answer
+                    //never tells whether the record exists — RFC 6749 §5.2's invalid_grant.
                     return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidGrant, "refresh_token is not valid."));
+                        OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
                 }
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
                 }
 
-                ServerHttpResponse? clientFailure = await VerifyRefreshClientAsync(
-                    oauth, fields, registration, storedRefresh.ClientId, context, ct).ConfigureAwait(false);
+                ServerHttpResponse? clientFailure = VerifyRefreshClient(
+                    fields, registration, storedRefresh.ClientId, context);
                 if(clientFailure is not null)
                 {
                     return (null, clientFailure);
                 }
 
-                Uri issuerUri;
-                try
+                //BeforeRefreshCorrelationAsync already resolved the issuer once for this request
+                //and carried it; a missing carry means the endpoint's step did not run as the
+                //dispatcher requires, and is answered as a server fault rather than silently
+                //resolving a second, possibly different, issuer.
+                if(context.CorrelationStepIssuer is not Uri issuerUri)
                 {
-                    issuerUri = oauth.ResolveIssuerAsync is not null
-                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false))!
-                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
-                            .ConfigureAwait(false);
+                    return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                        "The endpoint's pre-correlation step recorded no resolved issuer."));
                 }
-                catch(InvalidOperationException ex)
+
+                //OpenID Connect Core 1.0 §12.2: a refreshed ID Token's iss "MUST be the same as in
+                //the ID Token issued when the original authentication occurred" — the mix-up
+                //defense of RFC 9700 §4.4 applied to the SECOND issuer resolution a refresh
+                //performs. A mismatch is an INVALID presentation: refused before any DPoP check or
+                //claim, minting and revoking nothing.
+                if(!IsSameIssuerAsIssuance(issuerUri, storedRefresh.ExpectedIssuer))
                 {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, ex.Message));
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
                 //RFC 9449 §5 — when the refresh token was issued under a
                 //DPoP-bound flow, the refresh exchange MUST present a proof
-                //whose thumbprint matches the stored binding. The helper
-                //rejects on thumbprint mismatch with invalid_dpop_proof.
+                //whose thumbprint matches the stored binding. The request-only half already ran
+                //once, in BeforeRefreshCorrelationAsync; this reads the carried outcome and
+                //rejects on thumbprint mismatch with invalid_dpop_proof. A missing carry means the
+                //step did not run as the dispatcher requires, and is a server fault rather than a
+                //silent Bearer fallback.
                 ConfirmationMethod? boundConfirmation = storedRefresh.Confirmation;
-                bool dpopRequired = boundConfirmation is { IsEmpty: false };
-                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
-                    server, context, registration, issuerUri, now,
+                if(context.DpopStepOutcome is not DpopValidationOutcome carriedDpopOutcome)
+                {
+                    return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
+                        "The endpoint's pre-correlation step recorded no DPoP outcome."));
+                }
+
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.BindValidatedProofAsync(
+                    server, context, registration, issuerUri, carriedDpopOutcome,
                     expectedThumbprint: boundConfirmation?.JwkThumbprint,
-                    dpopRequired, ct).ConfigureAwait(false);
+                    proofRequiredByRecord: boundConfirmation is { IsEmpty: false }, ct).ConfigureAwait(false);
 
                 if(!dpopOutcome.IsSuccess)
                 {
@@ -6064,6 +7686,7 @@ public static class AuthCodeEndpoints
                         storedRefresh.SubjectId,
                         registration,
                         context,
+                        context.AuthorizationDetailsStepOutcome,
                         ct).ConfigureAwait(false);
                 if(detailsFailure is not null)
                 {
@@ -6094,6 +7717,22 @@ public static class AuthCodeEndpoints
                     }
                 }
 
+                //RFC 6749 §6: resolve the effective scope for the refreshed access token. No
+                //refresh-request scope leaves the full grant carried on storedRefresh.Scope in
+                //force; a present one MUST be a subset of it (the access token — and every
+                //scope-gated token producer — narrows to that subset) or the request fails
+                //invalid_scope. The refresh token itself is never narrowed by this — see the Scope
+                //assignment on newRefreshState below, carried verbatim from storedRefresh per §6's
+                //"the refresh token scope MUST be identical to that of the refresh token included
+                //by the client in the request."
+                _ = fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? requestedScope);
+                (string effectiveScope, ServerHttpResponse? scopeFailure) =
+                    ResolveEffectiveScope(storedRefresh.Scope, requestedScope);
+                if(scopeFailure is not null)
+                {
+                    return (null, scopeFailure);
+                }
+
                 //RFC 8707 §2.2: resolve the effective resource set for the refreshed access
                 //token. No refresh-request resource leaves the full grant carried on
                 //storedRefresh.Resource in force; a present one MUST be a subset of it (the
@@ -6106,6 +7745,11 @@ public static class AuthCodeEndpoints
                 {
                     return (null, resourceFailure);
                 }
+
+                //Carried into the response's own BuildResponse step (ExchangeContextRefreshScopeExtensions)
+                //so the wire scope member reflects this same effective value rather than the
+                //terminal state's own Scope, which stays the record's full stored grant.
+                context.SetEffectiveRefreshScope(effectiveScope);
 
                 //OAuth 2.1 draft-16 §4.3.1: "Authorization servers MUST utilize one of these
                 //methods to detect refresh token replay by malicious actors for public clients"
@@ -6123,7 +7767,7 @@ public static class AuthCodeEndpoints
                 if(!isClaimed)
                 {
                     return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidGrant, "The refresh token is unknown, expired, or has been revoked."));
+                        OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
                 }
 
                 IssuanceContext issuance = new()
@@ -6132,7 +7776,7 @@ public static class AuthCodeEndpoints
                     Context = context,
                     IssuerUri = issuerUri,
                     Subject = storedRefresh.SubjectId,
-                    Scope = storedRefresh.Scope,
+                    Scope = effectiveScope,
                     ClientId = storedRefresh.ClientId,
                     GrantType = WellKnownGrantTypes.RefreshToken,
                     IssuedAt = now,
@@ -6209,7 +7853,10 @@ public static class AuthCodeEndpoints
                     ServerRefreshTokenIssuedState newRefreshState = new()
                     {
                         FlowId = newRefreshFlowId,
-                        PredecessorFlowId = storedRefresh.FlowId,
+
+                        //Carried verbatim across rotation, exactly as OriginatingGrantType is, so
+                        //the grant this refresh token belongs to never changes.
+                        GrantFlowId = storedRefresh.GrantFlowId,
                         ExpectedIssuer = issuerUri.OriginalString,
                         EnteredAt = now,
                         ExpiresAt = newRefreshExpiresAt,
@@ -6288,7 +7935,7 @@ public static class AuthCodeEndpoints
                 if(issued.RevokedAt is not null)
                 {
                     return ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidGrant, "The refresh token is unknown, expired, or has been revoked.");
+                        OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription);
                 }
 
                 IssuedTokenSet? tokenSet = context.IssuedTokens;
@@ -6339,7 +7986,11 @@ public static class AuthCodeEndpoints
                             refreshToken, ref first);
                     }
 
-                    string? scope = issued.Scope;
+                    //RFC 6749 §5.1: the response's scope member is the EFFECTIVE scope this
+                    //response was minted against (ExchangeContextRefreshScopeExtensions), not the
+                    //terminal state's own Scope — which stays the record's full stored grant, per
+                    //§6's identical-across-rotation rule for the refresh token itself.
+                    string? scope = context.EffectiveRefreshScope ?? issued.Scope;
                     if(!string.IsNullOrEmpty(scope))
                     {
                         JsonAppender.AppendStringField(sb, "scope", scope, ref first);
@@ -6372,6 +8023,7 @@ public static class AuthCodeEndpoints
         };
 
 
+    /// <summary>Builds token revocation using the admitted authentication and token operations.</summary>
     private static EndpointCandidate BuildRevocation() =>
         new()
         {
@@ -6411,14 +8063,23 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                }
+
+                //Identification of an optional client_id form field before authentication:
+                //a field that names another registration is refused invalid_client here, never
+                //forwarded into the authentication seam.
+                ServerHttpResponse? revocationIdentificationFailure =
+                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
+                if(revocationIdentificationFailure is not null)
+                {
+                    return (null, revocationIdentificationFailure);
                 }
 
                 //RFC 7009 §2.1: the client MUST authenticate using the same method
@@ -6428,8 +8089,8 @@ public static class AuthCodeEndpoints
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                    return (null, ClientAuthenticationFailureResponse(
+                        context.IncomingRequest, "Client authentication failed."));
                 }
 
                 //RFC 7009 §2.1: token is REQUIRED. The matcher already guaranteed
@@ -6460,6 +8121,7 @@ public static class AuthCodeEndpoints
         };
 
 
+    /// <summary>Builds token introspection using the admitted authentication and token operations.</summary>
     private static EndpointCandidate BuildIntrospection() =>
         new()
         {
@@ -6498,14 +8160,23 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                }
+
+                //Identification of an optional client_id form field before authentication:
+                //a field that names another registration is refused invalid_client here, never
+                //forwarded into the authentication seam.
+                ServerHttpResponse? introspectionIdentificationFailure =
+                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
+                if(introspectionIdentificationFailure is not null)
+                {
+                    return (null, introspectionIdentificationFailure);
                 }
 
                 //RFC 7662 §2.3: a caller authenticating with client credentials that
@@ -6515,8 +8186,8 @@ public static class AuthCodeEndpoints
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                    return (null, ClientAuthenticationFailureResponse(
+                        context.IncomingRequest, "Client authentication failed."));
                 }
 
                 //RFC 7662 §2.1: token is REQUIRED. The matcher already guaranteed its
@@ -6861,19 +8532,19 @@ public static class AuthCodeEndpoints
     /// value the client must present at the token endpoint — never
     /// <see cref="ServerCodeIssuedState.CodeHash"/>. The raw code was stashed on the request
     /// context by the same <c>BuildInputAsync</c> call that produced <paramref name="code"/>
-    /// (<see cref="ExchangeContextServerExtensions.SetRawAuthorizationCode"/>); the state itself
+    /// (<c>ExchangeContextServerExtensions.SetRawAuthorizationCode(string)</c>); the state itself
     /// is hash-only per the class's own contract (see <see cref="ServerCodeIssuedState"/>). Also
     /// appends the RFC 9207 / FAPI 2.0 §5.3.1.2 <c>iss</c> response parameter under
     /// <c>policy.EmitIssOnRedirect</c>.
     /// </summary>
     /// <remarks>
-    /// Reads <see cref="ExchangeContextServerExtensions.ResolvedIssuer"/>, populated by
+    /// Reads <c>ExchangeContextServerExtensions.ResolvedIssuer</c>, populated by
     /// <see cref="TryResolveRedirectIssuerAsync"/> during
     /// <c>EvaluateAuthenticationRequirementsAsync</c> — the same resolution path
     /// <c>MetadataEndpoints</c> uses for the discovery <c>issuer</c> field
     /// (RFC 9207 §2.3). When resolution found no usable issuer the parameter is omitted
     /// rather than failing the redirect — the strict-default deployment populates
-    /// <see cref="ClientRecord.IssuerUri"/> or <see cref="ExchangeContextServerExtensions.Issuer"/>
+    /// <see cref="ClientRecord.IssuerUri"/> or <c>ExchangeContextServerExtensions.ResolvedIssuer</c>
     /// and the permissive deployment opts out via <c>policy.EmitIssOnRedirect</c>.
     /// </remarks>
     private static ServerHttpResponse BuildAuthorizeRedirect(
@@ -6927,7 +8598,7 @@ public static class AuthCodeEndpoints
     /// verbatim on both the success and error responses per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see> so
     /// the client can bind the redirect to its pending request. The <c>iss</c> value is
-    /// <see cref="ExchangeContextServerExtensions.ResolvedIssuer"/>, resolved once ahead of
+    /// <c>ExchangeContextServerExtensions.ResolvedIssuer</c>, resolved once ahead of
     /// both this success path and the error-redirect path by
     /// <see cref="TryResolveRedirectIssuerAsync"/>; the parameter is omitted when resolution
     /// found no usable issuer.
@@ -7254,6 +8925,11 @@ public static class AuthCodeEndpoints
         AuthorizationDenialReason.UnmetAuthenticationRequirements => OAuthErrors.UnmetAuthenticationRequirements,
         AuthorizationDenialReason.AccessDenied => OAuthErrors.AccessDenied,
         AuthorizationDenialReason.InvalidTarget => OAuthErrors.InvalidTarget,
+        AuthorizationDenialReason.LoginRequired => OAuthErrors.LoginRequired,
+        AuthorizationDenialReason.InteractionRequired => OAuthErrors.InteractionRequired,
+        AuthorizationDenialReason.ConsentRequired => OAuthErrors.ConsentRequired,
+        AuthorizationDenialReason.AccountSelectionRequired => OAuthErrors.AccountSelectionRequired,
+        AuthorizationDenialReason.InvalidScope => OAuthErrors.InvalidScope,
         _ => OAuthErrors.AccessDenied
     };
 
@@ -7268,6 +8944,16 @@ public static class AuthCodeEndpoints
             "The established authentication does not satisfy the request's authentication requirements.",
         AuthorizationDenialReason.InvalidTarget =>
             "The requested resource is invalid, missing, unknown, or malformed.",
+        AuthorizationDenialReason.LoginRequired =>
+            "The Authorization Server requires End-User authentication.",
+        AuthorizationDenialReason.InteractionRequired =>
+            "The Authorization Server requires End-User interaction of some form to proceed.",
+        AuthorizationDenialReason.ConsentRequired =>
+            "The Authorization Server requires End-User consent.",
+        AuthorizationDenialReason.AccountSelectionRequired =>
+            "The End-User is required to select a session at the Authorization Server.",
+        AuthorizationDenialReason.InvalidScope =>
+            "The requested scope is invalid, unknown, or excessive.",
 
         //A denial with no reason set, and an explicit AccessDenied denial, share the same
         //RFC 6749 §4.1.2.1 default description.
@@ -7278,24 +8964,6 @@ public static class AuthCodeEndpoints
     };
 
 
-    /// <summary>
-    /// Evaluates a request's RFC 9470 §5 step-up authentication requirements at the
-    /// authorization endpoint, shared across every code-issuing authorize path (PAR-backed,
-    /// direct, and JAR). Enforces the temporal <c>max_age</c> recency requirement itself
-    /// (OIDC Core §3.1.2.1, using the deployment's <c>ClockSkewTolerance</c>), then invokes
-    /// the application's <see cref="EvaluateAuthorizationRequestDelegate"/> for the semantic
-    /// decision (<c>acr</c> satisfaction, consent, policy). Returns the OAuth Authorization
-    /// Error Response redirect to use when a requirement is unmet, or <see langword="null"/>
-    /// when the request may proceed to code issuance.
-    /// </summary>
-    /// <summary>
-    /// Reads the optional <c>max_age</c> request parameter (OIDC Core §3.1.2.1) — the maximum
-    /// authentication age in whole seconds, a non-negative integer. Returns the parsed value
-    /// (or <see langword="null"/> when the parameter is absent) and whether it was well-formed;
-    /// a present-but-malformed value reports <c>IsWellFormed = false</c> so the caller rejects
-    /// the request with <c>invalid_request</c>. Shared by the query-parameter authorize paths
-    /// (PAR and direct); the JAR path reads the same parameter from the signed request object.
-    /// </summary>
     /// <summary>
     /// Returns whether a <c>request_uri</c>-referenced authorize request carries any front-channel
     /// parameter beyond <c>request_uri</c> and <c>client_id</c>. Per RFC 9126 §4 / RFC 9101 §6.3
@@ -7317,6 +8985,14 @@ public static class AuthCodeEndpoints
     }
 
 
+    /// <summary>
+    /// Reads the optional <c>max_age</c> request parameter (OIDC Core §3.1.2.1) — the maximum
+    /// authentication age in whole seconds, a non-negative integer. Returns the parsed value
+    /// (or <see langword="null"/> when the parameter is absent) and whether it was well-formed;
+    /// a present-but-malformed value reports <c>IsWellFormed = false</c> so the caller rejects
+    /// the request with <c>invalid_request</c>. Shared by the query-parameter authorize paths
+    /// (PAR and direct); the JAR path reads the same parameter from the signed request object.
+    /// </summary>
     private static (int? MaxAge, bool IsWellFormed) ReadRequestedMaxAge(RequestFields fields)
     {
         if(!fields.TryGetValue(OAuthRequestParameterNames.MaxAge, out string? raw)
@@ -7335,10 +9011,58 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// Whether the space-delimited <c>prompt</c> value <paramref name="prompt"/> carries
+    /// <see cref="WellKnownPromptValues.None"/> together with any other value — OIDC Core
+    /// §3.1.2.1: "If this parameter contains none with any other value, an error is returned."
+    /// </summary>
+    private static bool HasNoneWithOtherPromptValues(string? prompt)
+    {
+        if(string.IsNullOrEmpty(prompt))
+        {
+            return false;
+        }
+
+        string[] values = prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        return values.Length > 1 && Array.Exists(values, WellKnownPromptValues.IsNone);
+    }
+
+
+    /// <summary>
+    /// Parses the recognized <c>prompt</c> values out of the space-delimited
+    /// <paramref name="prompt"/>, per OIDC Core §3.1.2.1. A value this library does not
+    /// recognize is silently dropped rather than surfaced: "If an OP receives a prompt value
+    /// outside the set defined above that it does not understand, it MAY return an error or it
+    /// MAY ignore it" — this library ignores it.
+    /// </summary>
+    private static ImmutableHashSet<string> ParseRequestedPromptValues(string? prompt)
+    {
+        if(string.IsNullOrEmpty(prompt))
+        {
+            return ImmutableHashSet<string>.Empty;
+        }
+
+        ImmutableHashSet<string>.Builder builder = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
+        foreach(string value in prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if(WellKnownPromptValues.IsNone(value)
+                || WellKnownPromptValues.IsLogin(value)
+                || WellKnownPromptValues.IsConsent(value)
+                || WellKnownPromptValues.IsSelectAccount(value))
+            {
+                _ = builder.Add(value);
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+
+    /// <summary>
     /// Resolves the issuer URI for the RFC 9207 §2 Authorize-redirect <c>iss</c> parameter
     /// through the identical resolution path
     /// <c>MetadataEndpoints</c> uses for the discovery <c>issuer</c> field —
-    /// the application's <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+    /// the application's <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/>
     /// delegate when configured, otherwise <see cref="DefaultIssuerResolver"/> — so RFC 9207
     /// §2.3's "the issuer identifier included in the server's metadata value issuer MUST be
     /// identical to the iss parameter's value" holds by construction rather than by two
@@ -7370,13 +9094,29 @@ public static class AuthCodeEndpoints
     }
 
 
-    private static async ValueTask<ServerHttpResponse?> EvaluateAuthenticationRequirementsAsync(
+    /// <summary>
+    /// Evaluates a request's RFC 9470 §5 step-up authentication requirements at the
+    /// authorization endpoint, shared across every code-issuing authorize path (PAR-backed,
+    /// direct, and JAR). Enforces the temporal <c>max_age</c> recency requirement itself
+    /// (OIDC Core §3.1.2.1, using the deployment's <c>ClockSkewTolerance</c>), then invokes
+    /// the application's <see cref="EvaluateAuthorizationRequestDelegate"/> for the semantic
+    /// decision (<c>acr</c> satisfaction, consent, policy, and RFC 6749 §3.3 scope narrowing via
+    /// <see cref="AuthorizationRequestDecision.Permit(string?)"/>).
+    /// </summary>
+    /// <returns>
+    /// <c>Failure</c> carries the OAuth Authorization Error Response redirect to use when a
+    /// requirement is unmet or the seam granted an invalid scope, or <see langword="null"/> when
+    /// the request may proceed to code issuance — in which case <c>EffectiveScope</c> is the
+    /// (possibly narrowed and canonicalized) scope to grant.
+    /// </returns>
+    private static async ValueTask<(string EffectiveScope, ServerHttpResponse? Failure)>
+        EvaluateAuthenticationRequirementsAsync(
         EndpointServer server,
         ExchangeContext context,
         string? requestedAcrValues,
         int? requestedMaxAge,
         string requestedScope,
-        string subjectId,
+        string? subjectId,
         DateTimeOffset now,
         Uri redirectUri,
         string? requestState,
@@ -7385,6 +9125,7 @@ public static class AuthCodeEndpoints
         string? clientId = null,
         string? requestedIssuerState = null,
         string? requestedResource = null,
+        string? requestedPrompt = null,
         CancellationToken cancellationToken = default)
     {
         var oauth = server.OAuth();
@@ -7403,6 +9144,28 @@ public static class AuthCodeEndpoints
             }
         }
 
+        //RFC 6749 §3.1 / OAuth 2.1 §3.1: "The authorization server MUST first authenticate the
+        //resource owner." No established subject answers the RFC 6749 §4.1.2.1 Authorization
+        //Error Response redirect with error=login_required (OIDC Core §3.1.2.6: "The
+        //Authorization Server requires End-User authentication") rather than a 500 — this is the
+        //expected first state under the MUST-authenticate rule, not an unexpected condition
+        //(RFC 9110 §15.6.1), so it is never server_error. This runs before max_age (there is no
+        //auth_time to measure) and before the decision seam (AuthorizationRequestEvaluation.Subject
+        //stays non-null; the seam is never called without an established subject).
+        if(subjectId is null)
+        {
+            return (requestedScope, await BuildAuthorizeErrorResponseAsync(
+                server,
+                context,
+                redirectUri,
+                OAuthErrors.LoginRequired,
+                "No End-User is authenticated for this request.",
+                requestState,
+                responseMode,
+                clientId,
+                cancellationToken).ConfigureAwait(false));
+        }
+
         if(requestedMaxAge is int maxAge)
         {
             //RFC 9470 §5 / OIDC Core §3.1.2.1 — max_age bounds the elapsed seconds since the
@@ -7418,7 +9181,7 @@ public static class AuthCodeEndpoints
             if(context.AuthTime is not { } establishedAuthTime
                 || now.ToUnixTimeSeconds() - establishedAuthTime.ToUnixTimeSeconds() > maxAge)
             {
-                return await BuildAuthorizeErrorResponseAsync(
+                return (requestedScope, await BuildAuthorizeErrorResponseAsync(
                     server,
                     context,
                     redirectUri,
@@ -7427,13 +9190,63 @@ public static class AuthCodeEndpoints
                     requestState,
                     responseMode,
                     clientId,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false));
             }
+        }
+
+        ImmutableHashSet<string> requestedPromptValues = ParseRequestedPromptValues(requestedPrompt);
+
+        //OIDC Core §3.1.2.1: login/consent/select_account each carry a MUST-return-an-error
+        //obligation when the requested interaction cannot be confirmed. The library has no UI of
+        //its own (it returns a response for the host to send), so it can only proceed past that
+        //obligation when a wired seam vouches for the interaction. With no seam wired at all, an
+        //explicit interactive prompt fails closed on its own OIDC Core §3.1.2.6 error — silently
+        //treating an anonymous "no decision" as permission would let the requested interaction be
+        //skipped entirely.
+        bool isSeamWired = oauth.EvaluateAuthorizationRequestAsync is not null
+            && context.ClientRegistration is not null;
+        bool requiresInteractionVouch =
+            requestedPromptValues.Contains(WellKnownPromptValues.Login)
+            || requestedPromptValues.Contains(WellKnownPromptValues.Consent)
+            || requestedPromptValues.Contains(WellKnownPromptValues.SelectAccount);
+
+        if(requiresInteractionVouch && !isSeamWired)
+        {
+            AuthorizationDenialReason unvouchedReason = requestedPromptValues switch
+            {
+                var values when values.Contains(WellKnownPromptValues.Login) => AuthorizationDenialReason.LoginRequired,
+                var values when values.Contains(WellKnownPromptValues.Consent) => AuthorizationDenialReason.ConsentRequired,
+                _ => AuthorizationDenialReason.AccountSelectionRequired
+            };
+
+            return (requestedScope, await BuildAuthorizeErrorResponseAsync(
+                server,
+                context,
+                redirectUri,
+                MapDenialReasonToError(unvouchedReason),
+                DefaultDenialDescription(unvouchedReason),
+                requestState,
+                responseMode,
+                clientId,
+                cancellationToken).ConfigureAwait(false));
         }
 
         if(oauth.EvaluateAuthorizationRequestAsync is { } evaluateRequest
             && context.ClientRegistration is { } registration)
         {
+            //RFC 9396 §2: the same request's authorization_details, parsed once through the
+            //wired seam so the decision seam observes the typed list beside the verbatim string.
+            //A value that failed to parse never reaches this point — it is refused at request
+            //receipt (ValidateAuthorizationDetailsShapeAsync), before a flow state carrying it
+            //to this authorize step is ever saved.
+            IReadOnlyList<AuthorizationDetail>? requestedAuthorizationDetailObjects = null;
+            if(requestedAuthorizationDetails is not null
+                && oauth.ParseAuthorizationDetailsAsync is { } parseAuthorizationDetails)
+            {
+                requestedAuthorizationDetailObjects = await parseAuthorizationDetails(
+                    requestedAuthorizationDetails, context, cancellationToken).ConfigureAwait(false);
+            }
+
             AuthorizationRequestDecision decision = await evaluateRequest(
                 new AuthorizationRequestEvaluation
                 {
@@ -7441,11 +9254,13 @@ public static class AuthCodeEndpoints
                     RequestedMaxAge = requestedMaxAge,
                     RequestedScope = requestedScope,
                     RequestedAuthorizationDetails = requestedAuthorizationDetails,
+                    RequestedAuthorizationDetailObjects = requestedAuthorizationDetailObjects,
                     //OID4VCI 1.0 §5.1.3: issuer_state is surfaced UNTRUSTED — the seam owns
                     //correlating it to the Offer; the library validates nothing about it. RFC 8707
                     //resource is surfaced as the parsed indicator list (§5.1.2).
                     RequestedIssuerState = requestedIssuerState,
                     RequestedResource = ParseResourceIndicators(requestedResource),
+                    RequestedPromptValues = requestedPromptValues,
                     Subject = subjectId,
                     EstablishedAcr = context.Acr,
                     EstablishedAuthTime = context.AuthTime,
@@ -7463,7 +9278,7 @@ public static class AuthCodeEndpoints
 
             if(!decision.IsPermitted)
             {
-                return await BuildAuthorizeErrorResponseAsync(
+                return (requestedScope, await BuildAuthorizeErrorResponseAsync(
                     server,
                     context,
                     redirectUri,
@@ -7472,11 +9287,84 @@ public static class AuthCodeEndpoints
                     requestState,
                     responseMode,
                     clientId,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false));
+            }
+
+            if(decision.GrantedScope is { } grantedScope)
+            {
+                (bool isValid, string canonicalScope) = EvaluateGrantedScope(grantedScope, requestedScope);
+                if(!isValid)
+                {
+                    //RFC 6749 §3.3: the seam may only narrow the requested scope, never widen
+                    //it, and never to nothing. An empty grant or a granted value outside the
+                    //request is a defect in the application's own decision, not a client-facing
+                    //condition — refused with server_error (RFC 6749 §4.1.2.1) rather than
+                    //issued as a silent widening or an empty grant.
+                    _ = System.Diagnostics.Activity.Current?.AddEvent(
+                        new System.Diagnostics.ActivityEvent(OAuthEventNames.SeamGrantedScopeExceedsRequest));
+
+                    return (requestedScope, await BuildAuthorizeErrorResponseAsync(
+                        server,
+                        context,
+                        redirectUri,
+                        OAuthErrors.ServerError,
+                        "The authorization decision seam granted a scope outside the requested scope.",
+                        requestState,
+                        responseMode,
+                        clientId,
+                        cancellationToken).ConfigureAwait(false));
+                }
+
+                return (canonicalScope, null);
             }
         }
 
-        return null;
+        return (requestedScope, null);
+    }
+
+
+    /// <summary>
+    /// Validates that <paramref name="grantedScope"/> — the value an
+    /// <see cref="AuthorizationRequestDecision.Permit(string?)"/> narrowed the request to — is a
+    /// non-empty subset of <paramref name="requestedScope"/>'s space-delimited tokens per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: "The
+    /// authorization server MAY fully or partially ignore the scope requested by the client." An
+    /// empty or whitespace <paramref name="grantedScope"/> is invalid — an application that wants
+    /// to grant nothing denies the request with
+    /// <see cref="AuthorizationDenialReason.InvalidScope"/> instead of permitting an empty grant.
+    /// A valid grant is canonicalized to the requested tokens' own order, deduplicated, so the
+    /// redeemed token response's <c>scope</c> never reflects a seam-supplied ordering.
+    /// </summary>
+    private static (bool IsValid, string CanonicalScope) EvaluateGrantedScope(
+        string grantedScope, string requestedScope)
+    {
+        string[] grantedTokens = grantedScope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] requestedTokens = requestedScope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        HashSet<string> requestedSet = new(requestedTokens, StringComparer.Ordinal);
+        HashSet<string> grantedSet = new(grantedTokens, StringComparer.Ordinal);
+
+        bool isValid = grantedTokens.Length > 0 && Array.TrueForAll(grantedTokens, requestedSet.Contains);
+        if(!isValid)
+        {
+            return (false, string.Empty);
+        }
+
+        StringBuilder canonicalScope = new();
+        HashSet<string> emitted = new(StringComparer.Ordinal);
+        foreach(string token in requestedTokens)
+        {
+            if(grantedSet.Contains(token) && emitted.Add(token))
+            {
+                if(canonicalScope.Length > 0)
+                {
+                    _ = canonicalScope.Append(' ');
+                }
+
+                _ = canonicalScope.Append(token);
+            }
+        }
+
+        return (true, canonicalScope.ToString());
     }
 
 
@@ -7522,38 +9410,31 @@ public static class AuthCodeEndpoints
     /// <summary>
     /// Returns whether <paramref name="responseType"/> names an OAuth 2.0
     /// <c>response_type</c> other than <see cref="WellKnownResponseTypes.Code"/>.
-    /// <see langword="false"/> for <see langword="null"/> — a request that omits
-    /// <c>response_type</c> falls through to this endpoint's implicit
-    /// <c>code</c> default rather than being rejected, matching the endpoint's
-    /// established behavior for the parameter.
+    /// <see langword="false"/> for <see langword="null"/>: an absent
+    /// <c>response_type</c> is a missing required parameter per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>,
+    /// distinct from a present but unsupported value, and every caller refuses it before
+    /// this method runs.
     /// </summary>
     private static bool IsUnsupportedResponseType(string? responseType) =>
         responseType is not null && !WellKnownResponseTypes.IsCode(responseType);
 
 
     /// <summary>
-    /// Returns whether <paramref name="method"/> is an accepted PKCE
-    /// <c>code_challenge_method</c> value under the deployment's policy. The
-    /// strict default (<see cref="PkceMethodSet.S256Only"/>) accepts only
-    /// <c>S256</c>; the permissive baseline
-    /// (<see cref="PkceMethodSet.S256AndPlain"/>) also accepts <c>plain</c>.
+    /// Whether the wire method is S256, the sole accepted transformation under
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>:
+    /// "The plain code challenge method, defined in [RFC7636], is explicitly forbidden in OAuth 2.1."
+    /// An absent method requests plain per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// An absent method requests plain per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// Callers return <c>invalid_request</c> for unsupported transformations per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">RFC 7636 §4.4.1</see>.
     /// </summary>
-    private static bool IsAcceptedPkceMethod(string? method, ExchangeContext context)
-    {
-        if(string.IsNullOrEmpty(method))
-        {
-            return false;
-        }
-
-        if(string.Equals(method, WellKnownCodeChallengeMethods.S256,
-            StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return context.AllowedPkceMethods == PkceMethodSet.S256AndPlain
-            && WellKnownCodeChallengeMethods.IsPlain(method);
-    }
+    private static bool IsAcceptedPkceMethod(string? method) =>
+        WellKnownCodeChallengeMethods.IsS256(method ?? string.Empty);
 
 
     /// <summary>
@@ -7567,20 +9448,23 @@ public static class AuthCodeEndpoints
     /// <param name="requested">The redirect URI presented on the request.</param>
     /// <param name="tokenEndpointAuthMethod">
     /// The registration's declared <see cref="Client.ClientAuthenticationMethod"/>
-    /// (<see cref="Server.ClientRecord.TokenEndpointAuthMethod"/>). <see langword="null"/> or
+    /// (<see cref="ClientRecord.TokenEndpointAuthMethod"/>). <see langword="null"/> or
     /// <see cref="ClientAuthenticationMethod.None"/> is the public-client shape the loopback
     /// fallback requires; any other value is a confidential client and the fallback never runs.
     /// </param>
     /// <param name="codeChallengeMethod">
-    /// The request's <c>code_challenge_method</c> wire value. The fallback requires exactly
-    /// <see cref="WellKnownCodeChallengeMethods.S256"/> — not whatever
-    /// <see cref="ExchangeContext.AllowedPkceMethods"/> otherwise accepts under a permissive
-    /// deployment policy — per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.1.1">RFC 9700 §2.1.1</see>.
+    /// The request's <c>code_challenge_method</c> wire value. The library requires
+    /// <see cref="WellKnownCodeChallengeMethods.S256"/> independently for this fallback.
+    /// PAR and JAR method gates refuse non-S256 before redirect matching; direct authorization
+    /// validates the destination first so its error redirect is safe. This condition holds independently
+    /// of those method gates, consistent with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.1.1">RFC 9700 §2.1.1</see>:
+    /// "When using PKCE, clients SHOULD use PKCE code challenge methods that do not expose
+    /// the PKCE verifier in the authorization request."
     /// </param>
     /// <param name="context">
     /// The resolved per-request policy bag, read only for
-    /// <see cref="PolicyExchangeContextExtensions.IsLocalhostNameAcceptedForLoopbackRedirects"/> —
+    /// <c>PolicyExchangeContextExtensions.IsLocalhostNameAcceptedForLoopbackRedirects</c> —
     /// see that property's remarks for the RFC 8252 §8.3 / MCP authorization specification citations
     /// behind the default-off <c>localhost</c> allowance.
     /// </param>
@@ -7596,7 +9480,7 @@ public static class AuthCodeEndpoints
     /// secret (or presents no proof-of-possession at all) claim the same latitude, so both gates are
     /// required together and neither is optional.
     /// </remarks>
-    private static bool IsAcceptableRedirectUri(
+    internal static bool IsAcceptableRedirectUri(
         IReadOnlyCollection<Uri> registeredRedirectUris,
         Uri requested,
         ClientAuthenticationMethod? tokenEndpointAuthMethod,
@@ -7661,9 +9545,11 @@ public static class AuthCodeEndpoints
     /// <c>unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"</c>.
     /// </summary>
     /// <remarks>
-    /// Checked in <see cref="VerifyCodeGrantPresentationAsync"/> before the PKCE digest is
-    /// computed, so a verifier outside this shape fails PKCE verification without ever being
-    /// hashed or compared.
+    /// Checked in <see cref="BeforeCodeRedemptionCorrelationAsync"/>, before any stored code
+    /// state is loaded, so a grammatically malformed verifier fails PKCE verification without
+    /// ever being hashed or compared against a stored challenge — the distinction this method
+    /// enforces is the request's own grammar, never the stored challenge comparison
+    /// <see cref="VerifyCodeGrantPresentation"/> performs once the code state is loaded.
     /// </remarks>
     private static bool IsValidCodeVerifierGrammar(string candidate)
     {
@@ -7761,5 +9647,98 @@ public static class AuthCodeEndpoints
             DateTimeOffset dt => dt,
             _ => fallback
         };
+    }
+}
+
+
+/// <summary>
+/// The per-request carry for a step endpoint's <c>authorization_details</c> decision: the parsed,
+/// shape-validated request-only detail list, decided ONCE by <see cref="AuthCodeEndpoints"/>'s
+/// pre-correlation step against the issuer that same step already resolved and carried, and read
+/// by <see cref="AuthCodeEndpoints.ResolveGrantedAuthorizationDetailsAsync"/> instead of
+/// re-parsing the request for the same request. The OID4VCI 1.0 §5.1.1/§6.1.1 <c>locations</c>
+/// requirement is decided ONCE in the step, for the step's own shape refusal, and is not re-made
+/// for a carried outcome — it is not itself part of the carry, since nothing downstream of the
+/// step re-checks it.
+/// </summary>
+/// <param name="Details">The parsed, shape-validated <c>authorization_details</c> entries from the token request.</param>
+internal sealed record AuthorizationDetailsStepOutcome(
+    IReadOnlyList<AuthorizationDetail> Details);
+
+
+/// <summary>
+/// A typed accessor block over <see cref="ExchangeContext"/> fronting one per-request carry: the
+/// <see cref="AuthorizationDetailsStepOutcome"/> a pre-correlation step's request-only validation
+/// records (<see cref="AuthorizationDetailsStepOutcome"/> property/<see cref="SetAuthorizationDetailsStepOutcome"/>,
+/// under <see cref="AuthorizationServerHandlers.AuthorizationDetailsStepOutcomeKey"/>) for a
+/// handler's later <see cref="AuthCodeEndpoints.ResolveGrantedAuthorizationDetailsAsync"/> call to
+/// read within the same request.
+/// </summary>
+/// <remarks>
+/// Internal — the outcome type it carries (<see cref="AuthorizationDetailsStepOutcome"/>) is
+/// itself internal, so nothing here is reachable outside <see cref="Verifiable.OAuth"/>.
+/// </remarks>
+internal static class ExchangeContextAuthorizationDetailsExtensions
+{
+    extension(ExchangeContext context)
+    {
+        /// <summary>
+        /// Gets the <see cref="AuthorizationDetailsStepOutcome"/> a pre-correlation step recorded
+        /// for this request, or <see langword="null"/> when no step ran, the request carried no
+        /// <c>authorization_details</c>, or none has been stored yet.
+        /// </summary>
+        internal AuthorizationDetailsStepOutcome? AuthorizationDetailsStepOutcome =>
+            context.TryGetValue(AuthorizationServerHandlers.AuthorizationDetailsStepOutcomeKey, out object? v)
+                && v is AuthorizationDetailsStepOutcome outcome ? outcome : null;
+
+        /// <summary>Sets the <see cref="AuthorizationDetailsStepOutcome"/> a pre-correlation step recorded for this request.</summary>
+        /// <param name="outcome">The step's outcome.</param>
+        internal void SetAuthorizationDetailsStepOutcome(AuthorizationDetailsStepOutcome outcome)
+        {
+            ArgumentNullException.ThrowIfNull(outcome);
+            context[AuthorizationServerHandlers.AuthorizationDetailsStepOutcomeKey] = outcome;
+        }
+    }
+}
+
+
+/// <summary>
+/// A typed accessor block over <see cref="ExchangeContext"/> fronting one per-request carry: the
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see> effective scope
+/// <see cref="AuthCodeEndpoints.BuildRefreshToken"/>'s <c>BuildInputAsync</c> step resolves via
+/// <see cref="AuthCodeEndpoints.ResolveEffectiveScope"/>, for that same endpoint's <c>BuildResponse</c>
+/// step to echo on the response's <c>scope</c> member — the same narrowed value the access token,
+/// and every scope-gated token producer, were issued against, rather than the full scope carried on
+/// the presented <see cref="ServerRefreshTokenIssuedState"/>.
+/// </summary>
+/// <remarks>
+/// Internal — this carry moves a value computed in one delegate of the refresh endpoint to another
+/// delegate of the SAME endpoint within one request; nothing outside <see cref="Verifiable.OAuth"/>
+/// needs it.
+/// </remarks>
+internal static class ExchangeContextRefreshScopeExtensions
+{
+    private const string EffectiveRefreshScopeKey = "server.effectiveRefreshScope";
+
+    extension(ExchangeContext context)
+    {
+        /// <summary>
+        /// Gets the effective scope <see cref="AuthCodeEndpoints.BuildRefreshToken"/>'s
+        /// <c>BuildInputAsync</c> step resolved for this refresh response, or <see langword="null"/>
+        /// when no such step has run yet for this request.
+        /// </summary>
+        internal string? EffectiveRefreshScope =>
+            context.TryGetValue(EffectiveRefreshScopeKey, out object? v) && v is string scope ? scope : null;
+
+        /// <summary>Sets the effective scope resolved for this refresh response.</summary>
+        /// <param name="scope">
+        /// The <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>
+        /// effective scope this refresh response was issued against.
+        /// </param>
+        internal void SetEffectiveRefreshScope(string scope)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+            context[EffectiveRefreshScopeKey] = scope;
+        }
     }
 }

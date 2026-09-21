@@ -1,6 +1,5 @@
 using CsCheck;
 using Microsoft.Extensions.Time.Testing;
-using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Tests.TestInfrastructure;
@@ -28,16 +27,14 @@ internal sealed class Fido2RulePropertyTests
     /// 7.1</see>, step 8 rejects any difference from the expected challenge, however small.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the claim-issuing call fully completes, so the using declaration's dispose runs strictly after it returns.")]
-    public void AnySingleCharacterChallengeCorruptionFailsChallengeClaim()
+    public async Task AnySingleCharacterChallengeCorruptionFailsChallengeClaim()
     {
         string challenge = Fido2CeremonyInputFactory.ValidChallenge;
 
-        (from index in Gen.Int[0, challenge.Length - 1]
-         from replacement in Gen.Char.AlphaNumeric.Where(c => c != challenge[index])
-         select (index, replacement))
-        .Sample(sample =>
+        await (from index in Gen.Int[0, challenge.Length - 1]
+               from replacement in Gen.Char.AlphaNumeric.Where(c => c != challenge[index])
+               select (index, replacement))
+        .SampleAsync(async sample =>
         {
             char[] corrupted = challenge.ToCharArray();
             corrupted[sample.index] = sample.replacement;
@@ -45,11 +42,11 @@ internal sealed class Fido2RulePropertyTests
             using RegistrationCeremonyInput input = Fido2CeremonyInputFactory.CreateValidRegistrationInput(
                 clientDataChallenge: new string(corrupted));
 
-            ClaimIssueResult result = IssueRegistrationClaimsAsync(input).GetAwaiter().GetResult();
+            ClaimIssueResult result = await IssueRegistrationClaimsAsync(input);
 
             Claim claim = FindClaim(result, Fido2ClaimIds.Fido2RegistrationChallenge);
             Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -60,14 +57,12 @@ internal sealed class Fido2RulePropertyTests
     /// 7.1</see>, step 14 rejects any difference from <c>authData.rpIdHash</c>.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the claim-issuing call fully completes, so the using declaration's dispose runs strictly after it returns.")]
-    public void AnyBitFlipInExpectedRpIdHashFailsRpIdHashClaim()
+    public async Task AnyBitFlipInExpectedRpIdHashFailsRpIdHashClaim()
     {
-        (from index in Gen.Int[0, 31]
-         from bit in Gen.Int[0, 7]
-         select (index, bit))
-        .Sample(sample =>
+        await (from index in Gen.Int[0, 31]
+               from bit in Gen.Int[0, 7]
+               select (index, bit))
+        .SampleAsync(async sample =>
         {
             byte[] corrupted = Fido2TestVectors.CreateRpIdHash();
             corrupted[sample.index] ^= (byte)(1 << sample.bit);
@@ -75,11 +70,11 @@ internal sealed class Fido2RulePropertyTests
             using RegistrationCeremonyInput input = Fido2CeremonyInputFactory.CreateValidRegistrationInput(
                 expectedRpIdHash: corrupted);
 
-            ClaimIssueResult result = IssueRegistrationClaimsAsync(input).GetAwaiter().GetResult();
+            ClaimIssueResult result = await IssueRegistrationClaimsAsync(input);
 
             Claim claim = FindClaim(result, Fido2ClaimIds.Fido2RegistrationRpIdHash);
             Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -91,11 +86,9 @@ internal sealed class Fido2RulePropertyTests
     /// unrelated bits cannot make an unrelated claim fail.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the claim-issuing call fully completes, so the using declaration's dispose runs strictly after it returns.")]
-    public void BackupFlagsInvariantFailsExactlyWhenBackupStateSetWithoutBackupEligible()
+    public async Task BackupFlagsInvariantFailsExactlyWhenBackupStateSetWithoutBackupEligible()
     {
-        Gen.Byte.Sample(flagsByte =>
+        await Gen.Byte.SampleAsync(async flagsByte =>
         {
             bool userPresent = (flagsByte & AuthenticatorDataFlags.UserPresentBit) != 0;
             bool userVerified = (flagsByte & AuthenticatorDataFlags.UserVerifiedBit) != 0;
@@ -110,13 +103,13 @@ internal sealed class Fido2RulePropertyTests
                 userVerification: UserVerificationRequirement.Discouraged,
                 allowUserPresenceAbsent: true);
 
-            ClaimIssueResult result = IssueRegistrationClaimsAsync(input).GetAwaiter().GetResult();
+            ClaimIssueResult result = await IssueRegistrationClaimsAsync(input);
 
             Claim claim = FindClaim(result, Fido2ClaimIds.Fido2RegistrationBackupFlagsInvariant);
             bool expectedFailure = backupState && !backupEligible;
 
             Assert.AreEqual(expectedFailure ? ClaimOutcome.Failure : ClaimOutcome.Success, claim.Outcome);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

@@ -133,6 +133,14 @@ internal static class WebVhTestLog
                         {
                             alsoKnownAs.Add(123);
                         }
+
+                        if(plan.ExtraMoveAlsoKnownAs is { } extraAlsoKnownAs)
+                        {
+                            foreach(string extra in extraAlsoKnownAs)
+                            {
+                                alsoKnownAs.Add(extra);
+                            }
+                        }
                     }
 
                     currentDid = entryDid;
@@ -593,7 +601,10 @@ internal sealed class WebVhController: IDisposable
 /// <param name="ExplicitFilesServiceEndpoint">An optional explicit <c>#files</c> serviceEndpoint that overrides the implicit one (for example a non-HTTP(S) scheme, for negative dereferencing tests).</param>
 /// <param name="ExplicitFilesServiceEndpointMap">An optional explicit <c>#files</c> serviceEndpoint expressed as a map (the URL is a member value), overriding the implicit service.</param>
 /// <param name="ExplicitWhoisServiceEndpoint">An optional explicit <c>#whois</c> serviceEndpoint at a different HTTP(S) location, overriding the implicit whois service.</param>
+/// <param name="MoveChangeScid">When moving, the replacement SCID to declare instead of the genesis one (for negative tests that pair a domain move with a disallowed SCID change).</param>
+/// <param name="GenesisAlsoKnownAs">The <c>alsoKnownAs</c> values to declare on the genesis entry, or <see langword="null"/> to omit them.</param>
 /// <param name="MethodOverride">When set, this (non-genesis) entry declares this <c>method</c> parameter value, used to exercise the rejection of a method change/downgrade after the first entry.</param>
+/// <param name="ExtraMoveAlsoKnownAs">When moving, additional well-formed <c>alsoKnownAs</c> values to declare alongside the automatic prior-DID entry — for a negative test proving that an <c>alsoKnownAs</c> value which was never a verified <c>state.id</c> is never treated as equivalent.</param>
 internal sealed record WebVhEntryPlan(
     WebVhController Signer,
     ImmutableArray<string> UpdateKeys,
@@ -612,7 +623,8 @@ internal sealed record WebVhEntryPlan(
     string? ExplicitWhoisServiceEndpoint = null,
     string? MoveChangeScid = null,
     ImmutableArray<string>? GenesisAlsoKnownAs = null,
-    string? MethodOverride = null);
+    string? MethodOverride = null,
+    ImmutableArray<string>? ExtraMoveAlsoKnownAs = null);
 
 
 /// <summary>

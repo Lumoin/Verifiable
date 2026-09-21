@@ -24,14 +24,14 @@ namespace Verifiable.DidComm.Routing;
 /// message is a packed encrypted message — a <see cref="DidCommEncryptedMessage"/> — so it is carried
 /// byte-faithfully as base64url with no JSON-object representation: <c>data.base64</c> is the spec's
 /// "full power of DIDComm attachments". There is no parallel typed model: this mirrors
-/// <see cref="OutOfBandInvitationExtensions"/>, reusing the message model, <see cref="Attachment"/>, and
+/// <see cref="Verifiable.DidComm.OutOfBand.OutOfBandInvitationExtensions"/>, reusing the message model, <see cref="Attachment"/>, and
 /// the injected <see cref="DidCommMessageSerializer"/> / <see cref="DidCommMessageParser"/>.
 /// </para>
 /// <para>
 /// Every wrapper is <em>anoncrypt</em>: the mediator never authenticates the sender (DIDComm v2.1
 /// §Routing Protocol 2.0 §Roles). The wrap path (<see cref="WrapInForwardAsync(DidCommEncryptedMessage, string, IReadOnlyList{string}, DidResolver, ExchangeContext, EphemeralKeyPairFactory, string, string, string, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, BaseMemoryPool, CancellationToken)"/>)
 /// is producer-side and MAY throw on bad caller args; the unpack path
-/// (<see cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>)
+/// (<see cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, OutboundTransportDelegate?, HashFunctionSelector?, JsonValueSerializer?, DecodeDelegate?, CancellationToken)"/>)
 /// is the mediator over attacker-controlled wire input and is fail-closed — it never throws, returning a
 /// typed <see cref="ForwardUnpackError"/> instead. The mediator MUST NOT decrypt the forwarded message
 /// (it is "a blob"); it returns it as owned opaque bytes plus the next hop, and the transmit to that hop
@@ -45,7 +45,7 @@ public static class RoutingForwardExtensions
     /// The hard upper bound on the length of the forwarded <c>data.base64</c> string the unpack path
     /// decodes into a pooled buffer. The forwarded message is attacker-controlled wire input, so this
     /// caps the allocation a hostile forward can drive — the bound is checked BEFORE decoding (mirrors
-    /// <see cref="OutOfBandInvitationExtensions.MaximumOobValueLength"/>); it is well above any real
+    /// <see cref="Verifiable.DidComm.OutOfBand.OutOfBandInvitationExtensions.MaximumOobValueLength"/>); it is well above any real
     /// packed DIDComm envelope.
     /// </summary>
     public const int MaximumForwardedMessageLength = 4 * 1024 * 1024;
@@ -353,7 +353,7 @@ public static class RoutingForwardExtensions
     /// Unpacks a forward message a mediator received, resolving the anoncrypt cryptographic functions from
     /// the key-agreement registry. The delegate-taking overload does the work after resolution.
     /// </summary>
-    /// <inheritdoc cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// <inheritdoc cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, OutboundTransportDelegate?, HashFunctionSelector?, JsonValueSerializer?, DecodeDelegate?, CancellationToken)"/>
     public static async ValueTask<ForwardUnpackResult> UnpackForwardAsync(
         this DidCommEncryptedMessage forwardEnvelope,
         string mediatorRecipientKeyId,
@@ -425,7 +425,15 @@ public static class RoutingForwardExtensions
     /// <param name="signedParser">Parser producing an unverified JWS message from a nested signed JWM's bytes.</param>
     /// <param name="base64UrlDecoder">Base64Url decoder for the protected header, envelope members, and the forward attachment's <c>data.base64</c>.</param>
     /// <param name="base64UrlEncoder">Base64Url encoder, threaded to the anoncrypt unpack.</param>
+    /// <param name="agreementDelegate">Performs the key-agreement decryption step of the anoncrypt unpack.</param>
+    /// <param name="keyDerivationDelegate">Derives the content-encryption key from the agreed secret.</param>
+    /// <param name="keyUnwrapDelegate">Unwraps the per-recipient content-encryption key.</param>
+    /// <param name="aeadDecryptDelegate">Performs the AEAD decryption of the outer envelope's ciphertext.</param>
     /// <param name="memoryPool">Memory pool for transient buffers and the owned forwarded message.</param>
+    /// <param name="transport">OPTIONAL. The outbound transport delegate threaded to a nested signed inner's resolution.</param>
+    /// <param name="hashFunctionSelector">OPTIONAL. Selects the hash function threaded to a nested signed inner's resolution.</param>
+    /// <param name="jsonValueSerializer">OPTIONAL. The JSON value serializer threaded to a nested signed inner's resolution.</param>
+    /// <param name="hashBase58Decoder">OPTIONAL. Base58 decoder threaded to a nested signed inner's resolution.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A fail-closed forward unpack result the caller disposes.</returns>
     public static async ValueTask<ForwardUnpackResult> UnpackForwardAsync(
@@ -775,6 +783,12 @@ public static class RoutingForwardExtensions
         AttachmentResolutionError.JwsResolutionNotSupported => ForwardUnpackError.MissingForwardedMessage,
         AttachmentResolutionError.MalformedInline => ForwardUnpackError.MalformedForwardedMessage,
         AttachmentResolutionError.HashMissingForLinks => ForwardUnpackError.MalformedForwardedMessage,
+        AttachmentResolutionError.None => ForwardUnpackError.ForwardedMessageFetchFailed,
+        AttachmentResolutionError.UnsupportedHashAlgorithm => ForwardUnpackError.ForwardedMessageFetchFailed,
+        AttachmentResolutionError.MalformedHash => ForwardUnpackError.ForwardedMessageFetchFailed,
+        AttachmentResolutionError.HashMismatch => ForwardUnpackError.ForwardedMessageFetchFailed,
+        AttachmentResolutionError.FetchDenied => ForwardUnpackError.ForwardedMessageFetchFailed,
+        AttachmentResolutionError.AllLinksFailed => ForwardUnpackError.ForwardedMessageFetchFailed,
         _ => ForwardUnpackError.ForwardedMessageFetchFailed
     };
 

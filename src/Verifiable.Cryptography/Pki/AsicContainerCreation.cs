@@ -259,7 +259,7 @@ public sealed record AsicContainerSignatureContext
     /// Gets certificates placed in the CAdES object's own certificate set, or <see langword="null"/> to place
     /// none beyond the signer's. Read by <see cref="AsicContainerCreation.SignAsync"/>; the three-phase path
     /// takes them at <see cref="AsicContainerCreation.CompleteSignature"/>, where
-    /// <see cref="CAdESSignatureCreation.Complete"/> takes them.
+    /// <see cref="CAdESSignatureCreation.Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/> takes them.
     /// </summary>
     public IReadOnlyList<PkiCertificateMemory>? AdditionalCertificates { get; init; }
 
@@ -696,7 +696,7 @@ public static class AsicContainerCreation
     /// <exception cref="ArgumentNullException">When an argument is <see langword="null"/>.</exception>
     /// <exception cref="AsicContainerCreationException">When the supplied material is not a container this library builds.</exception>
     /// <remarks>
-    /// The signing itself goes through <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?)"/>,
+    /// The signing itself goes through <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/>,
     /// which owns the table mapping a signing algorithm to its digest and signature encodings. A
     /// <see cref="AsicContainerSignatureContext.SignatureDigestAlgorithm"/> that is not the one the signer's
     /// profile uses is therefore refused there rather than here — by the layer that owns the rule.

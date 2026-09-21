@@ -69,7 +69,7 @@ public record DcqlCredentialMetadata
 
     /// <summary>
     /// The credential's OID4VP 1.0 §6.1.1 trust evidence — the facts a <c>trusted_authorities</c>
-    /// entry is matched against (<see cref="TrustedAuthoritiesQuery.Matches(TrustedAuthorityEvidence)"/>).
+    /// entry is matched against (<see cref="DcqlQueryExtensions.Matches(TrustedAuthoritiesQuery, TrustedAuthorityEvidence)"/>).
     /// <see langword="null"/> when the format or wiring surfaces none, in which case a
     /// <c>trusted_authorities</c> constraint on this credential fails closed
     /// (<see cref="DcqlFailureReasons.TrustedAuthorityEvidenceAbsent"/>).

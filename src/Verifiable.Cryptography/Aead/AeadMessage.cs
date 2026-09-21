@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Verifiable.Cryptography.Aead;
 
 /// <summary>
-/// A parsed and validated AEAD message, produced by <see cref="JweParsing.ParseCompact"/>
+/// A parsed and validated AEAD message, produced by <c>JweParsing.ParseCompact</c>
 /// and consumed by the decrypt flow.
 /// </summary>
 /// <remarks>

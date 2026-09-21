@@ -47,11 +47,15 @@ public sealed record ServerCodeIssuedState: FlowState
     public required string CodeChallenge { get; init; }
 
     /// <summary>
-    /// The <c>code_challenge_method</c> bound at authorization time — <c>S256</c> or, under a
-    /// deployment that accepts it, <c>plain</c> — per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>. The
-    /// token endpoint dispatches PKCE verification on this PERSISTED value; RFC 7636 §4.6 is never
-    /// read from the token request, which carries no <c>code_challenge_method</c> parameter at all.
+    /// The accepted S256 wire method from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>, retained
+    /// for code binding per <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4">§4.4</see>:
+    /// "it MUST associate the "code_challenge" and
+    /// "code_challenge_method" values with the authorization code so it can be verified later."
+    /// Token verification selects this bound method per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.5">§4.5</see>.
+    /// The library accepts S256 only, consistent with
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>.
     /// </summary>
     public required string CodeChallengeMethod { get; init; }
 

@@ -1,6 +1,11 @@
 using System.Text;
+using Verifiable.Core;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vci.Wallet;
 
@@ -24,8 +29,9 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 /// </para>
 /// <para>
 /// This replaces the hand-rolled raw-<c>HttpClient</c> issuance flow with a
-/// single call: <see cref="IssuePreAuthorizedAsync"/> takes the offer's
-/// pre-authorized grant plus the holder key material and returns the issued
+/// single call:
+/// <see cref="IssuePreAuthorizedAsync(CredentialOffer, string, PrivateKeyMemory, PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, ExchangeContext, CancellationToken)"/>
+/// takes the offer's pre-authorized grant plus the holder key material and returns the issued
 /// Credential.
 /// </para>
 /// </remarks>
@@ -42,11 +48,56 @@ public sealed class Oid4VciWalletClient
     /// </summary>
     /// <param name="configuration">The wallet delegate bundle.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="configuration"/> wires only some of
+    /// <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/>,
+    /// <see cref="Oid4VciWalletConfiguration.DpopKey"/>, and
+    /// <see cref="Oid4VciWalletConfiguration.GenerateIdentifierAsync"/> — the three are wired
+    /// together or not at all.
+    /// </exception>
     public Oid4VciWalletClient(Oid4VciWalletConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        EnsureDpopWiringIsComplete(configuration);
 
         this.Configuration = configuration;
+    }
+
+
+    /// <summary>
+    /// Refuses a partially-wired DPoP configuration.
+    /// <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/>,
+    /// <see cref="Oid4VciWalletConfiguration.DpopKey"/>, and
+    /// <see cref="Oid4VciWalletConfiguration.GenerateIdentifierAsync"/> must be set together or not
+    /// at all: a configuration carrying one or two of the three without the rest would otherwise
+    /// silently degrade to a plain Bearer request instead of the RFC 9449 §5 sender-constrained one
+    /// the deployment asked for.
+    /// </summary>
+    /// <param name="configuration">The configuration to check.</param>
+    /// <exception cref="ArgumentException">Thrown naming the missing member when the three are not all set or all unset.</exception>
+    private static void EnsureDpopWiringIsComplete(Oid4VciWalletConfiguration configuration)
+    {
+        bool hasConstructDpopProofAsync = configuration.ConstructDpopProofAsync is not null;
+        bool hasDpopKey = configuration.DpopKey is not null;
+        bool hasGenerateIdentifierAsync = configuration.GenerateIdentifierAsync is not null;
+
+        if(hasConstructDpopProofAsync == hasDpopKey && hasDpopKey == hasGenerateIdentifierAsync)
+        {
+            return;
+        }
+
+        string missingMember = (hasConstructDpopProofAsync, hasDpopKey, hasGenerateIdentifierAsync) switch
+        {
+            (false, _, _) => nameof(Oid4VciWalletConfiguration.ConstructDpopProofAsync),
+            (_, false, _) => nameof(Oid4VciWalletConfiguration.DpopKey),
+            _ => nameof(Oid4VciWalletConfiguration.GenerateIdentifierAsync)
+        };
+
+        throw new ArgumentException(
+            "RFC 9449 §5 sender-constraining wires ConstructDpopProofAsync, DpopKey, and "
+            + $"GenerateIdentifierAsync together or not at all; {missingMember} is not set while at "
+            + "least one of the other two is.",
+            nameof(configuration));
     }
 
 
@@ -65,50 +116,86 @@ public sealed class Oid4VciWalletClient
     /// single query parameter — <c>credential_offer</c> or <c>credential_offer_uri</c>,
     /// never both — and <see cref="CredentialOfferSerializer"/> rejects a link carrying
     /// both. The parsed offer feeds the same downstream issuance as a directly-composed
-    /// offer (e.g. <see cref="IssuePreAuthorizedAsync(CredentialOffer, string, PrivateKeyMemory, PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, CancellationToken)"/>).
+    /// offer (e.g. <see cref="IssuePreAuthorizedAsync(CredentialOffer, string, PrivateKeyMemory, PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, ExchangeContext, CancellationToken)"/>).
     /// </remarks>
     /// <param name="deepLink">The §4.1 Credential Offer deep link the Wallet "scanned".</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before a by-reference GET.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The recreated Credential Offer.</returns>
+    /// <returns>
+    /// The recreated Credential Offer, or the <see cref="FetchCredentialOfferAsync"/> failure when
+    /// the link is by reference and the GET was refused or malformed.
+    /// </returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="deepLink"/> carries both <c>credential_offer</c> and <c>credential_offer_uri</c>.</exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the link is by reference but the configuration has no
-    /// <see cref="Oid4VciWalletConfiguration.FetchCredentialOffer"/> transport, or the GET
-    /// returns a non-success status code.
+    /// <see cref="Oid4VciWalletConfiguration.FetchCredentialOffer"/> transport, or when the link is
+    /// by value but its inline offer JSON does not parse.
     /// </exception>
-    public async ValueTask<CredentialOffer> AcceptCredentialOfferAsync(
+    public async ValueTask<Result<CredentialOffer, Oid4VciRequestFailure>> AcceptCredentialOfferAsync(
         string deepLink,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(deepLink);
+        ArgumentNullException.ThrowIfNull(context);
 
         //§4.1: a link carries either credential_offer_uri (by reference) or credential_offer (by
         //value), never both — TryGetCredentialOfferUri rejects the mutual-exclusion violation.
         if(CredentialOfferSerializer.TryGetCredentialOfferUri(deepLink, out Uri? credentialOfferUri))
         {
-            return await FetchCredentialOfferAsync(credentialOfferUri!, cancellationToken).ConfigureAwait(false);
+            return await FetchCredentialOfferAsync(credentialOfferUri!, context, cancellationToken).ConfigureAwait(false);
         }
 
-        //§4.1.2: the by-value link (or raw credential_offer value) carries the offer JSON inline.
-        return CredentialOfferSerializer.ExtractFromDeepLink(deepLink);
+        //§4.1.2: the by-value link (or raw credential_offer value) carries the offer JSON inline;
+        //a caller-supplied value that does not parse is the caller's own malformed input, not a
+        //remote refusal, so it raises rather than answering a failure value.
+        return Result<CredentialOffer, Oid4VciRequestFailure>.Success(
+            CredentialOfferSerializer.ExtractFromDeepLink(deepLink));
     }
 
 
     /// <summary>
     /// GETs the §4.1.3 by-reference Credential Offer at <paramref name="credentialOfferUri"/>
-    /// through the configured transport and parses the returned offer JSON.
+    /// through the library's guarded <see cref="OutboundFetch"/> chokepoint and parses the returned
+    /// offer JSON. §4.1.3: "Upon receipt of the credential_offer_uri, the Wallet MUST send an HTTP
+    /// GET request to the URI to retrieve the referenced Credential Offer Object ... and parse it
+    /// to recreate the Credential Offer parameters." Follows the same fetch-validate shape
+    /// <see cref="Client.AuthorizationServerMetadataDocuments.ResolveAsync"/> applies to its own
+    /// document fetch: a transport hint plus an authoritative post-read size check, an exact
+    /// <c>200</c> status, and a media-type gate — so <see cref="OutboundFetch.FetchAsync"/>'s own
+    /// redirect re-validation and per-hop policy evaluation cover this GET exactly as they cover
+    /// that resolver's.
     /// </summary>
     /// <param name="credentialOfferUri">The <c>credential_offer_uri</c> to retrieve.</param>
+    /// <param name="context">
+    /// The per-operation exchange context. An <see cref="OutboundFetchPolicy"/> set on it directly
+    /// (<see cref="OutboundFetchPolicyExchangeContextExtensions.SetOutboundFetchPolicy"/>) wins;
+    /// otherwise <see cref="Oid4VciWalletConfiguration.OutboundFetchPolicy"/> is the deployment
+    /// default applied — the same resolution order every other dial this Wallet makes uses.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The recreated Credential Offer.</returns>
+    /// <returns>
+    /// The recreated Credential Offer, or a failure: <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/>
+    /// when the policy refused <paramref name="credentialOfferUri"/> or a redirect hop, or refused
+    /// to follow the redirect at all; <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> for a
+    /// non-<c>200</c> status (§4.1.3 defines no error body for this GET, so <see cref="Oid4VciRequestFailure.ErrorCode"/>
+    /// is always <see langword="null"/>); <see cref="Oid4VciRequestFailureKind.MalformedResponse"/>
+    /// when the content type is not <c>application/json</c>, the body exceeds
+    /// <see cref="Oid4VciWalletConfiguration.MaximumCredentialOfferBytes"/>, or the body does not
+    /// satisfy §4.1.1's <c>credential_issuer</c> and <c>credential_configuration_ids</c> rules —
+    /// the same rules <see cref="CredentialOfferSerializer.FromJson"/> raises for a caller-supplied
+    /// offer, answered here as a value since the body is the Issuer's own.
+    /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when no <see cref="Oid4VciWalletConfiguration.FetchCredentialOffer"/> transport is
-    /// configured, or the GET returns a non-success status code.
+    /// Thrown when no <see cref="Oid4VciWalletConfiguration.FetchCredentialOffer"/> transport is configured.
     /// </exception>
-    public async ValueTask<CredentialOffer> FetchCredentialOfferAsync(
+    public async ValueTask<Result<CredentialOffer, Oid4VciRequestFailure>> FetchCredentialOfferAsync(
         Uri credentialOfferUri,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentialOfferUri);
+        ArgumentNullException.ThrowIfNull(context);
 
         if(Configuration.FetchCredentialOffer is null)
         {
@@ -118,16 +205,92 @@ public sealed class Oid4VciWalletClient
                 + "Oid4VciWalletConfiguration.FetchCredentialOffer to fetch a by-reference offer.");
         }
 
-        (int statusCode, string body) = await Configuration.FetchCredentialOffer(
-            credentialOfferUri, cancellationToken).ConfigureAwait(false);
+        //The call's ExchangeContext override wins; Configuration.OutboundFetchPolicy is the
+        //deployment default otherwise — resolved once and propagated onto context so
+        //OutboundFetch.FetchAsync's own policy read (every hop, including redirects) sees it.
+        context.SetOutboundFetchPolicy(context.ResolveOutboundFetchPolicy(Configuration.OutboundFetchPolicy));
 
-        if(statusCode is < 200 or >= 300)
+        OutboundRequest request = new()
         {
-            throw new InvalidOperationException(
-                $"§4.1.3 Credential Offer GET to {credentialOfferUri} returned HTTP {statusCode}: {body}");
+            Target = credentialOfferUri,
+            Method = "GET",
+            MaxResponseBytes = Configuration.MaximumCredentialOfferBytes
+        };
+
+        //A transport exception propagates as itself; the guarded fetch chokepoint answers policy
+        //and redirect refusals as OutboundFetchResult values, not exceptions.
+        OutboundFetchResult fetch = await OutboundFetch.FetchAsync(
+            request, context, Configuration.FetchCredentialOffer, cancellationToken).ConfigureAwait(false);
+
+        if(!fetch.IsFetched || fetch.Response is null)
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(
+                OutboundFetchOutcomeFailure(credentialOfferUri, fetch.Outcome, fetch.DenyReason));
         }
 
-        return CredentialOfferSerializer.FromJson(body);
+        OutboundResponse response = fetch.Response;
+
+        //Non-normative example aside, the only documented success status is the implicit 200 a JSON
+        //body GET answers with; mirrors AuthorizationServerMetadataDocuments.ResolveAsync's own
+        //exact-200 gate rather than accepting the wider 2xx range. §4.1.3 defines no error body for
+        //this GET, so a non-200 status carries no wire error code or description.
+        if(response.StatusCode != 200)
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(new Oid4VciRequestFailure
+            {
+                Kind = Oid4VciRequestFailureKind.ErrorResponse,
+                Endpoint = credentialOfferUri,
+                StatusCode = response.StatusCode,
+                ErrorCode = null,
+                ErrorDescription = null
+            });
+        }
+
+        //§4.1.3: "The response from the Credential Issuer that contains a Credential Offer Object
+        //MUST use the media type application/json."
+        _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
+        if(!IsJsonContentType(contentType))
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(
+                    credentialOfferUri,
+                    response.StatusCode,
+                    $"§4.1.3 the response content type was '{contentType}', not application/json."));
+        }
+
+        //The authoritative post-read size check — MaxResponseBytes above is only a transport hint a
+        //hostile or non-conforming transport may not honor.
+        if(response.Body.Length > Configuration.MaximumCredentialOfferBytes)
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(
+                    credentialOfferUri,
+                    response.StatusCode,
+                    "§4.1.3 the response exceeded the configured maximum size."));
+        }
+
+        //The offer body is remote input, so a malformed parse answers MalformedResponse rather
+        //than raising — CredentialOfferSerializer.TryParse shares §4.1.1's rules with FromJson,
+        //which raises them for the by-value link's caller-supplied JSON instead.
+        string offerJson = Encoding.UTF8.GetString(response.Body.Span);
+        if(!CredentialOfferSerializer.TryParse(offerJson, out CredentialOffer? offer, out string? violatedRule))
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(credentialOfferUri, response.StatusCode, violatedRule!));
+        }
+
+        return Result<CredentialOffer, Oid4VciRequestFailure>.Success(offer!);
+    }
+
+
+    /// <summary>
+    /// Whether <paramref name="contentType"/> is exactly <c>application/json</c> per §4.1.3, with
+    /// parameters (e.g. <c>;charset=utf-8</c>) stripped before comparison.
+    /// </summary>
+    private static bool IsJsonContentType(string? contentType)
+    {
+        return ContentTypeReader.ReadMediaType(contentType).Equals(
+            WellKnownMediaTypes.Application.Json, StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -143,9 +306,16 @@ public sealed class Oid4VciWalletClient
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs (§12.2 metadata in deployments).</param>
     /// <param name="transactionCode">The §6.1 <c>tx_code</c>, or <see langword="null"/> when none is required.</param>
     /// <param name="responseEncryption">The §8.2 <c>credential_response_encryption</c> ask, or <see langword="null"/> for a plaintext response.</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The issued Credential string (the §8.3 <c>credentials[0].credential</c>).</returns>
-    public async ValueTask<string> IssuePreAuthorizedAsync(
+    /// <returns>The issued Credential string (the §8.3 <c>credentials[0].credential</c>), or the endpoint's refusal.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <paramref name="offer"/> carries no Pre-Authorized Code grant, or when the
+    /// issuance succeeded on the wire but was deferred or carried no Credential — the simple
+    /// overload cannot describe either, so the caller's programming error surfaces as an
+    /// exception rather than the endpoint's own <see cref="Oid4VciRequestFailure"/>.
+    /// </exception>
+    public async ValueTask<Result<string, Oid4VciRequestFailure>> IssuePreAuthorizedAsync(
         CredentialOffer offer,
         string credentialConfigurationId,
         PrivateKeyMemory holderPrivate,
@@ -153,6 +323,7 @@ public sealed class Oid4VciWalletClient
         Oid4VciIssuanceEndpoints endpoints,
         string? transactionCode,
         CredentialResponseEncryption? responseEncryption,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(offer);
@@ -173,6 +344,7 @@ public sealed class Oid4VciWalletClient
             endpoints,
             transactionCode,
             responseEncryption,
+            context,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -189,9 +361,11 @@ public sealed class Oid4VciWalletClient
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
     /// <param name="transactionCode">The §6.1 <c>tx_code</c>, or <see langword="null"/> when none is required.</param>
     /// <param name="responseEncryption">The §8.2 <c>credential_response_encryption</c> ask, or <see langword="null"/>.</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The full Credential Response outcome.</returns>
-    public async ValueTask<CredentialIssuanceResult> IssuePreAuthorizedDetailedAsync(
+    /// <returns>The full Credential Response outcome, or the endpoint's refusal.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="offer"/> carries no Pre-Authorized Code grant.</exception>
+    public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssuePreAuthorizedDetailedAsync(
         CredentialOffer offer,
         string credentialConfigurationId,
         PrivateKeyMemory holderPrivate,
@@ -199,6 +373,7 @@ public sealed class Oid4VciWalletClient
         Oid4VciIssuanceEndpoints endpoints,
         string? transactionCode,
         CredentialResponseEncryption? responseEncryption,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(offer);
@@ -219,6 +394,7 @@ public sealed class Oid4VciWalletClient
             endpoints,
             transactionCode,
             responseEncryption,
+            context,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -236,14 +412,16 @@ public sealed class Oid4VciWalletClient
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
     /// <param name="transactionCode">The §6.1 <c>tx_code</c>, or <see langword="null"/>.</param>
     /// <param name="responseEncryption">The §8.2 response-encryption ask, or <see langword="null"/>.</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The issued Credential string (the §8.3 <c>credentials[0].credential</c>).</returns>
+    /// <returns>The issued Credential string (the §8.3 <c>credentials[0].credential</c>), or the endpoint's refusal.</returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the issuance was deferred or produced no Credential — use
-    /// <see cref="IssuePreAuthorizedDetailedAsync(PreAuthorizedCodeOfferGrant, Uri, string, PrivateKeyMemory, PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, CancellationToken)"/>
+    /// Thrown when the issuance succeeded on the wire but was deferred or produced no
+    /// Credential — use
+    /// <see cref="IssuePreAuthorizedDetailedAsync(PreAuthorizedCodeOfferGrant, Uri, string, PrivateKeyMemory, PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, ExchangeContext, CancellationToken)"/>
     /// to handle a §9 deferral, a §8.2 batch, or the §11 <c>notification_id</c>.
     /// </exception>
-    public async ValueTask<string> IssuePreAuthorizedAsync(
+    public async ValueTask<Result<string, Oid4VciRequestFailure>> IssuePreAuthorizedAsync(
         PreAuthorizedCodeOfferGrant grant,
         Uri credentialIssuer,
         string credentialConfigurationId,
@@ -252,9 +430,10 @@ public sealed class Oid4VciWalletClient
         Oid4VciIssuanceEndpoints endpoints,
         string? transactionCode,
         CredentialResponseEncryption? responseEncryption,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        CredentialIssuanceResult result = await IssuePreAuthorizedDetailedAsync(
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssuePreAuthorizedDetailedAsync(
             grant,
             credentialIssuer,
             credentialConfigurationId,
@@ -263,7 +442,15 @@ public sealed class Oid4VciWalletClient
             endpoints,
             transactionCode,
             responseEncryption,
+            context,
             cancellationToken).ConfigureAwait(false);
+
+        if(!outcome.IsSuccess)
+        {
+            return Result<string, Oid4VciRequestFailure>.Failure(outcome.Error);
+        }
+
+        CredentialIssuanceResult result = outcome.Value;
 
         if(result.IsDeferred)
         {
@@ -279,7 +466,7 @@ public sealed class Oid4VciWalletClient
                 "§8.3 the Credential Response carried no credentials[0].credential.");
         }
 
-        return result.Credentials[0];
+        return Result<string, Oid4VciRequestFailure>.Success(result.Credentials[0]);
     }
 
 
@@ -297,9 +484,10 @@ public sealed class Oid4VciWalletClient
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
     /// <param name="transactionCode">The §6.1 <c>tx_code</c>, or <see langword="null"/>.</param>
     /// <param name="responseEncryption">The §8.2 response-encryption ask, or <see langword="null"/>.</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The full Credential Response outcome.</returns>
-    public async ValueTask<CredentialIssuanceResult> IssuePreAuthorizedDetailedAsync(
+    /// <returns>The full Credential Response outcome, or the endpoint's refusal.</returns>
+    public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssuePreAuthorizedDetailedAsync(
         PreAuthorizedCodeOfferGrant grant,
         Uri credentialIssuer,
         string credentialConfigurationId,
@@ -308,6 +496,7 @@ public sealed class Oid4VciWalletClient
         Oid4VciIssuanceEndpoints endpoints,
         string? transactionCode,
         CredentialResponseEncryption? responseEncryption,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(grant);
@@ -316,22 +505,33 @@ public sealed class Oid4VciWalletClient
         ArgumentNullException.ThrowIfNull(holderPrivate);
         ArgumentNullException.ThrowIfNull(holderPublic);
         ArgumentNullException.ThrowIfNull(endpoints);
+        ArgumentNullException.ThrowIfNull(context);
 
         //§6: the Pre-Authorized Code grant mints the access token over an HTTP
         //form POST. tx_code rides alongside when the offer required one.
-        (string accessToken, string tokenType) = await RequestAccessTokenAsync(
-            grant.PreAuthorizedCode, transactionCode, endpoints.TokenEndpoint, cancellationToken)
-            .ConfigureAwait(false);
+        Result<(string AccessToken, string TokenType, DateTimeOffset? ExpiresAt), Oid4VciRequestFailure> tokenOutcome =
+            await RequestAccessTokenAsync(
+                grant.PreAuthorizedCode, transactionCode, endpoints.TokenEndpoint, context, cancellationToken)
+                .ConfigureAwait(false);
+
+        if(!tokenOutcome.IsSuccess)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(tokenOutcome.Error);
+        }
+
+        (string accessToken, string tokenType, DateTimeOffset? accessTokenExpiresAt) = tokenOutcome.Value;
 
         return await IssueWithAccessTokenDetailedAsync(
             accessToken,
             tokenType,
+            accessTokenExpiresAt,
             credentialIssuer,
             credentialConfigurationId,
             holderPrivate,
             holderPublic,
             endpoints,
             responseEncryption,
+            context,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -348,23 +548,32 @@ public sealed class Oid4VciWalletClient
     /// </summary>
     /// <param name="accessToken">The access token authorizing the Nonce and Credential Requests.</param>
     /// <param name="tokenType">The token's <c>token_type</c> (<c>Bearer</c>, or <c>DPoP</c> with the DPoP delegate wired).</param>
+    /// <param name="accessTokenExpiresAt">
+    /// The instant <paramref name="accessToken"/> expires, carried over into the returned
+    /// <see cref="CredentialIssuanceResult.ExpiresAt"/>, or <see langword="null"/> when the caller
+    /// does not know it (the section 6 token response carried no <c>expires_in</c>, or the token
+    /// came from a grant this client did not itself redeem).
+    /// </param>
     /// <param name="credentialIssuer">The Credential Issuer identifier - the holder proof's <c>aud</c>.</param>
     /// <param name="credentialConfigurationId">The Credential Configuration to request.</param>
     /// <param name="holderPrivate">The holder's signing private key for the section 7.2.1 proof.</param>
     /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
     /// <param name="endpoints">The resolved Nonce / Credential endpoint URLs.</param>
     /// <param name="responseEncryption">The section 8.2 response-encryption ask, or <see langword="null"/>.</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The full Credential Response outcome.</returns>
-    public async ValueTask<CredentialIssuanceResult> IssueWithAccessTokenDetailedAsync(
+    /// <returns>The full Credential Response outcome, or the endpoint's refusal.</returns>
+    public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssueWithAccessTokenDetailedAsync(
         string accessToken,
         string tokenType,
+        DateTimeOffset? accessTokenExpiresAt,
         Uri credentialIssuer,
         string credentialConfigurationId,
         PrivateKeyMemory holderPrivate,
         PublicKeyMemory holderPublic,
         Oid4VciIssuanceEndpoints endpoints,
         CredentialResponseEncryption? responseEncryption,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
@@ -374,10 +583,18 @@ public sealed class Oid4VciWalletClient
         ArgumentNullException.ThrowIfNull(holderPrivate);
         ArgumentNullException.ThrowIfNull(holderPublic);
         ArgumentNullException.ThrowIfNull(endpoints);
+        ArgumentNullException.ThrowIfNull(context);
 
         //§7: the Nonce Endpoint issues the c_nonce the proof must carry.
-        string credentialNonce = await RequestNonceAsync(
-            accessToken, tokenType, endpoints.NonceEndpoint, cancellationToken).ConfigureAwait(false);
+        Result<string, Oid4VciRequestFailure> nonceOutcome = await RequestNonceAsync(
+            accessToken, tokenType, endpoints.NonceEndpoint, context, cancellationToken).ConfigureAwait(false);
+
+        if(!nonceOutcome.IsSuccess)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(nonceOutcome.Error);
+        }
+
+        string credentialNonce = nonceOutcome.Value;
 
         //§7.2.1: mint the holder key proof bound to the c_nonce and the Issuer.
         string proofJwt = await Oid4VciProofIssuance.BuildJwtProofAsync(
@@ -397,10 +614,12 @@ public sealed class Oid4VciWalletClient
         return await RequestCredentialAsync(
             accessToken,
             tokenType,
+            accessTokenExpiresAt,
             credentialConfigurationId,
             proofJwt,
             responseEncryption,
             endpoints.CredentialEndpoint,
+            context,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -408,13 +627,30 @@ public sealed class Oid4VciWalletClient
     /// <summary>
     /// Sends the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1.1">§6.1.1</see>
     /// Pre-Authorized Code Token Request — <c>grant_type=...pre-authorized_code</c>, the code, and
-    /// (when required) <c>tx_code</c> as form fields — and parses <c>access_token</c> and
-    /// <c>token_type</c> off the JSON Token Response.
+    /// (when required) <c>tx_code</c> as form fields — attaching a
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see> DPoP proof
+    /// when <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/> is wired ("This is
+    /// applicable for all access token requests regardless of grant type"), and parses
+    /// <c>access_token</c>, <c>token_type</c>, and <c>expires_in</c> off the JSON Token Response.
+    /// <c>expires_in</c> is added to the instant this method sends the request rather than the
+    /// instant it reads the response:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see> counts
+    /// it "from the time the response was generated," and the request instant is never later than
+    /// that, so the computed expiry never overstates the token's remaining lifetime.
     /// </summary>
-    private async ValueTask<(string AccessToken, string TokenType)> RequestAccessTokenAsync(
+    /// <returns>
+    /// The access token, its type, and its computed expiry; or a failure:
+    /// <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> when the policy refused
+    /// <paramref name="tokenEndpoint"/> before any dial, <see cref="Oid4VciRequestFailureKind.ErrorResponse"/>
+    /// for the RFC 6749 §5.2 Token Error Response a non-2xx status carries, or
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> when the success body is not
+    /// well-formed JSON, repeats a member, or carries no <c>access_token</c>.
+    /// </returns>
+    private async ValueTask<Result<(string AccessToken, string TokenType, DateTimeOffset? ExpiresAt), Oid4VciRequestFailure>> RequestAccessTokenAsync(
         string preAuthorizedCode,
         string? transactionCode,
         Uri tokenEndpoint,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         Dictionary<string, string> formFields = new(StringComparer.Ordinal)
@@ -428,25 +664,120 @@ public sealed class Oid4VciWalletClient
             formFields[OAuthRequestParameterNames.TxCode] = transactionCode;
         }
 
-        (int statusCode, string body) = await Configuration.SendFormPost(
-            tokenEndpoint, formFields, cancellationToken).ConfigureAwait(false);
-
-        if(statusCode is < 200 or >= 300)
+        Oid4VciRequestFailure? policyDenial = EvaluateOutboundPolicy(tokenEndpoint, context, Configuration.OutboundFetchPolicy);
+        if(policyDenial is not null)
         {
-            throw new InvalidOperationException(
-                $"§6 Pre-Authorized Code Token Request to {tokenEndpoint} returned HTTP {statusCode}: {body}");
+            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(policyDenial);
         }
 
-        ReadOnlySpan<byte> tokenJson = Encoding.UTF8.GetBytes(body);
-        string accessToken = JwkJsonReader.ExtractStringValue(tokenJson, WellKnownTokenTypes.AccessTokenUtf8)
-            ?? throw new InvalidOperationException(
-                $"§6 Token Response from {tokenEndpoint} carried no access_token. Body: {body}");
+        DateTimeOffset requestedAt = Configuration.TimeProvider.GetUtcNow();
+        HttpResponseData response = await SendTokenRequestAsync(
+            formFields, tokenEndpoint, context, cancellationToken).ConfigureAwait(false);
+
+        if(response.StatusCode is < 200 or >= 300)
+        {
+            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(
+                ParseErrorResponse(response.StatusCode, response.Body, tokenEndpoint));
+        }
+
+        ReadOnlySpan<byte> tokenJson = Encoding.UTF8.GetBytes(response.Body);
+
+        //RFC 7519-style §4 uniqueness posture applied to a fetched JSON document: a repeated
+        //"access_token" would let this reader select the first occurrence while the Authorization
+        //Server's own semantics — and any other consumer of the same body — resolve the last.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(tokenJson))
+        {
+            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(
+                    tokenEndpoint,
+                    response.StatusCode,
+                    "§6 the Token Response is not well-formed JSON, or contains a duplicate member name."));
+        }
+
+        string? accessToken = JwkJsonReader.ExtractStringValue(tokenJson, WellKnownTokenTypes.AccessTokenUtf8);
+        if(accessToken is null)
+        {
+            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(tokenEndpoint, response.StatusCode, "§6 the Token Response carried no access_token."));
+        }
 
         //RFC 6749 §5.1 token_type defaults to Bearer when the AS omits it.
         string tokenType = JwkJsonReader.ExtractStringValue(tokenJson, OAuthRequestParameterNames.TokenTypeUtf8)
             ?? WellKnownAuthenticationSchemes.Bearer;
 
-        return (accessToken, tokenType);
+        DateTimeOffset? expiresAt = JwkJsonReader.TryExtractLongValue(
+            tokenJson, OAuthRequestParameterNames.ExpiresInUtf8, out long expiresInSeconds)
+            ? requestedAt.AddSeconds(expiresInSeconds)
+            : null;
+
+        return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Success((accessToken, tokenType, expiresAt));
+    }
+
+
+    /// <summary>
+    /// Sends the §6 Token Request once when <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/>
+    /// carries no DPoP key, or through <see cref="DpopNonceRetry.SendWithNonceRetryAsync"/> — the
+    /// helper shared with the AuthCode token endpoint's own retry — when it does, embedding a fresh
+    /// proof on every attempt and retrying exactly once on an RFC 9449 §8.1 <c>use_dpop_nonce</c>
+    /// challenge (HTTP 400 + <c>error=use_dpop_nonce</c> in the JSON body + a <c>DPoP-Nonce</c>
+    /// response header).
+    /// </summary>
+    private async ValueTask<HttpResponseData> SendTokenRequestAsync(
+        IReadOnlyDictionary<string, string> formFields,
+        Uri tokenEndpoint,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        if(Configuration.ConstructDpopProofAsync is null || Configuration.DpopKey is null)
+        {
+            return await Configuration.SendFormPost(
+                tokenEndpoint, formFields, OutgoingHeaders.Empty, context, cancellationToken).ConfigureAwait(false);
+        }
+
+        string authority = InMemoryDpopNonceCache.AuthorityFor(tokenEndpoint);
+
+        return await DpopNonceRetry.SendWithNonceRetryAsync(
+            (nonce, ct) => SendFormPostWithDpopAsync(formFields, tokenEndpoint, nonce, context, ct),
+            static candidate => candidate.StatusCode == 400
+                && candidate.Body.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal),
+            authority,
+            Configuration.LookupDpopNonce,
+            Configuration.StoreDpopNonce,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Mints one fresh DPoP proof bound to <paramref name="tokenEndpoint"/> — embedding
+    /// <paramref name="nonce"/> when supplied — and sends the §6 Token Request once. No <c>ath</c>
+    /// claim: the token endpoint proof is minted before an access token exists to bind to.
+    /// </summary>
+    private async ValueTask<HttpResponseData> SendFormPostWithDpopAsync(
+        IReadOnlyDictionary<string, string> formFields,
+        Uri tokenEndpoint,
+        string? nonce,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        string jti = await Configuration.GenerateIdentifierAsync!(
+            WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
+
+        DpopProofClaims claims = new()
+        {
+            Htm = HttpPostMethod,
+            Htu = tokenEndpoint.GetLeftPart(UriPartial.Path),
+            Iat = Configuration.TimeProvider.GetUtcNow(),
+            Jti = jti,
+            Nonce = nonce
+        };
+
+        string proof = await Configuration.ConstructDpopProofAsync!(
+            claims, Configuration.DpopKey!, cancellationToken).ConfigureAwait(false);
+
+        OutgoingHeaders headers = OutgoingHeaders.Empty.WithDpop(proof);
+
+        return await Configuration.SendFormPost(
+            tokenEndpoint, formFields, headers, context, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -455,27 +786,53 @@ public sealed class Oid4VciWalletClient
     /// Nonce Request — an authorized POST with no body — and reads <c>c_nonce</c> off the JSON Nonce
     /// Response.
     /// </summary>
-    private async ValueTask<string> RequestNonceAsync(
+    /// <returns>
+    /// The <c>c_nonce</c>; or a failure: <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/>
+    /// when the policy refused <paramref name="nonceEndpoint"/> before any dial,
+    /// <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> for a non-2xx status, or
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> when the success body is not
+    /// well-formed JSON, repeats a member, or carries no <c>c_nonce</c>.
+    /// </returns>
+    private async ValueTask<Result<string, Oid4VciRequestFailure>> RequestNonceAsync(
         string accessToken,
         string tokenType,
         Uri nonceEndpoint,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
-            accessToken, tokenType, nonceEndpoint, cancellationToken).ConfigureAwait(false);
-
-        (int statusCode, string body, _) = await Configuration.SendJsonPost(
-            nonceEndpoint, string.Empty, headers, cancellationToken).ConfigureAwait(false);
-
-        if(statusCode is < 200 or >= 300)
+        Oid4VciRequestFailure? policyDenial = EvaluateOutboundPolicy(nonceEndpoint, context, Configuration.OutboundFetchPolicy);
+        if(policyDenial is not null)
         {
-            throw new InvalidOperationException(
-                $"§7 Nonce Request to {nonceEndpoint} returned HTTP {statusCode}: {body}");
+            return Result<string, Oid4VciRequestFailure>.Failure(policyDenial);
         }
 
-        return JwkJsonReader.ExtractStringValue(Encoding.UTF8.GetBytes(body), CNonceUtf8)
-            ?? throw new InvalidOperationException(
-                $"§7 Nonce Response from {nonceEndpoint} carried no c_nonce. Body: {body}");
+        HttpResponseData response = await SendAuthorizedJsonPostAsync(
+            nonceEndpoint, string.Empty, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
+
+        if(response.StatusCode is < 200 or >= 300)
+        {
+            return Result<string, Oid4VciRequestFailure>.Failure(
+                ParseErrorResponse(response.StatusCode, response.Body, nonceEndpoint));
+        }
+
+        ReadOnlySpan<byte> nonceJson = Encoding.UTF8.GetBytes(response.Body);
+        if(!JwkJsonReader.IsWellFormedJsonDocument(nonceJson))
+        {
+            return Result<string, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(
+                    nonceEndpoint,
+                    response.StatusCode,
+                    "§7 the Nonce Response is not well-formed JSON, or contains a duplicate member name."));
+        }
+
+        string? nonce = JwkJsonReader.ExtractStringValue(nonceJson, CNonceUtf8);
+        if(nonce is null)
+        {
+            return Result<string, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(nonceEndpoint, response.StatusCode, "§7 the Nonce Response carried no c_nonce."));
+        }
+
+        return Result<string, Oid4VciRequestFailure>.Success(nonce);
     }
 
 
@@ -488,13 +845,24 @@ public sealed class Oid4VciWalletClient
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.2">§9.2</see>
     /// HTTP 202 deferral carrying <c>transaction_id</c> + <c>interval</c>.
     /// </summary>
-    private async ValueTask<CredentialIssuanceResult> RequestCredentialAsync(
+    /// <returns>
+    /// The full Credential Response outcome; or a failure:
+    /// <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> when the policy refused
+    /// <paramref name="credentialEndpoint"/> before any dial, the §8.3.1
+    /// <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> for a non-2xx, non-202 status, or
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> when a 202 deferral carries no
+    /// <c>transaction_id</c>, or a success body is not well-formed JSON, repeats a member, or
+    /// carries no <c>credentials[].credential</c>.
+    /// </returns>
+    private async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> RequestCredentialAsync(
         string accessToken,
         string tokenType,
+        DateTimeOffset? accessTokenExpiresAt,
         string credentialConfigurationId,
         string proofJwt,
         CredentialResponseEncryption? responseEncryption,
         Uri credentialEndpoint,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         string requestBody = await EncryptRequestIfAskedAsync(
@@ -502,83 +870,122 @@ public sealed class Oid4VciWalletClient
             responseEncryption,
             cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
-            accessToken, tokenType, credentialEndpoint, cancellationToken).ConfigureAwait(false);
+        Oid4VciRequestFailure? policyDenial = EvaluateOutboundPolicy(credentialEndpoint, context, Configuration.OutboundFetchPolicy);
+        if(policyDenial is not null)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(policyDenial);
+        }
 
-        (int statusCode, string body, string? contentType) = await Configuration.SendJsonPost(
-            credentialEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
+        HttpResponseData response = await SendAuthorizedJsonPostAsync(
+            credentialEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
 
         //§8.3: a deferral answers HTTP 202 with transaction_id + interval (plaintext metadata, not the
         //encrypted credential payload); the Wallet later polls the Deferred Credential Endpoint.
-        if(statusCode == HttpAcceptedStatusCode)
+        if(response.StatusCode == HttpAcceptedStatusCode)
         {
-            return ParseDeferredPending(body, accessToken, tokenType, credentialEndpoint);
+            return ParseDeferredPending(response.Body, response.StatusCode, accessToken, tokenType, accessTokenExpiresAt, credentialEndpoint);
         }
 
-        if(statusCode is < 200 or >= 300)
+        if(response.StatusCode is < 200 or >= 300)
         {
-            throw new InvalidOperationException(
-                $"§8 Credential Request to {credentialEndpoint} returned HTTP {statusCode}: {body}");
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(
+                ParseErrorResponse(response.StatusCode, response.Body, credentialEndpoint));
         }
 
-        string responseJson = await DecryptResponseIfAskedAsync(
-            body, contentType, responseEncryption, cancellationToken).ConfigureAwait(false);
+        string? contentType = response.Headers.TryGetSingle(WellKnownHttpHeaderNames.ContentType);
+        Result<string, Oid4VciRequestFailure> decryptOutcome = await DecryptResponseIfAskedAsync(
+            response.Body, contentType, responseEncryption, credentialEndpoint, response.StatusCode, cancellationToken)
+            .ConfigureAwait(false);
 
-        return ParseIssuedCredentials(responseJson, accessToken, tokenType, credentialEndpoint);
+        if(!decryptOutcome.IsSuccess)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(decryptOutcome.Error);
+        }
+
+        return ParseIssuedCredentials(decryptOutcome.Value, response.StatusCode, accessToken, tokenType, accessTokenExpiresAt, credentialEndpoint);
     }
 
 
     /// <summary>
     /// Polls the OID4VCI 1.0 §9 Deferred Credential Endpoint for a previously-deferred issuance,
     /// presenting the <c>transaction_id</c> a prior <see cref="CredentialIssuanceResult"/> carried.
-    /// Returns the issued Credentials when ready (§9.2 HTTP 200), or a still-deferred result echoing the
-    /// <c>transaction_id</c> and <c>interval</c> when the Issuer answers §9.2 HTTP 202.
+    /// Answers a value rather than throwing: the issued Credentials when ready (§9.2 HTTP 200), a
+    /// still-deferred result echoing the <c>transaction_id</c> and <c>interval</c> when the Issuer
+    /// answers §9.2 HTTP 202, or an
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.3">§9.3</see>
+    /// <see cref="Oid4VciRequestFailure"/> — for example <c>invalid_transaction_id</c> — for any
+    /// other status.
     /// </summary>
     /// <param name="transactionId">The §9.1 <c>transaction_id</c> from the deferred issuance.</param>
     /// <param name="accessToken">The issuance access token (from <see cref="CredentialIssuanceResult.AccessToken"/>).</param>
     /// <param name="tokenType">The access token's type (<c>Bearer</c> or <c>DPoP</c>).</param>
+    /// <param name="accessTokenExpiresAt">
+    /// The instant <paramref name="accessToken"/> expires (from a prior
+    /// <see cref="CredentialIssuanceResult.ExpiresAt"/>), carried over into a successful outcome's
+    /// <see cref="CredentialIssuanceResult.ExpiresAt"/>, or <see langword="null"/> when unknown.
+    /// </param>
     /// <param name="deferredCredentialEndpoint">The §9 Deferred Credential Endpoint URL.</param>
     /// <param name="responseEncryption">The §8.2 response-encryption ask carried over from issuance, or <see langword="null"/>.</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before the dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The issued Credentials, or a still-deferred result to poll again after the interval.</returns>
-    public async ValueTask<CredentialIssuanceResult> PollDeferredCredentialAsync(
+    /// <returns>
+    /// The issued Credentials, a still-deferred result to poll again after the interval, or the
+    /// §9.3 refusal.
+    /// </returns>
+    public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> PollDeferredCredentialAsync(
         string transactionId,
         string accessToken,
         string tokenType,
+        DateTimeOffset? accessTokenExpiresAt,
         Uri deferredCredentialEndpoint,
         CredentialResponseEncryption? responseEncryption,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transactionId);
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
         ArgumentNullException.ThrowIfNull(deferredCredentialEndpoint);
+        ArgumentNullException.ThrowIfNull(context);
 
         string requestBody = await EncryptRequestIfAskedAsync(
             BuildDeferredRequestBody(transactionId), responseEncryption, cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
-            accessToken, tokenType, deferredCredentialEndpoint, cancellationToken).ConfigureAwait(false);
+        Oid4VciRequestFailure? policyDenial = EvaluateOutboundPolicy(deferredCredentialEndpoint, context, Configuration.OutboundFetchPolicy);
+        if(policyDenial is not null)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(policyDenial);
+        }
 
-        (int statusCode, string body, string? contentType) = await Configuration.SendJsonPost(
-            deferredCredentialEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
+        HttpResponseData response = await SendAuthorizedJsonPostAsync(
+            deferredCredentialEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
 
         //§9.2: still pending answers HTTP 202 echoing the transaction_id with a fresh interval.
-        if(statusCode == HttpAcceptedStatusCode)
+        if(response.StatusCode == HttpAcceptedStatusCode)
         {
-            return ParseDeferredPending(body, accessToken, tokenType, deferredCredentialEndpoint);
+            return ParseDeferredPending(response.Body, response.StatusCode, accessToken, tokenType, accessTokenExpiresAt, deferredCredentialEndpoint);
         }
 
-        if(statusCode is < 200 or >= 300)
+        //§9.3: any other non-2xx status is a Deferred Credential Error Response — a value the
+        //caller inspects, never an exception, so invalid_transaction_id and a future poll after a
+        //credential_request_denied are ordinary control flow.
+        if(response.StatusCode is < 200 or >= 300)
         {
-            throw new InvalidOperationException(
-                $"§9 Deferred Credential Request to {deferredCredentialEndpoint} returned HTTP {statusCode}: {body}");
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(
+                ParseErrorResponse(response.StatusCode, response.Body, deferredCredentialEndpoint));
         }
 
-        string responseJson = await DecryptResponseIfAskedAsync(
-            body, contentType, responseEncryption, cancellationToken).ConfigureAwait(false);
+        string? contentType = response.Headers.TryGetSingle(WellKnownHttpHeaderNames.ContentType);
+        Result<string, Oid4VciRequestFailure> decryptOutcome = await DecryptResponseIfAskedAsync(
+            response.Body, contentType, responseEncryption, deferredCredentialEndpoint, response.StatusCode, cancellationToken)
+            .ConfigureAwait(false);
 
-        return ParseIssuedCredentials(responseJson, accessToken, tokenType, deferredCredentialEndpoint);
+        if(!decryptOutcome.IsSuccess)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(decryptOutcome.Error);
+        }
+
+        return ParseIssuedCredentials(decryptOutcome.Value, response.StatusCode, accessToken, tokenType, accessTokenExpiresAt, deferredCredentialEndpoint);
     }
 
 
@@ -592,15 +999,23 @@ public sealed class Oid4VciWalletClient
     /// <param name="tokenType">The access token's type (<c>Bearer</c> or <c>DPoP</c>).</param>
     /// <param name="notificationEndpoint">The §11 Notification Endpoint URL.</param>
     /// <param name="eventDescription">The §11.1 <c>event_description</c> (OPTIONAL human-readable text), or <see langword="null"/>.</param>
+    /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before the dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the Notification Endpoint returns a non-success status (§11.3).</exception>
-    public async ValueTask SendCredentialNotificationAsync(
+    /// <returns>
+    /// <see langword="null"/> when the Issuer acknowledged the notification — §11.2 requires an HTTP
+    /// status in the 2xx range, with 204 (No Content) RECOMMENDED; otherwise the
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-11.3">§11.3</see>
+    /// failure — the policy's <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> refusal, or
+    /// the endpoint's own <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> such as <c>invalid_notification_id</c>.
+    /// </returns>
+    public async ValueTask<Oid4VciRequestFailure?> SendCredentialNotificationAsync(
         string notificationId,
         string notificationEvent,
         string accessToken,
         string tokenType,
         Uri notificationEndpoint,
         string? eventDescription,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(notificationId);
@@ -608,21 +1023,26 @@ public sealed class Oid4VciWalletClient
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
         ArgumentNullException.ThrowIfNull(notificationEndpoint);
+        ArgumentNullException.ThrowIfNull(context);
 
         string requestBody = BuildNotificationRequestBody(notificationId, notificationEvent, eventDescription);
 
-        IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
-            accessToken, tokenType, notificationEndpoint, cancellationToken).ConfigureAwait(false);
+        Oid4VciRequestFailure? policyDenial = EvaluateOutboundPolicy(notificationEndpoint, context, Configuration.OutboundFetchPolicy);
+        if(policyDenial is not null)
+        {
+            return policyDenial;
+        }
 
-        (int statusCode, string body, _) = await Configuration.SendJsonPost(
-            notificationEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
+        HttpResponseData response = await SendAuthorizedJsonPostAsync(
+            notificationEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
 
         //§11.2: success is HTTP 204 No Content; §11.3 maps failures to error bodies.
-        if(statusCode is < 200 or >= 300)
+        if(response.StatusCode is < 200 or >= 300)
         {
-            throw new InvalidOperationException(
-                $"§11 Notification Request to {notificationEndpoint} returned HTTP {statusCode}: {body}");
+            return ParseErrorResponse(response.StatusCode, response.Body, notificationEndpoint);
         }
+
+        return null;
     }
 
 
@@ -662,15 +1082,33 @@ public sealed class Oid4VciWalletClient
     /// an encrypted response is a JWE with media type <c>application/jwt</c>; this decrypts it to the
     /// plaintext JSON before the credentials are read. The application owns the decryption composition.
     /// </summary>
-    private async ValueTask<string> DecryptResponseIfAskedAsync(
+    /// <param name="body">The response body, plaintext JSON or a compact JWE.</param>
+    /// <param name="contentType">The response's <c>Content-Type</c> header value, or <see langword="null"/>.</param>
+    /// <param name="responseEncryption">The §8.2 response-encryption ask that produced this response, or <see langword="null"/>.</param>
+    /// <param name="endpoint">The endpoint that answered, carried into a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure.</param>
+    /// <param name="statusCode">The success status the endpoint answered with, carried into a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The plaintext Credential Response JSON; or <see cref="Oid4VciRequestFailureKind.MalformedResponse"/>
+    /// when <paramref name="responseEncryption"/> asked for encryption but <paramref name="contentType"/>
+    /// is not <c>application/jwt</c> — the Issuer answered in clear, which is remote input, not the
+    /// caller's own mistake.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <paramref name="responseEncryption"/> asked for encryption but the wallet
+    /// configuration has no <see cref="Oid4VciWalletConfiguration.DecryptResponse"/> delegate.
+    /// </exception>
+    private async ValueTask<Result<string, Oid4VciRequestFailure>> DecryptResponseIfAskedAsync(
         string body,
         string? contentType,
         CredentialResponseEncryption? responseEncryption,
+        Uri endpoint,
+        int statusCode,
         CancellationToken cancellationToken)
     {
         if(responseEncryption is null)
         {
-            return body;
+            return Result<string, Oid4VciRequestFailure>.Success(body);
         }
 
         if(Configuration.DecryptResponse is null)
@@ -681,17 +1119,25 @@ public sealed class Oid4VciWalletClient
                 + "encrypted response.");
         }
 
-        //§8.3 / §9.2: an encrypted response is application/jwt regardless of content; refuse a clear
-        //answer to an encryption ask rather than misreading it.
+        //§8.3 / §9.2: an encrypted response is application/jwt regardless of content; a clear answer
+        //to an encryption ask is remote input — the Issuer's own mistake — so it answers
+        //MalformedResponse rather than raising.
         if(contentType is not null
             && !contentType.Contains(WellKnownMediaTypes.Application.Jwt, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
-                $"§10 encryption was requested but the response Content-Type was '{contentType}', "
-                + $"not '{WellKnownMediaTypes.Application.Jwt}'. The Issuer did not encrypt the response.");
+            return Result<string, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(
+                    endpoint,
+                    statusCode,
+                    $"§10 encryption was requested but the response Content-Type was '{contentType}', "
+                    + $"not '{WellKnownMediaTypes.Application.Jwt}'. The Issuer did not encrypt the response."));
         }
 
-        return await Configuration.DecryptResponse(body, cancellationToken).ConfigureAwait(false);
+        //An exception the application's own DecryptResponse delegate throws propagates as itself,
+        //as a transport exception does — this seam is composition, not remote input.
+        string decrypted = await Configuration.DecryptResponse(body, cancellationToken).ConfigureAwait(false);
+
+        return Result<string, Oid4VciRequestFailure>.Success(decrypted);
     }
 
 
@@ -701,15 +1147,25 @@ public sealed class Oid4VciWalletClient
     /// <c>credentials</c> is an array of objects each carrying a <c>credential</c> member; this reads
     /// EVERY object's credential string (a §8.2 batch carries more than one) plus the optional
     /// <c>notification_id</c>. The <see cref="JwkJsonReader"/> array-of-objects scanner keeps the wallet
-    /// free of <c>System.Text.Json</c>.
+    /// free of <c>System.Text.Json</c>. The body is remote input: a body that is not well-formed
+    /// JSON or that carries no <c>credentials[].credential</c> answers
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> rather than raising.
     /// </summary>
-    private static CredentialIssuanceResult ParseIssuedCredentials(
+    private static Result<CredentialIssuanceResult, Oid4VciRequestFailure> ParseIssuedCredentials(
         string responseJson,
+        int statusCode,
         string accessToken,
         string tokenType,
+        DateTimeOffset? accessTokenExpiresAt,
         Uri endpoint)
     {
         ReadOnlySpan<byte> json = Encoding.UTF8.GetBytes(responseJson);
+
+        if(!JwkJsonReader.IsWellFormedJsonDocument(json))
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(endpoint, statusCode, "§8 the Credential Response is not well-formed JSON, or contains a duplicate member name."));
+        }
 
         List<string>? credentials = JwkJsonReader.ExtractNestedStringValuesFromArray(
             json,
@@ -718,21 +1174,21 @@ public sealed class Oid4VciWalletClient
 
         if(credentials is null || credentials.Count == 0)
         {
-            throw new InvalidOperationException(
-                $"§8 Credential Response from {endpoint} carried no credentials[].credential. "
-                + $"Body: {responseJson}");
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(endpoint, statusCode, "§8 the Credential Response carried no credentials[].credential."));
         }
 
         string? notificationId = JwkJsonReader.ExtractStringValue(
             json, Oid4VciCredentialParameterNames.NotificationIdUtf8);
 
-        return new CredentialIssuanceResult
+        return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Success(new CredentialIssuanceResult
         {
             Credentials = credentials,
             NotificationId = notificationId,
             AccessToken = accessToken,
-            TokenType = tokenType
-        };
+            TokenType = tokenType,
+            ExpiresAt = accessTokenExpiresAt
+        });
     }
 
 
@@ -741,33 +1197,105 @@ public sealed class Oid4VciWalletClient
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3">§8.3</see>
     /// / <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.2">§9.2</see>:
     /// a deferral carries <c>transaction_id</c> (REQUIRED) and <c>interval</c> (REQUIRED alongside it).
+    /// The body is remote input: a deferral carrying no <c>transaction_id</c> answers
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> rather than raising.
     /// </summary>
-    private static CredentialIssuanceResult ParseDeferredPending(
+    private static Result<CredentialIssuanceResult, Oid4VciRequestFailure> ParseDeferredPending(
         string body,
+        int statusCode,
         string accessToken,
         string tokenType,
+        DateTimeOffset? accessTokenExpiresAt,
         Uri endpoint)
     {
         ReadOnlySpan<byte> json = Encoding.UTF8.GetBytes(body);
 
-        string transactionId = JwkJsonReader.ExtractStringValue(
-            json, Oid4VciCredentialParameterNames.TransactionIdUtf8)
-            ?? throw new InvalidOperationException(
-                $"§9 deferral from {endpoint} carried no transaction_id. Body: {body}");
+        string? transactionId = JwkJsonReader.ExtractStringValue(json, Oid4VciCredentialParameterNames.TransactionIdUtf8);
+        if(transactionId is null)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(endpoint, statusCode, "§9.2 the deferral carried no transaction_id."));
+        }
 
         int? interval = JwkJsonReader.TryExtractLongValue(
             json, Oid4VciCredentialParameterNames.IntervalUtf8, out long intervalSeconds)
             ? (int)intervalSeconds
             : null;
 
-        return new CredentialIssuanceResult
+        return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Success(new CredentialIssuanceResult
         {
             TransactionId = transactionId,
             DeferredIntervalSeconds = interval,
             AccessToken = accessToken,
-            TokenType = tokenType
+            TokenType = tokenType,
+            ExpiresAt = accessTokenExpiresAt
+        });
+    }
+
+
+    /// <summary>
+    /// Parses a structured OID4VCI error response into a value, walking the JSON body with the
+    /// same span helpers the success paths use rather than a JSON library. A body that is not
+    /// well-formed JSON, or carries no <c>error</c> member, still yields a refusal — the HTTP
+    /// status alone is enough to know the request was refused; only the wire error detail is missing.
+    /// </summary>
+    private static Oid4VciRequestFailure ParseErrorResponse(int statusCode, string body, Uri endpoint)
+    {
+        ReadOnlySpan<byte> json = Encoding.UTF8.GetBytes(body);
+        bool isWellFormed = JwkJsonReader.IsWellFormedJsonDocument(json);
+
+        return new Oid4VciRequestFailure
+        {
+            Kind = Oid4VciRequestFailureKind.ErrorResponse,
+            Endpoint = endpoint,
+            StatusCode = statusCode,
+            ErrorCode = isWellFormed
+                ? JwkJsonReader.ExtractStringValue(json, OAuthRequestParameterNames.ErrorUtf8)
+                : null,
+            ErrorDescription = isWellFormed
+                ? JwkJsonReader.ExtractStringValue(json, OAuthRequestParameterNames.ErrorDescriptionUtf8)
+                : null
         };
     }
+
+
+    /// <summary>
+    /// Builds a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure for a success
+    /// status whose body, content type, or size breaks the request's section rule.
+    /// </summary>
+    /// <param name="endpoint">The endpoint that answered the malformed success.</param>
+    /// <param name="statusCode">The success status code the endpoint answered with.</param>
+    /// <param name="rule">The violated rule, in the library's own words.</param>
+    private static Oid4VciRequestFailure MalformedResponseFailure(Uri endpoint, int statusCode, string rule) =>
+        new()
+        {
+            Kind = Oid4VciRequestFailureKind.MalformedResponse,
+            Endpoint = endpoint,
+            StatusCode = statusCode,
+            ErrorCode = null,
+            ErrorDescription = rule
+        };
+
+
+    /// <summary>
+    /// Builds an <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> failure for a §4.1.3
+    /// offer GET whose <see cref="OutboundFetchResult.Outcome"/> was not
+    /// <see cref="OutboundFetchOutcome.Fetched"/> — the policy refused the target or a redirect hop,
+    /// or refused to follow the redirect chain at all.
+    /// </summary>
+    /// <param name="endpoint">The §4.1.3 <c>credential_offer_uri</c> the policy refused.</param>
+    /// <param name="outcome">The <see cref="OutboundFetchResult.Outcome"/> naming why the fetch did not complete.</param>
+    /// <param name="denyReason">The policy's own denial reason, or <see langword="null"/> when none was given.</param>
+    private static Oid4VciRequestFailure OutboundFetchOutcomeFailure(
+        Uri endpoint, OutboundFetchOutcome outcome, string? denyReason) =>
+        new()
+        {
+            Kind = Oid4VciRequestFailureKind.OutboundPolicyDenied,
+            Endpoint = endpoint,
+            StatusCode = null,
+            ErrorCode = null,
+            ErrorDescription = denyReason is not null ? $"{outcome}: {denyReason}" : outcome.ToString()
+        };
 
 
     /// <summary>
@@ -817,37 +1345,109 @@ public sealed class Oid4VciWalletClient
 
 
     /// <summary>
-    /// Composes the request headers carrying the access-token authorization.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6750">RFC 6750</see>: a Bearer token rides
-    /// <c>Authorization: Bearer &lt;token&gt;</c>.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 §7.1</see>: a DPoP-bound
-    /// token rides <c>Authorization: DPoP &lt;token&gt;</c> alongside a fresh DPoP proof in the
-    /// <c>DPoP</c> header — wired only when the token is DPoP-bound and a proof producer is configured.
+    /// Sends a §7/§8/§9/§11 authorized JSON POST, carrying the access-token authorization per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 §2.1</see>
+    /// (<c>Authorization: Bearer &lt;token&gt;</c>) or, when <paramref name="tokenType"/> is
+    /// DPoP-bound and <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/> is wired,
+    /// through <see cref="DpopNonceRetry.SendWithNonceRetryAsync"/> — the helper shared with the §6
+    /// Token Request and the AuthCode client — retrying exactly once on a <c>use_dpop_nonce</c>
+    /// challenge (RFC 9449 §9) carrying a <c>DPoP-Nonce</c> response header.
     /// </summary>
-    private async ValueTask<IReadOnlyDictionary<string, string>> ComposeAuthorizationHeadersAsync(
+    /// <remarks>
+    /// Two challenge forms are recognised. Every OID4VCI 1.0 error response this Wallet's
+    /// resource requests receive is a §8.3.1 Credential Error Response shape — HTTP 400 with the
+    /// error code in the JSON body — so an OID4VCI Credential/Nonce/Deferred/Notification Endpoint
+    /// signals <c>use_dpop_nonce</c> the same way the §6 Token Endpoint does (HTTP 400 +
+    /// <c>error=use_dpop_nonce</c> in the body). RFC 9449 §9 additionally documents a generic
+    /// resource server's own form: "an HTTP 401 (Unauthorized) error code with an accompanying
+    /// <c>WWW-Authenticate: DPoP</c> value" carrying <c>error="use_dpop_nonce"</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> auth-param
+    /// form). This Wallet recognises either so it retries against a conformant Issuer regardless
+    /// of which form its Credential Endpoint chose.
+    /// </remarks>
+    private async ValueTask<HttpResponseData> SendAuthorizedJsonPostAsync(
+        Uri endpoint,
+        string jsonBody,
         string accessToken,
         string tokenType,
-        Uri endpoint,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
-
-        if(WellKnownAuthenticationSchemes.IsDPoP(tokenType) && Configuration.ProduceDpopProof is not null)
+        if(!WellKnownAuthenticationSchemes.IsDPoP(tokenType)
+            || Configuration.ConstructDpopProofAsync is null
+            || Configuration.DpopKey is null)
         {
-            string dpopProof = await Configuration.ProduceDpopProof(
-                HttpPostMethod, endpoint, accessToken, cancellationToken).ConfigureAwait(false);
+            OutgoingHeaders bearerHeaders = OutgoingHeaders.Empty.WithAuthorization(
+                WellKnownAuthenticationSchemes.Bearer, accessToken);
 
-            headers[WellKnownHttpHeaderNames.Authorization] =
-                $"{WellKnownAuthenticationSchemes.DPoP} {accessToken}";
-            headers[WellKnownHttpHeaderNames.DPoP] = dpopProof;
-
-            return headers;
+            return await Configuration.SendJsonPost(
+                endpoint, jsonBody, bearerHeaders, context, cancellationToken).ConfigureAwait(false);
         }
 
-        headers[WellKnownHttpHeaderNames.Authorization] =
-            $"{WellKnownAuthenticationSchemes.Bearer} {accessToken}";
+        string authority = InMemoryDpopNonceCache.AuthorityFor(endpoint);
+        string ath = await DpopProofValidator.ComputeAthAsync(
+            accessToken, Configuration.Base64UrlEncoder, Configuration.MemoryPool, cancellationToken)
+            .ConfigureAwait(false);
 
-        return headers;
+        return await DpopNonceRetry.SendWithNonceRetryAsync(
+            (nonce, ct) => SendJsonPostWithDpopAsync(endpoint, jsonBody, accessToken, ath, nonce, context, ct),
+            static candidate => IsUseDpopNonceChallenge(candidate),
+            authority,
+            Configuration.LookupDpopNonce,
+            Configuration.StoreDpopNonce,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Recognises a resource-request <c>use_dpop_nonce</c> challenge in either wire form: an
+    /// OID4VCI §8.3.1-shaped HTTP 400 with <c>error=use_dpop_nonce</c> in the JSON body, or the
+    /// RFC 9449 §9 generic resource-server form — HTTP 401 with a <c>WWW-Authenticate: DPoP</c>
+    /// value carrying <c>error="use_dpop_nonce"</c>.
+    /// </summary>
+    private static bool IsUseDpopNonceChallenge(HttpResponseData response) => response.StatusCode switch
+    {
+        400 => response.Body.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal),
+        401 => response.Headers.TryGetSingle(WellKnownHttpHeaderNames.WwwAuthenticate)
+            ?.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal) ?? false,
+        _ => false
+    };
+
+
+    /// <summary>
+    /// Mints one fresh DPoP proof bound to <paramref name="endpoint"/> and the presented
+    /// <paramref name="accessToken"/> (via <paramref name="ath"/>) — embedding
+    /// <paramref name="nonce"/> when supplied — and sends the JSON POST once.
+    /// </summary>
+    private async ValueTask<HttpResponseData> SendJsonPostWithDpopAsync(
+        Uri endpoint,
+        string jsonBody,
+        string accessToken,
+        string ath,
+        string? nonce,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        string jti = await Configuration.GenerateIdentifierAsync!(
+            WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
+
+        DpopProofClaims claims = new()
+        {
+            Htm = HttpPostMethod,
+            Htu = endpoint.GetLeftPart(UriPartial.Path),
+            Iat = Configuration.TimeProvider.GetUtcNow(),
+            Jti = jti,
+            Nonce = nonce,
+            Ath = ath
+        };
+
+        string proof = await Configuration.ConstructDpopProofAsync!(
+            claims, Configuration.DpopKey!, cancellationToken).ConfigureAwait(false);
+
+        OutgoingHeaders headers = OutgoingHeaders.Empty.WithDpopAndAccessToken(proof, accessToken);
+
+        return await Configuration.SendJsonPost(
+            endpoint, jsonBody, headers, context, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -894,6 +1494,45 @@ public sealed class Oid4VciWalletClient
         _ = builder.Append('}');
 
         return builder.ToString();
+    }
+
+
+    /// <summary>
+    /// Evaluates <paramref name="endpoint"/> against <paramref name="context"/>'s
+    /// <see cref="OutboundFetchPolicy"/> before this client dials it, answering a failure value
+    /// before any network contact when denied rather than dialing and failing later. Every
+    /// endpoint this client dials — the §6 Token, §7 Nonce, §8 Credential, §9 Deferred Credential
+    /// and §11 Notification Endpoints, plus the §4.1.3 by-reference Credential Offer URI — is read
+    /// out of a Credential Offer or §12.2 Credential Issuer Metadata the Issuer itself serves, so a
+    /// malicious or misconfigured document could point one at an internal, loopback, or
+    /// cloud-metadata address: the same SSRF vector a discovered GET target is, gated the same way.
+    /// </summary>
+    /// <param name="endpoint">The endpoint this client is about to dial.</param>
+    /// <param name="context">The per-operation exchange context carrying the policy.</param>
+    /// <param name="configurationPolicy">
+    /// <see cref="Oid4VciWalletConfiguration.OutboundFetchPolicy"/>, the deployment default applied
+    /// when <paramref name="context"/> carries none.
+    /// </param>
+    /// <returns><see langword="null"/> when <paramref name="endpoint"/> is allowed; otherwise the denial.</returns>
+    private static Oid4VciRequestFailure? EvaluateOutboundPolicy(
+        Uri endpoint, ExchangeContext context, OutboundFetchPolicy configurationPolicy)
+    {
+        OutboundFetchPolicy policy = context.ResolveOutboundFetchPolicy(configurationPolicy);
+        OutboundFetchDecision decision = policy.Evaluate(endpoint);
+
+        if(decision.IsAllowed)
+        {
+            return null;
+        }
+
+        return new Oid4VciRequestFailure
+        {
+            Kind = Oid4VciRequestFailureKind.OutboundPolicyDenied,
+            Endpoint = endpoint,
+            StatusCode = null,
+            ErrorCode = null,
+            ErrorDescription = decision.DenyReason
+        };
     }
 
 

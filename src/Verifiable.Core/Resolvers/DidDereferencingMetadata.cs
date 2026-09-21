@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -44,6 +45,15 @@ public sealed class DidDereferencingMetadata: IEquatable<DidDereferencingMetadat
     /// revision.
     /// </remarks>
     public IReadOnlyList<IReadOnlyDictionary<string, object>>? Proof { get; init; }
+
+    /// <summary>
+    /// The freshness a method's own wire fetch reports for the dereferenced content, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>. A dereference
+    /// that reaches no network (for example one served entirely from an already-resolved document) and an
+    /// unsuccessful dereference both leave this at its default value — not storable, zero lifetime — so a
+    /// caller cannot infer a cacheable lifetime for content that was never fetched over HTTP.
+    /// </summary>
+    public HttpCacheFreshness Freshness { get; init; }
 
     /// <inheritdoc />
     public bool Equals(DidDereferencingMetadata? other)

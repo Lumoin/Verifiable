@@ -7,7 +7,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Dcql;
 
 /// <summary>
-/// Proves <see cref="TrustedAuthoritiesQuery.Matches(TrustedAuthorityEvidence)"/> dispatches on the
+/// Proves <see cref="DcqlQueryExtensions.Matches(TrustedAuthoritiesQuery, TrustedAuthorityEvidence)"/> dispatches on the
 /// entry's <c>type</c> and compares each of the three registered
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1">
 /// OpenID for Verifiable Presentations 1.0, Section 6.1.1</see> types against the credential's typed

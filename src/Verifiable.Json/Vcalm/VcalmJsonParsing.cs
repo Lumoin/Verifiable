@@ -93,7 +93,7 @@ public static class VcalmJsonParsing
 
     /// <summary>
     /// Builds a <see cref="ParseVcalmUpdateStatusDelegate"/> for the §C.3
-    /// <c>POST /credentials/status</c> body. STJ-free of <paramref name="options"/> dependencies —
+    /// <c>POST /credentials/status</c> body. STJ-free of <see cref="JsonSerializerOptions"/> dependencies —
     /// the §C.3 body is a small fixed-shape object the parser reads with <see cref="JsonDocument"/>.
     /// </summary>
     public static ParseVcalmUpdateStatusDelegate CreateUpdateStatusParser() =>

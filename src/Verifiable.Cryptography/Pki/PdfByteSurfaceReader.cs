@@ -458,12 +458,19 @@ public static class PdfByteSurfaceReader
     /// Parses one classic cross-reference table section (its subsections and the trailer dictionary that follows),
     /// and reads the trailer's own <c>/Prev</c> link and <c>/Root</c> reference.
     /// </summary>
+    /// <param name="s">The PDF byte surface being scanned.</param>
+    /// <param name="pos">The offset to start parsing from; advanced past the section on return.</param>
+    /// <param name="objectOffsets">The newest-wins object-number-to-offset map this section's entries merge into.</param>
+    /// <param name="decidedObjectNumbers">The object numbers already decided by a newer revision, so this section's own entries for them are recorded but not merged.</param>
     /// <param name="rawSectionEntries">
     /// When supplied, populated with EVERY object number this one section itself declares, unmerged against any
     /// other section (an in-use entry's own offset, or <c>-1</c> for a freed <c>'f'</c> entry) — the per-revision
     /// detail <paramref name="objectOffsets"/>'s own newest-wins merge discards, needed to tell which
     /// incremental-update revision declared which object number (<see cref="TryWalkXrefChainSections"/>).
     /// </param>
+    /// <param name="prev">The trailer's own <c>/Prev</c> link to the previous section, or <see langword="null"/> when absent.</param>
+    /// <param name="root">The trailer's own <c>/Root</c> indirect reference, or <see langword="null"/> when absent.</param>
+    /// <param name="error">The failure reason when this returns <see langword="false"/>; <see langword="null"/> otherwise.</param>
     private static bool TryParseClassicXrefSection(
         ReadOnlySpan<byte> s,
         ref int pos,

@@ -56,7 +56,10 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// Builds a simulator wired with the shipped CBOR codecs, defaulting to the ES256-only credential
     /// backend and <paramref name="residentCredentialCapacity"/> resident credential slots.
     /// </summary>
+    /// <param name="runId">The stable identifier for this simulated authenticator run.</param>
     /// <param name="pool">The memory pool the simulator's PIN/UV auth key-agreement material is minted from.</param>
+    /// <param name="rng">The entropy source the simulator draws from, or <see langword="null"/> (the default) for a fresh counter stream.</param>
+    /// <param name="residentCredentialCapacity">The number of resident credential slots the simulator provisions.</param>
     /// <param name="aaguid">
     /// The authenticator-wide AAGUID, or <see langword="null"/> (the default) to draw one from the
     /// simulator's own entropy source. A real-wire capstone supplies an explicit value so a
@@ -69,6 +72,10 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// <see cref="TestClock.CanonicalEpoch"/> under a fresh <see cref="FakeTimeProvider"/> — the suite's one
     /// instant unless a fixture needs a specific relationship to it — never the system clock.
     /// </param>
+    /// <param name="simulateFingerprintCapture">The fingerprint capture simulation delegate, or <see langword="null"/> to leave fingerprint capture unsimulated.</param>
+    /// <param name="simulateBuiltInUv">The built-in user-verification simulation delegate, or <see langword="null"/> to leave built-in UV unsimulated.</param>
+    /// <param name="enterpriseAttestationProvisioning">The enterprise attestation provisioning material, or <see langword="null"/> when the fixture does not exercise enterprise attestation.</param>
+    /// <param name="simulateUserPresence">The user-presence simulation delegate, or <see langword="null"/> to leave user presence unsimulated.</param>
     public static CtapAuthenticatorSimulator CreateSimulator(
         string runId, BaseMemoryPool pool, FillEntropyDelegate? rng = null, int residentCredentialCapacity = 8, TimeProvider? timeProvider = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null, SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
@@ -88,9 +95,17 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// is supplied — mc Step 9 can never resolve the certified format choice without provisioning
     /// material, so wiring the seam unconditionally is harmless for every non-capable-authenticator test.
     /// </summary>
+    /// <param name="runId">The stable identifier for this simulated authenticator run.</param>
     /// <param name="pool">The memory pool the simulator's PIN/UV auth key-agreement material is minted from.</param>
+    /// <param name="backend">The credential-signing backend to wire, or <see langword="null"/> to model no backend injected at all.</param>
+    /// <param name="rng">The entropy source the simulator draws from, or <see langword="null"/> (the default) for a fresh counter stream.</param>
+    /// <param name="residentCredentialCapacity">The number of resident credential slots the simulator provisions.</param>
     /// <param name="aaguid">The authenticator-wide AAGUID — see <see cref="CreateSimulator"/>.</param>
     /// <param name="timeProvider">The simulator's clock — see <see cref="CreateSimulator"/>.</param>
+    /// <param name="simulateFingerprintCapture">The fingerprint capture simulation delegate, or <see langword="null"/> to leave fingerprint capture unsimulated.</param>
+    /// <param name="simulateBuiltInUv">The built-in user-verification simulation delegate, or <see langword="null"/> to leave built-in UV unsimulated.</param>
+    /// <param name="enterpriseAttestationProvisioning">The enterprise attestation provisioning material, or <see langword="null"/> when the fixture does not exercise enterprise attestation.</param>
+    /// <param name="simulateUserPresence">The user-presence simulation delegate, or <see langword="null"/> to leave user presence unsimulated.</param>
     public static CtapAuthenticatorSimulator CreateSimulatorWithBackend(
         string runId,
         BaseMemoryPool pool,

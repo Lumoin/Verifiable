@@ -57,6 +57,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <param name="privateKeyBytes">The PKCS#1 DER-encoded RSA private key (<c>RSAPrivateKey</c>).</param>
     /// <param name="nonRecoverableMessage">The non-recovered message part M2 — the terminal's challenge RND.IFD.</param>
     /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+    /// <param name="timeProvider">Supplies the timestamp recorded on the produced <see cref="SignatureProducedEvent"/>.</param>
     /// <param name="context">Optional context dictionary. Reserved for future use.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>
@@ -130,6 +131,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <param name="nonRecoverableMessage">The non-recovered message part M2 — the terminal's challenge RND.IFD.</param>
     /// <param name="signature">The chip's ISO-9796-2 signature.</param>
     /// <param name="publicKeyMaterial">The DER <c>RSAPublicKey</c> (modulus and public exponent), as carried in EF.DG15.</param>
+    /// <param name="timeProvider">Supplies the timestamp recorded on the produced <see cref="VerificationCompletedEvent"/>.</param>
     /// <param name="context">Optional context dictionary. Reserved for future use.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>

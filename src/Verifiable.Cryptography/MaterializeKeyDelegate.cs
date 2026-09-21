@@ -39,7 +39,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// <strong>Relationship to <see cref="PublicKeyMemory.WithKeyBytesAsync"/>
-/// and <see cref="PrivateKeyMemory.WithKeyBytesAsync"/></strong>
+/// and <see cref="PrivateKeyMemory.WithKeyBytesAsync{TDataToSign, TResult}(SigningFunction{byte, TDataToSign, TResult}, ReadOnlyMemory{TDataToSign}, BaseMemoryPool)"/></strong>
 /// </para>
 /// <para>
 /// The instance <c>WithKeyBytesAsync</c> methods on <see cref="PublicKeyMemory"/>

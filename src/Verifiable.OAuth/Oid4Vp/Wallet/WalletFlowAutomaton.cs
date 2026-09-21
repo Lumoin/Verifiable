@@ -33,7 +33,7 @@ public static class WalletFlowAutomaton
     /// </param>
     /// <param name="expectedVerifierClientId">
     /// The Verifier client identifier the Wallet expects to see in the JAR.
-    /// Carried into the initial state as <see cref="States.RequestUriReceived.ExpectedIssuer"/>
+    /// Carried into the initial state as <see cref="Verifiable.Server.FlowState.ExpectedIssuer"/>
     /// for trace correlation. The mix-up-defence rejection itself happens in
     /// <see cref="Oid4VpWalletClient"/> before the PDA is stepped — every parse path
     /// funnels through its <c>EnforceExpectedClientIdContract</c> choke point, which

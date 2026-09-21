@@ -22,7 +22,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <see cref="Random"/> is held as a <see cref="Salt"/> so the underlying
 /// memory has a clear owner (this item) and a tag carrying provenance
 /// (<see cref="CryptoTags.MdocIssuerSignedItemRandom"/>). Disposing the item
-/// disposes the salt. The same pattern <see cref="Verifiable.JCose.Sd.SdDisclosure"/>
+/// disposes the salt. The same pattern <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdDisclosure"/>
 /// uses for its own salt ownership.
 /// </para>
 /// <para>
@@ -34,7 +34,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <para>
 /// <see cref="WireBytes"/> is a slice of the issuer's exact Tag-24-wrapped
 /// bytes for this item. On the issuance path the
-/// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/> step fills
+/// <c>Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync</c> step fills
 /// it; on the parse path the decoder fills it from the source buffer.
 /// Verifiers hash these bytes verbatim against the MSO commitment.
 /// </para>
@@ -88,7 +88,7 @@ public sealed class MdocIssuerSignedItem: IDisposable
 
     /// <summary>
     /// The per-item random salt. Owned by this item; the caller reads
-    /// <see cref="Salt.AsReadOnlySpan"/> when it needs the bytes and must not
+    /// <see cref="SensitiveMemory.AsReadOnlySpan"/> when it needs the bytes and must not
     /// dispose the salt independently.
     /// </summary>
     public Salt Random { get; }

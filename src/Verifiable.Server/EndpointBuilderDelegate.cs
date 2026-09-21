@@ -29,7 +29,7 @@ namespace Verifiable.Server;
 /// <see cref="IncomingRequest"/> envelope, headers, fields, route values), or
 /// per-client policy that determines whether this builder's endpoints belong
 /// in the chain for this request. Builders that need backend access read it
-/// from <see cref="ExchangeContextServerExtensions.Server"/>; the dispatcher places
+/// from <c>context.RequestServer</c>; the dispatcher places
 /// the active server on the context at entry.
 /// </para>
 /// <para>
@@ -46,7 +46,7 @@ namespace Verifiable.Server;
 /// <param name="context">
 /// The per-request context. Carries the typed <see cref="IncomingRequest"/>
 /// envelope, the resolved registration, tenant identifier, the active dispatch
-/// host via <see cref="ExchangeContextServerExtensions.Server"/>, and any
+/// host via <c>context.RequestServer</c>, and any
 /// application-supplied request-scoped state.
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>

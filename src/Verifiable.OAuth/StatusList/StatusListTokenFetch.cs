@@ -71,6 +71,15 @@ public sealed record StatusListTokenFetchResult
     /// <summary>The number of redirect hops followed.</summary>
     public int RedirectCount { get; init; }
 
+    /// <summary>
+    /// The freshness the terminal response's headers imply, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>, when
+    /// <see cref="Outcome"/> is <see cref="StatusListTokenFetchOutcome.Fetched"/>. Every other outcome
+    /// leaves this at its default value — not storable, zero lifetime — so a caller cannot infer a
+    /// cacheable lifetime from a fetch that never produced a token.
+    /// </summary>
+    public HttpCacheFreshness Freshness { get; init; }
+
     /// <summary>Whether <see cref="Outcome"/> is <see cref="StatusListTokenFetchOutcome.Fetched"/>.</summary>
     public bool IsFetched => Outcome == StatusListTokenFetchOutcome.Fetched;
 }
@@ -90,12 +99,12 @@ public sealed record StatusListTokenFetchResult
 /// the client to another URI using an HTTP status code in the 3xx range, which clients SHOULD
 /// follow" (Section 8.2) and "HTTP clients MUST follow the guidance provided in Section 15.4 of
 /// [RFC9110] for handling redirects" (Section 11.4): whether and how many redirects are followed is
-/// the caller's <see cref="ExchangeContext.OutboundFetchPolicy"/> — <see cref="OutboundFetchPolicy.SecureDefault"/>
+/// the caller's <c>ExchangeContext.OutboundFetchPolicy</c> — <see cref="OutboundFetchPolicy.SecureDefault"/>
 /// follows none; a caller opts into following redirects via <see cref="OutboundFetchPolicy.Redirects"/>
 /// / <see cref="OutboundFetchPolicy.MaxRedirects"/>. "The HTTP response SHOULD use Content-Encoding
 /// (such as gzip)" is the transport's concern, not this method's. No <c>System.Net.Http</c> is
-/// referenced here — the network primitive is the caller-supplied <paramref name="transport"/>, the
-/// same discipline <c>ClientIdMetadataDocuments.BuildResolving</c> follows.
+/// referenced here — the network primitive is the caller-supplied <c>transport</c>, the
+/// same discipline <see cref="Server.Pipeline.ClientIdMetadataDocuments.ResolveAsync"/> follows.
 /// </para>
 /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-8.1">Token Status List, Section 8.1</see>,
 /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-8.2">Section 8.2</see>, and
@@ -110,7 +119,7 @@ public static class StatusListTokenFetch
     /// <param name="format">The expected wire format, sent as <c>Accept</c> and checked against the response's <c>Content-Type</c>.</param>
     /// <param name="context">The per-call exchange context; the SSRF policy is read from it.</param>
     /// <param name="transport">The application-supplied single-hop transport.</param>
-    /// <param name="maxResponseBytes">An upper bound, in bytes, on the response body accepted, per <see cref="OutboundFetch.OutboundRequest.MaxResponseBytes"/>.</param>
+    /// <param name="maxResponseBytes">An upper bound, in bytes, on the response body accepted, per <see cref="OutboundRequest.MaxResponseBytes"/>.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The fetch outcome; see <see cref="StatusListTokenFetchResult"/>.</returns>
     /// <exception cref="ArgumentNullException">
@@ -222,7 +231,8 @@ public static class StatusListTokenFetch
             ContentType = contentType,
             StatusCode = response.StatusCode,
             FinalUri = fetch.FinalUri,
-            RedirectCount = fetch.RedirectCount
+            RedirectCount = fetch.RedirectCount,
+            Freshness = HttpCacheFreshness.Compute(response)
         };
     }
 
@@ -247,15 +257,7 @@ public static class StatusListTokenFetch
     /// <returns><see langword="true"/> when the media type portion matches.</returns>
     private static bool IsAcceptableContentType(string? contentType, string expectedMediaType)
     {
-        if(string.IsNullOrWhiteSpace(contentType))
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> value = contentType.AsSpan().Trim();
-        int parameterDelimiter = value.IndexOf(';');
-        ReadOnlySpan<char> mediaType = (parameterDelimiter >= 0 ? value[..parameterDelimiter] : value).Trim();
-
-        return mediaType.Equals(expectedMediaType, StringComparison.OrdinalIgnoreCase);
+        return ContentTypeReader.ReadMediaType(contentType).Equals(
+            expectedMediaType, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -32,8 +32,10 @@ namespace Verifiable.Core.Model.Did
     /// <see href="https://tools.ietf.org/html/rfc7517">JWK (RFC 7517) specification</see>.</remarks>
     public class PublicKeyJwk: KeyFormat
     {
+        /// <summary>The JWK member set (<c>kty</c>, <c>crv</c>, <c>x</c>, <c>y</c>, and so on) per RFC 7517.</summary>
         public Dictionary<string, object> Header { get; set; } = [];
 
+        /// <summary>Additional, format-specific members carried alongside the JWK header, or <see langword="null"/> when none.</summary>
         public Dictionary<string, object>? Payload { get; set; }
 
 

@@ -189,11 +189,12 @@ internal static class WebPlusProofs
         ReadOnlyMemory<byte> headerJson = headerOwner.Memory;
 
         //The header is read member-by-member (b64/crit/kid/alg) with first-occurrence semantics, and its exact
-        //bytes are what the signature covers; a header repeating a top-level member is ambiguous — a
-        //validate-one/act-on-another smuggling shape — so it is rejected, matching the JWS compact-verify path.
-        if(JwkJsonReader.HasDuplicateTopLevelKeys(headerJson.Span))
+        //bytes are what the signature covers; a header repeating a member name — at the top level or nested —
+        //is ambiguous — a validate-one/act-on-another smuggling shape — so it is rejected, matching the JWS
+        //compact-verify path.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(headerJson.Span))
         {
-            return ("A did:webplus proof header MUST NOT repeat a top-level member.", null);
+            return ("A did:webplus proof header MUST be well-formed JSON and MUST NOT repeat a member name.", null);
         }
 
         //WP-PRF-2: the payload is unencoded (RFC 7797 b64:false), and b64 is marked critical so a consumer that

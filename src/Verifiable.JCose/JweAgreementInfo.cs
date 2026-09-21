@@ -80,7 +80,7 @@ public static class JweAgreementInfo
     /// <remarks>
     /// The recipient key ids are sorted with ordinal (alphanumeric, byte-order) comparison
     /// and joined with a single <c>.</c> separator, the SHA-256 hash of the UTF-8 bytes of
-    /// the joined string is computed through <paramref name="computeDigest"/>, and the hash
+    /// the joined string is computed through the registered digest seam, and the hash
     /// is base64url-encoded. This binds the set of recipients into the key derivation for
     /// every recipient, matching DIDComm Messaging v2.1.
     /// </remarks>

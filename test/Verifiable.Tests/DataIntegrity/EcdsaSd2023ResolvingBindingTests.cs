@@ -1,8 +1,10 @@
+using System.Collections.Frozen;
 using System.Security.Cryptography;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -39,6 +41,8 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+
+    private static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, Context.CredentialsExamples20);
 
     private static IReadOnlyList<CredentialPath> MandatoryPaths { get; } =
     [
@@ -174,6 +178,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -211,6 +216,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -250,6 +256,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -282,6 +289,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -294,6 +302,323 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
         Assert.IsNotNull(result.Verified);
         Assert.IsFalse(result.Verified.Value.IsIdentityBound, "The BYOK overload must mint Asserted, never Bound.");
         Assert.IsTrue(result.Verified.Value.Provenance is AssertedProvenance);
+    }
+
+
+    /// <summary>
+    /// A derived proof's per-statement signature list must contain exactly one signature for
+    /// every disclosed (non-mandatory) statement: the base signature commits only to the
+    /// mandatory hash, the proof options hash, and the ephemeral public key, never to disclosed
+    /// statement content, per
+    /// <see href="https://www.w3.org/TR/vc-di-ecdsa/#verify-derived-proof-ecdsa-sd-2023">
+    /// VC Data Integrity ECDSA Cryptosuites: Verify Derived Proof (ecdsa-sd-2023)</see>. A
+    /// derived proof re-encoded with an EMPTY signature array - structurally valid, decodable,
+    /// carrying the genuine base signature, key, label map and mandatory indexes - together with
+    /// a tampered disclosed claim literal must be refused rather than accepted on the strength of
+    /// the (unrelated) base signature alone.
+    /// </summary>
+    [TestMethod]
+    public async Task DerivedProofWithEmptySignatureArrayAndTamperedDisclosedClaimIsRefused()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        var issuerPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        using var issuerPublicKey = issuerPair.PublicKey;
+        using var issuerPrivateKey = issuerPair.PrivateKey;
+
+        var signedCredential = await SignBaseAsync(issuerPrivateKey, cancellationToken).ConfigureAwait(false);
+        var derivedCredential = await DeriveAsync(signedCredential, cancellationToken).ConfigureAwait(false);
+
+        //Tamper one disclosed claim's literal: the honestly-derived per-statement signatures,
+        //had they been carried through, no longer cover the statement this literal now produces.
+        var degree = (Dictionary<string, object>)derivedCredential.CredentialSubject![0].AdditionalData!["degree"];
+        degree["name"] = "Tampered Degree Name";
+
+        //Re-encode the derived proof value through the SAME serializer the parse side uses,
+        //keeping the genuine base signature, ephemeral key, label map, and mandatory indexes,
+        //but with an EMPTY per-statement signature array: the proof stays structurally valid
+        //CBOR/multibase and only the signature-to-disclosure count is wrong.
+        using var parsedDerivedProof = EcdsaSd2023CborSerializer.ParseDerivedProof(
+            derivedCredential.Proof![0].ProofValue!,
+            TestSetup.Base64UrlDecoder,
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared);
+
+        using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
+            parsedDerivedProof.EphemeralPublicKey,
+            BaseMemoryPool.Shared);
+
+        derivedCredential.Proof[0].ProofValue = EcdsaSd2023CborSerializer.SerializeDerivedProof(
+            parsedDerivedProof.BaseSignature.AsReadOnlySpan(),
+            ephemeralKeyWithHeader.Memory.Span,
+            [],
+            parsedDerivedProof.LabelMap,
+            parsedDerivedProof.MandatoryIndexes,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared);
+
+        var result = await derivedCredential.VerifyDerivedProofAsync(
+            issuerPublicKey,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
+            EcdsaSd2023CborSerializer.ParseDerivedProof,
+            RdfcCanonicalizer,
+            ContextResolver,
+            KnownContext,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A derived proof carrying no per-statement signatures for its disclosed statements must be refused, never accepted on the base signature alone.");
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A derived proof's label map must cover every canonical blank node the verifier's own
+    /// canonicalization of the reveal document produces, per
+    /// <see href="https://www.w3.org/TR/vc-di-ecdsa/#verify-derived-proof-ecdsa-sd-2023">
+    /// VC Data Integrity ECDSA Cryptosuites: Verify Derived Proof (ecdsa-sd-2023)</see>. A
+    /// reveal document with two anonymous objects carries two blank nodes; a derived proof
+    /// re-encoded with a genuine base signature, key, and per-statement signatures but with
+    /// only ONE of the two blank nodes' entries removed -- so the label map is non-empty, not
+    /// entirely absent -- must still be refused rather than silently leaving that one blank node
+    /// under its raw canonical label. The statement-signature checks are stubbed to always
+    /// succeed so this test isolates the label map's own completeness gate from the (separate)
+    /// per-statement signature checks that would otherwise also reject the tampered content.
+    /// </summary>
+    [TestMethod]
+    public async Task DerivedProofWithOneOfTwoBlankNodeEntriesRemovedIsRefused()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        var issuerPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        using var issuerPublicKey = issuerPair.PublicKey;
+        using var issuerPrivateKey = issuerPair.PrivateKey;
+
+        var signedCredential = await SignTwoAnonymousObjectsBaseAsync(issuerPrivateKey, cancellationToken).ConfigureAwait(false);
+        var derivedCredential = await DeriveBothAnonymousObjectsAsync(signedCredential, cancellationToken).ConfigureAwait(false);
+
+        using var parsedDerivedProof = EcdsaSd2023CborSerializer.ParseDerivedProof(
+            derivedCredential.Proof![0].ProofValue!,
+            TestSetup.Base64UrlDecoder,
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared);
+
+        Assert.HasCount(2, parsedDerivedProof.LabelMap, "The reveal document carries two blank nodes: the anonymous 'degree' and 'homeAddress' objects.");
+
+        //Re-encode the derived proof value through the SAME serializer the parse side uses,
+        //keeping the genuine base signature, ephemeral key, and per-statement signatures, but
+        //with only ONE of the two blank nodes' entries removed from the label map.
+        var removedKey = parsedDerivedProof.LabelMap.Keys.First();
+        var mutatedLabelMap = parsedDerivedProof.LabelMap
+            .Where(entry => entry.Key != removedKey)
+            .ToDictionary(entry => entry.Key, entry => entry.Value);
+
+        Assert.HasCount(1, mutatedLabelMap, "Only one of the two entries was removed; the map is not empty.");
+
+        using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
+            parsedDerivedProof.EphemeralPublicKey,
+            BaseMemoryPool.Shared);
+
+        derivedCredential.Proof[0].ProofValue = EcdsaSd2023CborSerializer.SerializeDerivedProof(
+            parsedDerivedProof.BaseSignature.AsReadOnlySpan(),
+            ephemeralKeyWithHeader.Memory.Span,
+            parsedDerivedProof.Signatures.Select(signature => signature.AsReadOnlySpan().ToArray()).ToList(),
+            mutatedLabelMap,
+            parsedDerivedProof.MandatoryIndexes,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared);
+
+        var result = await derivedCredential.VerifyDerivedProofAsync(
+            issuerPublicKey,
+            AlwaysValidVerification,
+            EcdsaSd2023CborSerializer.ParseDerivedProof,
+            RdfcCanonicalizer,
+            ContextResolver,
+            KnownContext,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A derived proof whose label map has no entry for a blank node present in the reveal document must be refused, even when another blank node's entry is present.");
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// Simulates the cross-engine case: two conformant implementations of
+    /// <see href="https://www.w3.org/TR/rdf-canon/">RDF Dataset Canonicalization 1.0</see> can
+    /// assign different canonical labels to the same graph, so a label map built by one and
+    /// applied by the other carries keys that do not match the verifier's own canonical labels.
+    /// A derived proof re-encoded with its sole blank node's label map key changed to a
+    /// different canonical label -- simulating that condition without running a second engine,
+    /// since this single-blank-node reveal document is deterministically labeled "c14n0" by this
+    /// library's own canonicalization -- must be refused rather than silently verified, per
+    /// <see href="https://www.w3.org/TR/vc-di-ecdsa/#verify-derived-proof-ecdsa-sd-2023">
+    /// VC Data Integrity ECDSA Cryptosuites: Verify Derived Proof (ecdsa-sd-2023)</see>. The
+    /// statement-signature checks are stubbed to always succeed so this test isolates the label
+    /// map's own completeness gate from the (separate) per-statement signature checks that would
+    /// otherwise also reject the tampered content.
+    /// </summary>
+    [TestMethod]
+    public async Task DerivedProofWithLabelMapKeyedToADifferentCanonicalLabelIsRefused()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        var issuerPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        using var issuerPublicKey = issuerPair.PublicKey;
+        using var issuerPrivateKey = issuerPair.PrivateKey;
+
+        var signedCredential = await SignBaseAsync(issuerPrivateKey, cancellationToken).ConfigureAwait(false);
+        var derivedCredential = await DeriveAsync(signedCredential, cancellationToken).ConfigureAwait(false);
+
+        using var parsedDerivedProof = EcdsaSd2023CborSerializer.ParseDerivedProof(
+            derivedCredential.Proof![0].ProofValue!,
+            TestSetup.Base64UrlDecoder,
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared);
+
+        Assert.HasCount(1, parsedDerivedProof.LabelMap, "The reveal document carries exactly one blank node: the anonymous 'degree' object.");
+        var (originalKey, hmacValue) = parsedDerivedProof.LabelMap.Single();
+
+        //Rekey the sole entry to a canonical label distinct from the one this library's own
+        //canonicalization assigns to this graph's only blank node, standing in for a second
+        //RDFC-1.0 implementation that assigned the same blank node a different label.
+        var crossEngineLabelMap = new Dictionary<string, string> { [originalKey + "9"] = hmacValue };
+
+        using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
+            parsedDerivedProof.EphemeralPublicKey,
+            BaseMemoryPool.Shared);
+
+        derivedCredential.Proof[0].ProofValue = EcdsaSd2023CborSerializer.SerializeDerivedProof(
+            parsedDerivedProof.BaseSignature.AsReadOnlySpan(),
+            ephemeralKeyWithHeader.Memory.Span,
+            parsedDerivedProof.Signatures.Select(signature => signature.AsReadOnlySpan().ToArray()).ToList(),
+            crossEngineLabelMap,
+            parsedDerivedProof.MandatoryIndexes,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared);
+
+        var result = await derivedCredential.VerifyDerivedProofAsync(
+            issuerPublicKey,
+            AlwaysValidVerification,
+            EcdsaSd2023CborSerializer.ParseDerivedProof,
+            RdfcCanonicalizer,
+            ContextResolver,
+            KnownContext,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A derived proof whose label map keys do not match the verifier's own canonical labels must be refused.");
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A <see cref="VerificationDelegate"/> stub that always reports a valid signature, used to
+    /// isolate the label map completeness gate in
+    /// <see cref="CredentialEcdsaSd2023Extensions.extension(DataIntegritySecuredCredential).VerifyDerivedProofVerboseAsync(PublicKeyMemory, VerificationDelegate, ParseDerivedProofDelegate, CanonicalizationDelegate, ContextResolverDelegate?, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/>
+    /// from the statement-signature checks that follow it.
+    /// </summary>
+    private static ValueTask<(bool IsVerified, CryptoEvent? Event)> AlwaysValidVerification(
+        ReadOnlyMemory<byte> dataToVerify,
+        ReadOnlyMemory<byte> signature,
+        ReadOnlyMemory<byte> publicKeyMaterial,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<(bool IsVerified, CryptoEvent? Event)>((true, null));
+
+
+    private const string TwoAnonymousObjectsCredentialJson = /*lang=json,strict*/ """
+    {
+        "@context": [
+            "https://www.w3.org/ns/credentials/v2",
+            "https://www.w3.org/ns/credentials/examples/v2"
+        ],
+        "id": "http://university.example/credentials/9822",
+        "type": ["VerifiableCredential", "ExampleDegreeCredential"],
+        "issuer": "did:example:ecdsa-sd-issuer",
+        "validFrom": "2024-01-01T00:00:00Z",
+        "credentialSubject": {
+            "id": "did:example:subject",
+            "degree": {
+                "type": "ExampleBachelorDegree",
+                "name": "Bachelor of Science and Arts"
+            },
+            "homeAddress": {
+                "type": "ExampleAddress",
+                "streetAddress": "1 Example Street"
+            }
+        }
+    }
+    """;
+
+
+    private static async Task<DataIntegritySecuredCredential> SignTwoAnonymousObjectsBaseAsync(PrivateKeyMemory issuerPrivateKey, CancellationToken cancellationToken)
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(TwoAnonymousObjectsCredentialJson, TestSetup.DefaultSerializationOptions)!;
+        var ephemeralPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        using var ephemeralPublicKey = ephemeralPair.PublicKey;
+        using var ephemeralPrivateKey = ephemeralPair.PrivateKey;
+
+        return await credential.CreateBaseProofAsync(
+            issuerPrivateKey,
+            ephemeralPair,
+            SignerKeyId,
+            ProofCreated,
+            MandatoryPaths,
+            () => RandomNumberGenerator.GetBytes(32),
+            JsonLdSelection.PartitionStatements,
+            RdfcCanonicalizer,
+            ContextResolver,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.DeserializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
+            EcdsaSd2023CborSerializer.SerializeBaseProof,
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    private static Task<DataIntegritySecuredCredential> DeriveBothAnonymousObjectsAsync(DataIntegritySecuredCredential signedCredential, CancellationToken cancellationToken)
+    {
+        var verifierRequestedPaths = new HashSet<CredentialPath>
+        {
+            CredentialPath.FromJsonPointer("/credentialSubject/degree/name"),
+            CredentialPath.FromJsonPointer("/credentialSubject/homeAddress/streetAddress")
+        };
+
+        return signedCredential.DeriveProofAsync(
+            verifierRequestedPaths,
+            userExclusions: null,
+            JsonLdSelection.PartitionStatements,
+            JsonLdSelection.SelectFragments,
+            RdfcCanonicalizer,
+            ContextResolver,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.DeserializeCredential,
+            EcdsaSd2023CborSerializer.ParseBaseProof,
+            EcdsaSd2023CborSerializer.SerializeDerivedProof,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).AsTask();
     }
 
 
@@ -361,6 +686,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,

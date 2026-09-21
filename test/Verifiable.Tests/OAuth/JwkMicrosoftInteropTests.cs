@@ -11,7 +11,7 @@ namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Verifies that the library's JWKS wire output is accepted by
-/// <see cref="Microsoft.IdentityModel.Tokens.JsonWebKeySet"/>, the parser used
+/// <c>Microsoft.IdentityModel.Tokens.JsonWebKeySet</c>, the parser used
 /// by the ASP.NET JWT bearer middleware and other relying-party stacks.
 /// </summary>
 /// <remarks>
@@ -114,8 +114,8 @@ internal sealed class JwkMicrosoftInteropTests
         await using TestHostShell app = new(TimeProvider);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair = createKeys();
 
-        ClientRecord registration = app.RegisterSigningClient(
-            $"client-{expectedKty}-{expectedAlg}", keyPair, JwksCapabilities);
+        ClientRecord registration = await app.RegisterSigningClientAsync(
+            $"client-{expectedKty}-{expectedAlg}", keyPair, JwksCapabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await FetchJwksAsync(
             app, registration, TestContext.CancellationToken).ConfigureAwait(false);

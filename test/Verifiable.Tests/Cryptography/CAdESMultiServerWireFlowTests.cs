@@ -488,7 +488,7 @@ internal sealed class CAdESMultiServerWireFlowTests
 
     /// <summary>
     /// Bridges a <see cref="BinaryHttpHost"/> to a <see cref="FetchTimestampResponseAsyncDelegate"/>-shaped
-    /// responder: wraps the received request octets as a <see cref="TimestampRequest"/>-tagged carrier, calls
+    /// responder: wraps the received request octets as a <see cref="Verifiable.Cryptography.Pki.PkiCertificateTags.TimestampRequest"/>-tagged carrier, calls
     /// the responder, and returns its answer as the <c>application/timestamp-reply</c> body. A configured
     /// object holding the responder delegate, not a closure over test state.
     /// </summary>

@@ -11,7 +11,7 @@ namespace Verifiable.DidComm;
 /// The concrete implementation lives in the leaf serialization package (<c>Verifiable.Json</c>); this
 /// project is serialization-agnostic and receives the delegate as a parameter, matching the
 /// <see cref="DidCommMessageSerializer"/> seam. This is the only place
-/// <see cref="System.Text.Json"/> touches a json attachment value, keeping <c>Verifiable.DidComm</c>
+/// <c>System.Text.Json</c> touches a json attachment value, keeping <c>Verifiable.DidComm</c>
 /// free of the serializer.
 /// </para>
 /// <para>

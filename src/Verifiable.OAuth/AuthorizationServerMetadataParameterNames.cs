@@ -354,4 +354,34 @@ public static class AuthorizationServerMetadataParameterNames
     /// Authorization Server Metadata" registry per §10.1.
     /// </summary>
     public static string ClientIdMetadataDocumentSupported { get; } = Utf8Constants.ToInternedString(ClientIdMetadataDocumentSupportedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DeviceAuthorizationEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> DeviceAuthorizationEndpointUtf8 => "device_authorization_endpoint"u8;
+
+    /// <summary>
+    /// URL of the authorization server's device authorization endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8628#section-3.1">RFC 8628 §3.1</see>.
+    /// </summary>
+    public static string DeviceAuthorizationEndpoint { get; } = Utf8Constants.ToInternedString(DeviceAuthorizationEndpointUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RequestObjectSigningAlgValuesSupported"/>.</summary>
+    public static ReadOnlySpan<byte> RequestObjectSigningAlgValuesSupportedUtf8 => "request_object_signing_alg_values_supported"u8;
+
+    /// <summary>
+    /// JSON array of the JWS signing algorithms the authorization server accepts on signed
+    /// request objects, advertised as <c>request_object_signing_alg_values_supported</c> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see> (JWT-Secured
+    /// Authorization Request, JAR).
+    /// </summary>
+    public static string RequestObjectSigningAlgValuesSupported { get; } = Utf8Constants.ToInternedString(RequestObjectSigningAlgValuesSupportedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RequireSignedRequestObject"/>.</summary>
+    public static ReadOnlySpan<byte> RequireSignedRequestObjectUtf8 => "require_signed_request_object"u8;
+
+    /// <summary>
+    /// Whether the authorization server requires every authorization request to use a signed
+    /// request object, advertised as <c>require_signed_request_object</c> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-10.6">RFC 9101 §10.6</see>.
+    /// </summary>
+    public static string RequireSignedRequestObject { get; } = Utf8Constants.ToInternedString(RequireSignedRequestObjectUtf8);
 }

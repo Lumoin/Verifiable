@@ -29,7 +29,7 @@ internal sealed class FederationTrustAdapterTests
 
         DateTimeOffset expiry = now.AddHours(1);
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, expiry, cancellationToken).ConfigureAwait(false);
+            subject, anchor, now, expiry, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         //The adapter consumes the validation OUTCOME; signature verification is the
         //caller's contract (and is covered by TrustChainValidatorTests / the property

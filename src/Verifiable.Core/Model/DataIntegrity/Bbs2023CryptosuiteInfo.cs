@@ -5,7 +5,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 
 /// <summary>
 /// The <c>bbs-2023</c> cryptosuite providing unlinkable selective disclosure with BBS signatures
-/// over the BLS12-381 G2 group.
+/// over the BLS12-381 G1 group, using G2 issuer public keys.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -142,7 +142,7 @@ public sealed class Bbs2023CryptosuiteInfo: CryptosuiteInfo
     /// for a total of 80 bytes.
     /// </para>
     /// <para>
-    /// See <see href="https://www.rfc-editor.org/info/rfc9591">The BBS Signature Scheme</see>.
+    /// See <see href="https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bbs-signatures-10#name-signature">The BBS Signature Scheme, Signature</see>.
     /// </para>
     /// </remarks>
     public static int SignatureLength => 80;

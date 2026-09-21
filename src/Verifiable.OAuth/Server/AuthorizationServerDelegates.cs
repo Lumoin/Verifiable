@@ -11,15 +11,24 @@ namespace Verifiable.OAuth.Server;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Called at the start of every request after the dispatcher has resolved the tenant
-/// via <see cref="AuthorizationServerIntegration.ExtractTenantIdAsync"/>. The implementation
-/// looks up the registration in whatever per-tenant store it maintains.
+/// Called at the start of every request after the dispatcher has resolved the tenant from the
+/// request route, and BEFORE any endpoint's own validation runs — the route resolves the
+/// tenant; the application selects the EFFECTIVE registration for that tenant, reading the
+/// incoming request off <paramref name="context"/> when it serves several clients under one
+/// tenant route (for example, by the presented <c>client_id</c>). The implementation looks up
+/// the registration in whatever per-tenant store it maintains.
 /// </para>
 /// <para>
 /// Return <see langword="null"/> when the registration is not found — the handler returns
-/// <c>invalid_client</c> without leaking whether the identifier exists. The
-/// <paramref name="context"/> carries request-scoped data the implementation can read
-/// for finer-grained decisions (e.g., region routing, feature flags).
+/// <c>invalid_client</c> without leaking whether the identifier exists.
+/// </para>
+/// <para>
+/// Whatever registration this delegate returns is the one SELECTED for the request. The OAuth
+/// endpoint families that read a caller-presented <c>client_id</c> identify it against that
+/// registration before any effect; client authentication validates the declared
+/// <c>token_endpoint_auth_method</c>'s own credentials, a separate check. The pre-authorized
+/// code grant is an exception: its optional wallet identifier is handed to the application's own
+/// decision, never compared here.
 /// </para>
 /// </remarks>
 public delegate ValueTask<ClientRecord?> LoadClientRegistrationDelegate(
@@ -121,20 +130,34 @@ public delegate ValueTask<JwksDocument> BuildJwksDocumentDelegate(
 /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-5">
 /// draft-ietf-oauth-client-id-metadata-document-02 Section 5</see>: fetches the document at
 /// <paramref name="clientMetadataUri"/> through the guarded outbound-fetch chokepoint,
-/// validates it, and reports a typed <see cref="ClientIdMetadataResolution"/> outcome. The
-/// resolver never throws for a fetch or validation failure — only cancellation propagates —
-/// so every caller-visible failure is a value the caller inspects, not an exception to catch.
+/// validates it, and reports a typed <see cref="ClientIdMetadataResolution"/> outcome together with
+/// the <see cref="ClientIdMetadataResolution.Freshness"/> its headers imply. The resolver never
+/// throws for a fetch or validation failure — only cancellation propagates — so every
+/// caller-visible failure is a value the caller inspects, not an exception to catch.
 /// </summary>
 /// <remarks>
-/// The library default, <see cref="ClientIdMetadataDocuments.BuildResolving"/>, composes the
-/// Section 5 fetch-validate-cache pipeline: Section 3 URL validation, the guarded fetch,
+/// <para>
+/// The library's one attempt, <see cref="ClientIdMetadataDocuments.ResolveAsync"/>, composes the
+/// Section 5 fetch-validate pipeline: Section 3 URL validation, the guarded fetch,
 /// status/content-type/size checks, parsing via <see cref="ClientIdMetadataDocumentReader"/>,
-/// the <c>client_id</c> match (Section 4), the CIMD-020 additional-validation hook, optional
-/// logo prefetch (Section 8.8), and caching per Section 5.2.
+/// the <c>client_id</c> match (Section 4), the CIMD-020 additional-validation hook, and optional
+/// logo prefetch (Section 8.8). It caches nothing and retains no state between calls — THIS
+/// delegate's implementation is the caching layer. It owns the store, honours
+/// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>'s freshness
+/// calculation and <see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>'s
+/// "A cache MUST NOT generate a stale response unless it is disconnected or doing so is explicitly
+/// permitted by the client or origin server," and decides what follows a failure. A cache hit for a
+/// document whose <see cref="ClientIdMetadataResolution.HasJwksUriKeySet"/> is set refreshes the
+/// discovered key set through <see cref="ClientIdMetadataDocuments.RefreshJwksAsync"/> on the key
+/// set's OWN schedule rather than the document's, so a rotated key still becomes visible while the
+/// document itself stays cached.
+/// </para>
+/// <para>
 /// <see cref="ClientIdMetadataMaterialization"/> invokes this delegate from
 /// <see cref="AuthorizationServerIntegration.ResolveClientMetadataAsync"/> for a matched CIMD
 /// client and maps a non-<see cref="ClientIdMetadataResolutionOutcome.Resolved"/> outcome to a
 /// request failure.
+/// </para>
 /// </remarks>
 /// <param name="clientMetadataUri">The Client Identifier URL to fetch the document from.</param>
 /// <param name="context">
@@ -288,7 +311,7 @@ public delegate ValueTask<Federation.SubordinateStatementContribution?> ResolveS
 /// <see cref="ResolveSubordinateStatementDelegate"/>.
 /// </para>
 /// <para>
-/// The library passes the parsed <paramref name="entityTypeFilter"/> — the
+/// The library passes the parsed <paramref name="entityTypeFilters"/> — the
 /// §8.2 <c>entity_type</c> query parameter — when present. An entity that
 /// does not implement the filter MAY ignore it and return its full
 /// membership; an entity that does implement it returns only subordinates
@@ -322,7 +345,7 @@ public delegate ValueTask<IReadOnlyList<EntityIdentifier>> ResolveSubordinateLis
 /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3">Federation §8.3</see>
 /// when an inbound GET arrives. The library matches the request, parses the
 /// <c>sub</c> / <c>anchor</c> / <c>type</c> parameters, assembles the §8.3
-/// Resolve Response payload from the returned contribution, and signs it with
+/// Resolve Response payload from the returned outcome's contribution, and signs it with
 /// the resolver's federation signing key; the application's response to this
 /// delegate is the resolution result itself.
 /// </summary>
@@ -338,12 +361,15 @@ public delegate ValueTask<IReadOnlyList<EntityIdentifier>> ResolveSubordinateLis
 /// Type.
 /// </para>
 /// <para>
-/// Returning <see langword="null"/> tells the library the subject cannot be
-/// resolved to the requested anchor; the endpoint then responds with HTTP
-/// 404. The <paramref name="trustAnchor"/> is <see langword="null"/> when
-/// the requester omitted the optional <c>anchor</c> parameter — the
-/// application decides how to resolve in that case (a configured default
-/// anchor, or a refusal expressed as a <see langword="null"/> return).
+/// Returning an outcome naming a <see cref="Federation.FederationResolveError"/>
+/// (<see cref="Federation.FederationResolveOutcome.Failed(Federation.FederationResolveError)"/>)
+/// tells the library exactly which
+/// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>
+/// error the endpoint answers with; returning <see langword="null"/> — or an outcome naming no
+/// error — answers <see cref="Federation.FederationResolveError.InvalidSubject"/>. The
+/// <paramref name="trustAnchor"/> is <see langword="null"/> when the requester omitted the
+/// optional <c>anchor</c> parameter — the application decides how to resolve in that case (a
+/// configured default anchor, or a refusal).
 /// </para>
 /// </remarks>
 /// <param name="subject">The Entity Identifier queried via the <c>sub</c> parameter.</param>
@@ -359,10 +385,10 @@ public delegate ValueTask<IReadOnlyList<EntityIdentifier>> ResolveSubordinateLis
 /// <param name="context">The per-request context bag.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>
-/// The resolved metadata, trust chain, and trust marks, or
-/// <see langword="null"/> when the subject cannot be resolved.
+/// The resolved outcome — a contribution or a named §8.9 error code — or
+/// <see langword="null"/> when the subject cannot be resolved and no more specific error applies.
 /// </returns>
-public delegate ValueTask<Federation.ResolveResponseContribution?> ResolveSubjectTrustChainDelegate(
+public delegate ValueTask<Federation.FederationResolveOutcome?> ResolveSubjectTrustChainDelegate(
     EntityIdentifier subject,
     EntityIdentifier? trustAnchor,
     Federation.EntityTypeIdentifier? entityTypeFilter,
@@ -741,10 +767,16 @@ public delegate ValueTask<TokenExchange.ValidatedSecurityToken?> ValidateTokenEx
 /// discretionary: RFC 8693 §1.1 leaves whether a composite token is issued to the authorization server.
 /// </para>
 /// <para>
-/// Return <see langword="null"/> when the exchange is denied — for example when the authorization
-/// server is "unwilling or unable to issue a token for any target service indicated by the
-/// <c>resource</c> or <c>audience</c> parameters": the endpoint then answers <c>invalid_target</c>
-/// per <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see>.
+/// Return <see langword="null"/> when the exchange is denied. The endpoint maps the denial by what
+/// was requested: for an ID-JAG mint (<see cref="TokenExchange.TokenExchangeRequest.RequestedTokenType"/>
+/// id-jag) it answers <c>invalid_grant</c>, matching the
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 §4.3.4.3</see>
+/// error response example (<c>error_description</c> "Audience validation failed"); for a plain
+/// exchange that named a <c>resource</c> or an <c>audience</c> it answers <c>invalid_target</c>, the
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see> SHOULD for
+/// a server "unwilling or unable to issue a token for any target service indicated by the
+/// <c>resource</c> or <c>audience</c> parameters"; for a plain exchange naming no target it answers
+/// that same section's <c>invalid_request</c> MUST for a request that "is not valid".
 /// </para>
 /// </remarks>
 /// <param name="subjectToken">The validated <c>subject_token</c> claims accepted by the validating seam.</param>
@@ -900,11 +932,12 @@ public delegate ValueTask RevokeTokenDelegate(
 /// issued tokens on a valid code replay is a SHOULD "when possible" — a deployment whose
 /// access tokens are stateless JWTs with no denylist store cannot honour it, and "when possible" is
 /// exactly the reason this seam is optional rather than required. When unwired, the replay and
-/// reuse-detection paths still delete the affected refresh-token record through
-/// the required <see cref="ServerIntegration.DeleteFlowStateAsync"/> after claiming the loaded live
-/// record — invalidating the refresh token, though not
-/// the access tokens already issued from it, which remain valid until they expire on their own; that
-/// degradation is the documented, deliberate behaviour of leaving this seam unwired, not a defect.
+/// reuse-detection paths still delete the grant's live refresh-token record through
+/// the required <see cref="ServerIntegration.DeleteFlowStateAsync"/> after claiming it from the one
+/// grant read <see cref="LoadGrantFlowStatesDelegate"/> makes — invalidating the refresh token,
+/// though not the access tokens already issued from the grant, which remain valid until they
+/// expire on their own; that degradation is the documented, deliberate behaviour of leaving this
+/// seam unwired, not a defect.
 /// </para>
 /// <para>
 /// <see cref="AuthorizationServerIntegration.Validate"/> does not require this delegate — an
@@ -927,6 +960,55 @@ public delegate ValueTask RevokeIssuedTokenDelegate(
     string tokenIdentifier,
     string tokenType,
     ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Reads every retained record of one grant in a single call, keyed by the grant's own flow
+/// identifier — the code flow's own id for a grant born from an authorization code, or the
+/// first refresh record's own id for a grant born at the token endpoint (see
+/// <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerRefreshTokenIssuedState.GrantFlowId"/>
+/// and
+/// <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerTokenIssuedState.GrantFlowId"/>).
+/// Required. A VALID replay of an already-redeemed authorization code and reuse of a rotated-out
+/// refresh token both revoke the grant by this one read rather than by following links between
+/// records, implementing
+/// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
+/// §4.3.1</see>: "it will revoke the active refresh token as well as the access authorization
+/// grant associated with it."
+/// </summary>
+/// <remarks>
+/// <para>
+/// Returns every retained record of <paramref name="tenantId"/> whose grant key
+/// (<c>GrantFlowId ?? FlowId</c>) equals <paramref name="grantFlowId"/> — the record whose own
+/// flow id equals it included — in any order, or an empty list when none remain. The library
+/// never follows a link from one returned record to find another: a record this call omits is a
+/// record the library will neither read, revoke, nor delete for this presentation.
+/// </para>
+/// <para>
+/// The application indexes this by the grant key of every
+/// <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerTokenIssuedState"/> and
+/// <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerRefreshTokenIssuedState"/> it saves —
+/// the same field <see cref="SaveServerFlowStateDelegate"/> already receives on
+/// <c>state</c>, read back rather than recomputed by the library.
+/// </para>
+/// <para>
+/// The application sees every request before the library is called and every response after it,
+/// and it alone can order two requests presented for the same grant — serializing them one at a
+/// time, or admitting both and relying on its own versioned writes. Every record names its grant
+/// so the application CAN do this; the library runs no ordering protocol of its own beyond the
+/// claim it makes, through <see cref="ClaimServerFlowStateDelegate"/>, on a record it is about to
+/// delete.
+/// </para>
+/// </remarks>
+/// <param name="tenantId">The tenant the grant belongs to.</param>
+/// <param name="grantFlowId">The grant's own flow identifier — the grant key every record of it shares.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<IReadOnlyList<(string FlowId, FlowState State, int StepCount)>> LoadGrantFlowStatesDelegate(
+    TenantId tenantId,
+    string grantFlowId,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
@@ -1009,6 +1091,14 @@ public delegate ValueTask<string> IssueCredentialNonceDelegate(
 /// §6.2 token response or a §6.3 error, and mints the access token through the configured
 /// token producers. Client authentication is OPTIONAL for this grant (§6.1); the seam decides
 /// whether an anonymous request (no <paramref name="clientId"/>) is acceptable.
+/// <paramref name="clientId"/> is handed to this delegate UNCHECKED — the library never
+/// compares it with <paramref name="registration"/> — because this grant's OAuth caller and its
+/// End-User subject are established by the application's own pre-authorized-code decision, not
+/// by the identification rule every other grant applies. Granting the request with a non-null
+/// <paramref name="clientId"/> is this application VOUCHING for that identifier: it becomes the
+/// issued access token's <c>client_id</c> claim (RFC 9068 §2.2) exactly as presented. An
+/// anonymous grant (a <see langword="null"/> <paramref name="clientId"/>) instead stamps
+/// <paramref name="registration"/>'s own identifier onto that claim.
 /// </remarks>
 /// <param name="preAuthorizedCode">The <c>pre-authorized_code</c> the Wallet presented.</param>
 /// <param name="transactionCode">
@@ -1502,7 +1592,7 @@ public delegate ValueTask DeliverBackChannelLogoutDelegate(
 /// (the PDP identifier, the chain-resolved endpoint URLs, and any
 /// <c>capabilities</c>); the application signs it with its own key and
 /// algorithm — e.g. via <c>Verifiable.JCose</c>
-/// <see cref="Verifiable.JCose.Jose.SignAsync{TJwtPart}(TJwtPart, TJwtPart, Verifiable.JCose.JwtPartEncoder{TJwtPart}, Verifiable.JCose.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/> —
+/// <see cref="Verifiable.JCose.Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, Verifiable.JCose.JwtPartEncoder{TJwtPart}, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/> —
 /// and returns the compact JWS. The application MUST add the spec-required
 /// <c>iss</c> claim (the PDP identifier, available as
 /// <c>policy_decision_point</c> in <paramref name="metadata"/>).

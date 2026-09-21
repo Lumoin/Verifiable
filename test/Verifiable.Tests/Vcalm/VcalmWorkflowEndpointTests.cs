@@ -78,7 +78,7 @@ internal sealed class VcalmWorkflowEndpointTests
     public async Task CreateWorkflowYields201WithId()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterAdministration(app);
+        string segment = await RegisterAdministrationAsync(app).ConfigureAwait(false);
 
         ServerHttpResponse response = await CreateWorkflowAsync(app, segment, ValidTwoStepWorkflow).ConfigureAwait(false);
 
@@ -100,7 +100,7 @@ internal sealed class VcalmWorkflowEndpointTests
     public async Task GetWorkflowReturnsStoredConfiguration()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterAdministration(app);
+        string segment = await RegisterAdministrationAsync(app).ConfigureAwait(false);
 
         string workflowId = await CreateWorkflowAndGetIdAsync(app, segment, ValidTwoStepWorkflow).ConfigureAwait(false);
 
@@ -130,7 +130,7 @@ internal sealed class VcalmWorkflowEndpointTests
     public async Task GetUnknownWorkflowYields404()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterAdministration(app);
+        string segment = await RegisterAdministrationAsync(app).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmWorkflowByIdAsync(
             segment, "urn:uuid:never-created", [], TestContext.CancellationToken).ConfigureAwait(false);
@@ -148,7 +148,7 @@ internal sealed class VcalmWorkflowEndpointTests
     public async Task CreateWorkflowWithNextStepOnFinalStepYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterAdministration(app);
+        string segment = await RegisterAdministrationAsync(app).ConfigureAwait(false);
 
         //The single step names a nextStep that does not exist — the §3.6.1 "final step MUST NOT carry
         //nextStep" violation manifested as a dangling reference.
@@ -171,7 +171,7 @@ internal sealed class VcalmWorkflowEndpointTests
     public async Task CreateWorkflowWithUndefinedInitialStepYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterAdministration(app);
+        string segment = await RegisterAdministrationAsync(app).ConfigureAwait(false);
 
         const string invalid =
             "{\"initialStep\":\"missing\",\"steps\":{\"present\":{}}}";
@@ -194,7 +194,7 @@ internal sealed class VcalmWorkflowEndpointTests
     public async Task CreateWorkflowWithStepCycleYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterAdministration(app);
+        string segment = await RegisterAdministrationAsync(app).ConfigureAwait(false);
 
         const string cyclic =
             "{\"initialStep\":\"a\",\"steps\":{" +
@@ -211,24 +211,35 @@ internal sealed class VcalmWorkflowEndpointTests
     }
 
 
-    //Registers a tenant with the VcalmAdministration capability and wires the workflow store seams.
-    private string RegisterAdministration(TestHostShell app)
+    /// <summary>
+    /// Registers the workflow administration capability with the configuration and callback delegates.
+    /// </summary>
+    private async Task<string> RegisterAdministrationAsync(TestHostShell app)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, AdministrationCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, AdministrationCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         Dictionary<string, VcalmWorkflowConfiguration> workflowStore = new(StringComparer.Ordinal);
-        app.Server.Vcalm().StoreVcalmWorkflowAsync = (workflowId, configuration, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            workflowStore[workflowId] = configuration;
+            candidateIntegration.StoreVcalmWorkflowAsync = (workflowId, configuration, _, _) =>
+            {
+                workflowStore[workflowId] = configuration;
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
-        app.Server.Vcalm().LoadVcalmWorkflowAsync = (workflowId, _, _) =>
-            ValueTask.FromResult(workflowStore.GetValueOrDefault(workflowId));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadVcalmWorkflowAsync = (workflowId, _, _) =>
+                ValueTask.FromResult(workflowStore.GetValueOrDefault(workflowId));
+        }).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }

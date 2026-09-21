@@ -106,8 +106,8 @@ public static class SdJwtPathExtraction
     /// specification does not admit.
     /// </para>
     /// <para>
-    /// The two claim maps are disjoint by construction. <paramref name="issuerSignedClaims"/> —
-    /// the result's <see cref="SdJwtWalkResult.IssuerSignedClaims"/> — holds only nodes reachable
+    /// The two claim maps are disjoint by construction. <see cref="SdJwtWalkResult.IssuerSignedClaims"/>
+    /// holds only nodes reachable
     /// without releasing any disclosure. A node that exists solely inside a resolved disclosure's
     /// own value goes to <see cref="SdJwtWalkResult.DisclosureInteriorClaims"/>, since reading it
     /// costs the release of the disclosure that carries it.

@@ -11,7 +11,7 @@ namespace Verifiable.Fido2;
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-credProtect-extension">
 /// CTAP 2.3, section 12.1: Credential Protection (credProtect)</see> — authenticator extension
 /// output, registration-only. <see cref="Level"/> is one of the three registered wire values
-/// {1, 2, 3}; <see cref="CredProtectExtensionProcessor"/> only attaches this context on a registered
+/// {1, 2, 3}; the CBOR <c>credProtect</c> extension processor only attaches this context on a registered
 /// level, reporting <see cref="ClaimOutcome.Failure"/> with no context for an out-of-set value.
 /// </remarks>
 public sealed record CredProtectLevelContext: ClaimContext

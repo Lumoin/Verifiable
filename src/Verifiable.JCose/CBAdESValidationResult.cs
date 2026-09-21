@@ -6,7 +6,7 @@ using Verifiable.Cryptography.Pki;
 namespace Verifiable.JCose;
 
 /// <summary>
-/// The B-B structural-and-cryptographic facts a successful <see cref="CBAdESSignatureValidation.ValidateAsync"/>
+/// The B-B structural-and-cryptographic facts a successful <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
 /// call promotes into a <see cref="Verified{T}"/> — the record a relying party consumes once verification has
 /// succeeded (the CB-AdES transposition of <see cref="JAdESVerifiedSignatureFacts"/>).
 /// </summary>
@@ -84,15 +84,15 @@ public sealed class CBAdESVerifiedSignatureFacts: IDisposable
 /// The outcome of validating a CB-AdES <c>COSE_Sign1</c> structure — the decoded facts when
 /// <see cref="IsValid"/> is <see langword="true"/>, or a closed-sum failure detail otherwise. Produced by
 /// <see cref="CBAdESSignatureValidation"/>'s <c>ValidateAsync</c> overloads, the CB-AdES counterpart of
-/// <see cref="Verifiable.Cbor.CoseVerificationResult"/> (mint-only pattern) and
+/// <c>Verifiable.Cbor.CoseVerificationResult</c> (mint-only pattern) and
 /// <c>Verifiable.Cryptography.Pki.SignatureValidationOutcome</c> (owns disposable carriers).
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Mint-only.</strong> The constructor and the <see cref="Success"/>/<see cref="Failed"/> factories
+/// <strong>Mint-only.</strong> The constructor and the <see cref="Success"/>/<see cref="Failed(CBAdESValidationFailure)"/> factories
 /// are <see langword="internal"/>, so a result with <see cref="IsValid"/> <see langword="true"/> can only
 /// originate from <see cref="CBAdESSignatureValidation"/> — application code cannot fabricate a "valid"
-/// result. This mirrors <see cref="Verifiable.Cbor.CoseVerificationResult"/>'s mint-only shape; the
+/// result. This mirrors <c>Verifiable.Cbor.CoseVerificationResult</c>'s mint-only shape; the
 /// difference — a sealed class rather than a readonly record struct — follows from ownership: this result
 /// carries <see cref="Headers"/> and <see cref="UnsignedHeaders"/>, both of which own pool-rented carriers
 /// (component models such as <see cref="AdESCertificateThumbprint"/>/<see cref="CBAdESDetachedObjects"/>),
@@ -102,8 +102,8 @@ public sealed class CBAdESVerifiedSignatureFacts: IDisposable
 /// <strong>Scope boundary.</strong> This is the structural-conformance-plus-cryptographic-verification
 /// verdict — every clause-5 signed/unsigned header rule <see cref="CBAdESHeaderRules"/> enforces, the COSE
 /// signature-value check itself, over caller-provided key material, and, on the level-aware
-/// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, BaseMemoryPool, CancellationToken)"/>
-/// overloads, every B-T/B-LT/B-LTA level-scoped rule <see cref="Verifiable.Cryptography.Pki.CBAdESLevelRules"/>
+/// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, CancellationToken)"/>
+/// overloads, every B-T/B-LT/B-LTA level-scoped rule <see cref="CBAdESLevelRules"/>
 /// enforces plus the message-imprint binding of every electronic time-stamp token this signature carries. It
 /// remains certificate-path-neutral at EVERY level this type's <see cref="IsValid"/> can report: certificate-
 /// path trust and revocation are NEVER resolved, chained, or validated, at any level — opening a time-stamp
@@ -249,7 +249,7 @@ public sealed class CBAdESValidationResult: IDisposable
 
     /// <summary>
     /// Mints a successful, IDENTITY-BOUND result over <paramref name="facts"/> — the certificate-accepting
-    /// <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload's own terminal step. Unlike
+    /// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PkiCertificateMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> overload's own terminal step. Unlike
     /// <see cref="Success"/>, this takes the already-constructed <paramref name="facts"/> rather than building
     /// one, because <paramref name="provenance"/> must have been established (<c>BoundProvenance.TryBindByCertificateDigestAsync</c>)
     /// AGAINST that exact instance before this method is called — <see cref="Verified{T}.TryCreateBound"/>'s own
@@ -455,7 +455,7 @@ public sealed class CBAdESSignatureInvalidFailure: CBAdESValidationFailure, IEqu
 
 
 /// <summary>
-/// The certificate-accepting <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload could not establish
+/// The certificate-accepting <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PkiCertificateMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> overload could not establish
 /// an identity binding for the supplied signing certificate — either the certificate itself is not one this
 /// binding can verify under (not an elliptic curve this library resolves, or not well-formed X.509), or the
 /// COSE signature value DID verify but the recomputed digest of the certificate it verified under does not

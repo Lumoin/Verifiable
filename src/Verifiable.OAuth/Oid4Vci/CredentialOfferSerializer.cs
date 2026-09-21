@@ -134,7 +134,53 @@ public static class CredentialOfferSerializer
     {
         ArgumentException.ThrowIfNullOrEmpty(offerJson);
 
+        if(!TryParse(offerJson, out CredentialOffer? offer, out string? violatedRule))
+        {
+            throw new ArgumentException(violatedRule, nameof(offerJson));
+        }
+
+        return offer!;
+    }
+
+
+    /// <summary>
+    /// Parses the §4.1.1 Credential Offer JSON object without raising — the inverse of
+    /// <see cref="ToJson"/> answered as a value rather than an exception. <see cref="FromJson"/>
+    /// raises the exact same rules as an <see cref="ArgumentException"/>; a caller reading the
+    /// offer over the wire — where a malformed body is the remote party's mistake, not the
+    /// caller's own — reports <paramref name="violatedRule"/> instead of catching one.
+    /// </summary>
+    /// <param name="offerJson">The §4.1.1 Credential Offer JSON object.</param>
+    /// <param name="offer">The parsed offer on success; otherwise <see langword="null"/>.</param>
+    /// <param name="violatedRule">
+    /// The violated §4.1.1 rule, in the library's own words, on failure; otherwise
+    /// <see langword="null"/>.
+    /// </param>
+    /// <returns><see langword="true"/> when <paramref name="offerJson"/> parses to a valid offer.</returns>
+    internal static bool TryParse(string offerJson, out CredentialOffer? offer, out string? violatedRule)
+    {
+        offer = null;
+        violatedRule = null;
+
+        if(string.IsNullOrEmpty(offerJson))
+        {
+            violatedRule = "The Credential Offer JSON is empty.";
+
+            return false;
+        }
+
         ReadOnlySpan<byte> json = Encoding.UTF8.GetBytes(offerJson);
+
+        //RFC 8259 §4 uniqueness posture applied to a Credential Offer: a repeated "credential_issuer"
+        //would let this reader select the first occurrence — the issuer the Wallet is steered to trust —
+        //while a duplicate second occurrence goes unnoticed, so the document is gated for well-formedness
+        //before any member is read.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(json))
+        {
+            violatedRule = "The Credential Offer is not well-formed JSON, or contains a duplicate member name.";
+
+            return false;
+        }
 
         //§4.1.1 credential_issuer (REQUIRED): "The URL of the Credential Issuer ... from which the
         //Wallet is requested to obtain one or more Credentials."
@@ -142,8 +188,19 @@ public static class CredentialOfferSerializer
             json, CredentialIssuerMetadataParameterNames.CredentialIssuerUtf8);
         if(string.IsNullOrEmpty(credentialIssuer))
         {
-            throw new ArgumentException(
-                "§4.1.1 credential_issuer is REQUIRED; the offer JSON carries none.", nameof(offerJson));
+            violatedRule = "§4.1.1 credential_issuer is REQUIRED; the offer JSON carries none.";
+
+            return false;
+        }
+
+        //§4.1.1 names the member "The URL of the Credential Issuer": a value that is no URI reference
+        //at all (a scheme with no authority, for instance) is refused here as a rule, since the
+        //Uri constructor would raise for it.
+        if(!Uri.TryCreate(credentialIssuer, UriKind.RelativeOrAbsolute, out Uri? credentialIssuerUri))
+        {
+            violatedRule = "§4.1.1 credential_issuer is not a URL.";
+
+            return false;
         }
 
         //§4.1.1 credential_configuration_ids (REQUIRED): "A non-empty array of unique strings."
@@ -151,22 +208,34 @@ public static class CredentialOfferSerializer
             json, CredentialOfferParameterNames.CredentialConfigurationIdsUtf8);
         if(configurationIds is null || configurationIds.Count == 0)
         {
-            throw new ArgumentException(
-                "§4.1.1 credential_configuration_ids is a REQUIRED non-empty array; the offer JSON carries none.",
-                nameof(offerJson));
+            violatedRule = "§4.1.1 credential_configuration_ids is a REQUIRED non-empty array; the offer JSON carries none.";
+
+            return false;
         }
 
         //§4.1.1 grants (OPTIONAL): the grant-type → parameters map. Absent when the offer leaves the
         //Wallet to determine grant types from the issuer metadata.
         string? grantsJson = JwkJsonReader.ExtractObjectAsString(json, CredentialOfferParameterNames.GrantsUtf8);
 
-        return new CredentialOffer
+        PreAuthorizedCodeOfferGrant? preAuthorizedCodeGrant = null;
+        if(grantsJson is not null)
         {
-            CredentialIssuer = new Uri(credentialIssuer, UriKind.RelativeOrAbsolute),
+            preAuthorizedCodeGrant = ParsePreAuthorizedCodeGrant(grantsJson, out violatedRule);
+            if(violatedRule is not null)
+            {
+                return false;
+            }
+        }
+
+        offer = new CredentialOffer
+        {
+            CredentialIssuer = credentialIssuerUri,
             CredentialConfigurationIds = configurationIds,
-            PreAuthorizedCodeGrant = grantsJson is null ? null : ParsePreAuthorizedCodeGrant(grantsJson),
+            PreAuthorizedCodeGrant = preAuthorizedCodeGrant,
             AuthorizationCodeGrant = grantsJson is null ? null : ParseAuthorizationCodeGrant(grantsJson)
         };
+
+        return true;
     }
 
 
@@ -278,10 +347,20 @@ public static class CredentialOfferSerializer
     }
 
 
-    //Parses the §4.1.1 urn:ietf:params:oauth:grant-type:pre-authorized_code grant block out of the
-    //grants object, or null when the offer advertises no Pre-Authorized Code grant.
-    private static PreAuthorizedCodeOfferGrant? ParsePreAuthorizedCodeGrant(string grantsJson)
+    /// <summary>
+    /// Parses the §4.1.1 <c>urn:ietf:params:oauth:grant-type:pre-authorized_code</c> grant block out
+    /// of the grants object, or answers <see langword="null"/> when the offer advertises no
+    /// Pre-Authorized Code grant. A grant block without its REQUIRED <c>pre-authorized_code</c> is
+    /// reported through <paramref name="violatedRule"/>, so <see cref="FromJson"/> (which raises the
+    /// rule) and a parse of remote input (which answers it) share this one body.
+    /// </summary>
+    /// <param name="grantsJson">The §4.1.1 <c>grants</c> object.</param>
+    /// <param name="violatedRule">The violated rule, or <see langword="null"/> when the block is valid or absent.</param>
+    /// <returns>The parsed grant, or <see langword="null"/> when none is advertised or a rule is violated.</returns>
+    private static PreAuthorizedCodeOfferGrant? ParsePreAuthorizedCodeGrant(string grantsJson, out string? violatedRule)
     {
+        violatedRule = null;
+
         ReadOnlySpan<byte> grants = Encoding.UTF8.GetBytes(grantsJson);
         string? grantJson = JwkJsonReader.ExtractObjectAsString(
             grants, WellKnownGrantTypes.PreAuthorizedCodeUtf8);
@@ -297,9 +376,10 @@ public static class CredentialOfferSerializer
         string? preAuthorizedCode = JwkJsonReader.ExtractStringValue(grant, OAuthRequestParameterNames.PreAuthorizedCodeUtf8);
         if(string.IsNullOrEmpty(preAuthorizedCode))
         {
-            throw new ArgumentException(
-                "§4.1.1 the pre-authorized_code grant is present but carries no REQUIRED "
-                + "pre-authorized_code.", nameof(grantsJson));
+            violatedRule = "§4.1.1 the pre-authorized_code grant is present but carries no REQUIRED "
+                + "pre-authorized_code.";
+
+            return null;
         }
 
         //§4.1.1: tx_code is an "Object indicating that a Transaction Code is required if present,
@@ -318,8 +398,12 @@ public static class CredentialOfferSerializer
     }
 
 
-    //Parses the §4.1.1 tx_code object's display hints. An all-unset object yields the empty
-    //requirement — its presence alone already signalled the Transaction Code is required.
+    /// <summary>
+    /// Parses the §4.1.1 <c>tx_code</c> object's display hints. An object with every hint unset
+    /// yields the empty requirement: its presence alone signals that a Transaction Code is required.
+    /// </summary>
+    /// <param name="grant">The Pre-Authorized Code grant block carrying the <c>tx_code</c> object.</param>
+    /// <returns>The Transaction Code requirement with whichever hints the object carried.</returns>
     private static TxCodeRequirement ParseTxCode(ReadOnlySpan<byte> grant)
     {
         string? txCodeJson = JwkJsonReader.ExtractObjectAsString(grant, OAuthRequestParameterNames.TxCodeUtf8);
@@ -342,8 +426,12 @@ public static class CredentialOfferSerializer
     }
 
 
-    //Parses the §4.1.1 authorization_code grant block out of the grants object, or null when the
-    //offer advertises no Authorization Code grant.
+    /// <summary>
+    /// Parses the §4.1.1 <c>authorization_code</c> grant block out of the grants object, or answers
+    /// <see langword="null"/> when the offer advertises no Authorization Code grant.
+    /// </summary>
+    /// <param name="grantsJson">The §4.1.1 <c>grants</c> object.</param>
+    /// <returns>The parsed grant, or <see langword="null"/> when none is advertised.</returns>
     private static AuthorizationCodeOfferGrant? ParseAuthorizationCodeGrant(string grantsJson)
     {
         ReadOnlySpan<byte> grants = Encoding.UTF8.GetBytes(grantsJson);
@@ -364,10 +452,18 @@ public static class CredentialOfferSerializer
     }
 
 
-    //Pulls the credential_offer / credential_offer_uri query values out of a deep link's query
-    //string. Returns false when the argument carries no '?' query at all (the caller then treats it
-    //as a raw credential_offer value). The values are returned still URL-encoded — the caller
-    //decodes the one it uses.
+    /// <summary>
+    /// Pulls the <c>credential_offer</c> / <c>credential_offer_uri</c> query values out of a deep
+    /// link's query string. The values are returned still URL-encoded; the caller decodes the one it
+    /// uses.
+    /// </summary>
+    /// <param name="deepLink">The deep link, or a raw <c>credential_offer</c> value.</param>
+    /// <param name="credentialOffer">The still-encoded <c>credential_offer</c> value, or <see langword="null"/>.</param>
+    /// <param name="credentialOfferUri">The still-encoded <c>credential_offer_uri</c> value, or <see langword="null"/>.</param>
+    /// <returns>
+    /// <see langword="false"/> when <paramref name="deepLink"/> carries no <c>?</c> query at all; the
+    /// caller then treats it as a raw <c>credential_offer</c> value.
+    /// </returns>
     private static bool TryGetQueryParameters(string deepLink, out string? credentialOffer, out string? credentialOfferUri)
     {
         credentialOffer = null;

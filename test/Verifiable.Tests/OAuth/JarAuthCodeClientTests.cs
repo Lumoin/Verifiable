@@ -61,8 +61,8 @@ internal sealed class JarAuthCodeClientTests
     public async Task JarParAsyncRoundTripsThroughBuildJarParMatcher()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarParCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
@@ -92,8 +92,8 @@ internal sealed class JarAuthCodeClientTests
     public async Task JarAuthorizeAsyncRoundTripsThroughBuildAuthorizeJarByValueMatcher()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarAuthorizeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarAuthorizeCapabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
@@ -124,8 +124,8 @@ internal sealed class JarAuthCodeClientTests
     public async Task JarParAsyncSurfacesCancellation()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarParCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
@@ -155,8 +155,8 @@ internal sealed class JarAuthCodeClientTests
     public async Task JarAuthorizeAsyncSurfacesCancellation()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarAuthorizeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarAuthorizeCapabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
@@ -246,8 +246,8 @@ internal sealed class JarAuthCodeClientPqTests
             CreateFreshKeyMaterial(algorithm);
 
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterJarSigningClient(
-            ClientId, ClientBaseUri, keyPair, JarParCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterJarSigningClientAsync(
+            ClientId, ClientBaseUri, keyPair, JarParCapabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, _) = host.CreateInProcessOAuthClientAndRegistration(
             material.Registration,

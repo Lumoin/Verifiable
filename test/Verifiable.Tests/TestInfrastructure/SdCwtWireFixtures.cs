@@ -114,6 +114,5 @@ internal static class SdCwtWireFixtures
     /// least one data item that refers to a status mechanism."
     /// </summary>
     /// <returns>The empty Status structure.</returns>
-    internal static Dictionary<string, object> BuildStatusWithNoMechanism() =>
-        new(StringComparer.Ordinal);
+    internal static Dictionary<string, object> BuildStatusWithNoMechanism() => new(StringComparer.Ordinal);
 }

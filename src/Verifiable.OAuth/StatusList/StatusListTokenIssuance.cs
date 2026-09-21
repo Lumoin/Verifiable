@@ -15,9 +15,9 @@ namespace Verifiable.OAuth.StatusList;
 /// mapping shared with the verification side — and the header is built by
 /// <see cref="UnsignedJwt.ForSigning"/> with <c>typ</c> pinned to
 /// <see cref="WellKnownMediaTypes.Jwt.StatusListJwt"/> ("typ: REQUIRED. The JWT type MUST be
-/// statuslist+jwt.") and <c>alg</c> derived from <paramref name="signingKey"/>'s
+/// statuslist+jwt.") and <c>alg</c> derived from the signing key's
 /// <see cref="Tag"/> via <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/>. Signing
-/// flows through <see cref="JwtSigningExtensions.SignAsync"/>, the standard JCose composition
+/// flows through <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>, the standard JCose composition
 /// pattern this project's other JWT issuers (<c>KbJwtIssuance</c>, <c>ClientAssertionSigning</c>)
 /// share — algorithm dispatch lives in the registry, not in a per-call-site delegate.
 /// </para>
@@ -27,7 +27,7 @@ namespace Verifiable.OAuth.StatusList;
 /// signatures if they are unsure" as the reason a MAC-secured Status List Token is not a
 /// composition this method offers — an application that needs one composes it directly over the
 /// JCose MAC primitives. "Both ttl and exp are RECOMMENDED to be used by the Status Issuer"
-/// (Section 13.7): both are written whenever <paramref name="token"/> carries them, since that
+/// (Section 13.7): both are written whenever the source token carries them, since that
 /// choice belongs to <see cref="StatusListTokenClaims.ToPayload"/>, not to this composition.
 /// </para>
 /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>

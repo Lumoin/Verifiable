@@ -2,6 +2,7 @@ using CsCheck;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Fido2;
 using Verifiable.JCose;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -27,29 +28,26 @@ internal sealed class Fido2AssertionVerifierPropertyTests
     /// in the other tests of this class.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until each async call fully completes, so minted's using declaration disposes it strictly after VerifyMintedAssertionAsync returns.")]
-    public void ValidAssertionsAlwaysVerifyAcrossRandomChallengesAndSignCounts()
+    public async Task ValidAssertionsAlwaysVerifyAcrossRandomChallengesAndSignCounts()
     {
         using Fido2AssertionOracle oracle = Fido2AssertionOracle.CreateEs256();
 
-        (from challengeLength in Gen.Int[1, 32]
-         from challengeSeed in Gen.Int[0, int.MaxValue]
-         from signCount in Gen.UInt[1, 1000]
-         select (challengeLength, challengeSeed, signCount))
-        .Sample(sample =>
+        await (from challengeLength in Gen.Int[1, 32]
+               from challengeSeed in Gen.Int[0, int.MaxValue]
+               from signCount in Gen.UInt[1, 1000]
+               select (challengeLength, challengeSeed, signCount))
+        .SampleAsync(async sample =>
         {
             string challenge = BuildBase64UrlChallenge(sample.challengeLength, sample.challengeSeed);
 
-            using MintedAssertion minted = oracle.MintAsync(challenge, ValidOrigin, signCount: sample.signCount, cancellationToken: TestContext.CancellationToken)
-                .AsTask().GetAwaiter().GetResult();
+            using MintedAssertion minted = await oracle.MintAsync(challenge, ValidOrigin, signCount: sample.signCount, cancellationToken: TestContext.CancellationToken)
+                .AsTask();
 
-            Fido2AssertionOutcome outcome = VerifyMintedAssertionAsync(oracle.CredentialPublicKey, minted, expectedChallenge: challenge)
-                .GetAwaiter().GetResult();
+            Fido2AssertionOutcome outcome = await VerifyMintedAssertionAsync(oracle.CredentialPublicKey, minted, expectedChallenge: challenge);
 
             Assert.IsTrue(outcome.SignatureValid);
             Assert.IsTrue(outcome.IsAcceptable);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

@@ -17,7 +17,7 @@ namespace Verifiable.Json.Converters;
 /// </para>
 /// <list type="bullet">
 ///   <item><description><see cref="DidDocument"/> — serialized as the DID document object.</description></item>
-///   <item><description><see cref="VerifiablePresentation"/> / <see cref="DataIntegritySecuredPresentation"/> — serialized as the presentation object (the did:webvh <c>/whois</c> case).</description></item>
+///   <item><description><see cref="Verifiable.Core.Model.Credentials.VerifiablePresentation"/> / <see cref="Verifiable.Core.Model.DataIntegrity.DataIntegritySecuredPresentation"/> — serialized as the presentation object (the did:webvh <c>/whois</c> case).</description></item>
 ///   <item><description><see cref="Service"/> / <see cref="VerificationMethod"/> — serialized as the fragment-dereferenced resource object.</description></item>
 ///   <item><description><see cref="string"/> — written as a JSON string (a service-endpoint URI).</description></item>
 ///   <item><description><see cref="TaggedMemory{Byte}"/> / <see cref="ReadOnlyMemory{Byte}"/> — decoded as UTF-8; written raw when it parses as JSON, otherwise as a base64 JSON string.</description></item>

@@ -7,6 +7,8 @@ namespace Verifiable.Core.Did.Methods.Keri
     /// The 3. did:keri Format: 3.1 Method Name</see>.</remarks>
     public record KeriDidMethod: GenericDidMethod
     {
+        /// <summary>Constructs the identifier from its full DID string.</summary>
+        /// <param name="didString">The DID string; must start with <c>did:keri:</c>.</param>
         public KeriDidMethod(string didString) : base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);

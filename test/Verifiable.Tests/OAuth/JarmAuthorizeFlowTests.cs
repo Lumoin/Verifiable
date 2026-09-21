@@ -56,7 +56,7 @@ internal sealed class JarmAuthorizeFlowTests
     public async Task ResponseModeJwtCarriesCodeInSignedResponseThatExchangesAtToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarmClient(host);
+        using VerifierKeyMaterial material = await RegisterJarmClientAsync(host).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         ServerHttpResponse authorizeResponse = await RunParAuthorizeAsync(
@@ -100,7 +100,7 @@ internal sealed class JarmAuthorizeFlowTests
     public async Task FormPostJwtModeReturnsAutoSubmittingHtml()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarmClient(host);
+        using VerifierKeyMaterial material = await RegisterJarmClientAsync(host).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         ServerHttpResponse authorizeResponse = await RunParAuthorizeAsync(
@@ -130,7 +130,7 @@ internal sealed class JarmAuthorizeFlowTests
         //response_mode injected on the front-channel authorize request must not turn a
         //plain redirect into (or out of) a JWT-secured response.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarmClient(host);
+        using VerifierKeyMaterial material = await RegisterJarmClientAsync(host).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         ServerHttpResponse authorizeResponse = await RunParAuthorizeAsync(
@@ -144,15 +144,22 @@ internal sealed class JarmAuthorizeFlowTests
     }
 
 
+    /// <summary>
+    /// A denied authorization request returns its error parameters inside the signed authorization response.
+    /// <see href="https://openid.net/specs/oauth-v2-jarm-final.html#section-2.1">JWT Secured Authorization Response Mode §2.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task DeniedAuthorizeWrapsErrorParametersInSignedResponse()
     {
         //JARM §2.1: the JWT carries the response parameters even for an error response.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarmClient(host);
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, registration, context, ct) => ValueTask.FromResult(
-                AuthorizationRequestDecision.Deny(AuthorizationDenialReason.AccessDenied));
+        using VerifierKeyMaterial material = await RegisterJarmClientAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Deny(AuthorizationDenialReason.AccessDenied));
+        }).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         ServerHttpResponse authorizeResponse = await RunParAuthorizeAsync(
@@ -179,8 +186,8 @@ internal sealed class JarmAuthorizeFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
         //A baseline client WITHOUT an AuthorizationResponseSigning key.
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         RequestFields parFields = BuildParFields(pkce, JarmResponseModes.Jwt);
@@ -199,8 +206,8 @@ internal sealed class JarmAuthorizeFlowTests
     public async Task DiscoveryAdvertisesJarmOnlyWithResponseSigningKey()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse unkeyed = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(200, unkeyed.StatusCode, unkeyed.Body);
@@ -208,7 +215,7 @@ internal sealed class JarmAuthorizeFlowTests
             "Without a response-signing key the JARM modes must not be advertised.");
         Assert.DoesNotContain("authorization_signing_alg_values_supported", unkeyed.Body);
 
-        EnableJarmSigning(host, material);
+        await EnableJarmSigningAsync(host, material).ConfigureAwait(false);
 
         ServerHttpResponse keyed = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(200, keyed.StatusCode, keyed.Body);
@@ -224,23 +231,23 @@ internal sealed class JarmAuthorizeFlowTests
     /// <see cref="KeyUsageContext.AuthorizationResponseSigning"/> key set reusing the
     /// registration's signing key, so the host's resolvers find it by id.
     /// </summary>
-    private static VerifierKeyMaterial RegisterJarmClient(TestHostShell host)
+    private static async Task<VerifierKeyMaterial> RegisterJarmClientAsync(TestHostShell host)
     {
-        VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        EnableJarmSigning(host, material);
+        VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+        await EnableJarmSigningAsync(host, material).ConfigureAwait(false);
 
         return material;
     }
 
 
-    private static void EnableJarmSigning(TestHostShell host, VerifierKeyMaterial material)
+    private static async Task EnableJarmSigningAsync(TestHostShell host, VerifierKeyMaterial material)
     {
-        host.UpdateSigningKeys(
+        await host.UpdateSigningKeysAsync(
             material.Registration.TenantId.Value,
             material.Registration.SigningKeys.ToImmutableDictionary().Add(
                 KeyUsageContext.AuthorizationResponseSigning,
-                new SigningKeySet { Current = [material.SigningKeyId] }));
+                new SigningKeySet { Current = [material.SigningKeyId] })).ConfigureAwait(false);
     }
 
 
@@ -248,6 +255,7 @@ internal sealed class JarmAuthorizeFlowTests
     {
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,

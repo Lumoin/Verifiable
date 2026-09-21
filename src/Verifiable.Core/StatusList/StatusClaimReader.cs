@@ -64,7 +64,7 @@ public static class StatusClaimReader
     /// Only top-level members are mechanisms: a <c>status_list</c> object nested inside another
     /// mechanism's value is that mechanism's own content and is neither named in
     /// <see cref="StatusClaim.Mechanisms"/> nor read as the reference. A repeated top-level member
-    /// name is refused outright, the same posture <see cref="JwkJsonReader.HasDuplicateTopLevelKeys"/>
+    /// name is refused outright, the same posture <see cref="JwkJsonReader.IsWellFormedJsonDocument"/>
     /// exists for elsewhere: a duplicate lets a producer show one reader one mechanism and another
     /// reader a different one.
     /// </remarks>
@@ -72,7 +72,18 @@ public static class StatusClaimReader
     {
         claim = null;
 
-        if(JwkJsonReader.HasDuplicateTopLevelKeys(statusObjectUtf8Json))
+        int pos = 0;
+        while(pos < statusObjectUtf8Json.Length
+            && statusObjectUtf8Json[pos] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
+        {
+            pos++;
+        }
+
+        bool isWellFormed = pos < statusObjectUtf8Json.Length && statusObjectUtf8Json[pos] == (byte)'{'
+            ? JwkJsonReader.IsWellFormedJsonDocument(statusObjectUtf8Json)
+            : JwkJsonReader.IsWellFormedJsonObjectContent(statusObjectUtf8Json);
+
+        if(!isWellFormed)
         {
             return false;
         }

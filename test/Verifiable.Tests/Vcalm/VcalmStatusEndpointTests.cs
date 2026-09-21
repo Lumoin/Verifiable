@@ -133,6 +133,17 @@ internal sealed class VcalmStatusEndpointTests
         await using TestHostShell app = new(TimeProvider);
         StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
 
+        //The status-list credential itself carries the base-only context VcalmStatusListService
+        //mints it with, not the "ExampleAlumniCredential" base-plus-examples context the shared
+        //verification wiring otherwise checks credentialStatus-bearing test credentials against.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmCredentialVerification = candidateIntegration.VcalmCredentialVerification! with
+            {
+                KnownContext = Context.FromIris(Context.Credentials20)
+            };
+        }).ConfigureAwait(false);
+
         using JsonDocument response = await PostCreateStatusListAsync(
             app, ctx.Segment, $"{{\"statusPurpose\":\"{RevocationPurpose}\",\"id\":\"{StatusListId}\"}}",
             expectedStatus: 201).ConfigureAwait(false);
@@ -240,6 +251,18 @@ internal sealed class VcalmStatusEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        //The status-list credential itself carries the base-only context VcalmStatusListService
+        //mints it with, not the "ExampleAlumniCredential" base-plus-examples context the shared
+        //verification wiring otherwise checks credentialStatus-bearing test credentials against.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmCredentialVerification = candidateIntegration.VcalmCredentialVerification! with
+            {
+                KnownContext = Context.FromIris(Context.Credentials20)
+            };
+        }).ConfigureAwait(false);
+
         await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
 
         const int Index = 94;
@@ -468,7 +491,425 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
-    private static bool HasStatusWarning(JsonDocument response)
+    //Literal type URLs for the Bitstring Status List 1.0 §3.5 processing-error / §3.2 RANGE_ERROR
+    //catalog rows, written as literals so these tests do not depend on the VcalmProblemTypes rows
+    //they exercise.
+    private const string StatusRetrievalErrorType = "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR";
+    private const string StatusVerificationErrorType = "https://www.w3.org/ns/credentials/status-list#STATUS_VERIFICATION_ERROR";
+    private const string StatusListLengthErrorType = "https://www.w3.org/ns/credentials/status-list#STATUS_LIST_LENGTH_ERROR";
+    private const string RangeErrorType = "https://www.w3.org/TR/vc-data-model-2.0#RANGE_ERROR";
+
+
+    /// <summary>
+    /// Bitstring Status List 1.0 §3.5 <c>STATUS_RETRIEVAL_ERROR</c>: the application's
+    /// <c>ResolveVcalmStatusListDelegate</c> cannot retrieve the referenced status list — it returns
+    /// <see langword="null"/> because the status service holds no record for the referenced
+    /// <c>statusListCredential</c>. §3.8.1 makes status a WARNING: the credential still verifies
+    /// TRUE, and the entry contributes no <c>results.credentialStatus</c> item.
+    /// </summary>
+    [TestMethod]
+    public async Task UnresolvableStatusListYieldsStatusRetrievalErrorWarning()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        const int Index = 61;
+        const string CredentialId = "urn:uuid:status-retrieval-error";
+        const string UnknownStatusList = "https://status.example/status-lists/never-created";
+
+        string issueBody = BuildIssueRequestBodyWithStatus(
+            ctx.IssuerDid, CredentialId, Index, statusListCredential: UnknownStatusList);
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        using JsonDocument verified = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+
+        Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "§3.8.1: an unresolvable status list is a WARNING, not an ERROR — verified stays true.");
+        Assert.IsTrue(HasProblemOfType(verified, StatusRetrievalErrorType),
+            "An unresolvable status list surfaces the Bitstring Status List 1.0 §3.5 STATUS_RETRIEVAL_ERROR.");
+
+        JsonElement statusResults = verified.RootElement
+            .GetProperty(VcalmParameterNames.Results)
+            .GetProperty(VcalmParameterNames.CredentialStatus);
+        Assert.AreEqual(0, statusResults.GetArrayLength(),
+            "An unresolvable status entry establishes no status result.");
+    }
+
+
+    /// <summary>
+    /// Bitstring Status List 1.0 §3.5 <c>STATUS_VERIFICATION_ERROR</c>: the resolver reports a
+    /// precise cause by throwing <c>BitstringStatusListException</c> of kind
+    /// <c>StatusVerification</c> — §3.8.1 makes it a WARNING naming that specification error type,
+    /// not the exception's own message.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolverThrowingStatusVerificationExceptionYieldsStatusVerificationErrorWarning()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 62;
+        const string CredentialId = "urn:uuid:status-verification-exception";
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
+                throw new BitstringStatusListException(
+                    BitstringStatusListErrorType.StatusVerification,
+                    "The status list credential's proof did not verify.");
+        }).ConfigureAwait(false);
+
+        string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index);
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        using JsonDocument verified = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+
+        Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "§3.8.1: a status-verification failure is a WARNING — verified stays true.");
+        Assert.IsTrue(HasProblemOfType(verified, StatusVerificationErrorType),
+            "A BitstringStatusListException of kind StatusVerification surfaces STATUS_VERIFICATION_ERROR.");
+    }
+
+
+    /// <summary>
+    /// Bitstring Status List 1.0 §3.5 <c>STATUS_LIST_LENGTH_ERROR</c>: the real
+    /// <c>BitstringStatusListValidation.GetStatus</c> raises the §3.2 herd-privacy minimum-length
+    /// check when the resolved status list holds fewer than
+    /// <c>BitstringStatusListCodec.MinimumEntries</c> entries.
+    /// </summary>
+    [TestMethod]
+    public async Task StatusListBelowMinimumLengthYieldsStatusListLengthErrorWarning()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 0;
+        const string CredentialId = "urn:uuid:status-list-length-error";
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
+            {
+                CoreStatusList tooShort = CoreStatusList.Create(8, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
+                {
+                    StatusList = tooShort,
+                    Purposes = [RevocationPurpose]
+                });
+            };
+        }).ConfigureAwait(false);
+
+        string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index);
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        using JsonDocument verified = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+
+        Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "§3.8.1: an under-minimum status list is a WARNING — verified stays true.");
+        Assert.IsTrue(HasProblemOfType(verified, StatusListLengthErrorType),
+            "A status list under the §3.2 herd-privacy minimum surfaces STATUS_LIST_LENGTH_ERROR.");
+    }
+
+
+    /// <summary>
+    /// §3.2 Validate Algorithm <c>RANGE_ERROR</c>: the real <c>BitstringStatusListValidation.GetStatus</c>
+    /// raises the range check when the entry's <c>statusListIndex</c> lies outside the resolved
+    /// (herd-privacy-sized) bitstring.
+    /// </summary>
+    [TestMethod]
+    public async Task StatusListIndexBeyondCapacityYieldsRangeErrorWarning()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        int outOfRangeIndex = BitstringStatusListCodec.MinimumEntries + 100;
+        const string CredentialId = "urn:uuid:range-error";
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
+            {
+                CoreStatusList list = CoreStatusList.Create(
+                    BitstringStatusListCodec.MinimumEntries, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
+                {
+                    StatusList = list,
+                    Purposes = [RevocationPurpose]
+                });
+            };
+        }).ConfigureAwait(false);
+
+        string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, outOfRangeIndex);
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        using JsonDocument verified = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+
+        Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "§3.8.1: an out-of-range index is a WARNING — verified stays true.");
+        Assert.IsTrue(HasProblemOfType(verified, RangeErrorType),
+            "A statusListIndex outside the bitstring surfaces the VC Data Model 2.0 RANGE_ERROR.");
+    }
+
+
+    /// <summary>
+    /// §3.8 sanitize-server-errors: an arbitrary resolver exception is reported as
+    /// <c>STATUS_RETRIEVAL_ERROR</c> with this library's own fixed sentence — the exception's message
+    /// MUST NOT reach the response ("Implementers are strongly advised to sanitize all server errors
+    /// in production environments, as not doing so can lead to information disclosure.").
+    /// </summary>
+    [TestMethod]
+    public async Task ResolverThrowingArbitraryExceptionYieldsStatusRetrievalErrorWithoutLeakingMessage()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 63;
+        const string CredentialId = "urn:uuid:arbitrary-exception";
+        const string Marker = "MARKER-9f3c2e77-DO-NOT-LEAK";
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
+                throw new InvalidOperationException(Marker);
+        }).ConfigureAwait(false);
+
+        string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index);
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        string verifyBody = "{\"verifiableCredential\":" + securedCredentialJson
+            + ",\"options\":{\"returnProblemDetails\":true}}";
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
+            ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
+            new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.IsFalse(response.Body.Contains(Marker, StringComparison.Ordinal),
+            "§3.8: server errors are sanitized — the resolver's exception message must not leak.");
+
+        using JsonDocument verified = JsonDocument.Parse(response.Body);
+        Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        Assert.IsTrue(HasProblemOfType(verified, StatusRetrievalErrorType),
+            "An arbitrary resolver exception surfaces the generic STATUS_RETRIEVAL_ERROR.");
+    }
+
+
+    /// <summary>
+    /// Bitstring Status List 1.0 §3.5 <c>STATUS_VERIFICATION_ERROR</c> for a malformed W3C-shaped
+    /// entry: a credentialStatus entry whose <c>type</c> IS <c>BitstringStatusListEntry</c> but whose
+    /// <c>statusListIndex</c> is missing cannot be resolved — a different case from a foreign
+    /// <c>type</c> (which this verifier implements no algorithm for and reports nothing).
+    /// </summary>
+    [TestMethod]
+    public async Task BitstringStatusListEntryMissingIndexYieldsStatusVerificationErrorWarning()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const string CredentialId = "urn:uuid:missing-index";
+
+        string issueBody = BuildIssueRequestBodyWithMalformedStatusEntry(ctx.IssuerDid, CredentialId);
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        using JsonDocument verified = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+
+        Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "§3.8.1: a malformed status entry is a WARNING — verified stays true.");
+        Assert.IsTrue(HasProblemOfType(verified, StatusVerificationErrorType),
+            "A BitstringStatusListEntry with a missing statusListIndex surfaces STATUS_VERIFICATION_ERROR.");
+    }
+
+
+    /// <summary>
+    /// An entry of a foreign, non-<c>BitstringStatusListEntry</c> <c>type</c> is turned away by
+    /// <c>TryMapStatusEntry</c> before the resolver is reached — this verifier implements no
+    /// algorithm for it and the specification names no error for it, so it stays silent. The
+    /// dedicated coverage for this branch (the "non-BitstringStatusListEntry type" case, plus the
+    /// two other non-mapping shapes) is <c>VcalmVerifierEndpointTests.NonMappingStatusEntryIsSkippedWithoutResolverOrCrash</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task ForeignStatusEntryTypeIsSkippedWithoutWarning()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 66;
+        const string CredentialId = "urn:uuid:foreign-status-type";
+
+        bool resolverInvoked = false;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
+            {
+                resolverInvoked = true;
+
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(null);
+            };
+        }).ConfigureAwait(false);
+
+        VerifiableCredential credential = new()
+        {
+            Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
+            Id = CredentialId,
+            Type = ["VerifiableCredential", "ExampleAlumniCredential"],
+            Issuer = new Issuer { Id = ctx.IssuerDid },
+            ValidFrom = "2023-01-01T00:00:00Z",
+            ValidUntil = "2030-01-01T00:00:00Z",
+            CredentialStatus =
+            [
+                new CredentialStatus
+                {
+                    Id = $"{StatusListId}#{Index.ToString(CultureInfo.InvariantCulture)}",
+                    Type = "NotABitstringStatusEntry",
+                    StatusPurpose = RevocationPurpose,
+                    StatusListIndex = Index.ToString(CultureInfo.InvariantCulture),
+                    StatusListCredential = StatusListId
+                }
+            ],
+            CredentialSubject =
+            [
+                new CredentialSubject
+                {
+                    Id = "did:example:alumni-subject",
+                    AdditionalData = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["alumniOf"] = "The School of Examples"
+                    }
+                }
+            ]
+        };
+        string issueBody = "{\"credential\":" + SerializeCredential(credential) + "}";
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        using JsonDocument verified = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+
+        Assert.IsFalse(resolverInvoked,
+            "A foreign credentialStatus type must be turned away by TryMapStatusEntry before the resolver.");
+        Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        Assert.IsFalse(HasStatusWarning(verified));
+        Assert.IsFalse(HasProblemOfType(verified, StatusVerificationErrorType),
+            "A foreign type establishes no status: this verifier implements no algorithm for it and reports nothing.");
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0's §3.3.1 <c>results.credentialStatus[]</c> item MUST be exactly
+    /// <c>{ value, verified, input }</c> — a message-purpose entry does not widen the wire item; the
+    /// purpose and the message ride the in-process result only.
+    /// </summary>
+    [TestMethod]
+    public async Task MessagePurposeStatusResultWireItemHasExactlyValueVerifiedInputMembers()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 64;
+        const string CredentialId = "urn:uuid:message-purpose-wire-shape";
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
+            {
+                CoreStatusList list = CoreStatusList.Create(
+                    BitstringStatusListCodec.MinimumEntries, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
+                {
+                    StatusList = list,
+                    Purposes = ["message"]
+                });
+            };
+        }).ConfigureAwait(false);
+
+        string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index, statusPurpose: "message");
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        using JsonDocument verified = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+
+        JsonElement statusResults = verified.RootElement
+            .GetProperty(VcalmParameterNames.Results)
+            .GetProperty(VcalmParameterNames.CredentialStatus);
+        Assert.AreEqual(1, statusResults.GetArrayLength());
+
+        JsonElement item = statusResults[0];
+        int memberCount = 0;
+        foreach(JsonProperty _ in item.EnumerateObject())
+        {
+            ++memberCount;
+        }
+
+        Assert.AreEqual(3, memberCount, "The wire item carries exactly value, verified, input (VCALM's MUST).");
+        Assert.IsTrue(item.TryGetProperty(VcalmParameterNames.Value, out _));
+        Assert.IsTrue(item.TryGetProperty(VcalmParameterNames.Verified, out _));
+        Assert.IsTrue(item.TryGetProperty(VcalmParameterNames.Input, out _));
+    }
+
+
+    /// <summary>
+    /// §3.8.1 process-safety: cancellation is not a verification outcome and is never turned
+    /// into a status WARNING. When the resolver observes cancellation, the verify call itself
+    /// cancels rather than returning HTTP 200 with a fabricated status result.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolverObservingCancellationPropagatesRatherThanBecomingWarning()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 65;
+        const string CredentialId = "urn:uuid:status-cancellation";
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
+                throw new OperationCanceledException("The status resolver observed cancellation.");
+        }).ConfigureAwait(false);
+
+        string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index);
+        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        string securedCredentialJson = issued.RootElement
+            .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        string verifyBody = "{\"verifiableCredential\":" + securedCredentialJson
+            + ",\"options\":{\"returnProblemDetails\":true}}";
+
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+            await app.DispatchAtEndpointAsync(
+                ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
+                new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    private static bool HasStatusWarning(JsonDocument response) =>
+        HasProblemOfType(response, VcalmProblemTypes.StatusWarning);
+
+
+    private static bool HasProblemOfType(JsonDocument response, string type)
     {
         if(!response.RootElement.TryGetProperty(VcalmParameterNames.ProblemDetails, out JsonElement problems))
         {
@@ -477,8 +918,8 @@ internal sealed class VcalmStatusEndpointTests
 
         foreach(JsonElement problem in problems.EnumerateArray())
         {
-            if(problem.TryGetProperty(VcalmParameterNames.ProblemType, out JsonElement type)
-                && string.Equals(type.GetString(), VcalmProblemTypes.StatusWarning, StringComparison.Ordinal))
+            if(problem.TryGetProperty(VcalmParameterNames.ProblemType, out JsonElement problemType)
+                && string.Equals(problemType.GetString(), type, StringComparison.Ordinal))
             {
                 return true;
             }
@@ -488,9 +929,9 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
-    //Registers a tenant allowing the issuer / verifier / status roles, wires the default JSON
-    //parsing, the Data Integrity signing (shared by §3.2.1 issuance and §C.1 status-list issuance),
-    //the verification seams (including the status resolver), and the §C.1 / §C.2 / §C.3 storage seams.
+    /// <summary>
+    /// Registers the status service and installs its list-storage delegates.
+    /// </summary>
     private async Task<StatusContext> RegisterStatusServiceAsync(TestHostShell app)
     {
         StatusKeyMaterial material = CreateKeyMaterial();
@@ -506,10 +947,13 @@ internal sealed class VcalmStatusEndpointTests
         string verificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
         string issuerDid = issuerDidDocument.Id!.ToString();
 
-        VerifierKeyMaterial hostMaterial = app.RegisterClient(ClientId, ClientBaseUri, AllRoleCapabilities);
+        VerifierKeyMaterial hostMaterial = await app.RegisterClientAsync(ClientId, ClientBaseUri, AllRoleCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(StatusKeyMaterial.Wrapping(hostMaterial));
 
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         VcalmCredentialIssuance issuance = new()
         {
@@ -523,78 +967,105 @@ internal sealed class VcalmStatusEndpointTests
         //§3.2.1 issuance and §C.1 status-list issuance share the same signing config (§C.1: "the
         //status list credential typically uses the same securing mechanism … as the verifiable
         //credentials it will be linked to.").
-        app.Server.Vcalm().VcalmCredentialIssuance = issuance;
-        app.Server.Vcalm().VcalmStatusListIssuance = issuance;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmCredentialIssuance = issuance;
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmStatusListIssuance = issuance;
+        }).ConfigureAwait(false);
 
-        WireVerificationSeam(app);
+        await WireVerificationSeamAsync(app).ConfigureAwait(false);
 
         //§C.1 / §C.2 status-list store.
-        app.Server.Vcalm().StoreVcalmStatusListAsync = (id, json, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            StatusListStore[id] = json;
+            candidateIntegration.StoreVcalmStatusListAsync = (id, json, _, _) =>
+            {
+                StatusListStore[id] = json;
 
-            //Seed the live decoded list the §C.3 update mutates and the resolver reads, by decoding
-            //the freshly-created (all-zero) encodedList.
-            LiveStatusLists[id] = DecodeStatusList(json);
+                //Seed the live decoded list the §C.3 update mutates and the resolver reads, by decoding
+                //the freshly-created (all-zero) encodedList.
+                LiveStatusLists[id] = DecodeStatusList(json);
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
-        app.Server.Vcalm().LoadVcalmStatusListAsync = (id, _, _) =>
-            ValueTask.FromResult(StatusListStore.GetValueOrDefault(id));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadVcalmStatusListAsync = (id, _, _) =>
+                ValueTask.FromResult(StatusListStore.GetValueOrDefault(id));
+        }).ConfigureAwait(false);
 
         //§C.3 update seam: load the live list named by the entry, set / clear the bit, report 200 /
         //404. NotFound when the status service holds no record for the credential or the list.
-        app.Server.Vcalm().UpdateVcalmCredentialStatusAsync = (credentialId, entry, status, _, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            if(!KnownCredentials.ContainsKey(credentialId)
-                || !LiveStatusLists.TryGetValue(entry.StatusListCredential, out CoreStatusList? list))
+            candidateIntegration.UpdateVcalmCredentialStatusAsync = (credentialId, entry, status, _, _, _) =>
             {
-                return ValueTask.FromResult(VcalmStatusUpdateOutcome.NotFound);
-            }
+                if(!KnownCredentials.ContainsKey(credentialId)
+                    || !LiveStatusLists.TryGetValue(entry.StatusListCredential, out CoreStatusList? list))
+                {
 
-            list.Set(entry.StatusListIndex, (byte)(status ? 1 : 0));
+                    return ValueTask.FromResult(VcalmStatusUpdateOutcome.NotFound);
+                }
 
-            return ValueTask.FromResult(VcalmStatusUpdateOutcome.Updated);
-        };
+                list.Set(entry.StatusListIndex, (byte)(status ? 1 : 0));
+
+                return ValueTask.FromResult(VcalmStatusUpdateOutcome.Updated);
+            };
+        }).ConfigureAwait(false);
 
         //The verifier's status resolver: hand back a fresh copy of the live list the verifier owns
         //and disposes, plus the declared purpose. Returns null when the list is unknown.
-        app.Server.Vcalm().ResolveVcalmStatusListAsync = (entry, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            if(!LiveStatusLists.TryGetValue(entry.StatusListCredential, out CoreStatusList? live))
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, _, _) =>
             {
-                return ValueTask.FromResult<VcalmResolvedStatusList?>(null);
-            }
+                if(!LiveStatusLists.TryGetValue(entry.StatusListCredential, out CoreStatusList? live))
+                {
 
-            CoreStatusList copy = CoreStatusList.FromRaw(live.AsSpan(), StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+                    return ValueTask.FromResult<VcalmResolvedStatusList?>(null);
+                }
 
-            return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
-            {
-                StatusList = copy,
-                Purposes = [RevocationPurpose]
-            });
-        };
+                CoreStatusList copy = CoreStatusList.FromRaw(live.AsSpan(), StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
+                {
+                    StatusList = copy,
+                    Purposes = [RevocationPurpose]
+                });
+            };
+        }).ConfigureAwait(false);
 
         return new StatusContext(hostMaterial.Registration.TenantId.Value, issuerDid, verificationMethodId, material);
     }
 
 
-    private static void WireVerificationSeam(TestHostShell app)
+    /// <summary>
+    /// Installs the verification delegate that resolves credential status for the status-service cases.
+    /// </summary>
+    private static async Task WireVerificationSeamAsync(TestHostShell app)
     {
-        app.Server.Vcalm().VcalmCredentialVerification = new VcalmCredentialVerification
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Resolver = KeyDidResolverSeam,
-            Canonicalize = RdfcCanonicalizer,
-            ContextResolver = ContextResolver,
-            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-            SerializeCredential = SerializeCredential,
-            SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
-            SerializeProofOptions = SerializeProofOptions,
-            Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            MemoryPool = Pool
-        };
+            candidateIntegration.VcalmCredentialVerification = new VcalmCredentialVerification
+            {
+                Resolver = KeyDidResolverSeam,
+                Canonicalize = RdfcCanonicalizer,
+                ContextResolver = ContextResolver,
+                KnownContext = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
+                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                SerializeCredential = SerializeCredential,
+                SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
+                SerializeProofOptions = SerializeProofOptions,
+                Decoder = TestSetup.Base58Decoder,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
     }
 
 
@@ -665,7 +1136,7 @@ internal sealed class VcalmStatusEndpointTests
     private async Task<JsonDocument> VerifyAsync(TestHostShell app, string segment, string securedCredentialJson)
     {
         string verifyBody = "{\"verifiableCredential\":" + securedCredentialJson
-            + ",\"options\":{\"returnProblemDetails\":true}}";
+            + ",\"options\":{\"returnProblemDetails\":true,\"returnResults\":true}}";
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
@@ -684,8 +1155,10 @@ internal sealed class VcalmStatusEndpointTests
 
 
     private static string BuildIssueRequestBodyWithStatus(
-        string issuerDid, string credentialId, int index, string statusPurpose = RevocationPurpose)
+        string issuerDid, string credentialId, int index, string statusPurpose = RevocationPurpose,
+        string? statusListCredential = null)
     {
+        string targetStatusList = statusListCredential ?? StatusListId;
         VerifiableCredential credential = new()
         {
             Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
@@ -698,11 +1171,11 @@ internal sealed class VcalmStatusEndpointTests
             [
                 new CredentialStatus
                 {
-                    Id = $"{StatusListId}#{index.ToString(CultureInfo.InvariantCulture)}",
+                    Id = $"{targetStatusList}#{index.ToString(CultureInfo.InvariantCulture)}",
                     Type = BitstringStatusListConstants.EntryType,
                     StatusPurpose = statusPurpose,
                     StatusListIndex = index.ToString(CultureInfo.InvariantCulture),
-                    StatusListCredential = StatusListId
+                    StatusListCredential = targetStatusList
                 }
             ],
             CredentialSubject =
@@ -721,6 +1194,47 @@ internal sealed class VcalmStatusEndpointTests
         string credentialJson = SerializeCredential(credential);
 
         return "{\"credential\":" + credentialJson + "}";
+    }
+
+
+    //A §C.3 issue body carrying a credentialStatus entry whose type IS BitstringStatusListEntry (the
+    //specification's shape) but whose statusListIndex is missing — distinct from a foreign type,
+    //which TryMapStatusEntry turns away silently.
+    private static string BuildIssueRequestBodyWithMalformedStatusEntry(string issuerDid, string credentialId)
+    {
+        VerifiableCredential credential = new()
+        {
+            Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
+            Id = credentialId,
+            Type = ["VerifiableCredential", "ExampleAlumniCredential"],
+            Issuer = new Issuer { Id = issuerDid },
+            ValidFrom = "2023-01-01T00:00:00Z",
+            ValidUntil = "2030-01-01T00:00:00Z",
+            CredentialStatus =
+            [
+                new CredentialStatus
+                {
+                    Id = $"{StatusListId}#missing-index",
+                    Type = BitstringStatusListConstants.EntryType,
+                    StatusPurpose = RevocationPurpose,
+                    StatusListIndex = null,
+                    StatusListCredential = StatusListId
+                }
+            ],
+            CredentialSubject =
+            [
+                new CredentialSubject
+                {
+                    Id = "did:example:alumni-subject",
+                    AdditionalData = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["alumniOf"] = "The School of Examples"
+                    }
+                }
+            ]
+        };
+
+        return "{\"credential\":" + SerializeCredential(credential) + "}";
     }
 
 

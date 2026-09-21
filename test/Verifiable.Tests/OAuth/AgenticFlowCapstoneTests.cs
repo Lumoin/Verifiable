@@ -329,11 +329,11 @@ internal sealed class AgenticFlowCapstoneTests
 
         //The CIMD resolutions are wire fetches issued mid-dispatch: the client spans dialing the
         //document (and jwks_uri) hosts must sit under the owning AS's server.handle dispatch span.
-        AssertWireFetchUnderDispatchSpan(captured, root, topology.DocumentHost.BaseAddress, topology.Segment1,
+        AssertWireFetchUnderDispatchSpan(captured, root, topology.DocumentHost.BaseAddress, topology.Handle1,
             "AS1's CIMD document resolution must attach under AS1's dispatch span.");
-        AssertWireFetchUnderDispatchSpan(captured, root, topology.JwksHost.BaseAddress, topology.Segment1,
+        AssertWireFetchUnderDispatchSpan(captured, root, topology.JwksHost.BaseAddress, topology.Handle1,
             "AS1's §8.2 jwks_uri discovery must attach under AS1's dispatch span.");
-        AssertWireFetchUnderDispatchSpan(captured, root, topology.DocumentHost.BaseAddress, topology.Segment2,
+        AssertWireFetchUnderDispatchSpan(captured, root, topology.DocumentHost.BaseAddress, topology.Handle2,
             "AS2's CIMD document resolution must attach under AS2's dispatch span.");
     }
 
@@ -803,15 +803,15 @@ internal sealed class AgenticFlowCapstoneTests
 
     /// <summary>
     /// Asserts that at least one HTTP client span dialing <paramref name="contentHostBase"/> is a
-    /// descendant of a <c>server.handle</c> dispatch span whose <c>server.tenant.id</c> tag is
-    /// <paramref name="tenantSegment"/> — the structural proof that the fetch was issued
+    /// descendant of a <c>server.handle</c> dispatch span whose <c>server.tenant.handle</c> tag is
+    /// <paramref name="tenantHandle"/> — the structural proof that the fetch was issued
     /// mid-dispatch by the owning authorization server, inside the same trace.
     /// </summary>
     private static void AssertWireFetchUnderDispatchSpan(
         IReadOnlyList<Activity> capturedActivities,
         Activity root,
         Uri contentHostBase,
-        string tenantSegment,
+        string tenantHandle,
         string message)
     {
         IReadOnlyList<Activity> inTrace = TraceTreeAssertions.FilterByTrace(capturedActivities, root.TraceId);
@@ -826,10 +826,10 @@ internal sealed class AgenticFlowCapstoneTests
             .Where(activity =>
                 string.Equals(activity.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal)
                 && string.Equals(
-                    activity.GetTagItem(ServerTagNames.TenantId)?.ToString(), tenantSegment, StringComparison.Ordinal))
+                    activity.GetTagItem(ServerTagNames.TenantHandle)?.ToString(), tenantHandle, StringComparison.Ordinal))
             .Select(activity => activity.SpanId)];
         Assert.IsGreaterThan(0, dispatchSpanIds.Count,
-            $"No server.handle dispatch span with tenant '{tenantSegment}' was captured in trace '{root.TraceId}'.");
+            $"No server.handle dispatch span with tenant '{tenantHandle}' was captured in trace '{root.TraceId}'.");
 
         bool isUnderDispatch = inTrace.Any(activity =>
             activity.Kind == ActivityKind.Client
@@ -1049,6 +1049,12 @@ internal sealed class AgenticFlowCapstoneTests
 
         public string Segment2 { get; private set; } = null!;
 
+        /// <summary>AS1 stub's exported tenant handle, safe to filter dispatch spans by.</summary>
+        public string Handle1 { get; private set; } = null!;
+
+        /// <summary>AS2 stub's exported tenant handle, safe to filter dispatch spans by.</summary>
+        public string Handle2 { get; private set; } = null!;
+
         public Uri As1Issuer { get; private set; } = null!;
 
         public Uri As2Issuer { get; private set; } = null!;
@@ -1092,6 +1098,9 @@ internal sealed class AgenticFlowCapstoneTests
         }
 
 
+        /// <summary>
+        /// Initializes the host and application state needed by the credential-flow cases before each test.
+        /// </summary>
         private async Task InitializeAsync(CancellationToken cancellationToken)
         {
             DocumentHost = await StaticContentHost.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -1117,7 +1126,7 @@ internal sealed class AgenticFlowCapstoneTests
             As1 = Shell.Host("default");
             As2 = Shell.AddHost(As2HostName, useDistinctCertificate: true);
 
-            ClientRecord stub1 = Shell.RegisterCimdStubClient(
+            ClientRecord stub1 = await Shell.RegisterCimdStubClientAsync(
                 ClientIdentifierUrl,
                 ImmutableHashSet.Create(
                     WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
@@ -1127,35 +1136,40 @@ internal sealed class AgenticFlowCapstoneTests
                     WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
                     WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                     WellKnownCapabilityIdentifiers.OAuthJwksEndpoint),
-                profile: PolicyProfile.Rfc6749WithPkce);
-            stub1 = ApplyStubUpdate(As1, stub1, AugmentAs1Stub(stub1));
+                profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+            stub1 = await ApplyStubUpdateAsync(As1, stub1, AugmentAs1Stub(stub1)).ConfigureAwait(false);
             Segment1 = stub1.TenantId.Value;
+            Handle1 = stub1.TenantHandle!.Value.Value;
 
             //AS2 is truly jwt-bearer-only: the RFC 9068 access-token producer's
             //RequiredCapability is null (an optional feature gate, not a grant-capability
             //proxy — see Rfc9068AccessTokenProducer's remarks), so the jwt-bearer redeem mints
             //an access token without AS2 ever declaring OAuthAuthorizationCode.
-            ClientRecord stub2 = Shell.RegisterCimdStubClientOnHost(
+            ClientRecord stub2 = await Shell.RegisterCimdStubClientOnHostAsync(
                 As2HostName,
                 ClientIdentifierUrl,
                 ImmutableHashSet.Create(
                     WellKnownCapabilityIdentifiers.OAuthJwtBearer,
                     WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                     WellKnownCapabilityIdentifiers.OAuthJwksEndpoint),
-                profile: PolicyProfile.Rfc6749WithPkce);
-            stub2 = ApplyStubUpdate(As2, stub2, AugmentAs2Stub(stub2));
+                profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+            stub2 = await ApplyStubUpdateAsync(As2, stub2, AugmentAs2Stub(stub2)).ConfigureAwait(false);
             Segment2 = stub2.TenantId.Value;
+            Handle2 = stub2.TenantHandle!.Value.Value;
             As2TokenSigningKeyId = stub2.SigningKeys[KeyUsageContext.AccessTokenIssuance].Current[0];
 
             //RFC 9207 emission on the Rfc6749WithPkce baseline (see the class remarks for why the
             //profiles that emit iss by default cannot be used here).
             AuthorizationServerIntegration as1OAuth = As1.Server.OAuth();
-            as1OAuth.ResolvePolicyAsync = async (registration, context, ct) =>
+            await TestHostShell.AlterAsync(As1.Server, candidateIntegration =>
             {
-                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct)
-                    .ConfigureAwait(false);
-                context.SetEmitIssOnRedirect(true);
-            };
+                candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+                {
+                    await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct)
+                        .ConfigureAwait(false);
+                    context.SetEmitIssOnRedirect(true);
+                };
+            }).ConfigureAwait(false);
 
             (OAuthClient as1Client, ClientRegistration as1Registration, Dictionary<string, FlowState> as1FlowStore) =
                 await Shell.CreateOAuthClientAndRegistrationAsync(
@@ -1194,36 +1208,53 @@ internal sealed class AgenticFlowCapstoneTests
                 [DocumentHost.Certificate, JwksHost.Certificate]);
             OutboundTransportDelegate resolverTransport =
                 GuardedHttpClientTransport.BuildSingleHopTransport(ResolverHttpClient);
-            ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-                resolverTransport, new ClientIdMetadataDocumentResolverOptions(), Time);
+            ResolveClientMetadataDelegate resolve = new ClientMetadataResolutionCache(
+                resolverTransport, new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), Time)
+                .ResolveDocumentAsync;
 
             foreach(HostedAuthorizationServer host in new[] { As1, As2 })
             {
                 AuthorizationServerIntegration oauth = host.Server.OAuth();
-                oauth.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-                oauth.ResolveClientMetadataAsync = (clientMetadataUri, context, ct) =>
+                await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
                 {
-                    context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+                    candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
 
-                    return resolve(clientMetadataUri, context, ct);
-                };
+
+                    candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, context, ct) =>
+                    {
+                        context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+
+                        return resolve(clientMetadataUri, context, ct);
+                    };
+                }).ConfigureAwait(false);
             }
 
             //RFC 7523 §3 item 3 accepts the token endpoint URL as an aud value; the
             //OAuthClient.IdJag flows sign their client assertions with exactly that audience.
-            as1OAuth.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
-                additionalAcceptedAudiences: [As1TokenEndpoint.OriginalString]);
-            As2.Server.OAuth().ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
-                additionalAcceptedAudiences: [As2TokenEndpoint.OriginalString]);
+            await TestHostShell.AlterAsync(As1.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
+                    additionalAcceptedAudiences: [As1TokenEndpoint.OriginalString]);
+            }).ConfigureAwait(false);
+            await TestHostShell.AlterAsync(As2.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
+                    additionalAcceptedAudiences: [As2TokenEndpoint.OriginalString]);
+            }).ConfigureAwait(false);
             //Both CIMD documents declare private_key_jwt; the token endpoint now refuses a declared
             //method it does not advertise before any validator runs (RFC 8414, Section 2), so both
             //hosts' advertisements must agree with the documents.
             foreach(HostedAuthorizationServer host in new[] { As1, As2 })
             {
                 AuthorizationServerIntegration authenticationOAuth = host.Server.OAuth();
-                authenticationOAuth.ClientAuthenticationMethodsSupported =
-                    [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-                authenticationOAuth.ClientAssertionSigningAlgorithmsSupported = [algorithm];
+                await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+                {
+                    candidateIntegration.ClientAuthenticationMethodsSupported =
+                        [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+
+
+                    candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [algorithm];
+                }).ConfigureAwait(false);
             }
 
             As1JwksKeys = await FetchJwksKeysAsync(
@@ -1231,13 +1262,21 @@ internal sealed class AgenticFlowCapstoneTests
             As2JwksKeys = await FetchJwksKeysAsync(
                 As2.SharedHttpClient!, As2.HttpBaseAddress!, Segment2, cancellationToken).ConfigureAwait(false);
 
-            as1OAuth.ValidateTokenExchangeTokenAsync = (token, tokenType, registration, context, ct) =>
-                ValidateStep3IdTokenAsync(token, tokenType, registration, ct);
-            as1OAuth.AuthorizeTokenExchangeAsync = (subject, actor, request, registration, context, ct) =>
-                AuthorizeMint(subject, request);
+            await TestHostShell.AlterAsync(As1.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateTokenExchangeTokenAsync = (token, tokenType, registration, context, ct) =>
+                    ValidateStep3IdTokenAsync(token, tokenType, registration, ct);
 
-            As2.Server.OAuth().ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>
-                ValidateJagForRedeemAsync(assertion, registration, ct);
+
+                candidateIntegration.AuthorizeTokenExchangeAsync = (subject, actor, request, registration, context, ct) =>
+                    AuthorizeMint(subject, request);
+            }).ConfigureAwait(false);
+
+            await TestHostShell.AlterAsync(As2.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>
+                    ValidateJagForRedeemAsync(assertion, registration, ct);
+            }).ConfigureAwait(false);
 
             Rs1 = new TestResourceServerShell(
                 trustedIssuer: As1Issuer,
@@ -1455,12 +1494,16 @@ internal sealed class AgenticFlowCapstoneTests
         };
 
 
-        private static ClientRecord ApplyStubUpdate(
-            HostedAuthorizationServer host, ClientRecord original, ClientRecord updated)
+        /// <summary>
+        /// Conditionally replaces the loaded stub and advances its revision before notification under
+        /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">section 4.1</see>.
+        /// </summary>
+        private static async Task<ClientRecord> ApplyStubUpdateAsync(
+                HostedAuthorizationServer host, ClientRecord original, ClientRecord updated)
         {
-            host.Registrations[updated.TenantId.Value] = updated;
-            host.Registrations[updated.ClientId] = updated;
-            host.Server.UpdateClient(original, updated, []);
+
+
+            updated = await host.UpdateClientAsync(original, updated, []).ConfigureAwait(false);
 
             return updated;
         }
@@ -1774,18 +1817,21 @@ internal sealed class AgenticFlowCapstoneTests
                     ValueTask.FromResult<FlowState?>(null),
                 parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
                 parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-                parseAuthorizationServerMetadataAsync: (body, ct) =>
-                    throw new NotImplementedException("The capstone pre-resolves metadata; the parser is not exercised."),
                 parseRegistrationResponseAsync: (body, ct) =>
                     throw new NotImplementedException("The capstone does not exercise dynamic registration."),
                 resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                    ValueTask.FromResult(metadata),
+                    ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                    {
+                        Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                        Metadata = metadata
+                    }),
                 resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
                 base64UrlEncoder: TestSetup.Base64UrlEncoder,
                 memoryPool: BaseMemoryPool.Shared,
                 timeProvider: timeProvider,
                 fillEntropy: fillEntropy,
-                generateIdentifierAsync: DefaultIdentifierGenerator.For(timeProvider, fillEntropy, BaseMemoryPool.Shared));
+                generateIdentifierAsync: DefaultIdentifierGenerator.For(timeProvider, fillEntropy, BaseMemoryPool.Shared),
+                outboundFetchPolicy: TestHostShell.LoopbackOutboundFetchPolicy);
 
             ClientRegistration registration = new()
             {

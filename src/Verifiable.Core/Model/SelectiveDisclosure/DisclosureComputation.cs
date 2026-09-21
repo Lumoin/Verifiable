@@ -355,7 +355,7 @@ public sealed class DisclosureComputation<TCredential>
 
         using var activity = ActivitySourceInstance.StartActivity("ComputeDisclosure");
         var startTime = TimeProvider.GetUtcNow();
-        var stopwatch = Stopwatch.StartNew();
+        var startTimestamp = TimeProvider.GetTimestamp();
 
         var evaluationRecords = new List<CredentialEvaluationRecord>();
         var latticeRecords = new List<LatticeComputationRecord>();
@@ -363,7 +363,7 @@ public sealed class DisclosureComputation<TCredential>
         var decisions = new List<CredentialDisclosureDecision<TCredential>>();
         var satisfiedRequirements = new HashSet<string>();
 
-        foreach(var match in matches)
+    loop_match: foreach(var match in matches)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -416,7 +416,6 @@ public sealed class DisclosureComputation<TCredential>
             var currentPaths = latticeResult.SelectedClaims;
             bool currentSatisfies = latticeResult.SatisfiesRequirements;
             IReadOnlySet<CredentialPath>? currentConflicts = latticeResult.ConflictingClaims;
-            bool policyRejected = false;
 
             foreach(var assessor in PolicyAssessors)
             {
@@ -498,8 +497,7 @@ public sealed class DisclosureComputation<TCredential>
 
                 if(!outcome.Approved)
                 {
-                    policyRejected = true;
-                    break;
+                    continue loop_match;
                 }
 
                 if(clamp is not null)
@@ -507,11 +505,6 @@ public sealed class DisclosureComputation<TCredential>
                     currentPaths = clamp.ClampedClaims;
                     currentSatisfies = match.RequiredPaths.IsSubsetOf(currentPaths);
                 }
-            }
-
-            if(policyRejected)
-            {
-                continue;
             }
 
             var decision = new CredentialDisclosureDecision<TCredential>
@@ -562,7 +555,7 @@ public sealed class DisclosureComputation<TCredential>
             }
         }
 
-        stopwatch.Stop();
+        var duration = TimeProvider.GetElapsedTime(startTimestamp);
 
         //Layer 6: Capture OTel trace context for the decision record.
         string? traceParent = null;
@@ -587,7 +580,7 @@ public sealed class DisclosureComputation<TCredential>
             TraceState = traceState,
             SpanId = spanId,
             Timestamp = startTime,
-            Duration = stopwatch.Elapsed,
+            Duration = duration,
             CandidateCount = matches.Count,
             Evaluations = evaluationRecords,
             LatticeComputations = latticeRecords,

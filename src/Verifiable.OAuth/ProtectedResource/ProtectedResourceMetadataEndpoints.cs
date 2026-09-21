@@ -87,7 +87,7 @@ public static class ProtectedResourceMetadataEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;

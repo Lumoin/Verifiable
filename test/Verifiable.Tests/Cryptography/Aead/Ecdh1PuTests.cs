@@ -387,4 +387,18 @@ internal sealed class Ecdh1PuTests
 
         return new SymmetricKeyMemory(owner, tag);
     }
+
+
+    /// <summary>
+    /// <see cref="KeyAgreementFunctionRegistry{TDiscriminator1, TDiscriminator2}.IsInitialized"/> is
+    /// <see langword="true"/> once <c>TestSetup</c>'s module initializer has run
+    /// <see cref="KeyAgreementFunctionRegistry{TDiscriminator1, TDiscriminator2}.Initialize"/>. The
+    /// process-wide <c>[ModuleInitializer]</c> runs before any test, so only the true-after state is
+    /// observable here without disturbing the other tests' process-wide registration.
+    /// </summary>
+    [TestMethod]
+    public void IsInitializedIsTrueAfterProcessWideSetup()
+    {
+        Assert.IsTrue(KeyAgreementFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized);
+    }
 }

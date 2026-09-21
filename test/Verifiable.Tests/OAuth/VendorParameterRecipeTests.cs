@@ -49,9 +49,9 @@ internal sealed class VendorParameterRecipeTests
     public async Task AdditionalParameterReachesTheAuthorizationServerOverHttpWireAndIsValidated()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterClient(app);
-        WireClientAuthenticationRequiringAdditionalParameter(app);
-        WireAcceptingAssertionValidator(app);
+        using VerifierKeyMaterial material = await RegisterClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationRequiringAdditionalParameterAsync(app).ConfigureAwait(false);
+        await WireAcceptingAssertionValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -85,9 +85,9 @@ internal sealed class VendorParameterRecipeTests
     public async Task RequestWithoutTheAdditionalParameterFailsTheDeploymentSpecificAuthenticationCheck()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterClient(app);
-        WireClientAuthenticationRequiringAdditionalParameter(app);
-        WireAcceptingAssertionValidator(app);
+        using VerifierKeyMaterial material = await RegisterClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationRequiringAdditionalParameterAsync(app).ConfigureAwait(false);
+        await WireAcceptingAssertionValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -109,8 +109,8 @@ internal sealed class VendorParameterRecipeTests
 
 
     /// <summary>Registers the confidential client allowed the <see cref="WellKnownCapabilityIdentifiers.OAuthJwtBearer"/> capability.</summary>
-    private static VerifierKeyMaterial RegisterClient(TestHostShell app) =>
-        app.RegisterDpopClient(
+    private static async Task<VerifierKeyMaterial> RegisterClientAsync(TestHostShell app) =>
+        await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -119,7 +119,7 @@ internal sealed class VendorParameterRecipeTests
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthJwtBearer,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
 
     /// <summary>
@@ -128,19 +128,25 @@ internal sealed class VendorParameterRecipeTests
     /// would implement its own vendor-flavored policy without any library change, since
     /// <see cref="ValidateClientCredentialsDelegate"/> receives the full posted field set.
     /// </summary>
-    private static void WireClientAuthenticationRequiringAdditionalParameter(TestHostShell app) =>
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal)
-                && fields.TryGetValue("requested_token_use", out string? tokenUse)
-                && string.Equals(tokenUse, "on_behalf_of", StringComparison.Ordinal));
+    private static async Task WireClientAuthenticationRequiringAdditionalParameterAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal)
+                    && fields.TryGetValue("requested_token_use", out string? tokenUse)
+                    && string.Equals(tokenUse, "on_behalf_of", StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
 
     /// <summary>Wires an assertion-validation seam that accepts any assertion and returns the fixture subject and granted scope.</summary>
-    private static void WireAcceptingAssertionValidator(TestHostShell app) =>
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(
-                    new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope });
+    private static async Task WireAcceptingAssertionValidatorAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(
+                        new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope });
+        }).ConfigureAwait(false);
 }

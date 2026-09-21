@@ -132,10 +132,9 @@
          System.Security.Cryptography.Pkcs assembly into every project's closure (MSB3277). -->
     <PackageReleaseNotes>See the full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.md.</PackageReleaseNotes>
 
-    <!-- The analysis level is pinned to the rule set this tree builds clean at. Raising it (11.0) is
-         its own lane, taken with the full diagnostic inventory in hand. -->
-    <AnalysisLevel>10.0</AnalysisLevel>
+    <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
   </PropertyGroup>

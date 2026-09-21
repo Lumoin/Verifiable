@@ -31,9 +31,7 @@ internal sealed class Fido2RegistrationVerifierPropertyTests
     /// <see cref="Fido2RegistrationVerifierTests.ValidNoneAttestationRegistrationIsAcceptableWithPopulatedCredentialRecord"/>.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the verification call fully completes, so the using declarations' dispose runs strictly after it returns.")]
-    public void ValidNoneAttestationRegistrationsAlwaysAcceptableAcrossRandomChallenges()
+    public async Task ValidNoneAttestationRegistrationsAlwaysAcceptableAcrossRandomChallenges()
     {
         //The public key's content is immaterial to this property — only its P-256 shape (kty/curve)
         //is observed by the verifier below — so the shared provider material stands in for a freshly
@@ -50,10 +48,10 @@ internal sealed class Fido2RegistrationVerifierPropertyTests
             y: EllipticCurveUtilities.SliceYCoordinate(uncompressedPoint).ToArray());
         byte[] rpIdHash = Fido2TestVectors.CreateRpIdHash();
 
-        (from length in Gen.Int[1, 32]
-         from seed in Gen.Int[0, int.MaxValue]
-         select (length, seed))
-        .Sample(sample =>
+        await (from length in Gen.Int[1, 32]
+               from seed in Gen.Int[0, int.MaxValue]
+               select (length, seed))
+        .SampleAsync(async sample =>
         {
             string challenge = BuildBase64UrlChallenge(sample.length, sample.seed);
             AuthenticatorData authenticatorData = BuildRegistrationAuthenticatorData(rpIdHash, Guid.NewGuid(), credentialPublicKey, [0x01, 0x02, 0x03], out byte[] authDataBytes);
@@ -67,13 +65,13 @@ internal sealed class Fido2RegistrationVerifierPropertyTests
             SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
                 (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-            Fido2RegistrationOutcome outcome = Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
-                .AsTask().GetAwaiter().GetResult();
+            Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
+                .AsTask();
 
             using Fido2CredentialRecord? record = outcome.CredentialRecord;
 
             return outcome.IsAcceptable && record is not null;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

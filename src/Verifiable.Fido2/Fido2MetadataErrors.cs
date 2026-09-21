@@ -156,7 +156,7 @@ public static class Fido2MetadataErrors
 
     /// <summary>
     /// The verification request declared <see cref="MetadataBlobRevocationPolicy.Required"/>, but no
-    /// <see cref="CheckCertificateRevocationStatusAsyncDelegate"/> is wired to
+    /// <see cref="Verifiable.Cryptography.Pki.CheckCertificateRevocationStatusAsyncDelegate"/> is wired to
     /// <see cref="MetadataBlobVerification.Build"/>.
     /// </summary>
     /// <remarks>

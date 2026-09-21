@@ -254,13 +254,24 @@ public static class BearerTokenValidation
                     "Access token signature verification failed."));
             }
 
-            //5. Parse the payload now that the signature is verified.
+            //5. Parse the payload now that the signature is verified. RFC 7519 §4: the Claim
+            //   Names within a JWT Claims Set MUST be unique. Gate the decoded payload for
+            //   well-formedness before it reaches the wired deserializer, so a duplicate claim
+            //   name is refused here rather than escaping the deserializer as an unhandled
+            //   exception.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
+            {
+                return (null, ServerHttpResponse.Unauthorized(
+                    OAuthErrors.InvalidToken,
+                    "Access token payload is not well-formed JSON, or carries a duplicate claim name."));
+            }
+
             JwtPayload payload;
             try
             {
                 payload = new(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
             }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+            catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
             {
                 return (null, ServerHttpResponse.Unauthorized(
                     OAuthErrors.InvalidToken,

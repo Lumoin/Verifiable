@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Json;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -82,7 +83,7 @@ internal sealed class WebPlusUpdateRulePropertyTests
     /// </summary>
     [TestMethod]
     public void NoWellFormedRuleIsSatisfiedByAnEmptyKeySet() =>
-        GenRuleOfDepth(3).Sample(rule => !IsSatisfiedByEmptyKeySet(rule));
+        GenRuleOfDepth(3).Sample(rule => !IsSatisfiedByEmptyKeySet(rule), threads: CsCheckSampling.Threads);
 
 
     //Evaluates a rule against the empty key set. Evaluation completes synchronously — a hashed-key leaf iterates
@@ -115,7 +116,7 @@ internal sealed class WebPlusUpdateRulePropertyTests
             {
                 return true;
             }
-        });
+        }, threads: CsCheckSampling.Threads);
 
 
     //A bounded generator of well-formed rule trees: a leaf at depth 0, otherwise a leaf or a non-empty

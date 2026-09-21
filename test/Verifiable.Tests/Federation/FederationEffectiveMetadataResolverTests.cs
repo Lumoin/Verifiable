@@ -18,6 +18,80 @@ internal sealed class FederationEffectiveMetadataResolverTests
     private static string[] ExpectedTrimmedToAuthCode { get; } = ["authorization_code"];
 
 
+    /// <summary>
+    /// OpenID Federation 1.0 §8.3: the Resolve Request's <c>entity_type</c> parameter is
+    /// "OPTIONAL. A specific Entity Type to resolve... If this parameter is not present, then
+    /// all Entity Types are returned." A subject declaring two Entity Types returns both, in
+    /// ordinal order of the identifier.
+    /// </summary>
+    [TestMethod]
+    public async Task ReadDeclaredEntityTypesReturnsEveryDeclaredTypeInOrdinalOrder()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://subject-declared-types.example.com"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://anchor-declared-types.example.com"));
+
+        MintedStatement subjectEc = await FederationTestRing.MintEntityConfigurationAsync(
+            subject, now, now.AddHours(1),
+            extraClaims: new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownFederationClaimNames.Metadata] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value] =
+                        new Dictionary<string, object>(StringComparer.Ordinal) { ["scope"] = "openid" },
+                    [WellKnownEntityTypeIdentifiers.OpenIdProvider.Value] =
+                        new Dictionary<string, object>(StringComparer.Ordinal) { ["issuer"] = "https://subject-declared-types.example.com" },
+                },
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        MintedStatement anchorAboutSubject = await FederationTestRing.MintSubordinateStatementAsync(
+            anchor, subject, now, now.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        MintedStatement anchorEc = await FederationTestRing.MintEntityConfigurationAsync(
+            anchor, now, now.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        TrustChain chain = new()
+        {
+            Statements = [subjectEc.Statement, anchorAboutSubject.Statement, anchorEc.Statement],
+        };
+
+        IReadOnlyList<EntityTypeIdentifier> declared =
+            FederationEffectiveMetadataResolver.ReadDeclaredEntityTypes(chain);
+
+        Assert.HasCount(2, declared);
+        Assert.AreEqual(WellKnownEntityTypeIdentifiers.OpenIdProvider, declared[0],
+            "openid_provider sorts before openid_relying_party ordinally.");
+        Assert.AreEqual(WellKnownEntityTypeIdentifiers.OpenIdRelyingParty, declared[1]);
+    }
+
+
+    /// <summary>
+    /// A subject that declares no Entity Types (no <c>metadata</c> claim at all) returns an
+    /// empty list — there is nothing to resolve, distinct from a policy failure.
+    /// </summary>
+    [TestMethod]
+    public async Task ReadDeclaredEntityTypesReturnsEmptyWhenSubjectDeclaresNone()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://subject-no-declared-types.example.com"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://anchor-no-declared-types.example.com"));
+
+        MintedChain chain = await FederationTestRing.BuildDirectChainAsync(
+            subject, anchor, now, now.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<EntityTypeIdentifier> declared =
+            FederationEffectiveMetadataResolver.ReadDeclaredEntityTypes(chain.Chain);
+
+        Assert.IsEmpty(declared);
+    }
+
+
     [TestMethod]
     public async Task ReturnsNullWhenSubjectDoesNotDeclareEntityType()
     {
@@ -30,7 +104,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
         //Subject EC has no metadata claim at all.
         MintedChain chain = await FederationTestRing.BuildDirectChainAsync(
             subject, anchor, now, now.AddHours(1),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         MetadataPolicyApplyResult? result = await FederationEffectiveMetadataResolver.ResolveAsync(
             chain.Chain,

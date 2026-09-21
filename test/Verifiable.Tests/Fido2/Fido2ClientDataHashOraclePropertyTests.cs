@@ -2,6 +2,7 @@ using CsCheck;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -28,6 +29,6 @@ internal sealed class Fido2ClientDataHashOraclePropertyTests
             byte[] expected = SHA256.HashData(clientDataJson);
 
             Assert.IsTrue(hash.AsReadOnlySpan().SequenceEqual(expected));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

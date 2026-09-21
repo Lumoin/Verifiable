@@ -58,8 +58,8 @@ internal sealed class SiopFlowIntegrationTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         //=== Step 1: the RP prepares the transaction and learns the handle to echo as state. ===
@@ -129,8 +129,8 @@ internal sealed class SiopFlowIntegrationTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         string requestHandle = await host.HandleSiopRequestPreparationAsync(

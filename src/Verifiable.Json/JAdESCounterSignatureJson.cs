@@ -81,6 +81,12 @@ public static class JAdESCounterSignatureJson
             {
                 JsonValueKind.String => Encoding.ASCII.GetBytes(value.GetString() ?? string.Empty),
                 JsonValueKind.Object => Encoding.UTF8.GetBytes(value.GetRawText()),
+                JsonValueKind.Undefined => [],
+                JsonValueKind.Array => [],
+                JsonValueKind.Number => [],
+                JsonValueKind.True => [],
+                JsonValueKind.False => [],
+                JsonValueKind.Null => [],
                 _ => []
             };
 

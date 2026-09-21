@@ -7,6 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
@@ -53,6 +54,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     public ResourceServerIntegration Integration { get; }
     public VerificationDelegate VerifySignature { get; }
 
+
     /// <summary>
     /// The scope a token must carry to reach <c>/protected</c>, or
     /// <see langword="null"/> when the host performs no scope enforcement.
@@ -61,6 +63,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// <c>scope</c> attribute naming this value.
     /// </summary>
     public string? RequiredScope { get; }
+
 
     /// <summary>
     /// The <c>authorization_servers</c> issuer identifiers the RFC 9728
@@ -72,6 +75,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
 
     public Uri? HttpBaseAddress { get; private set; }
 
+
     /// <summary>
     /// The resource server's own identity — the RFC 9728 §1.2 <c>resource</c>
     /// identifier the metadata document carries and the §3.3 resource-match
@@ -79,6 +83,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// once <see cref="StartHttpHostAsync"/> has run.
     /// </summary>
     public Uri? ResourceIdentity { get; private set; }
+
 
     /// <summary>
     /// The §3 path-inserted metadata URL derived from
@@ -89,8 +94,10 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// </summary>
     public Uri? MetadataUrl { get; private set; }
 
-    /// <summary>The self-signed leaf certificate the HTTPS listener presents once <see cref="StartHttpHostAsync"/> has run; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient"/>.</summary>
+
+    /// <summary>The self-signed leaf certificate the HTTPS listener presents once <see cref="StartHttpHostAsync"/> has run; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.</summary>
     public X509Certificate2? HttpCertificate { get; private set; }
+
 
     /// <summary>
     /// The shipped RS-side DPoP replay tracker (<see cref="InMemoryDpopReplayCache"/>). Tests inspect
@@ -186,7 +193,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         Uri resourceIdentity = new(baseAddress.GetLeftPart(UriPartial.Authority));
         Uri metadataUrl = WellKnownPaths.OAuthProtectedResource.ComputeUri(resourceIdentity.OriginalString);
 
-        metadataServer = BuildMetadataServer(resourceIdentity);
+        metadataServer = await BuildMetadataServerAsync(resourceIdentity).ConfigureAwait(false);
         application.MetadataEndpoint = new ResourceServerMetadataEndpoint(metadataServer, metadataUrl);
 
         webApplication = app;
@@ -211,7 +218,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// <see cref="AuthorizationServerIntegration.ContributeProtectedResourceMetadataAsync"/>
     /// seam, exactly as an application would supply them.
     /// </summary>
-    private EndpointServer BuildMetadataServer(Uri resourceIdentity)
+    private async Task<EndpointServer> BuildMetadataServerAsync(Uri resourceIdentity)
     {
         ClientRecord registration = new()
         {
@@ -255,6 +262,11 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             //host never runs them.
             DeleteFlowStateAsync = (tenantId, flowId, ctx, ct) =>
                 ValueTask.CompletedTask,
+            //Stateless metadata dispatch never reads a grant either; wired only to satisfy
+            //AuthorizationServerIntegration.Validate() for the same reason as DeleteFlowStateAsync
+            //above.
+            LoadGrantFlowStatesAsync = (tenantId, grantFlowId, ctx, ct) =>
+                ValueTask.FromResult<IReadOnlyList<(string FlowId, FlowState State, int StepCount)>>([]),
 
             ResolvePolicyAsync = (reg, ctx, ct) =>
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)reg, ctx, ct),
@@ -279,6 +291,25 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
                     ScopesSupported = requiredScope is not null ? [requiredScope] : null,
                     BearerMethodsSupported = [BearerMethodValues.Header]
                 }),
+            Cryptography = new AuthorizationServerCryptography
+            {
+                SigningKeyResolver = (_, _, _, _) => ValueTask.FromResult<PrivateKeyMemory?>(null),
+                VerificationKeyResolver = (_, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null)
+            },
+            Codecs = new AuthorizationServerCodecs
+            {
+                Encoder = TestSetup.Base64UrlEncoder,
+                Decoder = TestSetup.Base64UrlDecoder,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                    (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                JwtPayloadSerializer = static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                    (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                JwtHeaderDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Header JSON parsed to null."),
+                JwtPayloadDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Payload JSON parsed to null.")
+            },
             MemoryPool = BaseMemoryPool.Shared
         };
 
@@ -296,7 +327,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         };
 
         server.AddIntegration(integration);
-        server.Validate();
+        await server.RequestAlterationAsync(_ => { }).ConfigureAwait(false);
 
         return server;
     }

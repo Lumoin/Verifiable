@@ -16,7 +16,7 @@ namespace Verifiable.Tests.DidComm;
 
 /// <summary>
 /// Anchors the DIDComm v2.1 authcrypt UNPACK (decrypt) path
-/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>)
+/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, Verifiable.Cryptography.Aead.AuthenticatedKeyAgreementDecryptDelegate, Verifiable.Cryptography.Aead.AuthenticatedKeyDerivationDelegate, Verifiable.Cryptography.Aead.KeyUnwrapDelegate, Verifiable.Cryptography.Aead.AeadDecryptDelegate, BaseMemoryPool, JwtClaimsDeserializer?, System.Func{System.ReadOnlySpan{byte}, System.Collections.Generic.IReadOnlyDictionary{string, object}}?, DidCommEncryptedHeaderPolicy, System.Threading.CancellationToken)"/>)
 /// to the DIDComm Messaging v2.1 Appendix C.3 example 4 vector: ECDH-1PU over X25519 with A256CBC-HS512,
 /// sent from <c>did:example:alice#key-x25519-1</c> (the <c>skid</c>) to three of Bob's <c>keyAgreement</c>
 /// keys. Each recipient decrypts with Bob's Appendix A.2 static private key and MUST recover the

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth.Dpop;
 
 namespace Verifiable.Tests.OAuth;
@@ -12,12 +13,7 @@ namespace Verifiable.Tests.OAuth;
 /// </summary>
 internal static class DpopTestSupport
 {
-    public static DpopJwsPartSerializer Serializer { get; } = new()
-    {
-        SerializeHeader = SerializeHeader,
-        SerializePayload = SerializePayload,
-        EncodePart = EncodeDictionaryPart
-    };
+    public static DpopJwsPartSerializer Serializer { get; } = DpopJwsPartSerializerJson.Default;
 
 
     public static DpopJwsPartParser Parser { get; } = new()
@@ -25,49 +21,6 @@ internal static class DpopTestSupport
         ParseHeader = ParseHeaderJson,
         ParseClaims = ParseClaimsJson
     };
-
-
-    public static IReadOnlyDictionary<string, object> SerializeHeader(DpopProofHeader header)
-    {
-        Dictionary<string, object> dict = new(StringComparer.Ordinal)
-        {
-            [WellKnownJwkMemberNames.Alg] = header.Alg,
-            [WellKnownJoseHeaderNames.Typ] = header.Typ,
-            [WellKnownJoseHeaderNames.Jwk] = ToObjectDictionary(header.Jwk)
-        };
-        return dict;
-    }
-
-
-    public static IReadOnlyDictionary<string, object> SerializePayload(DpopProofClaims claims)
-    {
-        Dictionary<string, object> dict = new(StringComparer.Ordinal)
-        {
-            [WellKnownJwtClaimNames.Htm] = claims.Htm,
-            [WellKnownJwtClaimNames.Htu] = claims.Htu,
-            [WellKnownJwtClaimNames.Iat] = claims.Iat.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Jti] = claims.Jti
-        };
-        if(claims.Nonce is not null)
-        {
-            dict[WellKnownJwtClaimNames.Nonce] = claims.Nonce;
-        }
-        if(claims.Ath is not null)
-        {
-            dict[WellKnownJwtClaimNames.Ath] = claims.Ath;
-        }
-        return dict;
-    }
-
-
-    public static TaggedMemory<byte> EncodeDictionaryPart(IReadOnlyDictionary<string, object> part)
-    {
-        Dictionary<string, object> dict = part is Dictionary<string, object> d
-            ? d
-            : new(part);
-        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(dict);
-        return new TaggedMemory<byte>(bytes, BufferTags.Json);
-    }
 
 
     public static DpopProofHeader ParseHeaderJson(ReadOnlyMemory<byte> bytes)
@@ -129,16 +82,5 @@ internal static class DpopTestSupport
             Nonce = nonce,
             Ath = ath
         };
-    }
-
-
-    private static Dictionary<string, object> ToObjectDictionary(IReadOnlyDictionary<string, string> source)
-    {
-        Dictionary<string, object> dict = new(source.Count, StringComparer.Ordinal);
-        foreach(KeyValuePair<string, string> entry in source)
-        {
-            dict[entry.Key] = entry.Value;
-        }
-        return dict;
     }
 }

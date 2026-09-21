@@ -1,4 +1,5 @@
 using System.Buffers;
+using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.DidComm;
 
@@ -68,7 +69,7 @@ public enum AttachmentResolutionSource
 /// <para>
 /// Mint-only: the constructor is <see langword="private"/> and the factories are
 /// <see langword="internal"/>, so a resolved result can only originate from this library's resolver path.
-/// Mirrors <see cref="ForwardUnpackResult"/>.
+/// Mirrors <see cref="Verifiable.DidComm.Routing.ForwardUnpackResult"/>.
 /// </para>
 /// <para>
 /// Possession of a resolved result IS the proof the payload passed the access-form precedence and — for a
@@ -89,7 +90,8 @@ public sealed class AttachmentResolutionResult: IDisposable
         int payloadLength,
         AttachmentResolutionSource source,
         Uri? resolvedFrom,
-        AttachmentResolutionError error)
+        AttachmentResolutionError error,
+        HttpCacheFreshness freshness)
     {
         IsResolved = isResolved;
         this.PayloadOwner = payloadOwner;
@@ -97,6 +99,7 @@ public sealed class AttachmentResolutionResult: IDisposable
         Source = source;
         ResolvedFrom = resolvedFrom;
         Error = error;
+        Freshness = freshness;
     }
 
 
@@ -123,6 +126,15 @@ public sealed class AttachmentResolutionResult: IDisposable
     /// <summary>The reason resolution failed, or <see cref="AttachmentResolutionError.None"/> when it succeeded.</summary>
     public AttachmentResolutionError Error { get; }
 
+    /// <summary>
+    /// The freshness the fetched body's response headers imply, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>, when
+    /// <see cref="Source"/> is <see cref="AttachmentResolutionSource.Fetched"/>. Left at its default value
+    /// — not storable, zero lifetime — for an inline payload or a failed resolution, so a caller cannot
+    /// infer a cacheable lifetime for content that was never fetched over HTTP.
+    /// </summary>
+    public HttpCacheFreshness Freshness { get; }
+
 
     //Mints a resolved result owning the inline payload buffer. Internal so only the library's resolver path
     //can produce one.
@@ -136,12 +148,15 @@ public sealed class AttachmentResolutionResult: IDisposable
             payloadLength,
             AttachmentResolutionSource.Inline,
             resolvedFrom: null,
-            AttachmentResolutionError.None);
+            AttachmentResolutionError.None,
+            freshness: default);
     }
 
 
-    //Mints a resolved result owning a fetched payload buffer, recording the link it was fetched from.
-    internal static AttachmentResolutionResult ResolvedFetched(IMemoryOwner<byte> payloadOwner, int payloadLength, Uri resolvedFrom)
+    //Mints a resolved result owning a fetched payload buffer, recording the link it was fetched from and the
+    //freshness its response headers imply.
+    internal static AttachmentResolutionResult ResolvedFetched(
+        IMemoryOwner<byte> payloadOwner, int payloadLength, Uri resolvedFrom, HttpCacheFreshness freshness)
     {
         ArgumentNullException.ThrowIfNull(payloadOwner);
         ArgumentNullException.ThrowIfNull(resolvedFrom);
@@ -152,7 +167,8 @@ public sealed class AttachmentResolutionResult: IDisposable
             payloadLength,
             AttachmentResolutionSource.Fetched,
             resolvedFrom,
-            AttachmentResolutionError.None);
+            AttachmentResolutionError.None,
+            freshness);
     }
 
 
@@ -165,7 +181,8 @@ public sealed class AttachmentResolutionResult: IDisposable
             payloadLength: 0,
             AttachmentResolutionSource.Inline,
             resolvedFrom: null,
-            error);
+            error,
+            freshness: default);
     }
 
 

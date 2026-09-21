@@ -8,9 +8,9 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.JCose;
 
 /// <summary>
-/// Smoke-level wiring tests for the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> overloads:
+/// Smoke-level wiring tests for the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(System.ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, Verifiable.Cryptography.PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, System.ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/> overloads:
 /// the plumbing that composes the shared B-B core with
-/// <see cref="Verifiable.Cryptography.Pki.CBAdESLevelRules"/> and the async token-imprint pass, per
+/// <see cref="Verifiable.JCose.CBAdESLevelRules"/> and the async token-imprint pass, per
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
 /// ETSI TS 119 152-1 V1.1.1</see>. Exhaustive level-rule and token-imprint-binding coverage (positive and
 /// negative sigTst/adoTst/sigRTst/rfsTst/arcTst legs, the valData service disjunction, CB-A.1.1-30, CB-A.1.1-02)

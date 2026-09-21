@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 /// Drives <c>TPM2_NV_ReadPublic()</c> (TPM 2.0 Library Part 3, clause 31.6) against the in-house behavioural
 /// <see cref="TpmSimulator"/> - entirely in-process, with no external assets - through the same production
 /// command path production code uses (<see cref="TpmCommandExecutor"/> and
-/// <see cref="TpmDeviceExtensions.NvReadPublicAsync(uint, System.Threading.CancellationToken)"/>).
+/// <see cref="Verifiable.Tpm.Extensions.Nv.TpmDeviceExtensions.extension(TpmDevice).NvReadPublicAsync(uint, CancellationToken)"/>).
 /// </summary>
 /// <remarks>
 /// <para>

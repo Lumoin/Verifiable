@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
+using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -13,15 +14,38 @@ using Verifiable.JCose;
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
 /// <summary>
-/// Resolves an issuer's public key from its identifier.
-/// The application provides the implementation based on its trust framework
-/// (e.g., JWKS endpoint, OpenID Federation, X.509 trust list).
+/// Resolves an issuer's public key from the Issuer-signed JWT's own header and claims, per
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.5">SD-JWT
+/// VC draft-19, Section 2.5</see>'s two key discovery and validation mechanisms — JWT VC Issuer
+/// Metadata (keyed by <paramref name="keyId"/>) and Inline X.509 Certificates
+/// (<paramref name="x5c"/>). The application provides the implementation, composing the library's own
+/// pieces for either mechanism — <c>Verifiable.OAuth.Server.Pipeline.JwtVcIssuerMetadataDocuments</c>
+/// for the first, <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdJwtX5cTrustResolver"/> for the
+/// second — or its own trust framework (an OpenID Federation resolution, a pinned key list) entirely.
 /// </summary>
 /// <param name="issuerId">The <c>iss</c> claim from the credential.</param>
+/// <param name="keyId">
+/// The Issuer-signed JWT's <c>kid</c> header (RFC 7515 §4.1.4), or <see langword="null"/> when the
+/// header carries none.
+/// </param>
+/// <param name="x5c">
+/// The Issuer-signed JWT's <c>x5c</c> header (RFC 7515 §4.1.6) — the base64-encoded DER certificate
+/// chain, leaf first — or <see langword="null"/> when the header carries none.
+/// </param>
+/// <param name="context">
+/// The per-call context an implementation that fetches JWT VC Issuer Metadata polices its outbound
+/// request through.
+/// </param>
+/// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>
 /// The issuer's public key, or <see langword="null"/> if the issuer is not trusted.
 /// </returns>
-public delegate PublicKeyMemory? ResolveIssuerKeyDelegate(string issuerId);
+public delegate ValueTask<PublicKeyMemory?> ResolveIssuerKeyDelegate(
+    string issuerId,
+    string? keyId,
+    IReadOnlyList<string>? x5c,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
 
 
 /// <summary>
@@ -42,8 +66,8 @@ public delegate PublicKeyMemory? ResolveIssuerKeyDelegate(string issuerId);
 /// <list type="number">
 ///   <item><description>Parse SD-JWT wire format via <see cref="ParseSdJwtTokenDelegate"/>.</description></item>
 ///   <item><description>Base64url-decode the issuer JWT payload segment.</description></item>
-///   <item><description>Extract <c>iss</c> and resolve the issuer's public key via <see cref="ResolveIssuerKeyDelegate"/>.</description></item>
-///   <item><description>Verify the issuer credential signature via <see cref="Jws.VerifyAsync"/>.</description></item>
+///   <item><description>Extract <c>iss</c> and the header's <c>kid</c>/<c>x5c</c>, and resolve the issuer's public key via <see cref="ResolveIssuerKeyDelegate"/>.</description></item>
+///   <item><description>Verify the issuer credential signature via <see cref="Verifiable.JCose.Jws.VerifyAsync(Verifiable.JCose.JwsMessage, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.PublicKeyMemory, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/>.</description></item>
 ///   <item><description>Extract <c>cnf.jwk</c> and reconstruct the holder's public key.</description></item>
 ///   <item><description>Verify the KB-JWT signature against the holder key.</description></item>
 ///   <item><description>Extract KB-JWT claims (<c>nonce</c>, <c>aud</c>, <c>iat</c>, <c>sd_hash</c>).</description></item>
@@ -82,7 +106,11 @@ public static class SdJwtVpTokenVerification
     /// Wired to <c>SdJwtSerializer.GetSdJwtForHashing</c>.
     /// </param>
     /// <param name="resolveIssuerKey">
-    /// Application-provided delegate that resolves the issuer's public key.
+    /// Application-provided delegate that resolves the issuer's public key from the Issuer-signed
+    /// JWT's <c>iss</c> claim and its header's <c>kid</c>/<c>x5c</c>. Called with
+    /// <paramref name="context"/> unchanged per SD-JWT VC draft-19 §2.5 resolution — an
+    /// implementation that fetches JWT VC Issuer Metadata polices its outbound request through the
+    /// caller's own context rather than a fresh one.
     /// </param>
     /// <param name="computeDigest">
     /// Computes a digest. Wired to a provider-side implementation registered on
@@ -91,10 +119,10 @@ public static class SdJwtVpTokenVerification
     /// the <see cref="Tag"/> argument constructed per-call from the credential's
     /// <c>_sd_alg</c> claim.
     /// </param>
+    /// <param name="saltReuseSeam">Optional seam that detects a reused disclosure salt across presentations; <see langword="null"/> disables the check.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
     /// <param name="encoder">Delegate for Base64Url encoding.</param>
     /// <param name="pool">Memory pool for cryptographic allocations.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="parseX5c">
     /// Optional delegate that parses the issuer JWS <c>x5c</c> header (RFC 7515 §4.1.6) into
     /// certificates, for OID4VP 1.0 §6.1.1 trust evidence. <see langword="null"/> when the
@@ -106,6 +134,12 @@ public static class SdJwtVpTokenVerification
     /// and the verified <c>iss</c>, surfaced on <see cref="VpCredentialClaims.TrustedAuthorityEvidence"/>.
     /// <see langword="null"/> surfaces no evidence.
     /// </param>
+    /// <param name="context">
+    /// The per-call context <paramref name="resolveIssuerKey"/> is invoked with, unchanged — the
+    /// request's own <see cref="ExchangeContext"/>, so an implementation that fetches JWT VC Issuer
+    /// Metadata polices its outbound request through the caller's policy rather than a fresh one.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The parsed and crypto-verified VP token contents.</returns>
     /// <exception cref="FormatException">
     /// Thrown when the issuer-signed payload repeats a top-level claim name, or when it carries a
@@ -123,9 +157,10 @@ public static class SdJwtVpTokenVerification
         EncodeDelegate encoder,
         BaseMemoryPool pool,
         CommitmentReuseDetectionSeam? saltReuseSeam,
-        CancellationToken cancellationToken,
-        ParseX5cDelegate? parseX5c = null,
-        ResolveTrustedAuthorityEvidenceDelegate? resolveTrustedAuthorityEvidence = null)
+        ParseX5cDelegate? parseX5c,
+        ResolveTrustedAuthorityEvidenceDelegate? resolveTrustedAuthorityEvidence,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vpToken);
         ArgumentNullException.ThrowIfNull(credentialQueryId);
@@ -136,6 +171,7 @@ public static class SdJwtVpTokenVerification
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(encoder);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(context);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -159,16 +195,17 @@ public static class SdJwtVpTokenVerification
             using IMemoryOwner<byte> issuerPayloadBytes = decoder(issuerParts[1], pool);
             ReadOnlySpan<byte> issuerPayload = issuerPayloadBytes.Memory.Span;
 
-            //A top-level claim name that repeats is refused before any claim is read: the span
-            //scanner below resolves a repeated name to its FIRST occurrence while a serializer-based
-            //reader keeps the LAST, so a signed payload carrying the same claim twice shows one
-            //verifier one value and another verifier a different one — the validate-one/act-on-another
-            //smuggling class JarVerification refuses on the Request Object for the same reason. No
-            //conformant Issuer emits a duplicate top-level claim, so the presentation is malformed.
-            if(JwkJsonReader.HasDuplicateTopLevelKeys(issuerPayload))
+            //A claim name that repeats — at the top level or nested, e.g. inside "cnf.jwk" — is refused
+            //before any claim is read: the span scanner below resolves a repeated name to its FIRST
+            //occurrence while a serializer-based reader keeps the LAST, so a signed payload carrying the
+            //same claim twice shows one verifier one value and another verifier a different one — the
+            //validate-one/act-on-another smuggling class JarVerification refuses on the Request Object for
+            //the same reason. No conformant Issuer emits a duplicate claim, so the presentation is malformed.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(issuerPayload))
             {
                 throw new FormatException(
-                    "The credential's issuer-signed payload carries a duplicate top-level claim name.");
+                    "The credential's issuer-signed payload is not well-formed JSON, or carries a "
+                    + "duplicate claim name.");
             }
 
             iss = JwkJsonReader.ExtractStringValue(issuerPayload, "iss"u8);
@@ -211,8 +248,24 @@ public static class SdJwtVpTokenVerification
             }
         }
 
-        //Resolve the issuer's public key from the trust framework.
-        PublicKeyMemory? issuerPublicKey = iss is not null ? resolveIssuerKey(iss) : null;
+        //Read the issuer JWS header's kid (RFC 7515 §4.1.4) and x5c (RFC 7515 §4.1.6) once, ahead of
+        //resolving the issuer key: SD-JWT VC draft-19 §2.5 names both as inputs to key discovery, and
+        //the x5c reading is reused below for OID4VP 1.0 §6.1.1 trust evidence rather than re-decoded.
+        string? headerKid = SdJwtIssuerHeader.TryReadKid(token.IssuerSigned, decoder, pool, out string? kid)
+            ? kid
+            : null;
+        IReadOnlyList<string> headerX5c = SdJwtIssuerHeader.TryReadX5c(token.IssuerSigned, decoder, pool, out IReadOnlyList<string> x5cValues)
+            ? x5cValues
+            : [];
+
+        //Resolve the issuer's public key from the trust framework, through the caller's own context
+        //unchanged — an implementation that fetches JWT VC Issuer Metadata polices its outbound
+        //request by the request's own policy rather than a fresh one.
+        PublicKeyMemory? issuerPublicKey = iss is not null
+            ? await resolveIssuerKey(
+                iss, headerKid, headerX5c.Count > 0 ? headerX5c : null, context, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
 
         bool credentialSignatureValid = false;
         if(issuerPublicKey is not null)
@@ -373,9 +426,9 @@ public static class SdJwtVpTokenVerification
             //chain is a per-certificate list, not one disposable value, so it is disposed in its own
             //finally rather than through a using declaration.
             IReadOnlyList<PkiCertificateMemory> chain = [];
-            if(parseX5c is not null && SdJwtIssuerHeader.TryReadX5c(token.IssuerSigned, decoder, pool, out IReadOnlyList<string> x5c))
+            if(parseX5c is not null && headerX5c.Count > 0)
             {
-                chain = parseX5c(x5c, pool);
+                chain = parseX5c(headerX5c, pool);
             }
 
             try

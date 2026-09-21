@@ -114,7 +114,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
 
     /// <summary>
     /// An identifier DERIVED from an attestation certificate — RFC 5280 §4.2.1.2 method 1, the same
-    /// formula .NET's own <see cref="X509SubjectKeyIdentifierExtension.CreateFromSubjectPublicKeyInfo(PublicKey, bool)"/>
+    /// formula .NET's own <see cref="System.Security.Cryptography.X509Certificates.X509SubjectKeyIdentifierExtension(System.Security.Cryptography.X509Certificates.PublicKey, bool)"/>
     /// computes as an independent oracle — finds the entry whose <c>attestationCertificateKeyIdentifiers</c>
     /// carries that exact value. This is the consumer-side mirror of FIDO Metadata Service v3.1 section
     /// 3.1.1's "MUST be calculated according to method 1… as defined in [RFC5280] section 4.2.1.2": the

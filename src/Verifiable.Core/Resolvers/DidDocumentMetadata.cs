@@ -134,8 +134,20 @@ public class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
         return hash.ToHashCode();
     }
 
+    /// <summary>
+    /// Determines whether two <see cref="DidDocumentMetadata"/> instances are equal.
+    /// </summary>
+    /// <param name="left">The first metadata instance.</param>
+    /// <param name="right">The second metadata instance.</param>
+    /// <returns><see langword="true"/> if the two carry the same resolution metadata; otherwise, <see langword="false"/>.</returns>
     public static bool operator ==(DidDocumentMetadata? left, DidDocumentMetadata? right) =>
         left is null ? right is null : left.Equals(right);
 
+    /// <summary>
+    /// Determines whether two <see cref="DidDocumentMetadata"/> instances are not equal.
+    /// </summary>
+    /// <param name="left">The first metadata instance.</param>
+    /// <param name="right">The second metadata instance.</param>
+    /// <returns><see langword="true"/> if the two differ; otherwise, <see langword="false"/>.</returns>
     public static bool operator !=(DidDocumentMetadata? left, DidDocumentMetadata? right) => !(left == right);
 }

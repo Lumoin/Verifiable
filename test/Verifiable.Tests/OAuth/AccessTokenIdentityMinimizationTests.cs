@@ -85,8 +85,8 @@ internal sealed class AccessTokenIdentityMinimizationTests
             }
         };
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -164,8 +164,8 @@ internal sealed class AccessTokenIdentityMinimizationTests
             Profile = new ProfileClaims { Name = "Ada Lovelace" }
         };
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -176,12 +176,15 @@ internal sealed class AccessTokenIdentityMinimizationTests
 
         int resolverInvocationCount = 0;
         ResolveOidcClaimsDelegate seededResolver = host.Server.OAuth().ResolveOidcClaimsAsync!;
-        host.Server.OAuth().ResolveOidcClaimsAsync = (subject, scope, tenantId, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            resolverInvocationCount++;
+            candidateIntegration.ResolveOidcClaimsAsync = (subject, scope, tenantId, ctx, ct) =>
+            {
+                resolverInvocationCount++;
 
-            return seededResolver(subject, scope, tenantId, ctx, ct);
-        };
+                return seededResolver(subject, scope, tenantId, ctx, ct);
+            };
+        }).ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = host.Host("default");
         string segment = material.Registration.TenantId.Value;
@@ -212,8 +215,8 @@ internal sealed class AccessTokenIdentityMinimizationTests
     public async Task ParRejectsUnsupportedResponseTypes()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -263,13 +266,13 @@ internal sealed class AccessTokenIdentityMinimizationTests
     public async Task DirectAuthorizeRejectsUnsupportedResponseTypesWithRedirectError()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId,
             ClientBaseUri,
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
-                WellKnownCapabilityIdentifiers.OAuthDirectAuthorization));
+                WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");

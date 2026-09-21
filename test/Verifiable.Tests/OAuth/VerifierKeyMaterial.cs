@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using Verifiable.Cryptography;
+using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.Tests.OAuth;
@@ -8,11 +10,11 @@ namespace Verifiable.Tests.OAuth;
 /// The key material generated for a single client registration.
 /// </summary>
 /// <remarks>
-/// Returned from <see cref="VerifierServerSetup.RegisterClient"/>. The caller
+/// Returned from <see cref="TestHostShell.RegisterClientAsync(string, Uri, ImmutableHashSet{CapabilityIdentifier}, PolicyProfile?)"/>. The caller
 /// is responsible for disposing after the test — the signing and decryption keys
 /// are <see cref="PrivateKeyMemory"/> instances backed by pooled memory.
 /// </remarks>
-[DebuggerDisplay("VerifierKeyMaterial Segment={Registration.TenantId}")]
+[DebuggerDisplay("VerifierKeyMaterial Handle={Registration.TenantHandle}")]
 internal sealed class VerifierKeyMaterial: IDisposable
 {
     private bool disposed;
@@ -21,7 +23,7 @@ internal sealed class VerifierKeyMaterial: IDisposable
     /// <remarks>
     /// Re-pointed in place when a fixture helper upgrades the registration
     /// — for example
-    /// <see cref="TestHostShell.RegisterFederationCapableClient"/> appends
+    /// <see cref="TestHostShell.RegisterFederationCapableClientAsync"/> appends
     /// federation capability and signing keys to the baseline record. The
     /// key material itself is unchanged so the same buffers stay
     /// single-owned.

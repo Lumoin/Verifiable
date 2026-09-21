@@ -95,7 +95,7 @@ public static class FlowKindExtensions
 
         /// <summary>
         /// Marker for the JTI-replay defense flow used by DPoP per RFC 9449
-        /// §11.1. Carries persistence (a <see cref="States.JtiSeenState"/>
+        /// §11.1. Carries persistence (a <see cref="Verifiable.OAuth.Server.States.JtiSeenState"/>
         /// secondary index) but no transitions.
         /// </summary>
         public static JtiReplayFlowKind JtiReplay =>

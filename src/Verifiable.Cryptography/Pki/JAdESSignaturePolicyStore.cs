@@ -143,6 +143,7 @@ public sealed class JAdESSignaturePolicyStoreDocument: JAdESSignaturePolicyStore
         Document = document;
     }
 
+    /// <summary>The pooled signature policy document bytes; owned, returned to its pool on <see cref="Dispose"/>.</summary>
     public PooledMemory Document { get; }
 
     /// <summary>Disposes <see cref="Document"/>, returning its pooled buffer.</summary>

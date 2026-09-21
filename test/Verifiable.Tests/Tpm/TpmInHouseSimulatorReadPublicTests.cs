@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 /// 2.0 Library Specification</see>, Part 3: Commands, clause 12.4) against the in-house behavioural
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the production command
 /// path (<see cref="TpmCommandExecutor"/> with <see cref="ReadPublicInput"/> and
-/// <see cref="TpmResponseCodec.ReadPublic"/>).
+/// <c>TpmResponseCodec.ReadPublic</c>).
 /// </summary>
 /// <remarks>
 /// <para>

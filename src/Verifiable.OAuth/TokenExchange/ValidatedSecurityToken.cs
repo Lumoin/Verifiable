@@ -91,4 +91,16 @@ public sealed record ValidatedSecurityToken
     /// subject constrains the actor by <c>sub</c> alone, or carries no <c>may_act</c> constraint at all).
     /// </summary>
     public string? MayActIssuer { get; init; }
+
+    /// <summary>
+    /// The JWK SHA-256 thumbprint from the <c>subject_token</c>'s <c>cnf.jkt</c> claim (RFC 7800 /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>), when the
+    /// application surfaces it — the key a DPoP proof on this exchange MUST demonstrate possession
+    /// of before the authorization server issues from this subject token. Mirrors
+    /// <see cref="IdJag.IdJagAssertionValidationResult.ConfirmationKeyThumbprint"/> →
+    /// <see cref="JwtBearer.JwtBearerGrant.RequiredKeyThumbprint"/>. <see langword="null"/> when the
+    /// subject token carries no <c>cnf</c> claim, or the application does not surface one — the
+    /// exchange then treats it as unbound.
+    /// </summary>
+    public string? RequiredKeyThumbprint { get; init; }
 }

@@ -55,7 +55,7 @@ internal sealed class SdCwtIssuancePropertyTests
                 BaseMemoryPool.Shared);
 
             Assert.HasCount(disclosable.Count, disclosures);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -87,7 +87,7 @@ internal sealed class SdCwtIssuancePropertyTests
                     inMandatory ^ inDisclosure,
                     $"Claim '{keyStr}' must appear in exactly one of mandatory or disclosures.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -111,7 +111,7 @@ internal sealed class SdCwtIssuancePropertyTests
             var saltSet = new HashSet<string>(
                 disclosures.Select(d => Convert.ToHexString(d.Salt.AsReadOnlySpan())));
             Assert.HasCount(disclosures.Count, saltSet);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -127,9 +127,9 @@ internal sealed class SdCwtIssuancePropertyTests
                 WellKnownHashAlgorithms.Sha256Iana,
                 BaseMemoryPool.Shared);
 
-            Assert.HasCount(0, disclosures);
+            Assert.IsEmpty(disclosures);
             Assert.HasCount(claims.Count, payload);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -155,7 +155,7 @@ internal sealed class SdCwtIssuancePropertyTests
                 Assert.IsFalse(payload.ContainsKey(key),
                     $"Disclosable claim '{key}' must not remain in mandatory payload.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -185,9 +185,8 @@ internal sealed class SdCwtIssuancePropertyTests
 
     private static HashSet<CredentialPath> ToCwtCredentialPaths(IEnumerable<int> keys)
     {
-        return new(
-            keys.Select(k => CredentialPath.FromJsonPointer(
-                $"/{k.ToString(CultureInfo.InvariantCulture)}")));
+        return [.. keys.Select(k => CredentialPath.FromJsonPointer(
+                $"/{k.ToString(CultureInfo.InvariantCulture)}"))];
     }
 
 
@@ -195,7 +194,7 @@ internal sealed class SdCwtIssuancePropertyTests
     /// Property tests need direct CBOR bytes for <see cref="SdCwtClaimRedaction.Redact"/>
     /// rather than going through the full issuance pipeline. This uses a minimal
     /// <see cref="CborWriter"/> since the generated claims have only string values,
-    /// not the mixed types that <see cref="CborValueConverter.WriteValue"/> handles.
+    /// not the mixed types that <see cref="CborValueConverter.WriteValue(Lumoin.Veritas.Cbor.CborWriter, object?)"/> handles.
     /// </summary>
     private static byte[] SerializeIntStringMap(Dictionary<int, string> claims)
     {
@@ -212,3 +211,4 @@ internal sealed class SdCwtIssuancePropertyTests
         return buffer.WrittenSpan.ToArray();
     }
 }
+

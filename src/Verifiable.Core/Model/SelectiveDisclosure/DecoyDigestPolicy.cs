@@ -17,7 +17,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </para>
 /// <para>
 /// When an issuer does opt in, this type drives the randomization so callers need not write their own
-/// RNG: <see cref="Random(int, int)"/> draws a cryptographically-random count per <c>_sd</c> location.
+/// RNG: <see cref="Random(int, int, FillEntropyDelegate)"/> draws a cryptographically-random count per <c>_sd</c> location.
 /// </para>
 /// </remarks>
 public static class DecoyDigestPolicy
@@ -34,7 +34,7 @@ public static class DecoyDigestPolicy
     /// <param name="count">The number of decoys to add at each location. Must be non-negative.</param>
     /// <remarks>
     /// A constant count is itself a (weak) signal — every object of a given type carries the same number
-    /// of extra digests. Prefer <see cref="Random(int, int)"/> unless a fixed count is specifically wanted.
+    /// of extra digests. Prefer <see cref="Random(int, int, FillEntropyDelegate)"/> unless a fixed count is specifically wanted.
     /// </remarks>
     public static DecoyDigestCountDelegate Fixed(int count)
     {

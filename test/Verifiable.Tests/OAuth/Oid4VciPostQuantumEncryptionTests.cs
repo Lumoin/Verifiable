@@ -78,12 +78,17 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     public async Task MlKemEncryptedCredentialResponseRoundTripsToTheWallet()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential], "notif-pq-1"));
-        WireMlKemResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential], "notif-pq-1"));
+        }).ConfigureAwait(false);
+        await WireMlKemResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         var walletKemKeys = TestKeyMaterialProvider.CreateFreshMlKem768KeyMaterial();
         using PublicKeyMemory walletKemPublic = walletKemKeys.PublicKey;
@@ -92,7 +97,8 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         //§8.2: a request carrying credential_response_encryption MUST itself be encrypted. The
         //request leg uses the classical ECDH-ES request-encryption channel — independent of the
         //post-quantum KEM the response leg exercises.
-        using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
+        (PublicKeyMemory issuerPublic, PrivateKeyMemory issuerPrivate) = await WireRequestDecryptionSeamAsync(host).ConfigureAwait(false);
+        using PublicKeyMemory issuerPublicOwner = issuerPublic;
         using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -123,19 +129,25 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     public async Task TamperedKemEncapsulationFailsAuthentication()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        WireMlKemResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await WireMlKemResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         var walletKemKeys = TestKeyMaterialProvider.CreateFreshMlKem768KeyMaterial();
         using PublicKeyMemory walletKemPublic = walletKemKeys.PublicKey;
         using PrivateKeyMemory walletKemPrivate = walletKemKeys.PrivateKey;
 
         //§8.2: the request carrying credential_response_encryption MUST itself be encrypted.
-        using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
+        (PublicKeyMemory issuerPublic, PrivateKeyMemory issuerPrivate) = await WireRequestDecryptionSeamAsync(host).ConfigureAwait(false);
+        using PublicKeyMemory issuerPublicOwner = issuerPublic;
         using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -160,18 +172,21 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     /// <summary>
     /// Generates the issuer's classical ECDH-ES request-decryption key pair and wires the §10
     /// <see cref="DecryptCredentialRequestDelegate"/> seam to open requests with the private key.
-    /// Returns the public key the Wallet encrypts its request to; the caller owns both keys.
+    /// Returns both keys — the public key the Wallet encrypts its request to, and the private
+    /// key the seam decrypts with; the caller owns both keys.
     /// </summary>
-    private PublicKeyMemory WireRequestDecryptionSeam(TestHostShell host, out PrivateKeyMemory issuerPrivate)
+    private async Task<(PublicKeyMemory IssuerPublic, PrivateKeyMemory IssuerPrivate)> WireRequestDecryptionSeamAsync(TestHostShell host)
     {
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
-        issuerPrivate = issuerKeys.PrivateKey;
-        PrivateKeyMemory capturedPrivate = issuerPrivate;
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptEcdhJweAsync(jwe, capturedPrivate).ConfigureAwait(false);
+        PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptEcdhJweAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
-        return issuerPublic;
+        return (issuerPublic, issuerPrivate);
     }
 
 
@@ -229,39 +244,42 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     /// the content encryption key directly, and carry the encapsulation in the JWE
     /// encrypted-key segment.
     /// </summary>
-    private static void WireMlKemResponseEncryptionSeam(TestHostShell host)
+    private static async Task WireMlKemResponseEncryptionSeamAsync(TestHostShell host)
     {
-        host.Server.OAuth().EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            string recipientPub = (string)encryption.Jwk!["pub"];
-            using IMemoryOwner<byte> recipientKeyBytes = TestSetup.Base64UrlDecoder(recipientPub, Pool);
+            candidateIntegration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+            {
+                string recipientPub = (string)encryption.Jwk!["pub"];
+                using IMemoryOwner<byte> recipientKeyBytes = TestSetup.Base64UrlDecoder(recipientPub, Pool);
 
-            (IMemoryOwner<byte> kemCiphertext, IMemoryOwner<byte> sharedSecret) =
-                BouncyCastleCryptographicFunctions.EncapsulateMlKem768(recipientKeyBytes.Memory, Pool);
-            using IMemoryOwner<byte> encapsulation = kemCiphertext;
-            //The 32-byte ML-KEM shared secret is exactly an A256GCM key — no KDF stage in
-            //this composition. Ownership of the secret transfers to the key wrapper.
-            using SymmetricKeyMemory contentEncryptionKey = new(sharedSecret, CryptoTags.AesGcmCek);
+                (IMemoryOwner<byte> kemCiphertext, IMemoryOwner<byte> sharedSecret) =
+                    BouncyCastleCryptographicFunctions.EncapsulateMlKem768(recipientKeyBytes.Memory, Pool);
+                using IMemoryOwner<byte> encapsulation = kemCiphertext;
+                //The 32-byte ML-KEM shared secret is exactly an A256GCM key — no KDF stage in
+                //this composition. Ownership of the secret transfers to the key wrapper.
+                using SymmetricKeyMemory contentEncryptionKey = new(sharedSecret, CryptoTags.AesGcmCek);
 
-            string headerJson = "{\"alg\":\"" + MlKem768JweAlgorithm + "\",\"enc\":\"" + encryption.Enc + "\"}";
-            string encodedHeader = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+                string headerJson = "{\"alg\":\"" + MlKem768JweAlgorithm + "\",\"enc\":\"" + encryption.Enc + "\"}";
+                string encodedHeader = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
 
-            //AAD is the ASCII bytes of the encoded protected header per RFC 7516 §5.1 step 14.
-            byte[] aadBytes = Encoding.ASCII.GetBytes(encodedHeader);
-            IMemoryOwner<byte> aadOwner = Pool.Rent(aadBytes.Length);
-            aadBytes.CopyTo(aadOwner.Memory.Span);
-            using AdditionalData aad = new(aadOwner, CryptoTags.AesGcmAad);
+                //AAD is the ASCII bytes of the encoded protected header per RFC 7516 §5.1 step 14.
+                byte[] aadBytes = Encoding.ASCII.GetBytes(encodedHeader);
+                IMemoryOwner<byte> aadOwner = Pool.Rent(aadBytes.Length);
+                aadBytes.CopyTo(aadOwner.Memory.Span);
+                using AdditionalData aad = new(aadOwner, CryptoTags.AesGcmAad);
 
-            using AeadEncryptResult sealedContent = await BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync(
-                Encoding.UTF8.GetBytes(responseJson).AsMemory(),
-                contentEncryptionKey, aad, Pool, ct).ConfigureAwait(false);
+                using AeadEncryptResult sealedContent = await BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync(
+                    Encoding.UTF8.GetBytes(responseJson).AsMemory(),
+                    contentEncryptionKey, aad, Pool, ct).ConfigureAwait(false);
 
-            return encodedHeader
-                + "." + TestSetup.Base64UrlEncoder(encapsulation.Memory.Span)
-                + "." + TestSetup.Base64UrlEncoder(sealedContent.Iv.AsReadOnlySpan())
-                + "." + TestSetup.Base64UrlEncoder(sealedContent.Ciphertext.AsReadOnlySpan())
-                + "." + TestSetup.Base64UrlEncoder(sealedContent.Tag.AsReadOnlySpan());
-        };
+                return encodedHeader
+                    + "." + TestSetup.Base64UrlEncoder(encapsulation.Memory.Span)
+                    + "." + TestSetup.Base64UrlEncoder(sealedContent.Iv.AsReadOnlySpan())
+                    + "." + TestSetup.Base64UrlEncoder(sealedContent.Ciphertext.AsReadOnlySpan())
+                    + "." + TestSetup.Base64UrlEncoder(sealedContent.Tag.AsReadOnlySpan());
+            };
+        }).ConfigureAwait(false);
     }
 
 
@@ -335,16 +353,22 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     }
 
 
+    /// <summary>
+    /// Completes the fixture token exchange and returns an access token for the credential endpoint request.
+    /// </summary>
     private async Task<string> MintAccessTokenAsync(TestHostShell host, VerifierKeyMaterial material)
     {
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

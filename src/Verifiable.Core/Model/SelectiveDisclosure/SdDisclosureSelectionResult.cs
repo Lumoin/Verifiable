@@ -1,7 +1,7 @@
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
 /// <summary>
-/// The result of <see cref="SdToken{TEnvelope}.SelectDisclosures(IReadOnlySet{CredentialPath}, Cryptography.BaseMemoryPool)"/>.
+/// The result of <see cref="SdToken{TEnvelope}.SelectDisclosures(IReadOnlySet{CredentialPath}, BaseMemoryPool)"/>.
 /// </summary>
 /// <typeparam name="TEnvelope">The token's envelope type.</typeparam>
 /// <param name="Token">

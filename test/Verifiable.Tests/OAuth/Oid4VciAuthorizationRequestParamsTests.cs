@@ -68,17 +68,20 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     public async Task IssuerStateReachesTheAuthorizationDecisionSeam()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
         string? seenIssuerState = "<unset>";
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, registration, context, ct) =>
-            {
-                seenIssuerState = evaluation.RequestedIssuerState;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) =>
+                {
+                    seenIssuerState = evaluation.RequestedIssuerState;
 
-                return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-            };
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await RunToAuthorizeAsync(
             host, material, issuerState: OfferIssuerState).ConfigureAwait(false);
@@ -97,17 +100,20 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     public async Task AuthorizeWithoutIssuerStateStillSucceeds()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
         string? seenIssuerState = "<unset>";
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, registration, context, ct) =>
-            {
-                seenIssuerState = evaluation.RequestedIssuerState;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) =>
+                {
+                    seenIssuerState = evaluation.RequestedIssuerState;
 
-                return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-            };
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await RunToAuthorizeAsync(
             host, material, issuerState: null).ConfigureAwait(false);
@@ -128,19 +134,22 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     public async Task IssuerStateThatTheApplicationCannotCorrelateIsDeniedAtTheSeam()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
         //The application owns the Offer store; only an issuer_state it minted correlates. A value
         //it does not recognise — possibly attacker-injected — is denied.
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, registration, context, ct) =>
-                ValueTask.FromResult(
-                    string.Equals(evaluation.RequestedIssuerState, OfferIssuerState, StringComparison.Ordinal)
-                        ? AuthorizationRequestDecision.Permit
-                        : AuthorizationRequestDecision.Deny(
-                            AuthorizationDenialReason.AccessDenied,
-                            "issuer_state does not correlate to a known Credential Offer."));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) =>
+                    ValueTask.FromResult(
+                        string.Equals(evaluation.RequestedIssuerState, OfferIssuerState, StringComparison.Ordinal)
+                            ? AuthorizationRequestDecision.Permit()
+                            : AuthorizationRequestDecision.Deny(
+                                AuthorizationDenialReason.AccessDenied,
+                                "issuer_state does not correlate to a known Credential Offer."));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse permitted = await RunToAuthorizeAsync(
             host, material, issuerState: OfferIssuerState).ConfigureAwait(false);
@@ -164,36 +173,42 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     public async Task ScopeAndDetailsForTheSameTypeAreGrantedOnce()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+
+        //Both authorization-details seams are coupled changes and are published together in ONE
+        //alteration (EndpointServer.RequestAlterationAsync's own doc): a candidate wiring only the
+        //parser is itself a half-wired server the composition-time pairing check now refuses. The
+        //seam models the §5.1.2 collision: the request carried both a scope that maps to
+        //DegreeConfigurationId and an authorization_details object for the same configuration, so a
+        //naive issuer would grant the type twice (one scope-derived, one details-derived). The
+        //library collapses the duplicate so the §6.2 response names the type once.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                    ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
+                    [
+                        new GrantedCredentialAuthorization
+                        {
+                            CredentialConfigurationId = DegreeConfigurationId,
+                            CredentialIdentifiers = ["CivilEngineeringDegree-2026"]
+                        },
+                        //The scope-derived grant for the SAME Credential type — the details object
+                        //takes precedence, so this duplicate must not appear in the response.
+                        new GrantedCredentialAuthorization
+                        {
+                            CredentialConfigurationId = DegreeConfigurationId,
+                            CredentialIdentifiers = ["ScopeDerivedDuplicate-2026"]
+                        }
+                    ]));
+        }).ConfigureAwait(false);
 
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-
-        //The seam models the §5.1.2 collision: the request carried both a scope that maps to
-        //DegreeConfigurationId and an authorization_details object for the same configuration, so
-        //a naive issuer would grant the type twice (one scope-derived, one details-derived). The
-        //library collapses the duplicate so the §6.2 response names the type once.
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-                ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
-                [
-                    new GrantedCredentialAuthorization
-                    {
-                        CredentialConfigurationId = DegreeConfigurationId,
-                        CredentialIdentifiers = ["CivilEngineeringDegree-2026"]
-                    },
-                    //The scope-derived grant for the SAME Credential type — the details object
-                    //takes precedence, so this duplicate must not appear in the response.
-                    new GrantedCredentialAuthorization
-                    {
-                        CredentialConfigurationId = DegreeConfigurationId,
-                        CredentialIdentifiers = ["ScopeDerivedDuplicate-2026"]
-                    }
-                ]));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
             host, material,
@@ -226,17 +241,20 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     public async Task SingleResourceIndicatorIsReadAndSurfaced()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
         IReadOnlyList<string>? seenResource = null;
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, registration, context, ct) =>
-            {
-                seenResource = evaluation.RequestedResource;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) =>
+                {
+                    seenResource = evaluation.RequestedResource;
 
-                return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-            };
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await RunToAuthorizeAsync(
             host, material, resource: IssuerResource).ConfigureAwait(false);
@@ -260,17 +278,20 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     public async Task MultipleResourceIndicatorsAreReadAndSurfaced()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
         IReadOnlyList<string>? seenResource = null;
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, registration, context, ct) =>
-            {
-                seenResource = evaluation.RequestedResource;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) =>
+                {
+                    seenResource = evaluation.RequestedResource;
 
-                return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-            };
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
 
         const string secondResource = "https://other-issuer.example.com";
         ServerHttpResponse multi = await RunToAuthorizeAsync(
@@ -285,6 +306,165 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
         ServerHttpResponse none = await RunToAuthorizeAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(302, none.StatusCode, none.Body);
         Assert.IsNull(seenResource, "An absent resource parameter must surface as null at the seam.");
+    }
+
+
+    /// <summary>
+    /// RFC 9396 §2 defines <c>authorization_details</c> as a JSON array of objects; the decision
+    /// seam's <see cref="AuthorizationRequestEvaluation.RequestedAuthorizationDetailObjects"/>
+    /// carries the SAME request's details parsed through the wired
+    /// <c>ParseAuthorizationDetailsAsync</c> seam, beside the still-unchanged verbatim
+    /// <see cref="AuthorizationRequestEvaluation.RequestedAuthorizationDetails"/> string, so an
+    /// application correlating <c>issuer_state</c> to the requested
+    /// <c>credential_configuration_id</c> reads the parsed value instead of re-parsing the string
+    /// itself.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestedAuthorizationDetailsReachTheDecisionSeamParsed()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+
+        //The composition-time pairing check requires ResolveCredentialAuthorizationAsync alongside
+        //the parser (no further authorization details type is registered here). This test never
+        //reaches the token grant — it stops at the authorize response — so invoking the decision
+        //seam fails the test rather than merely going unobserved.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                {
+                    Assert.Fail("This test never reaches the token grant; the credential decision seam must not be consulted.");
+
+                    return ValueTask.FromResult(
+                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
+                };
+        }).ConfigureAwait(false);
+
+        string? seenVerbatim = "<unset>";
+        IReadOnlyList<AuthorizationDetail>? seenParsed = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) =>
+                {
+                    seenVerbatim = evaluation.RequestedAuthorizationDetails;
+                    seenParsed = evaluation.RequestedAuthorizationDetailObjects;
+
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
+
+        string verbatimDetails = SingleDetail(DegreeConfigurationId);
+        ServerHttpResponse authorizeResponse = await RunToAuthorizeWithDetailsAsync(
+            host, material, verbatimDetails).ConfigureAwait(false);
+
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+        Assert.AreEqual(verbatimDetails, seenVerbatim,
+            "The verbatim authorization_details string must reach the seam unchanged.");
+        Assert.IsNotNull(seenParsed);
+        Assert.HasCount(1, seenParsed);
+        Assert.AreEqual(AuthorizationDetailsTypeValues.OpenIdCredential, seenParsed[0].Type);
+        Assert.Contains(DegreeConfigurationId,
+            seenParsed[0].ExtensionData[Oid4VciCredentialParameterNames.CredentialConfigurationId],
+            StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// A request that carries no <c>authorization_details</c> observes
+    /// <see langword="null"/> for both the verbatim string and the parsed list — there is nothing
+    /// to parse.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestWithoutAuthorizationDetailsObservesNullParsedList()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+
+        //The composition-time pairing check requires ResolveCredentialAuthorizationAsync alongside
+        //the parser (no further authorization details type is registered here). This test never
+        //reaches the token grant — it stops at the authorize response — so invoking the decision
+        //seam fails the test rather than merely going unobserved.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                {
+                    Assert.Fail("This test never reaches the token grant; the credential decision seam must not be consulted.");
+
+                    return ValueTask.FromResult(
+                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
+                };
+        }).ConfigureAwait(false);
+
+        IReadOnlyList<AuthorizationDetail>? seenParsed = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, registration, context, ct) =>
+                {
+                    seenParsed = evaluation.RequestedAuthorizationDetailObjects;
+
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
+
+        ServerHttpResponse authorizeResponse = await RunToAuthorizeAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+        Assert.IsNull(seenParsed, "A request without authorization_details must observe a null parsed list.");
+    }
+
+
+    /// <summary>
+    /// Drives PAR → authorize with <paramref name="authorizationDetails"/> pushed verbatim, and
+    /// returns the authorize response, so the decision seam observes both the verbatim string and
+    /// its parsed projection.
+    /// </summary>
+    private async ValueTask<ServerHttpResponse> RunToAuthorizeWithDetailsAsync(
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        string authorizationDetails)
+    {
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+
+        RequestFields parFields = new()
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.AuthorizationDetails] = authorizationDetails
+        };
+
+        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.AuthCodePar, "POST",
+            parFields, [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
+        string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
+
+        RequestFields authorizeFields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
+        };
+
+        ExchangeContext authorizeContext = [];
+        authorizeContext.SetSubjectId(SubjectId);
+
+        return await host.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
+            authorizeFields, authorizeContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -323,6 +503,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -380,6 +561,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,

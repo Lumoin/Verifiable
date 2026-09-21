@@ -13,7 +13,7 @@ namespace Verifiable.Tests.OAuth;
 
 
 /// <summary>
-/// Verifies that <see cref="AuthCodeFlow"/> resists the attacks catalogued in
+/// Verifies that the <c>AuthCode</c> flow resists the attacks catalogued in
 /// <see href="https://www.rfc-editor.org/rfc/rfc9700">RFC 9700 — OAuth 2.0 Security
 /// Best Current Practice</see>.
 /// </summary>
@@ -710,12 +710,14 @@ internal sealed class OAuthAttackMitigationTests
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("OAuthAttackMitigationTests does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             isKnownAuthorizationServerIssuer: knownIssuerResolver,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,

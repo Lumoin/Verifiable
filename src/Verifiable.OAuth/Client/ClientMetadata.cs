@@ -40,6 +40,10 @@ namespace Verifiable.OAuth.Client;
 [DebuggerDisplay("ClientMetadata ClientName={ClientName}")]
 public sealed record ClientMetadata
 {
+    /// <summary>The issued identifier required in an RFC 7592 section 2.2 replacement request; parsing preserves it for server validation.</summary>
+    public string? ClientId { get; init; }
+
+
     /// <summary>
     /// Human-readable name for the client. RFC 7591 §2 <c>client_name</c>.
     /// </summary>

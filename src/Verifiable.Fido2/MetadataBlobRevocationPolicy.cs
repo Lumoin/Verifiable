@@ -1,3 +1,5 @@
+using Verifiable.Cryptography.Pki;
+
 namespace Verifiable.Fido2;
 
 /// <summary>

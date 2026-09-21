@@ -155,8 +155,8 @@ public static class MetadataBlobPayloadQueries
     /// dispatched only because this specific, external RFC 5280 formula mandates it (the same
     /// narrow, spec-mandated carve-out <c>BasicAccessControl</c>'s eMRTD key derivation uses) —
     /// routed through the registered async <see cref="ComputeDigestDelegate"/> because SHA-1 has no
-    /// synchronous <see cref="HashFunctionDelegate"/> registration in this library (by design; see
-    /// <see cref="EntropyDelegates"/>'s remarks on the sync/async digest split).
+    /// synchronous <see cref="HashFunctionDelegate"/> registration in this library (by design: the
+    /// sync/async digest split keeps a rarely-needed legacy algorithm out of the synchronous registry).
     /// </summary>
     private static async ValueTask<string> ComputeAttestationCertificateKeyIdentifierAsync(
         PkiCertificateMemory certificate, BaseMemoryPool pool, CancellationToken cancellationToken)

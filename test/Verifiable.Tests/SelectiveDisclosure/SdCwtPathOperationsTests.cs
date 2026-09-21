@@ -16,7 +16,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// <para>
 /// These tests use CBOR-native value types (strings, integers) for disclosure values
 /// rather than <see cref="System.Text.Json.JsonElement"/> because CBOR serialization
-/// does not support JsonElement. The JSON counterpart tests in <see cref="SdJwtPathOperationsTests"/>
+/// does not support JsonElement. The JSON counterpart tests in <see cref="SdJwtPathExtractionTests"/>
 /// use JsonElement values which are appropriate for JSON serialization.
 /// </para>
 /// </remarks>
@@ -129,7 +129,7 @@ internal sealed class SdCwtPathOperationsTests
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared);
 
-        Assert.HasCount(0, paths);
+        Assert.IsEmpty(paths);
     }
 
 
@@ -255,3 +255,4 @@ internal sealed class SdCwtPathOperationsTests
         return buffer.WrittenSpan.ToArray();
     }
 }
+

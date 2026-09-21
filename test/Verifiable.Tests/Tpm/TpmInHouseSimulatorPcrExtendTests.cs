@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -85,7 +86,9 @@ internal sealed class TpmInHouseSimulatorPcrExtendTests
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        byte[] digest = RandomNumberGenerator.GetBytes(Sha256DigestSize);
+        FillEntropyDelegate fillEntropy = RandomNumberGenerator.Fill;
+        byte[] digest = new byte[Sha256DigestSize];
+        fillEntropy(digest);
         byte[] expected = SHA256.HashData([.. new byte[Sha256DigestSize], .. digest]);
         uint counterBefore = await ReadPcrUpdateCounterAsync(tpm, registry, pool).ConfigureAwait(false);
 

@@ -35,59 +35,68 @@ public static class EndpointServerOAuthExtensions
             server.GetIntegration<AuthorizationServerIntegration>().Events;
 
 
-        /// <summary>Emits a <see cref="ClientRegistered"/> event on the OAuth family integration.</summary>
-        public void RegisterClient(
+        /// <summary>Notifies optional observers with a <see cref="ClientRegistered"/> event on the OAuth family integration.</summary>
+        /// <remarks>The caller commits storage before notification. Capability events require an application state effect; observer failures are isolated and inspected.</remarks>
+        public ValueTask RegisterClientAsync(
             ClientRecord registration,
-            RegistrationAccessToken accessToken,
             ExchangeContext context)
         {
-            server.GetIntegration<AuthorizationServerIntegration>()
-                .RegisterClient(registration, accessToken, context, server.TimeProvider);
+
+            return server.GetIntegration<AuthorizationServerIntegration>()
+                .RegisterClientAsync(registration, context, server.TimeProvider);
         }
 
 
-        /// <summary>Emits a <see cref="ClientUpdated"/> event on the OAuth family integration.</summary>
-        public void UpdateClient(
+        /// <summary>Notifies optional observers with a <see cref="ClientUpdated"/> event on the OAuth family integration.</summary>
+        /// <remarks>The caller commits storage before notification. Capability events require an application state effect; observer failures are isolated and inspected.</remarks>
+        public ValueTask UpdateClientAsync(
             ClientRecord previous,
             ClientRecord current,
             ExchangeContext context)
         {
-            server.GetIntegration<AuthorizationServerIntegration>()
-                .UpdateClient(previous, current, context, server.TimeProvider);
+
+            return server.GetIntegration<AuthorizationServerIntegration>()
+                .UpdateClientAsync(previous, current, context, server.TimeProvider);
         }
 
 
-        /// <summary>Emits a <see cref="ClientDeregistered"/> event on the OAuth family integration.</summary>
-        public void DeregisterClient(
+        /// <summary>Emits a tombstone one revision beyond the final record removed atomically by the required store.</summary>
+        /// <remarks>The caller passes the authoritative deletion result after commitment. Consumers retain its next revision to reject delayed updates.</remarks>
+        public ValueTask DeregisterClientAsync(
             ClientRecord registration,
             string reason,
             ExchangeContext context)
         {
-            server.GetIntegration<AuthorizationServerIntegration>()
-                .DeregisterClient(registration, reason, context, server.TimeProvider);
+
+            return server.GetIntegration<AuthorizationServerIntegration>()
+                .DeregisterClientAsync(registration, reason, context, server.TimeProvider);
         }
 
 
-        /// <summary>Emits a <see cref="CapabilityGranted"/> event on the OAuth family integration.</summary>
-        public void GrantCapability(
+        /// <summary>Notifies optional observers with a <see cref="CapabilityGranted"/> event on the OAuth family integration.</summary>
+        /// <remarks>The application applies the signal to its granted-capability state before reachability changes; observer failures are isolated and inspected.</remarks>
+        public ValueTask GrantCapabilityAsync(
             ClientRecord registration,
             CapabilityIdentifier capability,
             ExchangeContext context)
         {
-            server.GetIntegration<AuthorizationServerIntegration>()
-                .GrantCapability(registration, capability, context, server.TimeProvider);
+
+            return server.GetIntegration<AuthorizationServerIntegration>()
+                .GrantCapabilityAsync(registration, capability, context, server.TimeProvider);
         }
 
 
-        /// <summary>Emits a <see cref="CapabilityRevoked"/> event on the OAuth family integration.</summary>
-        public void RevokeCapability(
+        /// <summary>Notifies optional observers with a <see cref="CapabilityRevoked"/> event on the OAuth family integration.</summary>
+        /// <remarks>The application applies the signal to its granted-capability state before reachability changes; observer failures are isolated and inspected.</remarks>
+        public ValueTask RevokeCapabilityAsync(
             ClientRecord registration,
             CapabilityIdentifier capability,
             string reason,
             ExchangeContext context)
         {
-            server.GetIntegration<AuthorizationServerIntegration>()
-                .RevokeCapability(registration, capability, reason, context, server.TimeProvider);
+
+            return server.GetIntegration<AuthorizationServerIntegration>()
+                .RevokeCapabilityAsync(registration, capability, reason, context, server.TimeProvider);
         }
     }
 }

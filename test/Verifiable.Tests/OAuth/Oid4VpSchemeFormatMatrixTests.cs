@@ -101,8 +101,8 @@ internal sealed class Oid4VpSchemeFormatMatrixTests
         TestHostShell app = run.App;
 
         using SchemeMaterial schemeMaterial = await scheme.CreateAsync(tp, cancellationToken).ConfigureAwait(false);
-        using VerifierKeyMaterial verifierKeys = app.RegisterJarSigningClient(
-            schemeMaterial.ClientId, VerifierBaseUri, schemeMaterial.JarSigningKeyPair, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterJarSigningClientAsync(
+            schemeMaterial.ClientId, VerifierBaseUri, schemeMaterial.JarSigningKeyPair, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri requestUri, string parHandle) = await app.HandleParAsync(
             verifierKeys,

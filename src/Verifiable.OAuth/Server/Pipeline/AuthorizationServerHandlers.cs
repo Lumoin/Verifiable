@@ -25,7 +25,7 @@ internal static class AuthorizationServerHandlers
     public const string ValidationResultsKey = "server.validationResults";
 
     /// <summary>
-    /// Context-bag key for the <see cref="IssuedTokenSet"/> assembled by the token endpoint's
+    /// Context-bag key for the <see cref="Verifiable.OAuth.Server.Audit.IssuedTokenSet"/> assembled by the token endpoint's
     /// <c>BuildInputAsync</c> for consumption by <c>BuildResponse</c>. Transient — never persisted.
     /// </summary>
     public const string IssuedTokensKey = "server.issuedTokens";
@@ -75,4 +75,38 @@ internal static class AuthorizationServerHandlers
     /// the SHA-256 hash of this value — never persisted, never logged. Transient — never persisted.
     /// </summary>
     public const string RawAuthorizationCodeKey = "server.rawAuthorizationCode";
+
+    /// <summary>
+    /// Context-bag key for the <see cref="Verifiable.OAuth.AuthCode.Server.DpopValidationOutcome"/>
+    /// a pre-correlation step's
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation.ValidatePresentedProofAsync"/>
+    /// call recorded for this request, read by the handler's
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation.BindValidatedProofAsync"/>
+    /// call once a stored record's binding is known. Transient — never persisted.
+    /// </summary>
+    public const string DpopStepOutcomeKey = "server.dpopStepOutcome";
+
+    /// <summary>
+    /// Context-bag key for the issuer URI a step endpoint's pre-correlation step resolves once
+    /// per request, read by the endpoint's handler — <c>BuildToken</c>, <c>BuildRefreshToken</c>,
+    /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.HandleAuthorizationCodeReplayAsync"/>
+    /// and <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.HandleRefreshTokenReuseAsync"/>
+    /// — instead of resolving it a second time for the same request. Transient — never persisted.
+    /// </summary>
+    public const string CorrelationStepIssuerKey = "server.correlationStepIssuer";
+
+    /// <summary>
+    /// Context-bag key for the parsed request-only <c>authorization_details</c> decision a step
+    /// endpoint's pre-correlation step records for this request — the parsed, shape-validated
+    /// detail list — read by
+    /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.ResolveGrantedAuthorizationDetailsAsync"/>
+    /// instead of re-parsing them for the same request. The OID4VCI 1.0 §5.1.1/§6.1.1
+    /// <c>locations</c> requirement is decided once in the step, for the step's own shape
+    /// refusal, and is not itself part of this carry. The guarantee this carry gives is once per
+    /// request VALUE, not once per request: a grant's STORED <c>authorization_details</c>
+    /// baseline, when one exists, is a DIFFERENT value, parsed separately by
+    /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.ResolveGrantedAuthorizationDetailsAsync"/>
+    /// itself. Transient — never persisted.
+    /// </summary>
+    public const string AuthorizationDetailsStepOutcomeKey = "server.authorizationDetailsStepOutcome";
 }

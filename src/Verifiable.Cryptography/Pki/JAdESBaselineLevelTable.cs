@@ -7,7 +7,7 @@ namespace Verifiable.Cryptography.Pki;
 /// (the <c>CBAdESBaselineLevelTable</c>/<c>CoseHeaderParameters</c> exemplar shape) plus lookup helpers over
 /// <see cref="Rows"/>. JOSE/JSON-free: this class carries only the presence/cardinality/reference/annotation
 /// DATA clause 6 states, never a wire encoding or a rule-evaluation engine — those compose this registry from
-/// <see cref="JAdESLevelRules"/>.
+/// <c>JAdESLevelRules</c>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -35,7 +35,7 @@ namespace Verifiable.Cryptography.Pki;
 /// <strong>Reference clause, corrected.</strong>
 /// <see cref="AdoTst"/>'s row (JA-6.3-24) prints "Clause 5.3.3" in its References column — <see cref="SigPSt"/>'s
 /// own defining clause (JA-6.3-25, the very next row), not "Clause 5.2.6," whose own heading is "The <c>adoTst</c>
-/// (signed data time-stamp) header parameter" (<see cref="WellKnownJAdESHeaderNames.AdoTst"/>'s own remarks) —
+/// (signed data time-stamp) header parameter" (<c>WellKnownJAdESHeaderNames.AdoTst</c>'s own remarks) —
 /// the same copy-paste-from-<c>sigPSt</c> defect CB-AdES's own Table 14 carries, further evidence of
 /// shared drafting lineage; the ruled reading is "5.2.6". <see cref="AdoTst"/>.<see cref="AdESTableRow.Reference"/> below
 /// faithfully transcribes Table 1's printed cell ("5.3.3") per this registry's own transcription discipline,
@@ -47,8 +47,8 @@ namespace Verifiable.Cryptography.Pki;
 /// (JA-6.3-12/-13, both letter <c>a</c>) are transcribed here exactly as Table 1 states them (uniform
 /// "Conditioned presence", cardinality "0 or 1" — a static, pre/post-cutover-agnostic view); the temporal
 /// SHALL-from-2025-07-15 obligation letter a)'s third sentence states is already a LIVE rule at
-/// <see cref="JAdESHeaderRules.Check"/> (<see cref="JAdESIssuedAtMissingViolation"/>) and is not
-/// re-implemented by <see cref="JAdESLevelRules"/> — see that rule surface's own remarks for the ruled reading
+/// <c>JAdESHeaderRules.Check</c> (<c>JAdESIssuedAtMissingViolation</c>) and is not
+/// re-implemented by <c>JAdESLevelRules</c> — see that rule surface's own remarks for the ruled reading
 /// of letter a)'s SHOULD-NOT half (the "should not include the `iat`..." clause is read as <c>sigT</c>),
 /// which is moot for any current-time evaluation now that the cutover date has passed.
 /// </para>
@@ -166,7 +166,7 @@ public static class JAdESBaselineLevelTable
     /// <summary>
     /// <c>iat</c> (JA-6.3-12): conditioned presence at all 4 levels; cardinality 0 or 1; ref clause 5.1.11;
     /// letter a — see the type remarks for why letter a)'s live SHALL-from-2025-07-15 obligation is enforced at
-    /// <see cref="JAdESHeaderRules"/>, not re-implemented here.
+    /// <c>JAdESHeaderRules</c>, not re-implemented here.
     /// </summary>
     public static AdESTableRow IssuedAt { get; } = new()
     {
@@ -217,7 +217,7 @@ public static class JAdESBaselineLevelTable
     /// <summary>
     /// SPO <c>x5t#256</c> (JA-6.3-15): conditioned presence at all 4 levels; cardinality 0 or 1; ref clause
     /// 5.1.7. Name transcribed exactly as Table 1 prints it — the wire header this row's own
-    /// clause 5.1.7 profiles is <c>x5t#S256</c> (<see cref="WellKnownJwkMemberNames.X5tHashS256"/>); the printed
+    /// clause 5.1.7 profiles is <c>x5t#S256</c> (<c>WellKnownJwkMemberNames.X5tHashS256</c>); the printed
     /// cell omits the capital "S", not independently re-flagged here beyond this note.
     /// </summary>
     public static AdESTableRow X5tHashS256Option { get; } = new()
@@ -687,7 +687,7 @@ public static class JAdESBaselineLevelTable
     /// (<see cref="TstVdOption"/>/<see cref="EmbeddedValidationDataOption"/>/<see cref="AnyValDataOption"/>,
     /// JA-6.3-39..41) — letter j's three-way disjunction. Letter k's SHOULD-NOT preference against the
     /// embedded-in-token option has no single-preferred-SPO field to populate here (unlike CB-AdES's own
-    /// service row, whose (i) requirement names exactly one preferred SPO) — <see cref="JAdESLevelRules"/>
+    /// service row, whose (i) requirement names exactly one preferred SPO) — <c>JAdESLevelRules</c>
     /// documents, but does not enforce, letter k's soft preference.
     /// </summary>
     public static AdESTableRow ValidationDataForTimestampsService { get; } = new()

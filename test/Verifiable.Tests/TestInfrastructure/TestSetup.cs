@@ -11,6 +11,7 @@ using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -167,9 +168,8 @@ internal static class TestSetup
     };
 
 
-    /// <summary>The default serialization options used in tests.</summary>
-    public static JsonSerializerOptions DefaultSerializationOptions { get; } =
-        new JsonSerializerOptions().ApplyVerifiableDefaults();
+    /// <summary>The default serialization options used in tests, built with the shared test pool.</summary>
+    public static JsonSerializerOptions DefaultSerializationOptions { get; } = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared);
 
 
     /// <summary>
@@ -674,19 +674,19 @@ internal static class TestSetup
     /// a signing or key-agreement consumer for: P-256/384/521, secp256k1, RSA-2048/4096, Ed25519, ML-DSA-44/65/87,
     /// and the five Brainpool signing curves for <see cref="Purpose.Signing"/>; P-256/384/521, the five
     /// Brainpool curves, and X25519 for <see cref="Purpose.Exchange"/>. Backend attribution matches
-    /// <see cref="TestKeyMaterialProvider"/>'s own convention exactly (P-256/384/521 and RSA-2048/4096
+    /// <see cref="Verifiable.Tests.TestDataProviders.TestKeyMaterialProvider"/>'s own convention exactly (P-256/384/521 and RSA-2048/4096
     /// signing keys mint via the Microsoft backend; every other algorithm — including the P-256/384/521
     /// exchange keys, which mint via BouncyCastle even though their ECDH-ES <em>agreement</em> and 1PU
     /// counterparts are split across both backends — mints via BouncyCastle), so a test that asserts
     /// <see cref="KeyMaterialGeneratedEvent"/> provenance sees the same <c>Backend</c> string the cached
-    /// <see cref="TestKeyMaterialProvider"/> sources would have produced.
+    /// <see cref="Verifiable.Tests.TestDataProviders.TestKeyMaterialProvider"/> sources would have produced.
     /// </summary>
     /// <remarks>
     /// Deliberately excludes ML-KEM-512/768/1024: <see cref="InitializeKeyAgreementFunctions"/> passes
     /// <c>kemDecapsulationMatcher: null</c>, so no consumer can bind a minted ML-KEM key today — registering
     /// its keygen would produce a <see cref="KeyMaterialGeneratedEvent"/> for a key nothing downstream uses.
     /// Libsodium is not registered either: despite <c>Verifiable.Libsodium</c> also implementing Ed25519/X25519 key
-    /// creation, <see cref="TestKeyMaterialProvider"/> sources both exclusively from
+    /// creation, <see cref="Verifiable.Tests.TestDataProviders.TestKeyMaterialProvider"/> sources both exclusively from
     /// <c>BouncyCastleKeyMaterialCreator</c>, and neither <see cref="InitializeCryptoFunctions"/> nor
     /// <see cref="InitializeKeyAgreementFunctions"/> routes Ed25519/X25519 signing or exchange to Libsodium.
     /// </remarks>

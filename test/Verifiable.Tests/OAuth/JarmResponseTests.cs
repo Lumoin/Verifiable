@@ -366,6 +366,48 @@ resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
 
 
     [TestMethod]
+    public async Task RejectsClaimsSetWithDuplicateIssClaimName()
+    {
+        //RFC 7519 §4: "The Claim Names within a JWT Claims Set MUST be unique; JWT parsers MUST
+        //either reject JWTs with duplicate Claim Names or use a JSON parser that returns only the
+        //lexically last duplicate member name." The payload below carries "iss" twice: the FIRST
+        //occurrence is the attacker's chosen value, the LAST is the honest issuer a last-value-wins
+        //deserializer resolves — exactly the shape that, without a well-formedness gate ahead of the
+        //deserializer, would let this response sail through issuer/audience/expiry/signature checks
+        //using the honest trailing value while a first-match reader elsewhere disagrees about who
+        //signed it. The JSON is built by hand, never through JwtPayloadSerializer, and signed over
+        //its exact bytes with the project's own signing primitive.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory serverPublic = keys.PublicKey;
+        using PrivateKeyMemory serverPrivate = keys.PrivateKey;
+
+        long exp = TimeProvider.GetUtcNow().AddMinutes(5).ToUnixTimeSeconds();
+        string headerJson = "{\"alg\":\"ES256\",\"kid\":\"authorization-response-key-1\"}";
+        string payloadJson =
+            "{\"iss\":\"https://attacker.example.com\"," +
+            $"\"iss\":\"{Issuer}\",\"aud\":\"{ClientId}\",\"exp\":{exp}," +
+            "\"code\":\"legitimate-code\"}";
+
+        string headerB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+        string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+
+        using Signature signature = await serverPrivate.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+        string responseJwt = $"{headerB64}.{payloadB64}.{signatureB64}";
+
+        JarmResponseValidationResult result = await ValidateAsync(
+            responseJwt, serverPublic, Issuer, ClientId).ConfigureAwait(false);
+
+        //The whole response is refused outright — never processed under either occurrence's value.
+        Assert.IsFalse(result.IsValid);
+        Assert.IsNull(result.Parameters);
+        Assert.IsNull(result.Code);
+    }
+
+
+    [TestMethod]
     public void EncodesResponseJwtPerResponseMode()
     {
         const string ResponseJwt = "eyJh.eyJi.c2ln";
@@ -402,6 +444,47 @@ resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
 
         _ = Assert.ThrowsExactly<ArgumentException>(() =>
             JarmResponseEncoding.ResolveEncodingMode("query", "code"));
+    }
+
+
+    /// <summary>
+    /// RFC 7519 §4: "The JWT Claim Names within a Claims Set MUST be unique." A JARM response
+    /// whose Claims Set repeats <c>iss</c> — the attacker's value first, the honest issuer last —
+    /// is refused (<see cref="JarmResponseValidationResult.IsValid"/> <see langword="false"/>,
+    /// never an escaped exception). The payload is built by hand (never through
+    /// <see cref="PayloadSerializer"/>) and signed over its exact bytes, so only the payload's
+    /// well-formedness gate — not an invalid signature — can be responsible for the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsResponseWithDuplicateIssuerClaim()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory serverPublic = keys.PublicKey;
+        using PrivateKeyMemory serverPrivate = keys.PrivateKey;
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(serverPrivate.Tag);
+        string headerJson = "{\"alg\":\"" + algorithm + "\",\"kid\":\"" + KeyId + "\"}";
+        string payloadJson =
+            "{\"iss\":\"https://attacker.example.com\",\"iss\":\"" + Issuer + "\"," +
+            "\"aud\":\"" + ClientId + "\"," +
+            $"\"exp\":{now.AddMinutes(5).ToUnixTimeSeconds()}," +
+            "\"code\":\"PyyFaux2o7Q0YfXBU32jhw.5FXSQpvr8akv9CeRDSd0QA\"}";
+
+        string headerB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+        string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+
+        using Signature signature = await serverPrivate.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+        string responseJwt = $"{headerB64}.{payloadB64}.{signatureB64}";
+
+        JarmResponseValidationResult result = await ValidateAsync(
+            responseJwt, serverPublic, Issuer, ClientId).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsStructurallyValid);
+        Assert.IsFalse(result.IsValid);
     }
 
 

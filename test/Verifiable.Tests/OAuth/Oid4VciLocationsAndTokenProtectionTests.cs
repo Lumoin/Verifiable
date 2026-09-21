@@ -61,10 +61,25 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     public async Task LocationsOmittedWithAuthorizationServersIsRejectedAtPar()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
-        ConfigureAuthorizationServersMetadata(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+        //The composition-time pairing check requires ResolveCredentialAuthorizationAsync alongside
+        //the parser (no further authorization details type is registered here). This test never
+        //reaches the token grant — it is refused at PAR — so invoking the decision seam fails the
+        //test rather than merely going unobserved.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                {
+                    Assert.Fail("This test never reaches the token grant; the credential decision seam must not be consulted.");
+
+                    return ValueTask.FromResult(
+                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
+                };
+        }).ConfigureAwait(false);
+        await ConfigureAuthorizationServersMetadataAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse parResponse = await DispatchParAsync(
             host, material, DetailWithoutLocations(DegreeConfigurationId)).ConfigureAwait(false);
@@ -83,10 +98,25 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     public async Task WrongLocationsWithAuthorizationServersIsRejectedAtPar()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
-        ConfigureAuthorizationServersMetadata(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+        //The composition-time pairing check requires ResolveCredentialAuthorizationAsync alongside
+        //the parser (no further authorization details type is registered here). This test never
+        //reaches the token grant — it is refused at PAR — so invoking the decision seam fails the
+        //test rather than merely going unobserved.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                {
+                    Assert.Fail("This test never reaches the token grant; the credential decision seam must not be consulted.");
+
+                    return ValueTask.FromResult(
+                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
+                };
+        }).ConfigureAwait(false);
+        await ConfigureAuthorizationServersMetadataAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse parResponse = await DispatchParAsync(
             host, material,
@@ -109,20 +139,22 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     public async Task LocationsOmittedWithAuthorizationServersIsRejectedAtToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        ConfigureAuthorizationServersMetadata(host);
-
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
         bool seamCalled = false;
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-            {
-                seamCalled = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                {
+                    seamCalled = true;
 
-                return ValueTask.FromResult(GrantAllRequested(details));
-            };
+                    return ValueTask.FromResult(GrantAllRequested(details));
+                };
+        }).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        await ConfigureAuthorizationServersMetadataAsync(host).ConfigureAwait(false);
 
         string issuerLocation = material.Registration.IssuerUri!.OriginalString;
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
@@ -146,16 +178,18 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     public async Task LocationsNamingTheIssuerWithAuthorizationServersSucceeds()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                    ValueTask.FromResult(GrantAllRequested(details));
+        }).ConfigureAwait(false);
         //§13.10: keep the plain-bearer credential token within the long-lived threshold.
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        ConfigureAuthorizationServersMetadata(host);
-
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-                ValueTask.FromResult(GrantAllRequested(details));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        await ConfigureAuthorizationServersMetadataAsync(host).ConfigureAwait(false);
 
         string issuerLocation = material.Registration.IssuerUri!.OriginalString;
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
@@ -181,15 +215,17 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     public async Task LocationsAbsentWithoutAuthorizationServersStillSucceeds()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
         //No authorization_servers metadata is contributed: the AS is the issuer.
-
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-                ValueTask.FromResult(GrantAllRequested(details));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                    ValueTask.FromResult(GrantAllRequested(details));
+        }).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
             host, material,
@@ -211,20 +247,22 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     public async Task LongLivedPlainBearerCredentialTokenIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
-        //Longer than the §13.10 five-minute threshold and NOT sender-constrained.
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(10));
-
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
         bool seamCalled = false;
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-            {
-                seamCalled = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                {
+                    seamCalled = true;
 
-                return ValueTask.FromResult(GrantAllRequested(details));
-            };
+                    return ValueTask.FromResult(GrantAllRequested(details));
+                };
+        }).ConfigureAwait(false);
+        //Longer than the §13.10 five-minute threshold and NOT sender-constrained.
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(10)).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
             host, material,
@@ -246,15 +284,17 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     public async Task ShortLivedPlainBearerCredentialTokenIsIssued()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                    ValueTask.FromResult(GrantAllRequested(details));
+        }).ConfigureAwait(false);
         //Exactly the §13.10 threshold — not "longer than 5 minutes", so it is not long lived.
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-                ValueTask.FromResult(GrantAllRequested(details));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
             host, material,
@@ -281,12 +321,17 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         //Default HAIP profile — DPoP is required and the default access-token lifetime is one
         //hour, which is long lived per §13.10. The token issues because it is sender-constrained.
-        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        _ = host.EnableDpop();
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-                ValueTask.FromResult(GrantAllRequested(details));
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+
+
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                    ValueTask.FromResult(GrantAllRequested(details));
+        }).ConfigureAwait(false);
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration,
@@ -364,14 +409,17 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     /// <c>authorization_servers</c> parameter, the deployment fact that activates the §5.1.1 /
     /// §6.1.1 <c>locations</c> requirement.
     /// </summary>
-    private static void ConfigureAuthorizationServersMetadata(TestHostShell host)
+    private static async Task ConfigureAuthorizationServersMetadataAsync(TestHostShell host)
     {
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(
-                new CredentialIssuerMetadataContribution
-                {
-                    AuthorizationServers = ["https://as.example.com"]
-                });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(
+                    new CredentialIssuerMetadataContribution
+                    {
+                        AuthorizationServers = ["https://as.example.com"]
+                    });
+        }).ConfigureAwait(false);
     }
 
 
@@ -407,6 +455,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -439,6 +488,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,

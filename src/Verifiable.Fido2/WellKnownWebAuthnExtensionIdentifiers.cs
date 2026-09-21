@@ -154,6 +154,18 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// </remarks>
     public static string HmacSecretMc { get; } = Utf8Constants.ToInternedString(HmacSecretMcUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Prf"/>.</summary>
+    public static ReadOnlySpan<byte> PrfUtf8 => "prf"u8;
+
+    /// <summary>
+    /// The <c>prf</c> identifier.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication Level 3,
+    /// section 10.1.4: Pseudo-random function extension (prf)</see>.
+    /// </remarks>
+    public static string Prf { get; } = Utf8Constants.ToInternedString(PrfUtf8);
+
 
     /// <summary>
     /// Determines whether <paramref name="identifier"/> is <see cref="AppId"/>.
@@ -210,6 +222,13 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// <param name="identifier">The extension identifier to test.</param>
     /// <returns><see langword="true"/> if <paramref name="identifier"/> equals <see cref="HmacSecretMc"/>; otherwise <see langword="false"/>.</returns>
     public static bool IsHmacSecretMc(string identifier) => Equals(HmacSecretMc, identifier);
+
+    /// <summary>
+    /// Determines whether <paramref name="identifier"/> is <see cref="Prf"/>.
+    /// </summary>
+    /// <param name="identifier">The extension identifier to test.</param>
+    /// <returns><see langword="true"/> if <paramref name="identifier"/> equals <see cref="Prf"/>; otherwise <see langword="false"/>.</returns>
+    public static bool IsPrf(string identifier) => Equals(Prf, identifier);
 
 
     /// <summary>

@@ -81,6 +81,9 @@ public readonly struct Fido2RegistrationOptionsBuildState: IEquatable<Fido2Regis
     /// <summary>The <c>largeBlob</c> extension's registration-side support requirement, or <see langword="null"/> when not requested.</summary>
     public LargeBlobSupport? LargeBlobSupport { get; init; }
 
+    /// <summary>The <c>prf</c> extension's registration-side input, or <see langword="null"/> when not requested.</summary>
+    public Fido2PrfRegistrationExtensionInput? Prf { get; init; }
+
 
     /// <summary>
     /// Determines whether the specified <see cref="Fido2RegistrationOptionsBuildState"/> is equal to
@@ -107,7 +110,8 @@ public readonly struct Fido2RegistrationOptionsBuildState: IEquatable<Fido2Regis
             && UserVerification == other.UserVerification
             && Hints?.Count == other.Hints?.Count
             && AppIdExclude == other.AppIdExclude
-            && LargeBlobSupport == other.LargeBlobSupport;
+            && LargeBlobSupport == other.LargeBlobSupport
+            && Equals(Prf, other.Prf);
     }
 
 
@@ -139,6 +143,7 @@ public readonly struct Fido2RegistrationOptionsBuildState: IEquatable<Fido2Regis
         hash.Add(Hints?.Count ?? 0);
         hash.Add(AppIdExclude);
         hash.Add(LargeBlobSupport);
+        hash.Add(Prf);
 
         return hash.ToHashCode();
     }

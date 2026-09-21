@@ -3,9 +3,8 @@ namespace Verifiable.Core.SecurityEvents;
 /// <summary>
 /// The outcome of verifying a Security Event Token: the extracted, typed token on
 /// success, or a typed failure reason. Mirrors the success/failure shape of the
-/// claims-JWT validator family (for example
-/// <see cref="Verifiable.OAuth.JwsAccessTokenValidator"/>'s result) — verification
-/// reports outcomes a receiver dispatches on rather than throwing.
+/// claims-JWT validator family (for example the <c>JwsAccessTokenValidator</c>'s
+/// result) — verification reports outcomes a receiver dispatches on rather than throwing.
 /// </summary>
 /// <remarks>
 /// On failure, <see cref="Token"/> is <see langword="null"/> and <see cref="Error"/>

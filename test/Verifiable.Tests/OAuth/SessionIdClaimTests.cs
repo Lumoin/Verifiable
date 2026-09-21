@@ -3,8 +3,6 @@ using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
-using Verifiable.OAuth.Pkce;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -40,8 +38,8 @@ internal sealed class SessionIdClaimTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(
             host, material, WellKnownScopes.OpenId, sessionId: "session-A").ConfigureAwait(false);
@@ -63,8 +61,8 @@ internal sealed class SessionIdClaimTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse first = await DriveCodeExchangeAsync(
             host, material, WellKnownScopes.OpenId, sessionId: "session-A").ConfigureAwait(false);
@@ -93,8 +91,8 @@ internal sealed class SessionIdClaimTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(
             host, material, WellKnownScopes.OpenId, sessionId: null).ConfigureAwait(false);
@@ -124,86 +122,11 @@ internal sealed class SessionIdClaimTests
     private async Task<ServerHttpResponse> DriveCodeExchangeAsync(
         TestHostShell host, VerifierKeyMaterial material, string scope, string? sessionId)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = scope
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = scope, SessionId = sessionId },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
 
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        if(sessionId is not null)
-        {
-            authorizeContext.SetSessionId(sessionId);
-        }
-
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-
-        return await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-    }
-
-
-    /// <summary>Reads a string property from a JSON response body.</summary>
-    private static string ExtractFromBody(string body, string property)
-    {
-        using JsonDocument doc = JsonDocument.Parse(body);
-
-        return doc.RootElement.GetProperty(property).GetString()!;
-    }
-
-
-    /// <summary>Extracts the <c>code</c> query parameter from an authorize redirect Location.</summary>
-    private static string ExtractCode(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Authorize redirect did not carry a code parameter: {location}");
+        return result.TokenResponse;
     }
 }

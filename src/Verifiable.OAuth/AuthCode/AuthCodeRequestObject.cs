@@ -79,10 +79,10 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
     /// <summary>
     /// The PKCE code challenge method per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>.
-    /// REQUIRED. Must be <c>S256</c> per FAPI 2.0 §5.2.2 and HAIP 1.0 §3 — the
-    /// matcher enforces this.
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// The method gate refuses absent and non-S256 values before parameter validation.
     /// </summary>
-    public required string CodeChallengeMethod { get; init; }
+    public string? CodeChallengeMethod { get; init; }
 
     /// <summary>
     /// The instant the JAR was issued. REQUIRED — the JAR verification
@@ -136,6 +136,14 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
     /// for authentication-recency enforcement at the authorization endpoint.
     /// </summary>
     public int? MaxAge { get; init; }
+
+    /// <summary>
+    /// The requested <c>prompt</c> (space-delimited), or <see langword="null"/> when absent.
+    /// OPTIONAL per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>;
+    /// carried through for evaluation at the authorization endpoint.
+    /// </summary>
+    public string? Prompt { get; init; }
 
     /// <summary>
     /// The RFC 9396 <c>authorization_details</c> of the Request Object as its verbatim JSON
@@ -198,6 +206,7 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
             && string.Equals(Jti, other.Jti, StringComparison.Ordinal)
             && string.Equals(AcrValues, other.AcrValues, StringComparison.Ordinal)
             && MaxAge == other.MaxAge
+            && string.Equals(Prompt, other.Prompt, StringComparison.Ordinal)
             && string.Equals(AuthorizationDetails, other.AuthorizationDetails, StringComparison.Ordinal)
             && string.Equals(ResponseMode, other.ResponseMode, StringComparison.Ordinal)
             && string.Equals(IssuerState, other.IssuerState, StringComparison.Ordinal)

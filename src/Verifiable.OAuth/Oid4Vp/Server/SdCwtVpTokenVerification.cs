@@ -47,6 +47,10 @@ public static class SdCwtVpTokenVerification
     /// </param>
     /// <param name="seams">The CBOR/COSE verification seams plus the issuer-key resolver.</param>
     /// <param name="decoder">Delegate for Base64Url decoding the vp_token value.</param>
+    /// <param name="saltReuseSeam">
+    /// Optional detector that flags a disclosure salt reused across presentations; <see langword="null"/>
+    /// skips the check.
+    /// </param>
     /// <param name="pool">Memory pool for cryptographic allocations.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The parsed and crypto-verified VP token contents.</returns>

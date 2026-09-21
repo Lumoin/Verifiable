@@ -240,6 +240,51 @@ internal sealed class WebDidResolverResolvingTests
     }
 
 
+    /// <summary>
+    /// A <c>did.json</c> response carrying <c>Cache-Control: max-age</c> reports that many seconds of
+    /// storable freshness on the resolution metadata — the RFC 9111 §5.2 computation
+    /// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness.Compute"/> performs over the fetched
+    /// response, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
+    {
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [AliceDocumentUrl] = (200, DidDocumentJson(AliceDid))
+        });
+        transport.ResponseHeaders[AliceDocumentUrl] = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.CacheControl, "max-age=300"));
+
+        DidResolutionResult result = await Resolve(AliceDid, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful, $"did:web MUST resolve. Error: {result.ResolutionMetadata.Error?.Type}.");
+        Assert.IsTrue(result.ResolutionMetadata.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(300), result.ResolutionMetadata.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
+    }
+
+
+    /// <summary>
+    /// A non-200 <c>did.json</c> fetch reports non-storable freshness on the resolution metadata — there is
+    /// no document a cache could keep, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ANon200ResponseReportsNonStorableFreshness()
+    {
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [AliceDocumentUrl] = (404, null)
+        });
+
+        DidResolutionResult result = await Resolve(AliceDid, transport).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.IsFalse(result.ResolutionMetadata.Freshness.IsStorable,
+            "A resolution that never reached a document reports no storable freshness.");
+    }
+
+
     /// <summary>An identifier that is not a did:web is rejected as an invalid DID without any fetch.</summary>
     [TestMethod]
     public async Task RejectsNonWebDid()
@@ -369,6 +414,10 @@ internal sealed class WebDidResolverResolvingTests
 
         public List<OutboundRequest> Calls { get; } = [];
 
+        //Additive: response headers per URL, consulted by Delegate below. Left empty by every existing route,
+        //so a caller that never sets an entry here sees the same header-less OutboundResponse as before.
+        public Dictionary<string, HttpHeaderSet> ResponseHeaders { get; } = new(StringComparer.Ordinal);
+
 
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
@@ -383,7 +432,11 @@ internal sealed class WebDidResolverResolvingTests
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(Encoding.UTF8.GetBytes(route.Body), BufferTags.Json);
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body });
+            HttpHeaderSet headers = ResponseHeaders.TryGetValue(request.Target.AbsoluteUri, out HttpHeaderSet? configuredHeaders)
+                ? configuredHeaders
+                : HttpHeaderSet.Empty;
+
+            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
         };
     }
 }

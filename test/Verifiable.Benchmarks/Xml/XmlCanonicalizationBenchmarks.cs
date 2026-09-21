@@ -22,8 +22,8 @@ internal enum XmlCanonicalizationShape
 
 
 /// <summary>
-/// Throughput and allocation benchmarks for <see cref="XmlCanonicalization.TryCanonicalize"/> and
-/// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/> over the wide-attribute, wide-namespace and
+/// Throughput and allocation benchmarks for <see cref="XmlCanonicalization.TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/> and
+/// <see cref="XmlCanonicalization.TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/> over the wide-attribute, wide-namespace and
 /// sibling-spread document shapes, and for parsing a declaration-heavy start-tag — the
 /// cost-characterisation counterpart to <c>Verifiable.Tests.Xml.XmlCanonicalizationCostTests</c>, whose
 /// unit tests keep only the canonical-output-shape and pooled-custody assertions.
@@ -50,7 +50,7 @@ internal class XmlCanonicalizationBenchmarks
     [ParamsAllValues]
     public XmlCanonicalizationShape Shape { get; set; }
 
-    /// <summary>Whether <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/> runs instead of <see cref="XmlCanonicalization.TryCanonicalize"/>.</summary>
+    /// <summary>Whether <see cref="XmlCanonicalization.TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/> runs instead of <see cref="XmlCanonicalization.TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/>.</summary>
     [Params(false, true)]
     public bool IsExclusive { get; set; }
 

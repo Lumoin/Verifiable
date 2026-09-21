@@ -4,7 +4,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
 /// Carries the encrypted direct_post.jwt received from the authorization response sender.
-/// Transitions from <see cref="JarServed"/> to <see cref="ResponseReceived"/>.
+/// Transitions from <see cref="States.JarServedState"/> to <see cref="States.ResponseReceivedState"/>.
 /// This input arrives at the second DB persistence point.
 /// </summary>
 /// <remarks>

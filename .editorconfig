@@ -51,6 +51,12 @@ dotnet_diagnostic.IDE0029.severity = error
 dotnet_diagnostic.IDE0031.severity = error
 dotnet_diagnostic.IDE0041.severity = error
 
+# A switch over a command-code or response-code table maps the handful of members a method
+# actually handles and keeps its discard arm on purpose, so an unpopulated arm list is a design
+# choice rather than a defect; the switches that ARE exhaustive have been populated.
+dotnet_diagnostic.IDE0072.severity = suggestion
+dotnet_diagnostic.IDE0010.severity = suggestion
+
 # this. and Me. preferences
 dotnet_style_qualification_for_event = false
 dotnet_style_qualification_for_field = false
@@ -337,7 +343,13 @@ dotnet_style_prefer_inferred_tuple_names = true:suggestion
 dotnet_style_operator_placement_when_wrapping = beginning_of_line
 tab_width = 4
 indent_size = 4
-dotnet_style_prefer_collection_expression = true:suggestion
+# The ARGUMENT form (a `with(...)` clause passing constructor arguments inside a collection
+# expression) is not demanded: it names its constructor call inside the brackets instead of in
+# the open, and no value of this option prefers a collection expression for the plain shapes
+# (empty, a literal element list, a spread) without also demanding the argument form for a
+# constructor call. Disabling the preference is the only way to avoid the argument form; it also
+# gives up the automatic suggestion for the plain shapes, which now stay as ordinary C#.
+dotnet_style_prefer_collection_expression = false:suggestion
 
 [src/Verifiable.Json/AuthZen/**.cs]
 # IDE0130: the folder is organizational; the namespace is the public API.
@@ -352,6 +364,10 @@ dotnet_diagnostic.IDE0130.severity = none
 dotnet_diagnostic.IDE0130.severity = none
 
 [src/Verifiable.Json/Oid4Vci/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/Dpop/**.cs]
 # IDE0130: the folder is organizational; the namespace is the public API.
 dotnet_diagnostic.IDE0130.severity = none
 

@@ -7,7 +7,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the CBOR counterpart of <see cref="SdJwtToken"/>. The COSE_Sign1 message contains:
+/// This is the CBOR counterpart of the SD-JWT <see cref="SdToken{TEnvelope}"/> (<c>TEnvelope</c> = <see cref="string"/>). The COSE_Sign1 message contains:
 /// </para>
 /// <list type="bullet">
 /// <item><description>

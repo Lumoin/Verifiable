@@ -11,9 +11,11 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Flow coverage for the <c>Extensions/Pin</c> business-capability verbs
-/// (<see cref="TpmDeviceExtensions.DefinePinFailIndexAsync"/>, <see cref="TpmDeviceExtensions.VerifyPinAsync"/>,
-/// <see cref="TpmDeviceExtensions.ReadPinCountersAsync"/>, <see cref="TpmDeviceExtensions.ResetPinCountAsync"/>,
-/// <see cref="TpmDeviceExtensions.UndefinePinIndexAsync"/>) against the in-house behavioural
+/// (<see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/>,
+/// <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>,
+/// <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.ReadPinCountersAsync"/>,
+/// <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.ResetPinCountAsync"/>,
+/// <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.UndefinePinIndexAsync"/>) against the in-house behavioural
 /// <see cref="TpmSimulator"/> - entirely in-process, with no external assets - through the same production wire
 /// path <see cref="TpmInHouseSimulatorNvPinIndexTests"/> exercises directly, except every define/verify/read/
 /// reset/undefine step here goes exclusively through the verbs under test. TPM 2.0 Library Part 1, clause
@@ -97,10 +99,11 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Proves a successful <see cref="TpmDeviceExtensions.VerifyPinAsync"/> genuinely resets <c>pinCount</c> to
+    /// Proves a successful <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>
+    /// genuinely resets <c>pinCount</c> to
     /// zero rather than merely leaving it unchanged: after one prior mismatch, the correct PIN succeeds and
     /// reports <c>pinCount == 0</c>, and two FURTHER mismatches (not one) are then needed to reach
-    /// <paramref name="PinLimit"/> again.
+    /// <c>PinLimit</c> again.
     /// </summary>
     [TestMethod]
     public async Task SuccessfulVerifyPinAsyncBelowLimitResetsPinCountRequiringTwoMoreMismatchesToReachLimitAgain()
@@ -138,7 +141,7 @@ internal sealed class TpmPinExtensionsTests
 
     /// <summary>
     /// Pins the CTAP-relevant blocked rung: once <c>pinCount</c> reaches <c>pinLimit</c>,
-    /// <see cref="TpmDeviceExtensions.VerifyPinAsync"/> refuses even the CORRECT PIN with
+    /// <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> refuses even the CORRECT PIN with
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> (TPM 2.0 Library Part 1, clause 34.2.6.6, for the pinCount &gt;= pinLimit
     /// refusal; Part 3, clause 5.6, Authorization Checks, for the response code) - the TPM-side equivalent of
     /// CTAP's <c>PIN_BLOCKED</c>.
@@ -169,7 +172,7 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Pins the CTAP-relevant recovery rung: <see cref="TpmDeviceExtensions.ResetPinCountAsync"/> restores an
+    /// Pins the CTAP-relevant recovery rung: <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.ResetPinCountAsync"/> restores an
     /// at-limit PIN Fail Index for further PIN-auth use, mirroring CTAP's owner-equivalent "set new PIN" reset
     /// path (TPM 2.0 Library Part 1, clause 34.2.8.1's recovery note: no automatic self-heal exists until the
     /// owner rewrites the counter parameters).
@@ -203,7 +206,7 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Pins the no-oracle "how many tries remain" query: <see cref="TpmDeviceExtensions.ReadPinCountersAsync"/>
+    /// Pins the no-oracle "how many tries remain" query: <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.ReadPinCountersAsync"/>
     /// reports the current counter parameters WITHOUT ever moving <c>pinCount</c> itself, whether below the
     /// limit or already at it - repeated reads observe the identical value each time (TPM 2.0 Library Part 3,
     /// clause 31.13's owner-authorized arm; Part 1, clause 34.2.6.6's pinCount update is scoped to the
@@ -251,8 +254,8 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Verifies <see cref="TpmDeviceExtensions.UndefinePinIndexAsync"/> composed with a fresh
-    /// <see cref="TpmDeviceExtensions.DefinePinFailIndexAsync"/> genuinely rotates the Index authValue: the OLD
+    /// Verifies <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.UndefinePinIndexAsync"/> composed with a fresh
+    /// <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/> genuinely rotates the Index authValue: the OLD
     /// PIN no longer authorizes the redefined Index (its authValue is now <see cref="RotatedPinHash"/>), while
     /// the NEW PIN succeeds - the PIN-rotation precedent a stale snapshot's old stored form can never resurrect
     /// once authorized undefine-then-redefine has actually run.
@@ -286,7 +289,7 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Proves <see cref="TpmDeviceExtensions.DefinePinFailIndexAsync"/> actually threads its <c>ownerAuth</c>
+    /// Proves <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/> actually threads its <c>ownerAuth</c>
     /// parameter to the wire rather than ignoring it: a WRONG owner authorization is refused with
     /// <c>TPM_RC_BAD_AUTH</c> and defines nothing, while the CORRECT (empty, matching the simulator's default)
     /// owner authorization then succeeds at the very same handle. A mutation that hard-coded away
@@ -312,7 +315,7 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Proves <see cref="TpmDeviceExtensions.ReadPinCountersAsync"/> actually threads its <c>ownerAuth</c>
+    /// Proves <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.ReadPinCountersAsync"/> actually threads its <c>ownerAuth</c>
     /// parameter to the wire: a WRONG owner authorization is refused with <c>TPM_RC_BAD_AUTH</c>, while the
     /// CORRECT (empty) owner authorization then reports the counters. A mutation that hard-coded away
     /// <c>ownerAuth</c> would make the first call incorrectly succeed - this is the case that catches it.
@@ -337,7 +340,7 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Proves <see cref="TpmDeviceExtensions.ResetPinCountAsync"/> actually threads its <c>ownerAuth</c>
+    /// Proves <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.ResetPinCountAsync"/> actually threads its <c>ownerAuth</c>
     /// parameter to the wire: a WRONG owner authorization is refused with <c>TPM_RC_BAD_AUTH</c> and leaves
     /// the exhausted counter untouched, while the CORRECT (empty) owner authorization then resets it. A
     /// mutation that hard-coded away <c>ownerAuth</c> would make the first call incorrectly succeed - this is
@@ -377,7 +380,7 @@ internal sealed class TpmPinExtensionsTests
     }
 
     /// <summary>
-    /// Proves <see cref="TpmDeviceExtensions.UndefinePinIndexAsync"/> actually threads its <c>ownerAuth</c>
+    /// Proves <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.UndefinePinIndexAsync"/> actually threads its <c>ownerAuth</c>
     /// parameter to the wire: a WRONG owner authorization is refused with <c>TPM_RC_BAD_AUTH</c> and leaves the
     /// Index defined and usable, while the CORRECT (empty) owner authorization then undefines it. A mutation
     /// that hard-coded away <c>ownerAuth</c> would make the first call incorrectly succeed - this is the case
@@ -406,7 +409,7 @@ internal sealed class TpmPinExtensionsTests
         Assert.IsTrue(correctAuthResult.IsSuccess, $"The correct (empty) owner authorization must still undefine the Index: '{correctAuthResult.ResponseCode}'.");
     }
 
-    /// <summary>Defines <see cref="PinIndexHandle"/> as a PIN Fail Index with <see cref="CorrectPinHash"/> via <see cref="TpmDeviceExtensions.DefinePinFailIndexAsync"/>, asserting success.</summary>
+    /// <summary>Defines <see cref="PinIndexHandle"/> as a PIN Fail Index with <see cref="CorrectPinHash"/> via <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions.extension(TpmDevice).DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/>, asserting success.</summary>
     /// <param name="device">The TPM device.</param>
     /// <param name="pinLimit">The attempt threshold to provision.</param>
     /// <returns>A task that completes once the Index is provisioned.</returns>

@@ -11,7 +11,7 @@ namespace Verifiable.JCose;
 /// field values to obtain the total required buffer length.
 /// </para>
 /// <para>
-/// Used by <see cref="JwkThumbprintUtilities"/> and <see cref="EphemeralEncryptionKeyPair"/>
+/// Used by <see cref="JwkThumbprintUtilities"/> and by <c>EphemeralEncryptionKeyPair</c>
 /// to avoid over-allocating when writing into pooled memory.
 /// </para>
 /// </remarks>

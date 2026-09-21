@@ -1,4 +1,5 @@
 using CsCheck;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.WebFinger;
 
 namespace Verifiable.Tests.WebFinger;
@@ -66,7 +67,7 @@ internal sealed class WebFingerHostPropertyTests
             return string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
                 && string.IsNullOrEmpty(uri.UserInfo)
                 && string.Equals(uri.AbsolutePath, WellKnownWebFingerValues.WellKnownPath, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
 
 
     /// <summary>
@@ -108,5 +109,5 @@ internal sealed class WebFingerHostPropertyTests
                 && !encodedUserPart.Contains(' ', StringComparison.Ordinal)
                 && !encodedUserPart.Contains('@', StringComparison.Ordinal)
                 && string.Equals(Uri.UnescapeDataString(encodedUserPart), userPart, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
 }

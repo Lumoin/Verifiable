@@ -6,7 +6,7 @@ namespace Verifiable.Vcalm.Exchange;
 /// <c>FlowKind.VcalmExchange</c>.
 /// </summary>
 /// <remarks>
-/// <see cref="RequiresActionExecutor"/> is <see langword="false"/>: the holder
+/// <see cref="StatefulFlowKind.RequiresActionExecutor"/> is <see langword="false"/>: the holder
 /// <c>verifiablePresentation</c> verification is run in the participate endpoint's
 /// <c>BuildInputAsync</c> (composing the §3.3.2 verify path) BEFORE the PDA is stepped, so the
 /// verified / rejected verdict reaches the PURE transition as an input. The exchange flow therefore

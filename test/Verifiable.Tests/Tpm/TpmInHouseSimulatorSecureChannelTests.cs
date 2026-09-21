@@ -721,6 +721,10 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     /// two start nonces (captured before nonceTPM's ownership transfers into the session) for tests that need an
     /// independent oracle.
     /// </summary>
+    /// <param name="tpm">The TPM device to start the session against.</param>
+    /// <param name="registry">The response registry to read the command's response through.</param>
+    /// <param name="pool">Memory pool for the session's transient buffers.</param>
+    /// <param name="bindHandle">The entity the returned session is bound to.</param>
     /// <param name="bindAuthValueOverride">
     /// When supplied, the value the returned <see cref="TpmSession"/> derives its key from instead of the entity's
     /// real (resolved server-side) authorization value — used to construct a genuine, non-tampered command-HMAC

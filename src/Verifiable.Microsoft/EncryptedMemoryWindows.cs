@@ -11,7 +11,7 @@ namespace Verifiable.Security.Windows
     /// </summary>
     /// <remarks>
     /// This can only limit exposure of secrets in memory if they are held for
-    /// a longer time. See more at <see cref="SecureMemory"/> remarks.</remarks>
+    /// a longer time. See more at <see cref="SensitiveMemory"/> remarks.</remarks>
     [SupportedOSPlatform("windows")]
     public sealed class EncryptedMemoryWindows: SensitiveMemory
     {

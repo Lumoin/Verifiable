@@ -55,7 +55,7 @@ public sealed record JwtBearerGrant
     /// an ID-JAG redemption these are the details the Resource Authorization Server granted after
     /// processing the grant's <c>authorization_details</c> per
     /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.4.1; the same structured value the RFC 9068
-    /// access-token producer reads from <see cref="Server.ExchangeContextServerExtensions.GrantedAuthorizationDetailsClaim"/>.
+    /// access-token producer reads from <c>Verifiable.OAuth.Server.ExchangeContextServerExtensions.GrantedAuthorizationDetailsClaim</c>.
     /// </summary>
     public IReadOnlyList<object>? AuthorizationDetailsClaim { get; init; }
 
@@ -143,9 +143,11 @@ public sealed record JwtBearerGrant
     public string? Jti { get; init; }
 
     /// <summary>
-    /// The validated assertion's <c>exp</c> — the replay-store entry's expiry window — or
-    /// <see langword="null"/>. Supplied with <see cref="Jti"/> so the recorded <c>jti</c> expires no
-    /// later than the assertion it guards.
+    /// The validated assertion's <c>exp</c>, or <see langword="null"/>. Supplied with
+    /// <see cref="Jti"/> so the jwt-bearer endpoint can derive the replay-store entry's expiry —
+    /// this instant plus the exchange's clock-skew tolerance, since this delegate is the trust
+    /// authority for the assertion's own timing window (RFC 7523 §3 rules 4–5) and the library
+    /// cannot read whatever grace it applies beyond this claim.
     /// </summary>
     public DateTimeOffset? Expiration { get; init; }
 }

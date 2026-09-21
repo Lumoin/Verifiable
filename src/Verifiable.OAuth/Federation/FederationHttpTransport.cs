@@ -103,7 +103,7 @@ public static class FederationHttpTransport
             ArgumentNullException.ThrowIfNull(context);
 
             //§9: the Entity Configuration is published at the entity's
-            ///.well-known/openid-federation, derived from its identifier with no
+            //.well-known/openid-federation, derived from its identifier with no
             //sub query parameter (an entity self-issues its own configuration).
             Uri target = WellKnownPaths.OpenIdFederation.ComputeUri(entity.Value);
 
@@ -160,7 +160,9 @@ public static class FederationHttpTransport
         }
 
         string compactJws = Encoding.UTF8.GetString(response.Body.Span);
-        return EntityStatementJwsReader.TryRead(
+        FetchedEntityStatement? statement = EntityStatementJwsReader.TryRead(
             compactJws, headerDeserializer, payloadDeserializer, base64UrlDecoder, pool);
+
+        return statement is null ? null : statement with { Freshness = HttpCacheFreshness.Compute(response) };
     }
 }

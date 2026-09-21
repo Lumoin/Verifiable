@@ -75,6 +75,54 @@ internal sealed class WebVhDidUrlDereferencerTests
     }
 
 
+    /// <summary>
+    /// A path-dereferenced file response carrying <c>Cache-Control: max-age</c> reports that many seconds of
+    /// storable freshness on the dereferencing metadata, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PathDereferenceMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[\"did:webvh:issuer\"]}");
+        var routes = LogRoutes(log);
+        routes["https://example.com/governance/issuers.json"] = (200, served, "application/json");
+
+        DidDereferencingResult result = await DereferenceAsync(
+            $"{log.Did}/governance/issuers.json",
+            routes,
+            new Dictionary<string, string> { ["https://example.com/governance/issuers.json"] = "max-age=90" }).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful, $"A did:webvh path DID URL MUST dereference. Error: {result.DereferencingMetadata.Error?.Type}.");
+        Assert.IsTrue(result.DereferencingMetadata.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(90), result.DereferencingMetadata.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
+    }
+
+
+    /// <summary>
+    /// A path dereference against a not-found file reports non-storable freshness — there is no document a
+    /// cache could keep, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PathDereferenceNon200ResponseReportsNonStorableFreshness()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        var routes = LogRoutes(log);
+        routes["https://example.com/governance/issuers.json"] = (404, null, null);
+
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", routes).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "A 404 file MUST NOT dereference.");
+        Assert.IsFalse(result.DereferencingMetadata.Freshness.IsStorable,
+            "A dereference that never reached a document reports no storable freshness.");
+    }
+
+
     [TestMethod]
     public async Task PathNotFoundWhenFileMissing()
     {
@@ -524,9 +572,17 @@ internal sealed class WebVhDidUrlDereferencerTests
 
     private async Task<DidDereferencingResult> DereferenceAsync(
         string didUrl,
-        Dictionary<string, (int Status, byte[]? Body, string? ContentType)> routes)
+        Dictionary<string, (int Status, byte[]? Body, string? ContentType)> routes,
+        Dictionary<string, string>? cacheControlOverrides = null)
     {
         var transport = new RoutingTransport(routes);
+        if(cacheControlOverrides is not null)
+        {
+            foreach((string url, string cacheControl) in cacheControlOverrides)
+            {
+                transport.CacheControlOverrides[url] = cacheControl;
+            }
+        }
 
         DidMethodResolverDelegate webVhResolver = WebVhDidResolver.Build(
             transport.Delegate,
@@ -550,7 +606,8 @@ internal sealed class WebVhDidUrlDereferencerTests
             SerializeProofOptions,
             Base58Decoder,
             MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            BaseMemoryPool.Shared);
+            BaseMemoryPool.Shared,
+            Context.FromIris(Context.Credentials20));
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
@@ -598,6 +655,10 @@ internal sealed class WebVhDidUrlDereferencerTests
             this.Routes = routes;
         }
 
+        //Additive: a Cache-Control value per URL, layered onto the route's ContentType header. Left unset by
+        //every existing route, so a caller that never sets an entry here sees the same headers as before.
+        public Dictionary<string, string> CacheControlOverrides { get; } = new(StringComparer.Ordinal);
+
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
             if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[]? Body, string? ContentType) route))
@@ -609,9 +670,16 @@ internal sealed class WebVhDidUrlDereferencerTests
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(route.Body, BufferTags.Json);
 
-            HttpHeaderSet headers = route.ContentType is null
-                ? HttpHeaderSet.Empty
-                : HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, route.ContentType));
+            bool hasCacheControl = CacheControlOverrides.TryGetValue(request.Target.AbsoluteUri, out string? cacheControl);
+
+            HttpHeaderSet headers = (route.ContentType, hasCacheControl) switch
+            {
+                (null, false) => HttpHeaderSet.Empty,
+                ({ } contentType, false) => HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, contentType)),
+                (null, true) => HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.CacheControl, cacheControl!)),
+                ({ } contentType, true) => HttpHeaderSet.FromPairs(
+                    (WellKnownHttpHeaderNames.ContentType, contentType), (WellKnownHttpHeaderNames.CacheControl, cacheControl!))
+            };
 
             return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
         };

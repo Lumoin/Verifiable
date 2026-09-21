@@ -18,7 +18,7 @@ namespace Verifiable.Server.Pipeline;
 /// <see cref="Payload"/> on the request context via
 /// <see cref="ExchangeContextServerExtensions.SetMatchPayload"/>, and then invokes
 /// the endpoint's handlers. Handlers that consume the payload read it back
-/// through <see cref="ExchangeContextServerExtensions.MatchPayload"/> and pattern-match
+/// through <c>ExchangeContextServerExtensions.MatchPayload</c> and pattern-match
 /// to the subtype they expect.
 /// </para>
 /// </remarks>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -48,14 +49,20 @@ public sealed class DidDereferencingResult
     /// <param name="content">The dereferenced resource.</param>
     /// <param name="contentMetadata">Metadata about the content.</param>
     /// <param name="contentType">The media type of the resource.</param>
+    /// <param name="freshness">
+    /// The freshness the method's own wire fetch reports for <paramref name="content"/>, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>. Left at its
+    /// default (not storable) by a dereference that reaches no network.
+    /// </param>
     public static DidDereferencingResult Success(
         object content,
         DidDocumentMetadata? contentMetadata = null,
-        string? contentType = null)
+        string? contentType = null,
+        HttpCacheFreshness freshness = default)
     {
         return new DidDereferencingResult
         {
-            DereferencingMetadata = new DidDereferencingMetadata { ContentType = contentType },
+            DereferencingMetadata = new DidDereferencingMetadata { ContentType = contentType, Freshness = freshness },
             ContentStream = content,
             ContentMetadata = contentMetadata
         };

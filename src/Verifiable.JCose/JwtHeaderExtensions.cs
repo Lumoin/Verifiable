@@ -200,7 +200,7 @@ public static class JwtHeaderExtensions
         /// with <paramref name="base64UrlEncoder"/>. The curve name for the <c>crv</c> JWK
         /// parameter is resolved from the key's <see cref="Tag"/> by
         /// <paramref name="tagToCrvConverter"/>, defaulting to
-        /// <see cref="CryptoFormatConversions.DefaultTagToCrvConverter"/>.
+        /// <see cref="CryptoFormatConversions.DefaultTagToEpkCrvConverter"/>.
         /// </para>
         /// <para>
         /// HAIP 1.0 requires ECDH-ES with P-256 and either <c>A128GCM</c> or <c>A256GCM</c>.
@@ -217,7 +217,7 @@ public static class JwtHeaderExtensions
         /// <param name="base64UrlEncoder">Delegate for Base64url encoding the X and Y coordinates.</param>
         /// <param name="tagToCrvConverter">
         /// Delegate that maps the key's <see cref="Tag"/> to a JWK curve name string.
-        /// Pass <see cref="CryptoFormatConversions.DefaultTagToCrvConverter"/> for standard curves.
+        /// Pass <see cref="CryptoFormatConversions.DefaultTagToEpkCrvConverter"/> for standard curves.
         /// </param>
         /// <returns>A <see cref="JwtHeader"/> for an ECDH-ES JWE.</returns>
         /// <exception cref="InvalidOperationException">

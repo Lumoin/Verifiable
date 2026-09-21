@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Federation;
 /// the parsed <see cref="EntityStatement"/>, the unverified header used
 /// during signing (for feeding into
 /// <see cref="EntityStatementValidationContext"/>), and the raw compact
-/// JWS string the orchestrator's <see cref="Jws.VerifyAsync"/> call
+/// JWS string the orchestrator's <see cref="Jws.VerifyAsync(string, Verifiable.Cryptography.DecodeDelegate, BaseMemoryPool, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.VerificationDelegate, int, Verifiable.Cryptography.CryptoEventSink?, CancellationToken)"/> call
 /// consumes.
 /// </summary>
 internal sealed record MintedStatement(

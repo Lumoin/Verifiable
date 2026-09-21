@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Fido2;
 /// </summary>
 /// <remarks>
 /// Both records guard their <c>Dispose()</c> body with an <c>if(disposed) return;</c> check before
-/// releasing every owned carrier (<see cref="Fido2.AuthenticatorData"/>,
+/// releasing every owned carrier (<see cref="AuthenticatorData"/>,
 /// <see cref="RegistrationCeremonyInput.ExpectedRpIdHash"/>/<see cref="AssertionCeremonyInput.ExpectedRpIdHash"/>,
 /// and — for an assertion — <see cref="AssertionCeremonyInput.CredentialId"/>, every
 /// <see cref="AssertionCeremonyInput.AllowedCredentialIds"/> entry,

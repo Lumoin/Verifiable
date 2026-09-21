@@ -26,7 +26,7 @@ namespace Verifiable.Apdu.Lds;
 /// authenticated implicitly by the subsequent Secure Messaging rather than by returning an explicit
 /// authentication token. The ECDH agreement reuses <see cref="PaceGenericMapping.AgreeSharedSecretAsync"/>
 /// (a generic TR-03110 scalar·point primitive) and the key derivation reuses
-/// <see cref="PaceKeyDerivation.DeriveSessionKeysAsync"/>; the terminal's ephemeral private key is supplied
+/// <see cref="PaceKeyDerivation.DeriveSessionKeysAsync(ReadOnlyMemory{byte}, Tag, Tag, BaseMemoryPool, CancellationToken)"/>; the terminal's ephemeral private key is supplied
 /// by the caller — from the entropy provider in production, injected from a worked example in tests — so
 /// the flow is deterministic.
 /// </para>

@@ -44,7 +44,7 @@ internal sealed class XAdESTimeStampTests
         bool isRead = XAdESTimeStamp.TryRead(table, table.DocumentElementIndex, BaseMemoryPool.Shared, owned, out XAdESTimeStamp value, out XAdESReadError error);
         Assert.IsTrue(isRead, $"Must read but was refused with {error.Failure}.");
         Assert.IsFalse(value.HasId);
-        Assert.HasCount(0, value.Includes);
+        Assert.IsEmpty(value.Includes);
         Assert.IsFalse(value.HasCanonicalizationMethod);
         Assert.HasCount(1, value.TimeStamps);
         Assert.AreEqual(XAdESTimeStampEntryKind.EncapsulatedTimeStamp, value.TimeStamps[0].Kind);
@@ -306,3 +306,4 @@ internal sealed class XAdESTimeStampTests
         }
     }
 }
+

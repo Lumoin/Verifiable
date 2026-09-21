@@ -22,21 +22,59 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerCodecs Validated={IsValidated}")]
-public sealed class AuthorizationServerCodecs
+public sealed class AuthorizationServerCodecs: WiringComponent
 {
     /// <summary>
     /// Base64url encoder delegate. Required. Used for PKCE code challenge
     /// computation, correlation key encoding, and any other place where the
     /// server produces Base64url-encoded values.
     /// </summary>
-    public EncodeDelegate? Encoder { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public EncodeDelegate? Encoder
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Base64url decoder delegate. Required. Used for JWE header parsing, JWKS
     /// key coordinate decoding, and any other place where the server consumes
     /// Base64url-encoded values.
     /// </summary>
-    public DecodeDelegate? Decoder { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public DecodeDelegate? Decoder
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Computes a digest. Required.
@@ -51,7 +89,7 @@ public sealed class AuthorizationServerCodecs
     /// <see cref="CryptographicKeyFactory"/>:
     /// </para>
     /// <code>
-    /// codecs.ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync;
+    /// codecs.ComputeDigest = applicationDigest;
     /// </code>
     /// <para>
     /// The delegate's <see cref="Tag"/> argument carries the
@@ -61,33 +99,86 @@ public sealed class AuthorizationServerCodecs
     /// them — the algorithm decision lives at the call site, not in the slot.
     /// </para>
     /// <para>
-    /// Earlier versions of this group held a <c>HashFunctionSelector</c>
-    /// returning a naked-bytes <c>HashFunction</c>. That surface has been
-    /// deleted in favour of the pool-aware, semantic-typed
-    /// <see cref="ComputeDigestDelegate"/>.
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
     /// </para>
     /// </remarks>
-    public ComputeDigestDelegate? ComputeDigest { get; set; }
+    public ComputeDigestDelegate? ComputeDigest
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Serializes a <see cref="JwtHeader"/> to UTF-8 JSON bytes. Required.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Wire to the application's chosen JSON library. The library does not
-    /// import any JSON serialization library; the application decides whether
-    /// <c>System.Text.Json</c>, <c>Utf8Json</c>, or another library is used,
-    /// and supplies a delegate that calls it.
+    /// import any JSON serialization library; the application supplies its serializer delegate.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public JwtHeaderSerializer? JwtHeaderSerializer { get; set; }
+    public JwtHeaderSerializer? JwtHeaderSerializer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Serializes a <see cref="JwtPayload"/> to UTF-8 JSON bytes. Required.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Wire to the application's chosen JSON library. See
     /// <see cref="JwtHeaderSerializer"/> for the rationale.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public JwtPayloadSerializer? JwtPayloadSerializer { get; set; }
+    public JwtPayloadSerializer? JwtPayloadSerializer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Deserializes the protected header bytes of a compact JWS into a claim
@@ -97,21 +188,63 @@ public sealed class AuthorizationServerCodecs
     /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Wire to the application's chosen JSON library. See
     /// <see cref="JwtHeaderSerializer"/> for the rationale on why
     /// the library does not import a JSON library directly.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public JwtHeaderDeserializer? JwtHeaderDeserializer { get; set; }
+    public JwtHeaderDeserializer? JwtHeaderDeserializer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Deserializes the payload bytes of a compact JWS into a claim
     /// dictionary. Required when the AS consumes JWTs from the wire.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Wire to the application's chosen JSON library. See
     /// <see cref="JwtHeaderSerializer"/> for the rationale.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public JwtPayloadDeserializer? JwtPayloadDeserializer { get; set; }
+    public JwtPayloadDeserializer? JwtPayloadDeserializer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Serialises a <see cref="DcqlQuery"/> to its JSON wire-form string
@@ -121,7 +254,26 @@ public sealed class AuthorizationServerCodecs
     /// OID4VP 1.0 §5.9.3) — the signed-JAR path reaches DCQL serialisation
     /// through the action executor's injected delegates.
     /// </summary>
-    public JarClaimSerializer<DcqlQuery>? DcqlQuerySerializer { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public JarClaimSerializer<DcqlQuery>? DcqlQuerySerializer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Serialises a <see cref="VerifierClientMetadata"/> to its JSON
@@ -130,13 +282,25 @@ public sealed class AuthorizationServerCodecs
     /// unsigned-JAR path; the signed-JAR path reaches it via the action
     /// executor.
     /// </summary>
-    public JarClaimSerializer<VerifierClientMetadata>? ClientMetadataSerializer { get; set; }
-
-
-    /// <summary>
-    /// Whether <see cref="Validate"/> has been called successfully on this group.
-    /// </summary>
-    public bool IsValidated { get; private set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public JarClaimSerializer<VerifierClientMetadata>? ClientMetadataSerializer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -147,6 +311,7 @@ public sealed class AuthorizationServerCodecs
     /// </exception>
     public void Validate()
     {
+        IsValidated = false;
         var missing = new List<string>();
 
         if(Encoder is null) { missing.Add(nameof(Encoder)); }

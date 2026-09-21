@@ -39,7 +39,7 @@ namespace Verifiable.Fido2;
 /// <para>
 /// <strong>Equality.</strong> A user handle is not itself a secret, so
 /// <see cref="Equals(UserHandle?)"/> compares bytes directly with
-/// <see cref="ReadOnlySpan{T}.SequenceEqual(ReadOnlySpan{T})"/> rather than the constant-time
+/// <see cref="MemoryExtensions.SequenceEqual{T}(ReadOnlySpan{T}, ReadOnlySpan{T})"/> rather than the constant-time
 /// comparison a secret or a MAC verification would require — there is no timing side channel to
 /// protect against when comparing two values neither side keeps secret.
 /// </para>

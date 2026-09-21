@@ -29,8 +29,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// </para>
 /// <para>
 /// Signature verification on the MSO COSE_Sign1 is a separate concern (see
-/// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuerAuthVerifier"/> in
-/// <c>Verifiable.Cbor</c>). The verifier-side trust chain typically runs
+/// <see cref="MdocVerificationExtensions"/>). The verifier-side trust chain typically runs
 /// both checks in series: signature first (does the MSO belong to a key the
 /// verifier trusts), then this binding (did that signed MSO commit to the
 /// items the wallet presented).
@@ -38,7 +37,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <para>
 /// Digest computation routes through the registered synchronous digest seam
 /// (<see cref="CryptographicKeyEvents.ComputeDigest"/>), matching the precedent set by
-/// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance"/> and the SD-CWT
+/// <c>Verifiable.Cbor.Mdoc.MdocCborIssuance</c> and the SD-CWT
 /// pipeline — the library never picks a hash implementation the consumer
 /// did not wire.
 /// </para>

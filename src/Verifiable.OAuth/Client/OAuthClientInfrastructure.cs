@@ -1,3 +1,4 @@
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Dpop;
@@ -72,7 +73,7 @@ public sealed class OAuthClientInfrastructure
     /// <summary>
     /// Generates an identifier for a stated <see cref="IdentifierPurpose"/>.
     /// Mirrors the AS-side
-    /// <see cref="Server.AuthorizationServerIntegration.GenerateIdentifierAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.GenerateIdentifierAsync"/>
     /// slot: client-side identifier sites (today, the JAR JTI) route through
     /// here so audit and replay infrastructure can intercept on both sides
     /// of the wire symmetrically. A deployment that wants the library's own
@@ -82,6 +83,20 @@ public sealed class OAuthClientInfrastructure
     /// <see cref="MemoryPool"/>.
     /// </summary>
     public required GenerateIdentifierDelegate GenerateIdentifierAsync { get; init; }
+
+    /// <summary>
+    /// The outbound-fetch policy every dial this infrastructure's flow handlers make is evaluated
+    /// against when the call's <see cref="Verifiable.Core.ExchangeContext"/> carries none (see
+    /// <see cref="OutboundFetchPolicyExchangeContextExtensions.ResolveOutboundFetchPolicy"/>).
+    /// Defaults to <see cref="OutboundFetchPolicy.SecureDefault"/>: HTTPS-only, no redirects,
+    /// loopback and private-network literals denied. Every PAR, token, revocation, ID-JAG, and
+    /// OID4VP <c>response_uri</c> endpoint this infrastructure dials is read out of discovered
+    /// authorization-server metadata or a presented request, not chosen by this library, so a
+    /// deployment that talks to a loopback or private-network authorization server (a local
+    /// development instance, a service-mesh-internal AS) names a policy here that allows it
+    /// rather than weakening the secure default for every other call.
+    /// </summary>
+    public OutboundFetchPolicy OutboundFetchPolicy { get; init; } = OutboundFetchPolicy.SecureDefault;
 
 
     //Transport.
@@ -97,7 +112,7 @@ public sealed class OAuthClientInfrastructure
     /// Sends an HTTP POST with a JSON body — used by RFC 7591 §3 dynamic
     /// client registration. <see langword="null"/> when the application does
     /// not register clients dynamically; required when
-    /// <see cref="OAuthDynamicRegistrationClient.RegisterAsync"/> is called.
+    /// <see cref="OAuthDynamicRegistrationClient.RegisterAsync(RegisterClientOptions, System.Threading.CancellationToken)"/> is called.
     /// The in-process test transport wires this delegate to
     /// <see cref="Verifiable.OAuth.Server.Registration.RegistrationEndpoints.HandleCreateAsync"/>;
     /// production deployments wire it to their HTTP transport.
@@ -150,9 +165,6 @@ public sealed class OAuthClientInfrastructure
     /// <summary>Parses a token endpoint response.</summary>
     public ParseTokenResponseDelegate ParseTokenResponseAsync { get; private init; } = null!;
 
-    /// <summary>Parses an AS metadata document body into a typed record.</summary>
-    public ParseAuthorizationServerMetadataDelegate ParseAuthorizationServerMetadataAsync { get; private init; } = null!;
-
     /// <summary>Parses an RFC 7591 §3.2.1 registration response body.</summary>
     public ParseRegistrationResponseDelegate ParseRegistrationResponseAsync { get; private init; } = null!;
 
@@ -160,8 +172,8 @@ public sealed class OAuthClientInfrastructure
     //Discovery resolvers.
 
     /// <summary>
-    /// Resolves an AS issuer URL into its
-    /// <see cref="AuthorizationServerMetadata"/>. Invoked per-call by
+    /// Resolves an AS issuer URL into a typed
+    /// <see cref="AuthorizationServerMetadataResolution"/>. Invoked per-call by
     /// protocol methods that need an endpoint URL or capability list. The
     /// implementation typically fetches and caches per the application's
     /// caching policy.
@@ -260,7 +272,6 @@ public sealed class OAuthClientInfrastructure
         LoadFlowStateByRequestUriDelegate loadStateByRequestUriAsync,
         ParseParResponseDelegate parseParResponseAsync,
         ParseTokenResponseDelegate parseTokenResponseAsync,
-        ParseAuthorizationServerMetadataDelegate parseAuthorizationServerMetadataAsync,
         ParseRegistrationResponseDelegate parseRegistrationResponseAsync,
         ResolveAuthorizationServerMetadataDelegate resolveAuthorizationServerMetadataAsync,
         ResolveCallbackValidatorDelegate resolveCallbackValidator,
@@ -269,6 +280,7 @@ public sealed class OAuthClientInfrastructure
         TimeProvider timeProvider,
         FillEntropyDelegate fillEntropy,
         GenerateIdentifierDelegate generateIdentifierAsync,
+        OutboundFetchPolicy? outboundFetchPolicy = null,
         Oid4VpWalletConfiguration? defaultOid4VpWalletConfiguration = null,
         SendJsonPostDelegate? sendJsonPostAsync = null,
         SendJsonGetDelegate? sendJsonGetAsync = null,
@@ -287,7 +299,6 @@ public sealed class OAuthClientInfrastructure
         ArgumentNullException.ThrowIfNull(loadStateByRequestUriAsync);
         ArgumentNullException.ThrowIfNull(parseParResponseAsync);
         ArgumentNullException.ThrowIfNull(parseTokenResponseAsync);
-        ArgumentNullException.ThrowIfNull(parseAuthorizationServerMetadataAsync);
         ArgumentNullException.ThrowIfNull(parseRegistrationResponseAsync);
         ArgumentNullException.ThrowIfNull(resolveAuthorizationServerMetadataAsync);
         ArgumentNullException.ThrowIfNull(resolveCallbackValidator);
@@ -319,7 +330,6 @@ public sealed class OAuthClientInfrastructure
             LoadStateByRequestUriAsync = loadStateByRequestUriAsync,
             ParseParResponseAsync = parseParResponseAsync,
             ParseTokenResponseAsync = parseTokenResponseAsync,
-            ParseAuthorizationServerMetadataAsync = parseAuthorizationServerMetadataAsync,
             ParseRegistrationResponseAsync = parseRegistrationResponseAsync,
             ResolveAuthorizationServerMetadataAsync = resolveAuthorizationServerMetadataAsync,
             ResolveCallbackValidator = resolveCallbackValidator,
@@ -328,6 +338,7 @@ public sealed class OAuthClientInfrastructure
             MemoryPool = memoryPool,
             FillEntropy = fillEntropy,
             GenerateIdentifierAsync = generateIdentifierAsync,
+            OutboundFetchPolicy = outboundFetchPolicy ?? OutboundFetchPolicy.SecureDefault,
             DefaultOid4VpWalletConfiguration = defaultOid4VpWalletConfiguration,
             SendJsonPostAsync = sendJsonPostAsync,
             SendJsonGetAsync = sendJsonGetAsync,

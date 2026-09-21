@@ -35,7 +35,7 @@ namespace Verifiable.Tests.JCose;
 /// consuming the same rules over already-decoded, non-conformant wire content would exercise.
 /// </para>
 /// <para>
-/// <strong>Ownership discipline around <see cref="CBAdESSignatureCreation.SignAsync"/>'s "sole producer"
+/// <strong>Ownership discipline around <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>'s "sole producer"
 /// contract.</strong> On a SUCCESSFUL call, ownership of the <c>headers</c> argument transfers into the
 /// returned <see cref="CBAdESSignatureCreationResult.Headers"/> (see that method's remarks) — every succeeding
 /// test therefore disposes only the result, never the original <see cref="CBAdESProtectedHeaders"/> local. On a
@@ -63,7 +63,7 @@ namespace Verifiable.Tests.JCose;
 /// <para>
 /// <strong>Key material.</strong> Every signing key is P-256, minted through
 /// <see cref="TestKeyMaterialProvider.CreateP256KeyMaterial"/> (the Microsoft backend), signed via the explicit-
-/// delegate <see cref="CBAdESSignatureCreation.SignAsync"/> overload with
+/// delegate <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> overload with
 /// <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/> — mirroring
 /// <c>Verifiable.Tests.Cose.CoseTests</c>'s own explicit-delegate composition pattern exactly, so this file's
 /// tests never depend on the <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> resolution
@@ -237,7 +237,7 @@ internal sealed class CBAdESSignatureCreationTests
     /// <summary>
     /// The signed <c>x5chain</c> occurrence's <c>[2*certs:bstr]</c> certificate-path arm (clause 5.1.8,
     /// <see cref="CBAdESX5ChainCertificatePath"/>) round-trips byte-exact through the SHIPPED
-    /// <see cref="CBAdESSignatureCreation.SignAsync"/> -&gt; <see cref="CBAdESSignatureValidation.ValidateAsync"/>
+    /// <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> -&gt; <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
     /// composition (CB-5.1.8-04) — the array arm no prior test exercised;
     /// <see cref="CreationWithOnlyX5ChainSatisfiesTriWay"/> covers only the sibling <c>bstr</c> single-certificate
     /// arm. Exercises <see cref="Verifiable.Cbor.CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader"/>'s
@@ -336,7 +336,7 @@ internal sealed class CBAdESSignatureCreationTests
     /// throws, citing CB-6.3-a -- the additional clause 6.3 requirement that the generator include the claimed
     /// UTC time (not any other offset) as the <c>iat</c> content. This is the model's own construction-time
     /// guard (<see cref="CBAdESCwtClaims.CBAdESCwtClaims(DateTimeOffset)"/>), independent of and reached before
-    /// either <see cref="CBAdESHeaderRules.EnsureConformant"/> or <see cref="CBAdESSignatureCreation.SignAsync"/>
+    /// either <see cref="CBAdESHeaderRules.EnsureConformant"/> or <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// ever runs.
     /// </summary>
     [TestMethod]
@@ -1200,7 +1200,7 @@ internal sealed class CBAdESSignatureCreationTests
     /// <c>x5bag</c> (label 32) is NOT profiled by this document (CB-4.4-07: ETSI TS 119 152-1
     /// V1.1.1 never mentions <c>x5bag</c> anywhere) -- a caller carrying it as an
     /// <see cref="CBAdESProtectedHeaders.UnprofiledHeaders"/> entry round-trips it byte-exact through the
-    /// SHIPPED <see cref="CBAdESSignatureCreation.SignAsync"/> -&gt; <see cref="CBAdESSignatureValidation.ValidateAsync"/>
+    /// SHIPPED <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> -&gt; <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
     /// composition -- construction no longer throws a profiled-label collision for label 32 now that
     /// <c>CoseHeaderParameters.X5Bag</c> was removed from <see cref="CBAdESProtectedHeaders"/>'s local
     /// <c>IsProfiledLabel</c> switch.
@@ -1265,7 +1265,7 @@ internal sealed class CBAdESSignatureCreationTests
 
     /// <summary>
     /// A NEGATIVE unprofiled label (e.g. -1) round-trips byte-exact through the SHIPPED
-    /// <see cref="CBAdESSignatureCreation.SignAsync"/> -&gt; <see cref="CBAdESSignatureValidation.ValidateAsync"/>
+    /// <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> -&gt; <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
     /// composition. Before a fix, a self-round-trip of a canonically-encoded
     /// protected header carrying a negative label after a positive one (e.g. <c>x5t</c>, label 34) broke: the
     /// naive <c>key &lt;= previousKey</c> SIGNED-integer comparison the top-level map-key reader used to apply
@@ -1339,8 +1339,8 @@ internal sealed class CBAdESSignatureCreationTests
     /// <summary>
     /// A <c>tstr</c>-arm <c>crit</c> element AND a <c>tstr</c>-keyed <see cref="CBAdESProtectedHeaders.UnprofiledHeaders"/>
     /// entry (the general COSE <c>label: int / tstr</c> union RFC 9052 §1.4/§3.1 reuses unnarrowed)
-    /// round-trip byte-exact through the SHIPPED <see cref="CBAdESSignatureCreation.SignAsync"/> -&gt;
-    /// <see cref="CBAdESSignatureValidation.ValidateAsync"/> composition -- the writer side of that label
+    /// round-trip byte-exact through the SHIPPED <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> -&gt;
+    /// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> composition -- the writer side of that label
     /// union (<see cref="Verifiable.Cbor.CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader"/>'s per-arm
     /// dispatch and canonical-encoded-bytes sort; the crit array's per-arm <c>EncodeCritical</c> writer), paired
     /// with the reader side (<see cref="CBAdESSignatureValidationTests.ParseAcceptsIndependentlyMintedTextArmCritAndUnprofiledHeader"/>

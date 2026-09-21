@@ -357,10 +357,9 @@ public sealed class JAdESUnsignedHeaderElementCounterSignature: JAdESUnsignedHea
 /// <strong>JA-5.3.4-05, enforced at construction.</strong> "The <c>sigTst</c> JSON object shall not contain the
 /// <c>canonAlg</c> member" — an unconditional prohibition (unlike <c>arcTst</c>'s own container-mode-dependent
 /// rule, JA-5.3.1-14, which this element cannot check on its own — see <see cref="JAdESUnsignedHeaderElementArchiveTimestamp"/>).
-/// Checked directly on a clear-mode <paramref name="Carriage"/>'s decoded <see cref="AdESTimestampContainer.CanonAlg"/>;
+/// Checked directly on a clear-mode <see cref="Carriage"/>'s decoded <see cref="AdESTimestampContainer.CanonAlg"/>;
 /// an opaque-mode carriage is not decoded, so nothing to check.
 /// </remarks>
-/// <param name="Carriage">The dual-mode carriage: opaque wire text, or the decoded time-stamp container.</param>
 [DebuggerDisplay("JAdESUnsignedHeaderElementSignatureTimestamp: {Carriage}")]
 public sealed class JAdESUnsignedHeaderElementSignatureTimestamp: JAdESUnsignedHeaderElement, IDisposable
 {

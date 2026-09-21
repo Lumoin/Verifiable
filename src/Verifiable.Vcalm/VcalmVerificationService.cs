@@ -244,12 +244,17 @@ public static class VcalmVerificationService
     }
 
 
-    //§3.3.1 status check: for each BitstringStatusListEntry the credential carries, resolve the
-    //referenced status list through the seam, read the bit, and classify per §3.8.1. A set bit
-    //(revoked / suspended) is a status WARNING — it populates StatusResults with verified:false but
-    //does NOT add an error, so it does not flip the overall verified. A credential with no
-    //credentialStatus, an unwired resolver, or a list that cannot be resolved yields an empty result
-    //set and no warning (an undeterminable status is not asserted as revoked).
+    /// <summary>
+    /// The §3.3.1 status check: for each <c>BitstringStatusListEntry</c> the credential carries,
+    /// resolves the referenced status list through <paramref name="resolveStatusList"/>, reads the
+    /// bit, and classifies per §3.8.1. A set bit (revoked / suspended) is a status WARNING — it
+    /// populates the returned results with <c>verified:false</c> but does NOT add an ERROR, so it
+    /// does not flip the overall <c>verified</c>. A credential with no <c>credentialStatus</c> or an
+    /// unwired resolver yields an empty result set and no warning; every other path that cannot
+    /// establish a status (an unresolvable list, a <see cref="BitstringStatusListException"/>, or a
+    /// malformed entry) reports exactly one §3.8.1 WARNING through <paramref name="problems"/> and
+    /// adds no result.
+    /// </summary>
     private static async ValueTask<ImmutableArray<VcalmStatusResult>> EvaluateStatusAsync(
         DataIntegritySecuredCredential credential,
         ResolveVcalmStatusListDelegate? resolveStatusList,
@@ -267,8 +272,22 @@ public static class VcalmVerificationService
         ImmutableArray<VcalmStatusResult>.Builder results = ImmutableArray.CreateBuilder<VcalmStatusResult>();
         foreach(CredentialStatus status in statuses)
         {
-            if(!TryMapStatusEntry(status, out BitstringStatusListEntry? entry))
+            if(!TryMapStatusEntry(status, out bool isMalformedStatusEntry, out BitstringStatusListEntry? entry))
             {
+                //A foreign type is not a W3C status reference this verifier implements an algorithm
+                //for, and the specification names no error for it: it is skipped silently. A
+                //BitstringStatusListEntry with a missing / unparseable statusListIndex,
+                //statusListCredential, or statusPurpose IS the specification's shape but cannot be
+                //resolved: §3.5 STATUS_VERIFICATION_ERROR.
+                if(isMalformedStatusEntry)
+                {
+                    problems.Add(VcalmProblemDetail.Warning(
+                        VcalmProblemTypes.StatusVerificationError,
+                        "STATUS_VERIFICATION_ERROR",
+                        "A BitstringStatusListEntry credentialStatus entry lacks, or carries an unparseable, "
+                        + "statusListIndex, statusListCredential, or statusPurpose."));
+                }
+
                 continue;
             }
 
@@ -276,14 +295,20 @@ public static class VcalmVerificationService
             //(through the SSRF-policed OutboundFetch when remote), verifies its proof, and decodes the
             //bitstring — all throw-prone over attacker-influenced input — and GetStatus then enforces the
             //§3.2 purpose / window / length / range checks. A throw from EITHER must not become a 500:
-            //§3.8.1 makes status a WARNING, so an undeterminable status yields no result and no warning
-            //(it never flips verified), matching the documented null-resolution behaviour.
+            //§3.8.1 makes status a WARNING, reporting the specification's own error type instead of the
+            //exception's message, type name, or stack (§3.8: "sanitize all server errors").
             VcalmResolvedStatusList? resolved = null;
             try
             {
                 resolved = await resolveStatusList(entry, context, cancellationToken).ConfigureAwait(false);
                 if(resolved is null)
                 {
+                    problems.Add(VcalmProblemDetail.Warning(
+                        VcalmProblemTypes.StatusRetrievalError,
+                        "STATUS_RETRIEVAL_ERROR",
+                        $"The status list referenced by the '{entry.StatusPurpose}' credentialStatus "
+                        + "entry could not be retrieved."));
+
                     continue;
                 }
 
@@ -294,7 +319,9 @@ public static class VcalmVerificationService
                 {
                     Value = statusResult.Status,
                     Verified = statusResult.IsValid,
-                    Input = status.Id ?? string.Empty
+                    Input = status.Id ?? string.Empty,
+                    Purpose = statusResult.Purpose,
+                    Message = statusResult.Message
                 });
 
                 //§3.8.1: a set revocation / suspension bit is a status WARNING (does not flip
@@ -310,9 +337,7 @@ public static class VcalmVerificationService
             }
             catch(Exception ex) when(ex is not OperationCanceledException and not OutOfMemoryException)
             {
-                //An unresolvable / unverifiable / undecodable status list (or one failing the §3.2
-                //purpose / window / length / range checks) cannot establish the status: no result, no
-                //warning, never a 500. §3.8.1 status is a warning, so this does not flip verified.
+                problems.Add(BuildStatusUnavailableProblem(entry.StatusPurpose, ex));
             }
             finally
             {
@@ -324,14 +349,58 @@ public static class VcalmVerificationService
     }
 
 
-    //Maps the credential's CredentialStatus (a VC-DM 2.0 §4.10 status entry) to the typed Core
-    //BitstringStatusListEntry the resolver and validation surface read. Returns false for an entry
-    //that is not a BitstringStatusListEntry or whose statusListIndex / statusListCredential is
-    //missing or unparseable — such an entry is not a resolvable W3C status reference.
+    /// <summary>
+    /// Builds the §3.8.1 status WARNING for a status entry whose status could not be established
+    /// because <see cref="EvaluateStatusAsync"/>'s resolve-and-validate step threw. A
+    /// <see cref="BitstringStatusListException"/> reports the specification's own error kind (§3.5
+    /// Processing Errors, or the §3.2 <c>RANGE_ERROR</c>); any other exception reports
+    /// <see cref="VcalmProblemTypes.StatusRetrievalError"/> — the application's resolver failed and
+    /// said no more. The detail is this library's own fixed sentence: it never carries the
+    /// exception's message, type name, or stack (§3.8: "sanitize all server errors").
+    /// </summary>
+    private static VcalmProblemDetail BuildStatusUnavailableProblem(string purpose, Exception exception) =>
+        exception is BitstringStatusListException bitstringException
+            ? VcalmProblemDetail.Warning(
+                bitstringException.ErrorType switch
+                {
+                    BitstringStatusListErrorType.StatusRetrieval => VcalmProblemTypes.StatusRetrievalError,
+                    BitstringStatusListErrorType.StatusVerification => VcalmProblemTypes.StatusVerificationError,
+                    BitstringStatusListErrorType.StatusListLength => VcalmProblemTypes.StatusListLengthError,
+                    BitstringStatusListErrorType.Range => VcalmProblemTypes.RangeError,
+                    BitstringStatusListErrorType.MalformedValue => VcalmProblemTypes.MalformedValueError,
+                    _ => VcalmProblemTypes.StatusRetrievalError
+                },
+                bitstringException.ErrorCode,
+                $"The '{purpose}' credentialStatus entry's status could not be established.")
+            : VcalmProblemDetail.Warning(
+                VcalmProblemTypes.StatusRetrievalError,
+                "STATUS_RETRIEVAL_ERROR",
+                $"The '{purpose}' credentialStatus entry's status could not be established: the "
+                + "application's resolver failed and said no more.");
+
+
+    /// <summary>
+    /// Maps the credential's <see cref="CredentialStatus"/> (a VC Data Model 2.0 §4.10 status entry)
+    /// to the typed Core <see cref="BitstringStatusListEntry"/> the resolver and validation surface
+    /// read.
+    /// </summary>
+    /// <param name="status">The credential's status entry.</param>
+    /// <param name="isMalformedStatusEntry">
+    /// <see langword="true"/> when <paramref name="status"/> IS a <c>BitstringStatusListEntry</c> but
+    /// its <c>statusListIndex</c>, <c>statusListCredential</c>, or <c>statusPurpose</c> is missing or
+    /// unparseable, its <c>statusSize</c> is not a positive integer, its <c>statusMessage</c> array's
+    /// length does not equal the number of possible values <c>statusSize</c> indicates, or
+    /// <c>statusSize</c> is greater than <c>1</c> without a <c>statusMessage</c> array — the
+    /// specification's shape, malformed (§2.1). <see langword="false"/> for an entry of another
+    /// <c>type</c>, which this verifier implements no algorithm for.
+    /// </param>
+    /// <param name="entry">The mapped entry, or <see langword="null"/> when mapping failed.</param>
+    /// <returns><see langword="true"/> when <paramref name="status"/> mapped to a resolvable entry.</returns>
     private static bool TryMapStatusEntry(
-        CredentialStatus status, [NotNullWhen(true)] out BitstringStatusListEntry? entry)
+        CredentialStatus status, out bool isMalformedStatusEntry, [NotNullWhen(true)] out BitstringStatusListEntry? entry)
     {
         entry = null;
+        isMalformedStatusEntry = false;
 
         if(!string.Equals(status.Type, BitstringStatusListConstants.EntryType, StringComparison.Ordinal))
         {
@@ -342,6 +411,38 @@ public static class VcalmVerificationService
             || string.IsNullOrEmpty(status.StatusPurpose)
             || !int.TryParse(status.StatusListIndex, NumberStyles.Integer, CultureInfo.InvariantCulture, out int index))
         {
+            isMalformedStatusEntry = true;
+
+            return false;
+        }
+
+        //§2.1: absent statusSize MUST be processed as 1; if present it MUST be an integer greater
+        //than zero.
+        int statusSize = status.StatusSize ?? 1;
+        if(statusSize <= 0)
+        {
+            isMalformedStatusEntry = true;
+
+            return false;
+        }
+
+        //§2.1: a present statusMessage array's length MUST equal the number of possible status
+        //values statusSize indicates (2^statusSize). A statusSize this large already exceeds any
+        //array a caller could supply, so it is compared against an unreachable ceiling rather than
+        //shifted, avoiding a 32-bit shift-count wraparound.
+        long expectedMessageCount = statusSize < 31 ? 1L << statusSize : long.MaxValue;
+        if(status.StatusMessage is not null && status.StatusMessage.Count != expectedMessageCount)
+        {
+            isMalformedStatusEntry = true;
+
+            return false;
+        }
+
+        //§2.1: statusMessage MUST be present when statusSize is greater than 1.
+        if(statusSize > 1 && (status.StatusMessage is null || status.StatusMessage.Count == 0))
+        {
+            isMalformedStatusEntry = true;
+
             return false;
         }
 
@@ -350,7 +451,10 @@ public static class VcalmVerificationService
             Id = status.Id,
             StatusPurpose = status.StatusPurpose,
             StatusListIndex = index,
-            StatusListCredential = status.StatusListCredential
+            StatusListCredential = status.StatusListCredential,
+            StatusSize = statusSize,
+            StatusMessages = status.StatusMessage,
+            StatusReference = status.StatusReference
         };
 
         return true;
@@ -358,8 +462,8 @@ public static class VcalmVerificationService
 
 
     /// <summary>
-    /// Verifies one §3.3.2 presentation proof against the expected <paramref name="challenge"/> and
-    /// <paramref name="domain"/>, resolving the holder DID through the supplied resolver. Returns the
+    /// Verifies one §3.3.2 presentation proof against the expected <paramref name="expectedChallenge"/> and
+    /// <paramref name="expectedDomain"/>, resolving the holder DID through the supplied resolver. Returns the
     /// per-proof result and any §3.8.1 ProblemDetails (a presentation-proof failure is a
     /// cryptographic ERROR). A <see langword="null"/> expected challenge or domain skips that
     /// binding check (the caller did not bind it).
@@ -512,6 +616,7 @@ public static class VcalmVerificationService
             document,
             verification.Canonicalize,
             verification.ContextResolver,
+            verification.KnownContext,
             verification.DecodeProofValue,
             verification.SerializeCredential,
             verification.SerializeProofOptions,
@@ -621,6 +726,7 @@ public static class VcalmVerificationService
             verification.ParseDerivedProof!,
             verification.Canonicalize,
             verification.ContextResolver,
+            verification.KnownContext,
             verification.SerializeCredential,
             verification.SerializeProofOptions,
             verification.SdProofEncoder!,
@@ -685,6 +791,7 @@ public static class VcalmVerificationService
             domain,
             verification.Canonicalize,
             verification.ContextResolver,
+            verification.KnownContext,
             verification.DecodeProofValue,
             verification.SerializePresentation,
             verification.SerializeProofOptions,

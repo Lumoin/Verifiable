@@ -25,12 +25,12 @@ namespace Verifiable.OAuth.Server;
 /// lives outside any token-specific hook.
 /// </para>
 /// <para>
-/// The library ships <see cref="DefaultIssuerResolver"/> as the default
+/// The library ships <see cref="Verifiable.OAuth.Server.Pipeline.DefaultIssuerResolver"/> as the default
 /// implementation. It reads <see cref="ClientRecord.IssuerUri"/> first,
-/// then falls back to <see cref="ExchangeContextServerExtensions.Issuer"/> set by
+/// then falls back to the <c>ExchangeContextServerExtensions.Issuer</c> extension property set by
 /// the ASP.NET skin, and throws when neither is available. Applications that
 /// need per-caller, per-region, or dynamically-resolved issuer URIs set this
-/// delegate on <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+/// delegate on <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/>
 /// to supply their own logic. The returned URI is treated as authoritative;
 /// no further normalisation is performed by the library.
 /// </para>

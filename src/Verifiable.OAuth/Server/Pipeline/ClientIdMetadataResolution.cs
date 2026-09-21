@@ -1,3 +1,4 @@
+using Verifiable.Core.OutboundFetch;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.Server.Pipeline;
@@ -83,6 +84,25 @@ public sealed record ClientIdMetadataResolution
 
     /// <summary>The <c>Content-Type</c> the logo host reported, when <see cref="PrefetchedLogo"/> is set.</summary>
     public string? PrefetchedLogoContentType { get; init; }
+
+    /// <summary>
+    /// The freshness <see cref="ClientIdMetadataDocuments.ResolveAsync"/>'s document response headers
+    /// imply, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>,
+    /// when <see cref="Outcome"/> is <see cref="ClientIdMetadataResolutionOutcome.Resolved"/>. Every
+    /// other outcome leaves this at its default value — not storable, zero lifetime — so a caller
+    /// cannot infer a cacheable lifetime from a fetch that never produced a document.
+    /// </summary>
+    public HttpCacheFreshness Freshness { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="Document"/>'s key material was discovered from its <c>jwks_uri</c>
+    /// (through <see cref="ClientIdMetadataDocumentResolverOptions.ResolveJwksUri"/>) rather than
+    /// carried inline in the document itself. A caller serving this resolution from a fresh cache
+    /// entry refreshes the discovered key set on ITS OWN schedule via
+    /// <see cref="ClientIdMetadataDocuments.RefreshJwksAsync"/> instead of waiting for the document's
+    /// own cache lifetime to lapse, so a rotated key becomes visible promptly.
+    /// </summary>
+    public bool HasJwksUriKeySet { get; init; }
 
 
     /// <summary>Whether <see cref="Outcome"/> is <see cref="ClientIdMetadataResolutionOutcome.Resolved"/>.</summary>

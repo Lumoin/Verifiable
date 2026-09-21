@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -413,8 +414,7 @@ internal sealed class DidResolutionHttpBindingTests
     }
 
 
-    private static Dictionary<string, (int Status, byte[]? Body, string? ContentType)> EmptyRoutes() =>
-        new(StringComparer.Ordinal);
+    private static Dictionary<string, (int Status, byte[]? Body, string? ContentType)> EmptyRoutes() => new(StringComparer.Ordinal);
 
 
     //Mints a two-entry log whose second entry declares deactivated:true, signed by the same controller.
@@ -487,7 +487,8 @@ internal sealed class DidResolutionHttpBindingTests
             SerializeProofOptions,
             Base58Decoder,
             MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            BaseMemoryPool.Shared);
+            BaseMemoryPool.Shared,
+            Context.FromIris(Context.Credentials20));
 
         return DidResolverComposition.Build(
             BaseMemoryPool.Shared,

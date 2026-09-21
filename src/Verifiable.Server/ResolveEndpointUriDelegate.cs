@@ -27,7 +27,7 @@ namespace Verifiable.Server;
 /// <para>
 /// The delegate receives the resolved registration and the full per-request
 /// context bag. Implementations typically read
-/// <see cref="ExchangeContextServerExtensions.Issuer"/> for the scheme/authority and
+/// <c>context.Issuer</c> for the scheme/authority and
 /// compose the path themselves; deployments that resolve issuer per request
 /// (e.g., from <c>Forwarded</c> headers) construct the authority from whatever
 /// the skin placed on the context.

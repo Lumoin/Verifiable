@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// This command is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3,
-/// clause 31.3 (Table 245). The instance does not own <paramref name="auth"/> / <paramref name="publicInfo"/>
+/// clause 31.3 (Table 245). The instance does not own the <see cref="Auth"/> / <see cref="PublicInfo"/>
 /// caller-supplied buffers beyond the disposal it performs.
 /// </para>
 /// </remarks>

@@ -6,7 +6,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// <para>
 /// <c>TPM2_Unseal()</c> returns the sensitive data of a loaded sealed data object (a KEYEDHASH object created
-/// with <c>TPM2_Create()</c> from a <see cref="Spec.Structures.TpmtPublic.CreateSealedDataTemplate"/> template).
+/// with <c>TPM2_Create()</c> from a <see cref="TpmtPublic.CreateSealedDataTemplate"/> template).
 /// The object must be loaded (its transient handle is the command handle) and the caller must satisfy its
 /// authorization, so only this TPM - under the parent that wrapped the object - can recover the secret.
 /// </para>

@@ -39,6 +39,10 @@ internal sealed class FederationRegistrationEndpointTests
     private const string AnchorEntityId = "https://anchor.example.com";
 
 
+    /// <summary>
+    /// Signs the explicit registration response with the accepted metadata and trust anchor.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2.3">Federation §12.2.3</see>.
+    /// </summary>
     [TestMethod]
     public async Task RegistrationEndpointServesSignedExplicitRegistrationResponse()
     {
@@ -47,7 +51,7 @@ internal sealed class FederationRegistrationEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> opFederationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial opKeys = RegisterOp(app, opFederationKeys);
+        using VerifierKeyMaterial opKeys = await RegisterOpAsync(app, opFederationKeys).ConfigureAwait(false);
 
         //Mint the RP's signed Entity Configuration — the body the RP POSTs.
         using Federation.FederationTestRingNode rpNode =
@@ -60,29 +64,32 @@ internal sealed class FederationRegistrationEndpointTests
         string rpEcJws = rpEc.CompactJws;
 
         string? observedBody = null;
-        app.Server.OAuth().ResolveExplicitRegistrationAsync = (body, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            observedBody = body;
-
-            Dictionary<string, object> rpClientMetadata = new(StringComparer.Ordinal)
+            candidateIntegration.ResolveExplicitRegistrationAsync = (body, _, _, _) =>
             {
-                ["client_id"] = RpEntityId,
-                ["client_name"] = "Registered RP",
-            };
-            Dictionary<string, object> metadata = new(StringComparer.Ordinal)
-            {
-                [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value] = rpClientMetadata,
-            };
+                observedBody = body;
 
-            return ValueTask.FromResult<ExplicitRegistrationContribution?>(
-                new ExplicitRegistrationContribution
+                Dictionary<string, object> rpClientMetadata = new(StringComparer.Ordinal)
                 {
-                    Subject = new Uri(RpEntityId),
-                    Metadata = metadata,
-                    TrustAnchor = new Uri(AnchorEntityId),
-                    AuthorityHint = new Uri(OpEntityId),
-                });
-        };
+                    ["client_id"] = RpEntityId,
+                    ["client_name"] = "Registered RP",
+                };
+                Dictionary<string, object> metadata = new(StringComparer.Ordinal)
+                {
+                    [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value] = rpClientMetadata,
+                };
+
+                return ValueTask.FromResult<ExplicitRegistrationContribution?>(
+                    new ExplicitRegistrationContribution
+                    {
+                        Subject = new Uri(RpEntityId),
+                        Metadata = metadata,
+                        TrustAnchor = new Uri(AnchorEntityId),
+                        AuthorityHint = new Uri(OpEntityId),
+                    });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -135,6 +142,10 @@ internal sealed class FederationRegistrationEndpointTests
     }
 
 
+    /// <summary>
+    /// Returns the library's HTTP 400 response when application registration refuses.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2.4">Federation §12.2.4</see>.
+    /// </summary>
     [TestMethod]
     public async Task RegistrationEndpointReturns400WhenApplicationRefuses()
     {
@@ -143,10 +154,13 @@ internal sealed class FederationRegistrationEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> opFederationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial opKeys = RegisterOp(app, opFederationKeys);
+        using VerifierKeyMaterial opKeys = await RegisterOpAsync(app, opFederationKeys).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveExplicitRegistrationAsync =
-            (_, _, _, _) => ValueTask.FromResult<ExplicitRegistrationContribution?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveExplicitRegistrationAsync =
+                (_, _, _, _) => ValueTask.FromResult<ExplicitRegistrationContribution?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -163,6 +177,10 @@ internal sealed class FederationRegistrationEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects explicit registration using an unsupported request media type.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2.1">Federation §12.2.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task RegistrationEndpointRejectsWrongContentType()
     {
@@ -171,23 +189,27 @@ internal sealed class FederationRegistrationEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> opFederationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial opKeys = RegisterOp(app, opFederationKeys);
+        using VerifierKeyMaterial opKeys = await RegisterOpAsync(app, opFederationKeys).ConfigureAwait(false);
 
         //The delegate would accept; the request must be refused earlier on the
         //Content-Type alone, so a reachable delegate proves the gate runs first.
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveExplicitRegistrationAsync = (_, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            delegateInvoked = true;
-            return ValueTask.FromResult<ExplicitRegistrationContribution?>(
-                new ExplicitRegistrationContribution
-                {
-                    Subject = new Uri(RpEntityId),
-                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
-                    TrustAnchor = new Uri(AnchorEntityId),
-                    AuthorityHint = new Uri(OpEntityId),
-                });
-        };
+            candidateIntegration.ResolveExplicitRegistrationAsync = (_, _, _, _) =>
+            {
+                delegateInvoked = true;
+
+                return ValueTask.FromResult<ExplicitRegistrationContribution?>(
+                    new ExplicitRegistrationContribution
+                    {
+                        Subject = new Uri(RpEntityId),
+                        Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                        TrustAnchor = new Uri(AnchorEntityId),
+                        AuthorityHint = new Uri(OpEntityId),
+                    });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -209,7 +231,7 @@ internal sealed class FederationRegistrationEndpointTests
     }
 
 
-    private static VerifierKeyMaterial RegisterOp(
+    private static async Task<VerifierKeyMaterial> RegisterOpAsync(
         TestHostShell app,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> opFederationKeys)
     {
@@ -218,12 +240,12 @@ internal sealed class FederationRegistrationEndpointTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly);
 
-        return app.RegisterFederationCapableClient(
+        return await app.RegisterFederationCapableClientAsync(
             clientId: OpEntityId,
             baseUri: new Uri(OpEntityId),
             federationEntityId: new Uri(OpEntityId),
             federationSigningKeyPair: opFederationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
     }
 
 

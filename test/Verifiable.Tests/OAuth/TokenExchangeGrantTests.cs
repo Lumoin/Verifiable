@@ -6,10 +6,12 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
+using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.TokenExchange;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -83,8 +85,8 @@ internal sealed class TokenExchangeGrantTests
     public async Task ImpersonationExchangeIssuesBearerAccessTokenOverHttpWire()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireImpersonationSeams(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -139,10 +141,10 @@ internal sealed class TokenExchangeGrantTests
     public async Task DelegationExchangeRecordsActorInActClaimOverHttpWire()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        WireBranchingValidator(app, subjectToken: null);
-        WirePermissivePolicy(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireBranchingValidatorAsync(app, subjectToken: null).ConfigureAwait(false);
+        await WirePermissivePolicyAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -187,25 +189,30 @@ internal sealed class TokenExchangeGrantTests
     public async Task MayActConstrainsTheAuthorizedActor()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        WirePermissivePolicy(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
 
         //The subject token authorizes exactly ActorIdentity to act for it (§4.4 may_act.sub).
         //The actor token's claims are decided by the presented actor-token string.
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    string.Equals(token, SubjectTokenValue, StringComparison.Ordinal)
-                        ? new ValidatedSecurityToken
-                        {
-                            Subject = SubjectIdentity,
-                            Scope = GrantedScope,
-                            MayActSubject = ActorIdentity
-                        }
-                        : string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
-                            ? new ValidatedSecurityToken { Subject = ActorIdentity }
-                            : new ValidatedSecurityToken { Subject = "https://svc.example/intruder" });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        string.Equals(token, SubjectTokenValue, StringComparison.Ordinal)
+                            ? new ValidatedSecurityToken
+                            {
+                                Subject = SubjectIdentity,
+                                Scope = GrantedScope,
+                                MayActSubject = ActorIdentity
+                            }
+
+                            : string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
+                                ? new ValidatedSecurityToken { Subject = ActorIdentity }
+                                : new ValidatedSecurityToken { Subject = "https://svc.example/intruder" });
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -261,28 +268,33 @@ internal sealed class TokenExchangeGrantTests
         const string WrongIssuer = "https://issuer.example/other";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        WirePermissivePolicy(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
 
         //The subject token authorizes exactly {sub: ActorIdentity, iss: MayActIssuer} to act for it.
         //The presented actor-token string decides the actor's claims, including its issuer.
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    string.Equals(token, SubjectTokenValue, StringComparison.Ordinal)
-                        ? new ValidatedSecurityToken
-                        {
-                            Subject = SubjectIdentity,
-                            Scope = GrantedScope,
-                            MayActSubject = ActorIdentity,
-                            MayActIssuer = MayActIssuer
-                        }
-                        : string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
-                            //Right subject AND right issuer — the authorized actor.
-                            ? new ValidatedSecurityToken { Subject = ActorIdentity, Issuer = MayActIssuer }
-                            //Right subject but WRONG issuer — a different, unauthorized party.
-                            : new ValidatedSecurityToken { Subject = ActorIdentity, Issuer = WrongIssuer });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        string.Equals(token, SubjectTokenValue, StringComparison.Ordinal)
+                            ? new ValidatedSecurityToken
+                            {
+                                Subject = SubjectIdentity,
+                                Scope = GrantedScope,
+                                MayActSubject = ActorIdentity,
+                                MayActIssuer = MayActIssuer
+                            }
+
+                            : string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
+                                //Right subject AND right issuer — the authorized actor.
+                                ? new ValidatedSecurityToken { Subject = ActorIdentity, Issuer = MayActIssuer }
+                                //Right subject but WRONG issuer — a different, unauthorized party.
+                                : new ValidatedSecurityToken { Subject = ActorIdentity, Issuer = WrongIssuer });
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -336,25 +348,30 @@ internal sealed class TokenExchangeGrantTests
         const string ExplicitAudience = "https://api.example/orders";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
 
-        //The policy seam shapes the issued token for an explicit target (§2.1.1). This audience is not
-        //in any ScopeToAudience entry, so its presence in aud can only come from the explicit override.
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = GrantedScope,
-                        Audience = [ExplicitAudience],
-                        IssuedTokenType = TokenType.AccessToken
-                    });
+
+            //The policy seam shapes the issued token for an explicit target (§2.1.1). This audience is not
+            //in any ScopeToAudience entry, so its presence in aud can only come from the explicit override.
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            Audience = [ExplicitAudience],
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -397,25 +414,30 @@ internal sealed class TokenExchangeGrantTests
     public async Task NonAccessIssuedTokenTypeIsRejectedAsServerError()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
 
-        //The policy seam decides a JWT issued_token_type the producer cannot honor — only access
-        //tokens are minted, so this is an AS misconfiguration (§2.2.1 token_type/issued_token_type
-        //consistency).
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = GrantedScope,
-                        IssuedTokenType = TokenType.Jwt
-                    });
+
+            //The policy seam decides a JWT issued_token_type the producer cannot honor — only access
+            //tokens are minted, so this is an AS misconfiguration (§2.2.1 token_type/issued_token_type
+            //consistency).
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.Jwt
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -454,8 +476,8 @@ internal sealed class TokenExchangeGrantTests
     public async Task MalformedResourceIsRejectedFailClosed()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireImpersonationSeams(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -511,27 +533,32 @@ internal sealed class TokenExchangeGrantTests
         IReadOnlyList<string>? seenResources = null;
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
 
-        //Capture the resource list the authorization seam observes — it must carry BOTH targets.
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            (subject, actor, request, registration, context, ct) =>
-            {
-                seenResources = request.Resource;
 
-                return ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = GrantedScope,
-                        IssuedTokenType = TokenType.AccessToken
-                    });
-            };
+            //Capture the resource list the authorization seam observes — it must carry BOTH targets.
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenResources = request.Resource;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -576,9 +603,9 @@ internal sealed class TokenExchangeGrantTests
     public async Task DelegationChainNestsPriorActorUnderNewActor()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        WirePermissivePolicy(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
 
         //The subject token already carries an act claim naming a prior actor (it is itself a
         //delegated token). The new exchange adds the current actor on top of that chain.
@@ -586,12 +613,12 @@ internal sealed class TokenExchangeGrantTests
         {
             [WellKnownJwtClaimNames.Sub] = PriorActorIdentity
         };
-        WireBranchingValidator(app, subjectToken: new ValidatedSecurityToken
+        await WireBranchingValidatorAsync(app, subjectToken: new ValidatedSecurityToken
         {
             Subject = SubjectIdentity,
             Scope = GrantedScope,
             Act = priorAct
-        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -662,8 +689,8 @@ internal sealed class TokenExchangeGrantTests
     public async Task EndToEndRealTokenIsValidatedExchangedAndUsed()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -699,35 +726,41 @@ internal sealed class TokenExchangeGrantTests
         //STEP 2 — Wire the REAL subject-token validator. It runs the project's resource-server-grade
         //JwsAccessTokenValidator against the AS JWKS: a forged or wrong-issuer token returns null and
         //the exchange is refused. On success it surfaces the validated sub and scope.
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            async (token, tokenType, registration, context, ct) =>
-            {
-                JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
-                    token, asIssuer, jwksResolver).ConfigureAwait(false);
-                if(!result.IsSuccess)
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                async (token, tokenType, registration, context, ct) =>
                 {
-                    return null;
-                }
-
-                return new ValidatedSecurityToken
-                {
-                    Subject = result.Claims!.Subject,
-                    Issuer = result.Claims.Issuer,
-                    Scope = result.Claims.Scope
-                };
-            };
-
-        //STEP 3 — Wire the policy permit (the lone stub). The exchanged token impersonates the
-        //validated subject and carries its scope (RFC 8693 §1.1 / Appendix A.1.4).
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
+                    JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
+                        token, asIssuer, jwksResolver).ConfigureAwait(false);
+                    if(!result.IsSuccess)
                     {
-                        Subject = subject.Subject,
-                        Scope = subject.Scope ?? "read",
-                        IssuedTokenType = TokenType.AccessToken
-                    });
+
+                        return null;
+                    }
+
+                    return new ValidatedSecurityToken
+                    {
+                        Subject = result.Claims!.Subject,
+                        Issuer = result.Claims.Issuer,
+                        Scope = result.Claims.Scope
+                    };
+                };
+
+
+            //STEP 3 — Wire the policy permit (the lone stub). The exchanged token impersonates the
+            //validated subject and carries its scope (RFC 8693 §1.1 / Appendix A.1.4).
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = subject.Scope ?? "read",
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+        }).ConfigureAwait(false);
 
         //STEP 4 — Exchange the REAL subject token (RFC 8693 §2.1).
         OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
@@ -810,9 +843,9 @@ internal sealed class TokenExchangeGrantTests
     public async Task DelegationEndToEndBothTokensRealDistinctSubjectsExchangedAndUsed()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial subjectMaterial = RegisterTokenExchangeClient(app);
-        using VerifierKeyMaterial actorMaterial = RegisterActorClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial subjectMaterial = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        using VerifierKeyMaterial actorMaterial = await RegisterActorClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -851,45 +884,52 @@ internal sealed class TokenExchangeGrantTests
 
         //STEP 2 — Wire the REAL validator. It verifies the subject token against the subject tenant's
         //JWKS and the actor token against the actor tenant's JWKS, branching on the validated issuer.
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            async (token, tokenType, registration, context, ct) =>
-            {
-                JwsAccessTokenValidationResult subjectResult = await VerifyAgainstAsAsync(token, subjectIssuer, subjectJwks).ConfigureAwait(false);
-                if(subjectResult.IsSuccess)
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                async (token, tokenType, registration, context, ct) =>
                 {
-                    return new ValidatedSecurityToken
+                    JwsAccessTokenValidationResult subjectResult = await VerifyAgainstAsAsync(token, subjectIssuer, subjectJwks).ConfigureAwait(false);
+                    if(subjectResult.IsSuccess)
                     {
-                        Subject = subjectResult.Claims!.Subject,
-                        Issuer = subjectResult.Claims.Issuer,
-                        Scope = subjectResult.Claims.Scope
-                    };
-                }
 
-                JwsAccessTokenValidationResult actorResult = await VerifyAgainstAsAsync(token, actorIssuer, actorJwks).ConfigureAwait(false);
-                if(actorResult.IsSuccess)
-                {
-                    return new ValidatedSecurityToken
+                        return new ValidatedSecurityToken
+                        {
+                            Subject = subjectResult.Claims!.Subject,
+                            Issuer = subjectResult.Claims.Issuer,
+                            Scope = subjectResult.Claims.Scope
+                        };
+                    }
+
+                    JwsAccessTokenValidationResult actorResult = await VerifyAgainstAsAsync(token, actorIssuer, actorJwks).ConfigureAwait(false);
+                    if(actorResult.IsSuccess)
                     {
-                        Subject = actorResult.Claims!.Subject,
-                        Issuer = actorResult.Claims.Issuer,
-                        Scope = actorResult.Claims.Scope
-                    };
-                }
 
-                return null;
-            };
+                        return new ValidatedSecurityToken
+                        {
+                            Subject = actorResult.Claims!.Subject,
+                            Issuer = actorResult.Claims.Issuer,
+                            Scope = actorResult.Claims.Scope
+                        };
+                    }
 
-        //STEP 3 — Wire the policy permit (the lone stub). The exchanged token keeps the subject and
-        //the library records the actor in the act claim (§4.1).
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = subject.Scope ?? "read",
-                        IssuedTokenType = TokenType.AccessToken
-                    });
+                    return null;
+                };
+
+
+            //STEP 3 — Wire the policy permit (the lone stub). The exchanged token keeps the subject and
+            //the library records the actor in the act claim (§4.1).
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = subject.Scope ?? "read",
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+        }).ConfigureAwait(false);
 
         //STEP 4 — DELEGATION exchange on the SUBJECT tenant's token endpoint with both real tokens.
         OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
@@ -950,8 +990,8 @@ internal sealed class TokenExchangeGrantTests
     public async Task MalformedAndUnauthorizedExchangesAreRejectedFailClosed()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireImpersonationSeams(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1030,15 +1070,19 @@ internal sealed class TokenExchangeGrantTests
 
         //(e) The validation seam rejects the subject_token (null) — RFC 8693 §2.2.2 invalid_request.
         await using TestHostShell rejectingApp = new(TimeProvider);
-        using VerifierKeyMaterial rejectingMaterial = RegisterTokenExchangeClient(rejectingApp);
-        WireClientAuthentication(rejectingApp);
-        rejectingApp.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(null);
-        rejectingApp.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization { Subject = subject.Subject, Scope = GrantedScope });
+        using VerifierKeyMaterial rejectingMaterial = await RegisterTokenExchangeClientAsync(rejectingApp).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(rejectingApp).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(rejectingApp.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(null);
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization { Subject = subject.Subject, Scope = GrantedScope });
+        }).ConfigureAwait(false);
         await rejectingApp.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer rejectingHost = rejectingApp.Host("default");
         Uri rejectingTokenUrl = new(rejectingHost.HttpBaseAddress!, $"/connect/{rejectingMaterial.Registration.TenantId.Value}/token");
@@ -1057,15 +1101,19 @@ internal sealed class TokenExchangeGrantTests
         //(f) The policy seam denies (null) with NO named resource/audience target —
         //RFC 8693 §2.2.2 the general invalid_request MUST.
         await using TestHostShell denyingApp = new(TimeProvider);
-        using VerifierKeyMaterial denyingMaterial = RegisterTokenExchangeClient(denyingApp);
-        WireClientAuthentication(denyingApp);
-        denyingApp.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
-        denyingApp.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(null);
+        using VerifierKeyMaterial denyingMaterial = await RegisterTokenExchangeClientAsync(denyingApp).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(denyingApp).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(denyingApp.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(null);
+        }).ConfigureAwait(false);
         await denyingApp.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer denyingHost = denyingApp.Host("default");
         Uri denyingTokenUrl = new(denyingHost.HttpBaseAddress!, $"/connect/{denyingMaterial.Registration.TenantId.Value}/token");
@@ -1110,7 +1158,7 @@ internal sealed class TokenExchangeGrantTests
         //(i) Fail-closed: a host whose token-exchange seams are NOT wired does not
         //materialize the grant — a well-formed token-exchange request never reaches 200.
         await using TestHostShell bare = new(TimeProvider);
-        using VerifierKeyMaterial bareMaterial = RegisterTokenExchangeClient(bare);
+        using VerifierKeyMaterial bareMaterial = await RegisterTokenExchangeClientAsync(bare).ConfigureAwait(false);
         await bare.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer bareHost = bare.Host("default");
         Uri bareTokenUrl = new(bareHost.HttpBaseAddress!, $"/connect/{bareMaterial.Registration.TenantId.Value}/token");
@@ -1137,18 +1185,24 @@ internal sealed class TokenExchangeGrantTests
     /// candidate never materializes, so a well-formed exchange request never reaches the grant at all —
     /// the same fail-closed pattern
     /// <see cref="JwtBearerGrantTests.PresentCredentialsWithNoClientAuthSeamAreRejectedAsInvalidClient"/>
-    /// proves for the jwt-bearer grant's client-authentication seam.
+    /// proves for the jwt-bearer grant's client-authentication seam. RFC 6749 §5.2 defines
+    /// <c>unsupported_grant_type</c> as "the authorization grant type is not supported by the
+    /// authorization server": with the validation seam unwired, THIS server does not serve
+    /// token-exchange at all, regardless of the client's own capability, so that is the refusal this
+    /// missing seam earns — not <c>unauthorized_client</c>, which names a grant type the server serves
+    /// but this particular client is not registered for.
     /// </summary>
     [TestMethod]
     public async Task WellFormedExchangeWithoutTokenValidationSeamDoesNotActivateTheGrant()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
 
         //Client authentication AND the authorization-policy seam are wired; ValidateTokenExchangeTokenAsync
         //is deliberately left unconfigured.
-        WireClientAuthentication(app);
-        WirePermissivePolicy(app);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        InvalidOperationException exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () => await WirePermissivePolicyAsync(app).ConfigureAwait(false)).ConfigureAwait(false);
+        Assert.Contains(nameof(AuthorizationServerIntegration.ValidateTokenExchangeTokenAsync), exception.Message, StringComparison.Ordinal);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1166,11 +1220,13 @@ internal sealed class TokenExchangeGrantTests
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //No candidate matches grant_type=token-exchange when BuildTokenExchange is excluded from the
-        //endpoint-candidate set — the dispatcher's unmatched-chain path (the same one
-        //RefreshGrantTests.UnsupportedGrantTypeReturnsNotFound exercises for an unknown grant_type).
-        Assert.AreEqual(404, (int)response.StatusCode, body);
-        Assert.AreNotEqual(200, (int)response.StatusCode,
-            "A well-formed exchange must not be accepted when ValidateTokenExchangeTokenAsync is unwired (RFC 8693 §2.1).");
+        //endpoint-candidate set. RFC 6749 §5.2: "unsupported_grant_type — The authorization grant type
+        //is not supported by the authorization server" — the token endpoint's residual grant_type
+        //refusal answers this because the missing validation seam means THIS server's wiring does not
+        //serve token-exchange, not the host-generic 404 and not unauthorized_client (which would
+        //conflate the server's own missing wiring with a client-registration gap).
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains(OAuthErrors.UnsupportedGrantType, body, StringComparison.Ordinal);
     }
 
 
@@ -1186,8 +1242,8 @@ internal sealed class TokenExchangeGrantTests
     public async Task EndToEndRealTamperedOrExpiredSubjectTokenIsRejectedAsInvalidRequest()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1202,33 +1258,38 @@ internal sealed class TokenExchangeGrantTests
         ServerVerificationKeyResolverDelegate jwksResolver =
             await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            async (token, tokenType, registration, context, ct) =>
-            {
-                JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
-                    token, asIssuer, jwksResolver).ConfigureAwait(false);
-                if(!result.IsSuccess)
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                async (token, tokenType, registration, context, ct) =>
                 {
-                    return null;
-                }
-
-                return new ValidatedSecurityToken
-                {
-                    Subject = result.Claims!.Subject,
-                    Issuer = result.Claims.Issuer,
-                    Scope = result.Claims.Scope
-                };
-            };
-
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
+                    JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
+                        token, asIssuer, jwksResolver).ConfigureAwait(false);
+                    if(!result.IsSuccess)
                     {
-                        Subject = subject.Subject,
-                        Scope = subject.Scope ?? "read",
-                        IssuedTokenType = TokenType.AccessToken
-                    });
+
+                        return null;
+                    }
+
+                    return new ValidatedSecurityToken
+                    {
+                        Subject = result.Claims!.Subject,
+                        Issuer = result.Claims.Issuer,
+                        Scope = result.Claims.Scope
+                    };
+                };
+
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = subject.Scope ?? "read",
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+        }).ConfigureAwait(false);
 
         //Mint a real subject token (client_credentials, RFC 6749 §4.4) — sub == ClientId, P-256-signed
         //by the AS. It is, before tampering, a genuinely valid AS-issued token.
@@ -1313,27 +1374,32 @@ internal sealed class TokenExchangeGrantTests
         const string RequestedScope = "urn:example:custom";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
 
-        //The policy seam reads the requested scope off the request and echoes it into the granted
-        //authorization — the issued token carries exactly the requested scope (§2.2.1). The custom
-        //scope has no ScopeToAudience entry; the registration's AccessTokenAudPolicy is not Required
-        //(the impersonation happy path issues with the unmapped "read" scope and no audience), so the
-        //custom scope does not force a server_error.
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = request.Scope ?? GrantedScope,
-                        IssuedTokenType = TokenType.AccessToken
-                    });
+
+            //The policy seam reads the requested scope off the request and echoes it into the granted
+            //authorization — the issued token carries exactly the requested scope (§2.2.1). The custom
+            //scope has no ScopeToAudience entry; the registration's AccessTokenAudPolicy is not Required
+            //(the impersonation happy path issues with the unmapped "read" scope and no audience), so the
+            //custom scope does not force a server_error.
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = request.Scope ?? GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1371,8 +1437,8 @@ internal sealed class TokenExchangeGrantTests
     public async Task SuccessResponseCarriesCacheControlNoStore()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireImpersonationSeams(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1407,15 +1473,20 @@ internal sealed class TokenExchangeGrantTests
     public async Task ErrorBodyDoesNotLeakTheSubject()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The seam knows the subject (it is the fixture's SubjectIdentity) but rejects the exchange by
         //returning null — RFC 8693 §2.2.2 invalid_request. The error body must not echo the subject.
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(null);
-        WirePermissivePolicy(app);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(null);
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
+
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1452,18 +1523,18 @@ internal sealed class TokenExchangeGrantTests
         await using TestHostShell app = new(TimeProvider);
 
         //Register a client allowed the other grant's capability (client_credentials) but NOT OAuthTokenExchange.
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
         //Wire ALL THREE token-exchange seams: the only thing missing is the capability. A grant that
         //honored a wired seam regardless of capability would serve this; a disjoint grant does not.
-        WireImpersonationSeams(app);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1499,7 +1570,7 @@ internal sealed class TokenExchangeGrantTests
     public async Task NoIdTokenIsMintedForTokenExchangeEvenWithOpenidGrantedAndOidcFeatureEnabled()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -1507,26 +1578,31 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        WireClientAuthentication(app);
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
-        //The policy seam grants openid — an app opting in to vouch that the exchanged subject is an
-        //End-User (token_exchange honors whatever scope the app's authorization
-        //seam decides, unlike client_credentials' source-layer narrowing).
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = WellKnownScopes.OpenId,
-                        IssuedTokenType = TokenType.AccessToken
-                    });
+
+            //The policy seam grants openid — an app opting in to vouch that the exchanged subject is an
+            //End-User (token_exchange honors whatever scope the app's authorization
+            //seam decides, unlike client_credentials' source-layer narrowing).
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1577,7 +1653,7 @@ internal sealed class TokenExchangeGrantTests
     public async Task RefreshTokenMintedByTokenExchangeNeverYieldsIdTokenOnRedemption()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -1591,26 +1667,31 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        WireClientAuthentication(app);
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
-        //The app opts the exchanged subject into a refresh-token issuance carrying openid — the §4.5
-        //SAML-to-OAuth transition shape, where the mint runs through BuildRefreshTokenExchangeResponseAsync
-        //and stamps OriginatingGrantType = token_exchange on the stored refresh state.
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = WellKnownScopes.OpenId,
-                        IssuedTokenType = TokenType.RefreshToken
-                    });
+
+            //The app opts the exchanged subject into a refresh-token issuance carrying openid — the §4.5
+            //SAML-to-OAuth transition shape, where the mint runs through BuildRefreshTokenExchangeResponseAsync
+            //and stamps OriginatingGrantType = token_exchange on the stored refresh state.
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1664,6 +1745,697 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: "This is
+    /// applicable for all access token requests regardless of grant type." A <c>subject_token</c>
+    /// whose validated claims surface a <c>cnf.jkt</c> binding
+    /// (<see cref="ValidatedSecurityToken.RequiredKeyThumbprint"/>) presented with no DPoP proof at
+    /// all must not be exchanged for an unbound access token — the exchange is refused rather than
+    /// silently stripping the sender constraint.
+    /// </summary>
+    [TestMethod]
+    public async Task BoundAccessTokenSubjectWithoutProofIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey boundKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            string boundThumbprint = boundKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+            await WireBoundSubjectSeamsAsync(app, boundThumbprint).ConfigureAwait(false);
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+            await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer host = app.Host("default");
+            Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(400, (int)response.StatusCode, body);
+            Assert.Contains(OAuthErrors.InvalidGrant, body);
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §5 / §6.1: a bound <c>subject_token</c> presented with a DPoP proof for a DIFFERENT
+    /// key than the one it is bound to is refused — the key comparison at
+    /// <see cref="Verifiable.OAuth.IdJag.IdJagDpopDecision.Evaluate"/> step §9.8.1.2.1 (4) applies
+    /// identically here.
+    /// </summary>
+    [TestMethod]
+    public async Task BoundAccessTokenSubjectWithMismatchedProofIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> boundKeyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> presentedKeyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey boundKey = new(boundKeyMaterial, WellKnownJwaValues.Es256);
+            DpopKey presentedKey = new(presentedKeyMaterial, WellKnownJwaValues.Es256);
+            string boundThumbprint = boundKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+            await WireBoundSubjectSeamsAsync(app, boundThumbprint).ConfigureAwait(false);
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+            await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer host = app.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof;
+            //the retry carrying the echoed nonce still fails the key-mismatch check.
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+                host.SharedHttpClient!, tokenUrl, form,
+                nonce => BuildTokenEndpointDpopProofAsync(presentedKey, segment, material, nonce),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(400, (int)response.StatusCode, body);
+                Assert.Contains(OAuthErrors.InvalidGrant, body);
+            }
+        }
+        finally
+        {
+            boundKeyMaterial.PublicKey.Dispose();
+            boundKeyMaterial.PrivateKey.Dispose();
+            presentedKeyMaterial.PublicKey.Dispose();
+            presentedKeyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §5 / §6.1: a bound <c>subject_token</c> presented with a DPoP proof for the SAME key
+    /// it is bound to is accepted, and the issued access token is sender-constrained to that key:
+    /// <c>token_type</c> DPoP and a <c>cnf.jkt</c> equal to it.
+    /// </summary>
+    [TestMethod]
+    public async Task BoundAccessTokenSubjectWithMatchingProofIssuesDpopBoundAccessToken()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            string thumbprint = dpopKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+            await WireBoundSubjectSeamsAsync(app, thumbprint).ConfigureAwait(false);
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+            await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer host = app.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof;
+            //the retry carrying the echoed nonce succeeds.
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+                host.SharedHttpClient!, tokenUrl, form,
+                nonce => BuildTokenEndpointDpopProofAsync(dpopKey, segment, material, nonce),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(200, (int)response.StatusCode, body);
+
+                using JsonDocument doc = JsonDocument.Parse(body);
+                Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, doc.RootElement.GetProperty("token_type").GetString(),
+                    "A subject token's bound key, matched by the presented proof, must sender-constrain the issued token.");
+
+                string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+                using JsonDocument payload = DecodePayload(accessToken);
+                Assert.AreEqual(thumbprint,
+                    payload.RootElement.GetProperty(WellKnownJwtClaimNames.Cnf).GetProperty(WellKnownJwtClaimNames.JwkThumbprint).GetString(),
+                    "The issued access token's cnf.jkt must equal the subject token's bound key.");
+            }
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Regression control: an unbound <c>subject_token</c> presented with no DPoP proof still issues
+    /// an unconstrained Bearer access token — the ordinary, unbound exchange is unaffected by the
+    /// RFC 9449 §5 sender-constraint enforcement added for bound subject tokens.
+    /// </summary>
+    [TestMethod]
+    public async Task UnboundSubjectTokenWithoutProofIssuesBearerAccessToken()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireBoundSubjectSeamsAsync(app, requiredKeyThumbprint: null).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, doc.RootElement.GetProperty("token_type").GetString(),
+            "An unbound subject token presented with no proof must still issue an unconstrained Bearer token.");
+
+        string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(accessToken);
+        Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Cnf, out _),
+            "An unbound exchange must carry no cnf claim.");
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §5's binding is a MAY the client opts into per request, not gated on the subject
+    /// token's own binding: an unbound <c>subject_token</c> presented WITH a valid DPoP proof still
+    /// issues a token sender-constrained to that proof's key.
+    /// </summary>
+    [TestMethod]
+    public async Task UnboundSubjectTokenWithProofIssuesDpopBoundAccessToken()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireBoundSubjectSeamsAsync(app, requiredKeyThumbprint: null).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            string expectedThumbprint = dpopKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof;
+            //the retry carrying the echoed nonce succeeds.
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+                host.SharedHttpClient!, tokenUrl, form,
+                nonce => BuildTokenEndpointDpopProofAsync(dpopKey, segment, material, nonce),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(200, (int)response.StatusCode, body);
+
+                using JsonDocument doc = JsonDocument.Parse(body);
+                Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, doc.RootElement.GetProperty("token_type").GetString());
+
+                string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+                using JsonDocument payload = DecodePayload(accessToken);
+                Assert.AreEqual(expectedThumbprint,
+                    payload.RootElement.GetProperty(WellKnownJwtClaimNames.Cnf).GetProperty(WellKnownJwtClaimNames.JwkThumbprint).GetString());
+            }
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 §8</see>: the nonce
+    /// requirement is the SERVER's, never the grant's — proven here by ASSERTING the challenge
+    /// itself, rather than tolerating either outcome the way
+    /// <see cref="UnboundSubjectTokenWithProofIssuesDpopBoundAccessToken"/>'s permissive retry
+    /// helper does. Under <see cref="PolicyProfile.Rfc6749WithPkce"/> — a profile
+    /// <see cref="ClientPolicyProfiles.RequiresDpop"/> does NOT mandate — a nonce-less proof still
+    /// answers 400 <c>use_dpop_nonce</c> with a non-empty <c>DPoP-Nonce</c> header, and the retry
+    /// carrying that exact nonce succeeds.
+    /// </summary>
+    [TestMethod]
+    public async Task NonceLessProofUnderOptionalDpopProfileIsChallengedThenSucceedsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireBoundSubjectSeamsAsync(app, requiredKeyThumbprint: null).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithMandatoryDpopNonceChallengeAsync(
+                host.SharedHttpClient!, tokenUrl, form,
+                nonce => BuildTokenEndpointDpopProofAsync(dpopKey, segment, material, nonce),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(200, (int)response.StatusCode, body);
+            }
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: "This is
+    /// applicable for all access token requests regardless of grant type." A registration whose
+    /// profile mandates DPoP-bound access tokens (<see cref="ClientPolicyProfiles.RequiresDpop"/>) is
+    /// refused when a Token Exchange request carries no proof at all, even for an unbound
+    /// <c>subject_token</c>. The specification text leaves the exact status open; the concrete
+    /// refusal the shared validator issues for a missing-but-mandated proof is the §8
+    /// <c>use_dpop_nonce</c> challenge, asserted here by error code.
+    /// </summary>
+    [TestMethod]
+    public async Task RegistrationRequiringDpopWithoutAProofIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
+        await WireBoundSubjectSeamsAsync(app, requiredKeyThumbprint: null).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, body,
+            "A registration whose profile mandates DPoP must refuse a proof-less Token Exchange request.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see> /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">§6.1</see>: under a registration
+    /// whose profile mandates DPoP, a Token Exchange request for an unbound <c>subject_token</c>
+    /// presenting a valid proof still issues a token sender-constrained to that proof's key —
+    /// <c>token_type</c> answers <c>DPoP</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task RegistrationRequiringDpopWithAProofAnswersDpopTokenType()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
+        await WireBoundSubjectSeamsAsync(app, requiredKeyThumbprint: null).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //A mandating profile also enforces the §8 nonce mechanism on a nonce-less proof — answer
+            //the challenge once, exactly as the client road does, before asserting the bound outcome.
+            string firstProof = await BuildTokenEndpointDpopProofAsync(dpopKey, segment, material).ConfigureAwait(false);
+            using HttpResponseMessage challenge = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, OutgoingHeaders.Empty.WithDpop(firstProof), TestContext.CancellationToken).ConfigureAwait(false);
+            string challengeBody = await challenge.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(400, (int)challenge.StatusCode, challengeBody);
+            Assert.Contains(OAuthErrors.UseDpopNonce, challengeBody);
+            Assert.IsTrue(challenge.Headers.TryGetValues(WellKnownHttpHeaderNames.DPoPNonce, out IEnumerable<string>? nonceValues),
+                "RFC 9449 §8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+            string freshNonce = nonceValues!.First();
+
+            string htu = $"{material.Registration.IssuerUri!.GetLeftPart(UriPartial.Authority)}/connect/{segment}/token";
+            DpopProofClaims retryClaims = new()
+            {
+                Htm = WellKnownHttpMethods.Post,
+                Htu = htu,
+                Iat = TimeProvider.GetUtcNow(),
+                Jti = Guid.NewGuid().ToString("N"),
+                Nonce = freshNonce
+            };
+            string retryProof = await DpopProofConstruction.BuildAsync(
+                retryClaims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, OutgoingHeaders.Empty.WithDpop(retryProof), TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(200, (int)response.StatusCode, body);
+
+            using JsonDocument doc = JsonDocument.Parse(body);
+            Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, doc.RootElement.GetProperty("token_type").GetString(),
+                "A registration whose profile mandates DPoP must still bind the token to a presented proof for an unbound subject token.");
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 §8</see>: the
+    /// <c>use_dpop_nonce</c> challenge must answer before the subject-token seam is ever consulted —
+    /// the seam may carry a side effect (RFC 8693 §2.1's impersonation/delegation policy decision), so
+    /// a challenge the client retries must not already have run it once. The retry, presenting the
+    /// fresh nonce, consults the seam exactly once.
+    /// </summary>
+    [TestMethod]
+    public async Task RegistrationRequiringDpopChallengeDoesNotConsultTheSubjectSeamBeforeTheRetry()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        int subjectSeamInvocations = 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                {
+                    subjectSeamInvocations++;
+
+                    return ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+                };
+            WirePermissivePolicy(candidateIntegration);
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+        }).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            string firstProof = await BuildTokenEndpointDpopProofAsync(dpopKey, segment, material).ConfigureAwait(false);
+            using HttpResponseMessage challenge = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, OutgoingHeaders.Empty.WithDpop(firstProof), TestContext.CancellationToken).ConfigureAwait(false);
+            string challengeBody = await challenge.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(400, (int)challenge.StatusCode, challengeBody);
+            Assert.Contains(OAuthErrors.UseDpopNonce, challengeBody);
+            Assert.AreEqual(0, subjectSeamInvocations,
+                "The use_dpop_nonce challenge must never consult the subject-token seam.");
+
+            Assert.IsTrue(challenge.Headers.TryGetValues(WellKnownHttpHeaderNames.DPoPNonce, out IEnumerable<string>? nonceValues),
+                "RFC 9449 §8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+            string freshNonce = nonceValues!.First();
+
+            string htu = $"{material.Registration.IssuerUri!.GetLeftPart(UriPartial.Authority)}/connect/{segment}/token";
+            DpopProofClaims retryClaims = new()
+            {
+                Htm = WellKnownHttpMethods.Post,
+                Htu = htu,
+                Iat = TimeProvider.GetUtcNow(),
+                Jti = Guid.NewGuid().ToString("N"),
+                Nonce = freshNonce
+            };
+            string retryProof = await DpopProofConstruction.BuildAsync(
+                retryClaims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            using HttpResponseMessage retry = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, OutgoingHeaders.Empty.WithDpop(retryProof), TestContext.CancellationToken).ConfigureAwait(false);
+            string retryBody = await retry.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(200, (int)retry.StatusCode, retryBody);
+            Assert.AreEqual(1, subjectSeamInvocations,
+                "The retry with the fresh nonce must succeed and consult the subject-token seam exactly once.");
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §5 on the §4.5 SAML-to-OAuth Refresh-Token issuance branch: a bound
+    /// <c>subject_token</c> presented with no DPoP proof at all must not be exchanged for a Refresh
+    /// Token either — the enforcement is not limited to the access-token issuance branch.
+    /// </summary>
+    [TestMethod]
+    public async Task BoundSubjectExchangedForRefreshTokenWithoutProofIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey boundKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            string boundThumbprint = boundKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+            await WireBoundSubjectForRefreshIssuanceSeamsAsync(app, boundThumbprint).ConfigureAwait(false);
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+            await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer host = app.Host("default");
+            Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(400, (int)response.StatusCode, body);
+            Assert.Contains(OAuthErrors.InvalidGrant, body);
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// The refresh-token issuance branch's mismatched-key counterpart to
+    /// <see cref="BoundSubjectExchangedForRefreshTokenWithoutProofIsRefused"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task BoundSubjectExchangedForRefreshTokenWithMismatchedProofIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> boundKeyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> presentedKeyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey boundKey = new(boundKeyMaterial, WellKnownJwaValues.Es256);
+            DpopKey presentedKey = new(presentedKeyMaterial, WellKnownJwaValues.Es256);
+            string boundThumbprint = boundKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+            await WireBoundSubjectForRefreshIssuanceSeamsAsync(app, boundThumbprint).ConfigureAwait(false);
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+            await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer host = app.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof;
+            //the retry carrying the echoed nonce still fails the key-mismatch check.
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+                host.SharedHttpClient!, tokenUrl, form,
+                nonce => BuildTokenEndpointDpopProofAsync(presentedKey, segment, material, nonce),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(400, (int)response.StatusCode, body);
+                Assert.Contains(OAuthErrors.InvalidGrant, body);
+            }
+        }
+        finally
+        {
+            boundKeyMaterial.PublicKey.Dispose();
+            boundKeyMaterial.PrivateKey.Dispose();
+            presentedKeyMaterial.PublicKey.Dispose();
+            presentedKeyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §5: "When an authorization server supporting DPoP issues a refresh token to a public
+    /// client that presents a valid DPoP proof at the token endpoint, the refresh token MUST be bound
+    /// to the respective public key." A bound <c>subject_token</c> presented with the matching proof
+    /// on the §4.5 Refresh-Token issuance branch must therefore itself mint a refresh token bound to
+    /// that key — verified against the server's own stored flow state, the same slot the ordinary
+    /// <c>refresh_token</c> grant reads to enforce the binding on later use.
+    /// </summary>
+    [TestMethod]
+    public async Task BoundSubjectExchangedForRefreshTokenWithMatchingProofBindsMintedRefreshToken()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            string thumbprint = dpopKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+            await WireBoundSubjectForRefreshIssuanceSeamsAsync(app, thumbprint).ConfigureAwait(false);
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+            await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer host = app.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+            OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+            {
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.AccessToken
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof;
+            //the retry carrying the echoed nonce succeeds.
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+                host.SharedHttpClient!, tokenUrl, form,
+                nonce => BuildTokenEndpointDpopProofAsync(dpopKey, segment, material, nonce),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(200, (int)response.StatusCode, body);
+
+                using JsonDocument doc = JsonDocument.Parse(body);
+                Assert.AreEqual(
+                    TokenTypeNames.GetName(TokenType.RefreshToken),
+                    doc.RootElement.GetProperty(OAuthRequestParameterNames.IssuedTokenType).GetString(),
+                    "Sanity: the exchange must have minted a refresh token (§4.5).");
+                string refreshToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+                ServerRefreshTokenIssuedState storedState = host.FlowStates.Values
+                    .Select(entry => entry.State)
+                    .OfType<ServerRefreshTokenIssuedState>()
+                    .Single(state => state.RefreshToken == refreshToken);
+                Assert.IsNotNull(storedState.Confirmation, "The minted refresh token must record the DPoP binding.");
+                Assert.AreEqual(thumbprint, storedState.Confirmation!.JwkThumbprint,
+                    "The minted refresh token's bound key must equal the subject token's bound key.");
+            }
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>'s
     /// <c>audience</c> is a logical name the authorization seam MAY set to anything — it need not be
     /// an <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see> absolute
@@ -1680,7 +2452,7 @@ internal sealed class TokenExchangeGrantTests
     public async Task RefreshTokenMintedFromSpaceyLogicalAudienceCarriesNoResourceAndFailsClosedOnNarrowing()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -1688,27 +2460,31 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        WireClientAuthentication(app);
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
         //A logical audience name that is NOT a resource indicator — spaces and all — is exactly the
         //RFC 8693 §2.1 shape the authorization seam is free to grant.
         const string SpaceyLogicalAudience = "internal billing service";
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = WellKnownScopes.OpenId,
-                        IssuedTokenType = TokenType.RefreshToken,
-                        Audience = [SpaceyLogicalAudience]
-                    });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = [SpaceyLogicalAudience]
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1745,6 +2521,17 @@ internal sealed class TokenExchangeGrantTests
         Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", narrowedBody, StringComparison.Ordinal,
             $"A resource-narrowing refresh must fail closed when the spacey logical audience left "
             + $"nothing granted to narrow from. Got: {narrowedBody}");
+
+        //Discriminator: the refusal did not consume the refresh token — a no-resource refresh
+        //(nothing to narrow, nothing requested) still succeeds.
+        using HttpResponseMessage plainRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string plainBody = await plainRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)plainRefresh.StatusCode, plainBody);
     }
 
 
@@ -1768,7 +2555,7 @@ internal sealed class TokenExchangeGrantTests
     public async Task RefreshTokenMintedFromSpaceyUriShapedAudienceCarriesNoResourceAndFailsClosedOnNarrowing()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -1776,28 +2563,32 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        WireClientAuthentication(app);
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
         //A URI-shaped logical audience with an embedded space: Uri.TryCreate percent-escapes it and
         //still parses as absolute, so this is exactly the value that would slip a shape gate relying
         //on UriKind.Absolute parsing alone.
         const string SpaceyUriShapedAudience = "https://api.example.com/orders v2";
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = WellKnownScopes.OpenId,
-                        IssuedTokenType = TokenType.RefreshToken,
-                        Audience = [SpaceyUriShapedAudience]
-                    });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = [SpaceyUriShapedAudience]
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1834,6 +2625,17 @@ internal sealed class TokenExchangeGrantTests
             $"A resource-narrowing refresh requesting the fabricated 'v2' fragment must fail closed "
             + $"as invalid_target rather than matching a grant fabricated by splitting the spacey "
             + $"URI-shaped audience. Got: {narrowedBody}");
+
+        //Discriminator: the refusal did not consume the refresh token — a no-resource refresh
+        //(nothing to narrow, nothing requested) still succeeds.
+        using HttpResponseMessage plainRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string plainBody = await plainRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)plainRefresh.StatusCode, plainBody);
     }
 
 
@@ -1849,7 +2651,7 @@ internal sealed class TokenExchangeGrantTests
     public async Task RefreshTokenMintedFromUriAudiencesCarriesResourceAndNarrowsOnRefresh()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -1857,26 +2659,30 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        WireClientAuthentication(app);
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
         const string ResourceA = "https://cal.example.com/";
         const string ResourceB = "https://contacts.example.com/";
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization
-                    {
-                        Subject = subject.Subject,
-                        Scope = WellKnownScopes.OpenId,
-                        IssuedTokenType = TokenType.RefreshToken,
-                        Audience = [ResourceA, ResourceB]
-                    });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = [ResourceA, ResourceB]
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1930,20 +2736,24 @@ internal sealed class TokenExchangeGrantTests
     public async Task TokenExchangeRejectsEmptyResourceOccurrenceMixedWithValidOneAsInvalidTarget()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The token-exchange endpoint candidate only materialises when these seams are wired (the
         //same fail-closed gate PAR/revocation apply); the resource shape gate under test here runs
         //before either is ever invoked, so their bodies are unreached.
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization { Subject = subject.Subject, Scope = WellKnownScopes.OpenId, IssuedTokenType = TokenType.AccessToken });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization { Subject = subject.Subject, Scope = WellKnownScopes.OpenId, IssuedTokenType = TokenType.AccessToken });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1970,6 +2780,218 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
+    /// RFC 8693 §2.1: "Multiple "audience" parameters may be used to indicate that the issued token
+    /// is intended to be used at the multiple audiences listed." The genuine multi-audience wire form
+    /// is the REPEATED <c>audience</c> parameter, exactly as <see cref="OAuthRequestParameterNames.Resource"/>
+    /// repeats. The grant reads every occurrence and carries all of them, in order, into the
+    /// <see cref="TokenExchangeRequest.Audience"/> the authorization seam reads.
+    /// </summary>
+    [TestMethod]
+    public async Task RepeatedAudienceCarriesEveryTargetIntoTheAuthorizationSeamInOrder()
+    {
+        const string FirstAudience = "https://svc.example/orders";
+        const string SecondAudience = "https://svc.example/inventory";
+
+        IReadOnlyList<string>? seenAudiences = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenAudiences = request.Audience;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        form.Add(OAuthRequestParameterNames.Audience, FirstAudience);
+        form.Add(OAuthRequestParameterNames.Audience, SecondAudience);
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        Assert.IsNotNull(seenAudiences, "The authorization seam must have run.");
+        Assert.HasCount(2, seenAudiences!);
+        Assert.AreEqual(FirstAudience, seenAudiences![0]);
+        Assert.AreEqual(SecondAudience, seenAudiences[1]);
+    }
+
+
+    /// <summary>
+    /// A repeated <c>audience</c> occurrence carrying the SAME value twice names one target, not two:
+    /// the grant deduplicates ordinally (the same treatment <see cref="OAuthRequestParameterNames.Resource"/>
+    /// gets), so the authorization seam observes it exactly once.
+    /// </summary>
+    [TestMethod]
+    public async Task RepeatedIdenticalAudienceReachesTheAuthorizationSeamOnce()
+    {
+        const string Audience = "https://svc.example/orders";
+
+        IReadOnlyList<string>? seenAudiences = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenAudiences = request.Audience;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        form.Add(OAuthRequestParameterNames.Audience, Audience);
+        form.Add(OAuthRequestParameterNames.Audience, Audience);
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        Assert.IsNotNull(seenAudiences, "The authorization seam must have run.");
+        Assert.HasCount(1, seenAudiences!);
+        Assert.AreEqual(Audience, seenAudiences![0]);
+    }
+
+
+    /// <summary>
+    /// An <c>audience</c> occurrence that is empty carries no logical name to contribute; mixed with a
+    /// well-formed occurrence it must fail the whole request closed as malformed
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see>'s
+    /// general <c>invalid_request</c> MUST — RFC 8693 registers no audience-specific code the way RFC
+    /// 8707 §2 registers <c>invalid_target</c> for a malformed <c>resource</c> occurrence), not silently
+    /// drop the blank occurrence and succeed on the valid one alone.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenExchangeRejectsEmptyAudienceOccurrenceMixedWithValidOneAsInvalidRequest()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        form.Add(OAuthRequestParameterNames.Audience, "https://svc.example/orders");
+        form.Add(OAuthRequestParameterNames.Audience, "");
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", body, StringComparison.Ordinal,
+            $"An empty audience occurrence mixed with a valid one must fail the whole request closed. Got: {body}");
+    }
+
+
+    /// <summary>
+    /// RFC 8693 §2.2.2: "If the authorization server is unwilling or unable to issue a token for any
+    /// target service indicated by the "resource" or "audience" parameters, the "invalid_target" error
+    /// code SHOULD be used." A policy denial (<see langword="null"/>) on a plain exchange that named an
+    /// <c>audience</c> (no <c>resource</c>) is <c>invalid_target</c>, not the general <c>invalid_request</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyDenialWithNamedAudienceIsInvalidTarget()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(null);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new OutgoingFormFields
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken),
+            [OAuthRequestParameterNames.Audience] = "https://svc.example/orders"
+        }.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", body, StringComparison.Ordinal, body);
+    }
+
+
+    /// <summary>
     /// Registers a truly grant-only confidential client — no
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> — allowed the
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability plus
@@ -1979,24 +3001,29 @@ internal sealed class TokenExchangeGrantTests
     /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy —
     /// so the endpoint-match capability alone is sufficient. RegisterDpopClient
     /// supplies the AccessTokenIssuance signing keys the producers resolve. The discovery/jwks
-    /// capabilities round out the standard surface. <see cref="AddMachineScopeAudienceMapping"/> maps
+    /// capabilities round out the standard surface. <see cref="AddMachineScopeAudienceMappingAsync"/> maps
     /// <see cref="MachineScope"/> onto <see cref="ResourceServerAudience"/> so the real
     /// client_credentials subject/actor tokens minted below still reach a concrete audience —
     /// <c>openid</c> is narrowed away from every <c>client_credentials</c> grant.
     /// </summary>
-    private static VerifierKeyMaterial RegisterTokenExchangeClient(TestHostShell app)
+    /// <param name="app">The host to register the client on.</param>
+    /// <param name="profile">
+    /// The client's policy profile — <see cref="PolicyProfile.Rfc6749WithPkce"/> unless a DPoP test
+    /// selects a profile <see cref="ClientPolicyProfiles.RequiresDpop"/> mandates against.
+    /// </param>
+    private static async Task<VerifierKeyMaterial> RegisterTokenExchangeClientAsync(TestHostShell app, PolicyProfile? profile = null)
     {
-        VerifierKeyMaterial material = app.RegisterDpopClient(
+        VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
-            profile: PolicyProfile.Rfc6749WithPkce,
+            profile: profile ?? PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
-        AddMachineScopeAudienceMapping(app, material);
+        await AddMachineScopeAudienceMappingAsync(app, material).ConfigureAwait(false);
 
         return material;
     }
@@ -2008,9 +3035,9 @@ internal sealed class TokenExchangeGrantTests
     /// <c>client_credentials</c> token's subject (itself) is a distinct real subject, verified
     /// against its own published JWKS.
     /// </summary>
-    private static VerifierKeyMaterial RegisterActorClient(TestHostShell app)
+    private static async Task<VerifierKeyMaterial> RegisterActorClientAsync(TestHostShell app)
     {
-        VerifierKeyMaterial material = app.RegisterDpopClient(
+        VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ActorClientId,
             new Uri(ActorClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -2018,9 +3045,9 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
-        AddMachineScopeAudienceMapping(app, material);
+        await AddMachineScopeAudienceMappingAsync(app, material).ConfigureAwait(false);
 
         return material;
     }
@@ -2032,7 +3059,7 @@ internal sealed class TokenExchangeGrantTests
     /// upgrade pattern the sibling grant suites use, because the routing dictionaries are
     /// host-internal.
     /// </summary>
-    private static void AddMachineScopeAudienceMapping(TestHostShell app, VerifierKeyMaterial material)
+    private static async Task AddMachineScopeAudienceMappingAsync(TestHostShell app, VerifierKeyMaterial material)
     {
         HostedAuthorizationServer host = app.Host("default");
         string segment = material.Registration.TenantId.Value;
@@ -2047,9 +3074,9 @@ internal sealed class TokenExchangeGrantTests
             AllowedScopes = previous.AllowedScopes.Add(MachineScope),
             ScopeToAudience = scopeToAudience
         };
-        host.Registrations[segment] = updated;
-        host.Registrations[updated.ClientId] = updated;
-        host.Server.UpdateClient(previous, updated, []);
+
+
+        updated = await host.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
         material.Registration = updated;
     }
 
@@ -2059,16 +3086,19 @@ internal sealed class TokenExchangeGrantTests
     /// owns the secret store and the comparison; this test glue checks the form field against
     /// the secret of whichever client_id the request claims (both registered clients are served).
     /// </summary>
-    private static void WireClientAuthentication(TestHostShell app) =>
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue("client_secret", out string? secret)
-                && string.Equals(
-                    secret,
-                    string.Equals(registration.ClientId, ActorClientId, StringComparison.Ordinal)
-                        ? ActorClientSecret
-                        : ClientSecret,
-                    StringComparison.Ordinal));
+    private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue("client_secret", out string? secret)
+                    && string.Equals(
+                        secret,
+                        string.Equals(registration.ClientId, ActorClientId, StringComparison.Ordinal)
+                            ? ActorClientSecret
+                            : ClientSecret,
+                        StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
 
     /// <summary>
@@ -2078,16 +3108,81 @@ internal sealed class TokenExchangeGrantTests
     /// exchange and shapes the issued token to that same subject and scope as an
     /// access token (RFC 8693 §1.1 / Appendix A.1.4).
     /// </summary>
-    private static void WireImpersonationSeams(TestHostShell app)
+    private static async Task WireImpersonationSeamsAsync(TestHostShell app)
     {
-        WireClientAuthentication(app);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
 
-        WirePermissivePolicy(app);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
+
+    }
+
+
+    /// <summary>
+    /// Wires client authentication, a subject-token validation that surfaces
+    /// <paramref name="requiredKeyThumbprint"/> as <see cref="ValidatedSecurityToken.RequiredKeyThumbprint"/>,
+    /// and a permissive policy that shapes the issued token as an access token — the RFC 9449 §5
+    /// sender-constraint enforcement under test on the plain access-token issuance branch.
+    /// </summary>
+    private static async Task WireBoundSubjectSeamsAsync(TestHostShell app, string? requiredKeyThumbprint)
+    {
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken
+                        {
+                            Subject = SubjectIdentity,
+                            Scope = GrantedScope,
+                            RequiredKeyThumbprint = requiredKeyThumbprint
+                        });
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Wires client authentication, a subject-token validation that surfaces
+    /// <paramref name="requiredKeyThumbprint"/>, and a policy that selects the §4.5 SAML-to-OAuth
+    /// Refresh-Token issuance branch — the RFC 9449 §5 sender-constraint enforcement under test on
+    /// the Token Exchange grant's Refresh-Token issuance path.
+    /// </summary>
+    private static async Task WireBoundSubjectForRefreshIssuanceSeamsAsync(TestHostShell app, string? requiredKeyThumbprint)
+    {
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken
+                        {
+                            Subject = SubjectIdentity,
+                            Scope = GrantedScope,
+                            RequiredKeyThumbprint = requiredKeyThumbprint
+                        });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.RefreshToken
+                        });
+        }).ConfigureAwait(false);
     }
 
 
@@ -2096,8 +3191,14 @@ internal sealed class TokenExchangeGrantTests
     /// validated subject and the fixture's granted scope as an access token (RFC 8693 §1.1 /
     /// Appendix A.1.4). The library, not this seam, records the actor in the act claim for delegation.
     /// </summary>
-    private static void WirePermissivePolicy(TestHostShell app) =>
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+    private static async Task WirePermissivePolicyAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration => WirePermissivePolicy(candidateIntegration)).ConfigureAwait(false);
+
+
+    /// <summary>Installs the authorization operation on the editable candidate.</summary>
+    private static void WirePermissivePolicy(AuthorizationServerIntegration candidateIntegration)
+    {
+        candidateIntegration.AuthorizeTokenExchangeAsync =
             static (subject, actor, request, registration, context, ct) =>
                 ValueTask.FromResult<TokenExchangeAuthorization?>(
                     new TokenExchangeAuthorization
@@ -2106,6 +3207,7 @@ internal sealed class TokenExchangeGrantTests
                         Scope = GrantedScope,
                         IssuedTokenType = TokenType.AccessToken
                     });
+    }
 
 
     /// <summary>
@@ -2115,17 +3217,21 @@ internal sealed class TokenExchangeGrantTests
     /// token resolves to the actor's claims. Distinct subjects (<see cref="SubjectIdentity"/> vs
     /// <see cref="ActorIdentity"/>) make the §4.1 actor recording observable.
     /// </summary>
-    private static void WireBranchingValidator(TestHostShell app, ValidatedSecurityToken? subjectToken)
+    private static async Task WireBranchingValidatorAsync(TestHostShell app, ValidatedSecurityToken? subjectToken)
     {
         ValidatedSecurityToken subject = subjectToken
             ?? new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope };
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
-                        ? new ValidatedSecurityToken { Subject = ActorIdentity }
-                        : subject);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
+                            ? new ValidatedSecurityToken { Subject = ActorIdentity }
+                            : subject);
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
     }
 
 
@@ -2246,5 +3352,29 @@ internal sealed class TokenExchangeGrantTests
         Assert.IsTrue(built.IsSuccess, "The builder must accept a well-formed token-exchange request.");
 
         return built.Value;
+    }
+
+
+    /// <summary>
+    /// Builds a token-endpoint DPoP proof (<c>htm=POST</c>, <c>htu=</c> the issuer-authority + token
+    /// path the server validates against per RFC 9449 §4.2) for the given key.
+    /// </summary>
+    private async Task<string> BuildTokenEndpointDpopProofAsync(
+        DpopKey dpopKey, string segment, VerifierKeyMaterial material, string? nonce = null)
+    {
+        string htu = $"{material.Registration.IssuerUri!.GetLeftPart(UriPartial.Authority)}/connect/{segment}/token";
+        DpopProofClaims claims = new()
+        {
+            Htm = HttpMethod.Post.Method,
+            Htu = htu,
+            Iat = TimeProvider.GetUtcNow(),
+            Jti = Guid.NewGuid().ToString("N"),
+            Nonce = nonce
+        };
+
+        return await DpopProofConstruction.BuildAsync(
+            claims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

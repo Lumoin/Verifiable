@@ -36,7 +36,6 @@ namespace Verifiable.OAuth.Client;
 ///     loadStateByRequestUriAsync: ...,
 ///     parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
 ///     parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-///     parseAuthorizationServerMetadataAsync: ...,
 ///     parseRegistrationResponseAsync: ...,
 ///     resolveAuthorizationServerMetadataAsync: ...,
 ///     resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,

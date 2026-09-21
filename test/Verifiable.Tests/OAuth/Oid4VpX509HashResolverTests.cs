@@ -100,8 +100,9 @@ internal sealed class Oid4VpX509HashResolverTests
         //The JAR is correctly signed and chains to the trusted anchor, but the
         //client_id asserts a hash the leaf certificate does not produce. The hash
         //binding is the whole point of the prefix, so this must fail (OID4VP §5.9.3).
+        using DigestValue notLeafDigest = CryptographicKeyEvents.ComputeDigest("not-the-leaf"u8, 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
         string spoofedClientId =
-            $"{WellKnownClientIdPrefixes.X509Hash}:{TestSetup.Base64UrlEncoder(SHA256.HashData("not-the-leaf"u8))}";
+            $"{WellKnownClientIdPrefixes.X509Hash}:{TestSetup.Base64UrlEncoder(notLeafDigest.AsReadOnlySpan())}";
         string compactJar = await BuildX509HashJarAsync(chain.LeafSigningKey, spoofedClientId, LeafX5c(chain), now).ConfigureAwait(false);
         UnverifiedJwtHeader jarHeader = ParseHeader(compactJar);
 

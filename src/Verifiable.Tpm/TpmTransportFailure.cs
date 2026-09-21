@@ -9,7 +9,7 @@ namespace Verifiable.Tpm;
 /// <para>
 /// This record captures the details of why a <see cref="TpmDevice"/> transport broke.
 /// Once a transport failure occurs, the device is permanently failed — all subsequent
-/// <see cref="TpmDevice.Submit"/> calls return the same error immediately.
+/// <see cref="TpmDevice.SubmitAsync"/> calls return the same error immediately.
 /// </para>
 /// <para>
 /// <b>Linux failures:</b> The <see cref="ErrorCode"/> is an <c>errno</c> value from the

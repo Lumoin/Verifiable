@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Server.Audit;
 /// The set of <see cref="IssuedTokenAudit"/> records for tokens emitted in one
 /// token-endpoint response, keyed by the response field name the producing
 /// <see cref="TokenProducer"/> declared. Persisted on
-/// <see cref="ServerTokenIssuedState"/> as part of the post-issuance flow record.
+/// <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerTokenIssuedState"/> as part of the post-issuance flow record.
 /// </summary>
 /// <remarks>
 /// <para>

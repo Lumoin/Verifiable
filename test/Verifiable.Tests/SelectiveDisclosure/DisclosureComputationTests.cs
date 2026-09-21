@@ -25,6 +25,46 @@ internal sealed class DisclosureComputationTests
 
 
     /// <summary>
+    /// A <see cref="TimeProvider"/> test double whose <see cref="GetTimestamp"/> advances by a
+    /// fixed <see cref="TimeSpan"/> on every call, so a computation reading it twice observes a
+    /// known, deterministic elapsed duration with no dependency on wall-clock timing.
+    /// </summary>
+    private sealed class StepAdvancingTimeProvider: TimeProvider
+    {
+        private TimeSpan Step { get; }
+        private long Ticks { get; set; }
+
+        /// <summary>
+        /// Creates a provider whose <see cref="GetTimestamp"/> advances by <paramref name="step"/>
+        /// on every call.
+        /// </summary>
+        /// <param name="step">The fixed amount each call to <see cref="GetTimestamp"/> advances by.</param>
+        public StepAdvancingTimeProvider(TimeSpan step)
+        {
+            Step = step;
+        }
+
+        /// <inheritdoc/>
+        public override DateTimeOffset GetUtcNow()
+        {
+            return TestClock.CanonicalEpoch;
+        }
+
+        /// <inheritdoc/>
+        public override long GetTimestamp()
+        {
+            var current = Ticks;
+            Ticks += Step.Ticks;
+
+            return current;
+        }
+
+        /// <inheritdoc/>
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+    }
+
+
+    /// <summary>
     /// <see cref="DisclosureComputation{TCredential}.ComputeAsync"/>'s audit-trail
     /// <c>DecisionRecord.Timestamp</c> is the exact instant the passed <see cref="TimeProvider"/> reports,
     /// not wall time.
@@ -309,7 +349,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task DecisionRecordCapturesAllPhases()
     {
-        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
+        var computation = new DisclosureComputation<string>([], new StepAdvancingTimeProvider(TimeSpan.FromMilliseconds(1)));
 
         var matches = new[]
         {
@@ -330,6 +370,33 @@ internal sealed class DisclosureComputationTests
         Assert.HasCount(1, record.Evaluations);
         Assert.HasCount(1, record.LatticeComputations);
         Assert.HasCount(1, record.FinalDecisions);
+    }
+
+
+    /// <summary>
+    /// <see cref="DisclosureComputation{TCredential}.ComputeAsync"/>'s audit-trail
+    /// <c>DecisionRecord.Duration</c> is read from the passed <see cref="TimeProvider"/>, not wall
+    /// time: it equals exactly the amount that clock was advanced between the computation's two
+    /// timestamp reads.
+    /// </summary>
+    [TestMethod]
+    public async Task DecisionRecordDurationEqualsTheInjectedClocksAdvance()
+    {
+        var advance = TimeSpan.FromSeconds(5);
+        var computation = new DisclosureComputation<string>([], new StepAdvancingTimeProvider(advance));
+
+        var matches = new[]
+        {
+            CreateMatch("cred-1", "req-1",
+                required: [GivenName],
+                available: [GivenName, FamilyName])
+        };
+
+        var graph = await computation.ComputeAsync(matches,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(advance, graph.DecisionRecord!.Duration,
+            "Duration must equal the injected clock's advance, not wall time.");
     }
 
 

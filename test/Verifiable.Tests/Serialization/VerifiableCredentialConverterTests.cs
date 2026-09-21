@@ -64,7 +64,7 @@ internal sealed class VerifiableCredentialConverterTests
 
     /// <summary>
     /// <see cref="VerifiableCredential.Context"/> round-trips an <c>@context</c> array mixing an IRI
-    /// with an inline definition byte-identically: <see cref="VerifiableCredentialConverter"/> delegates
+    /// with an inline definition byte-identically: <see cref="Verifiable.Json.Converters.VerifiableCredentialConverter"/> delegates
     /// the member to the same <see cref="Verifiable.Json.Converters.JsonLdContextConverter"/> a bare
     /// <see cref="Verifiable.Core.Model.Common.Context"/> roundtrip uses.
     /// </summary>
@@ -205,7 +205,7 @@ internal sealed class VerifiableCredentialConverterTests
     public void CredentialExtensionDataSurvivesUnderCombinedResolver()
     {
         var options = new JsonSerializerOptions();
-        _ = options.ApplyVerifiableDefaults();
+        _ = options.ApplyVerifiableDefaults(BaseMemoryPool.Shared);
         options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
             VerifiableJsonContext.Default,
             VerifiableCredentialConverterTestsJsonContext.Default);
@@ -230,5 +230,36 @@ internal sealed class VerifiableCredentialConverterTests
         Assert.AreEqual("step-one", trail[0].GetString());
         Assert.IsTrue(document.RootElement.TryGetProperty("riskScore", out var risk));
         Assert.AreEqual(7, risk.GetInt32());
+    }
+
+
+    /// <summary>
+    /// W3C Bitstring Status List 1.0 §2.1: <c>statusSize</c> and <c>statusMessage</c> parse into
+    /// <see cref="CredentialStatus.StatusSize"/> and <see cref="CredentialStatus.StatusMessage"/>,
+    /// never into <see cref="CredentialStatus.AdditionalData"/>, and serialize back
+    /// byte-identically alongside <c>statusReference</c>.
+    /// </summary>
+    [TestMethod]
+    public void CredentialStatusStatusSizeAndStatusMessageRoundTripAsTypedMembers()
+    {
+        // lang=json, strict
+        const string Json = """
+            {"@context":["https://www.w3.org/ns/credentials/v2"],"type":["VerifiableCredential"],"issuer":"did:example:issuer","credentialSubject":{"id":"did:example:subject"},"credentialStatus":[{"id":"https://example.com/credentials/status/8#492847","type":"BitstringStatusListEntry","statusPurpose":"message","statusListIndex":"492847","statusListCredential":"https://example.com/credentials/status/8","statusSize":2,"statusMessage":[{"status":"0x0","message":"pending_review"},{"status":"0x1","message":"accepted"},{"status":"0x2","message":"rejected"},{"status":"0x3","message":"withdrawn"}],"statusReference":["https://example.org/status-dictionary/"]}]}
+            """;
+
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(Json, Options)!;
+
+        Assert.IsNotNull(credential.CredentialStatus);
+        CredentialStatus status = credential.CredentialStatus![0];
+        Assert.AreEqual(2, status.StatusSize);
+        Assert.IsNotNull(status.StatusMessage);
+        Assert.HasCount(4, status.StatusMessage!);
+        Assert.AreEqual("rejected", status.StatusMessage![2].Message);
+        Assert.IsNotNull(status.StatusReference);
+        Assert.AreEqual("https://example.org/status-dictionary/", status.StatusReference![0]);
+        Assert.IsNull(status.AdditionalData, "statusSize, statusMessage and statusReference are typed members; they must not land in AdditionalData.");
+
+        string reserialized = JsonSerializerExtensions.Serialize(credential, Options);
+        Assert.AreEqual(Json, reserialized, "credentialStatus statusSize/statusMessage/statusReference must round-trip byte-identically.");
     }
 }

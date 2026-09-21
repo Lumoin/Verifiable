@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Per-call inputs for
-/// <see cref="AuthCodeClient.StartJarAuthorizeAsync"/> — the JAR-by-value
+/// <see cref="AuthCodeClient.StartJarAuthorizeAsync(ClientRegistration, AuthCodeStartJarAuthorizeOptions, CancellationToken)"/> — the JAR-by-value
 /// direct authorization flow per RFC 9101 §6.1. The client signs a JAR with
 /// the AuthCode claims and constructs a redirect URL whose query carries
 /// <c>request=&lt;compact-jws&gt;</c> and the outer <c>client_id</c>; the user

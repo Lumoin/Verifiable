@@ -117,6 +117,20 @@ internal sealed class KeyCreationFunctionRegistryTests
 
 
     /// <summary>
+    /// <see cref="KeyCreationFunctionRegistry{TDiscriminator1, TDiscriminator2}.IsInitialized"/> is
+    /// <see langword="true"/> once <c>TestSetup</c>'s module initializer has run
+    /// <see cref="KeyCreationFunctionRegistry{TDiscriminator1, TDiscriminator2}.Initialize"/>. The
+    /// process-wide <c>[ModuleInitializer]</c> runs before any test, so only the true-after state is
+    /// observable here without disturbing the other tests' process-wide registration.
+    /// </summary>
+    [TestMethod]
+    public void IsInitializedIsTrueAfterProcessWideSetup()
+    {
+        Assert.IsTrue(KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized);
+    }
+
+
+    /// <summary>
     /// Mint (<see cref="CryptographicKeyEvents.CreateKeyPair"/>), bind (<see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, CryptoAlgorithm, Purpose, string?,
     /// System.Collections.Frozen.FrozenDictionary{string, object}?)"/>/ <see cref="CryptographicKeyFactory.CreatePublicKey(PublicKeyMemory, string, CryptoAlgorithm, Purpose, string?,
     /// System.Collections.Frozen.FrozenDictionary{string, object}?)"/>), then sign+verify must emit exactly ONE <see cref="KeyMaterialGeneratedEvent"/> for this key — never a second one

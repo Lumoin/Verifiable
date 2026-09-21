@@ -32,7 +32,10 @@ public static class AuthCodeRequestObjectExtensions
     {
         /// <summary>
         /// Projects this verified JAR's claims into a typed
-        /// <see cref="AuthCodeRequestObject"/>.
+        /// <see cref="AuthCodeRequestObject"/>. The method claim is optional per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+        /// "OPTIONAL, defaults to "plain" if not present in the request".
+        /// The endpoint method gate refuses that default with <c>invalid_request</c>.
         /// </summary>
         /// <param name="rawAuthorizationDetails">
         /// The verbatim RFC 9396 <c>authorization_details</c> array text the caller re-sliced
@@ -61,7 +64,7 @@ public static class AuthCodeRequestObjectExtensions
             string state = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameterNames.State);
             string nonce = JwtClaimReaders.RequireClaim(claims, WellKnownJwtClaimNames.Nonce);
             string codeChallenge = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameterNames.CodeChallenge);
-            string codeChallengeMethod = JwtClaimReaders.RequireClaim(
+            string? codeChallengeMethod = JwtClaimReaders.OptionalClaim(
                 claims, OAuthRequestParameterNames.CodeChallengeMethod);
 
             if(!Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
@@ -78,6 +81,7 @@ public static class AuthCodeRequestObjectExtensions
             //string; max_age is a non-negative integer (OIDC Core §3.1.2.1) — a present but
             //malformed value is surfaced as invalid_request_object like any other JAR defect.
             string? acrValues = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.AcrValues);
+            string? prompt = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.Prompt);
             string? responseMode = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.ResponseMode);
 
             //OID4VCI 1.0 §5.1.3 issuer_state and RFC 8707 resource: read verbatim. issuer_state is
@@ -116,6 +120,7 @@ public static class AuthCodeRequestObjectExtensions
                 Jti = jti,
                 AcrValues = acrValues,
                 MaxAge = maxAge,
+                Prompt = prompt,
                 AuthorizationDetails = rawAuthorizationDetails,
                 ResponseMode = responseMode,
                 IssuerState = issuerState,

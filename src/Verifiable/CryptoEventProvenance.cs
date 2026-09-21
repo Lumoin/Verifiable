@@ -106,7 +106,7 @@ internal static class CryptoEventProvenance
     /// <summary>
     /// Extracts the (algorithm, backend) pair the summary groups by. Not every <see cref="CryptoEvent"/>
     /// carries both: the entropy family carries a source instead of a backend string (its most analogous
-    /// field), and the digest/HMAC family carry neither a <see cref="CryptoAlgorithm"/> nor a backend at
+    /// field), and the digest/HMAC family carry neither a <see cref="Verifiable.Cryptography.Context.CryptoAlgorithm"/> nor a backend at
     /// all today (these fields are not yet modeled for the entropy/digest/HMAC families) — both cases render a
     /// documented placeholder rather than throwing, so an event type this method does not yet know about
     /// never breaks the summary; it renders as <c>(unknown)</c>/<c>(unknown)</c> instead.

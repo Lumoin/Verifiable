@@ -264,7 +264,7 @@ public static class ValidationChecks
     /// </summary>
     /// <remarks>
     /// Reads the clock-skew tolerance from the per-request policy
-    /// (<see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.ClockSkewToleranceOverride"/>)
+    /// (<c>PolicyExchangeContextExtensions.ClockSkewToleranceOverride</c>)
     /// when populated — so a deployment's profile governs the leeway per flow —
     /// otherwise falls back to the <see cref="ValidationContext.ClockSkew"/> field.
     /// Mirrors how <see cref="CheckKbJwtIatNotTooOld"/> resolves its window.
@@ -294,7 +294,7 @@ public static class ValidationChecks
     /// </summary>
     /// <remarks>
     /// Reads the freshness window from the per-request policy
-    /// (<see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.KbJwtMaxAgeWindow"/>)
+    /// (<c>PolicyExchangeContextExtensions.KbJwtMaxAgeWindow</c>)
     /// when populated; otherwise falls back to the legacy
     /// <see cref="ValidationContext.KbJwtMaxAge"/> field. Enforces a library
     /// default for the KB-JWT <c>iat</c>-too-old window.
@@ -441,7 +441,7 @@ public static class ValidationChecks
     /// (<see cref="Oid4Vp.HaipOid4VpVerifierExecutor"/>) and is surfaced via
     /// <see cref="ValidationContext.DcqlOverDisclosed"/>; enforcement is gated by
     /// the per-request policy
-    /// (<see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.EnforceNoOverDisclosure"/>,
+    /// (<c>PolicyExchangeContextExtensions.EnforceNoOverDisclosure</c>,
     /// default enforce). When enforcement is disabled the check passes regardless,
     /// leaving the over-disclosure signal available for audit/telemetry.
     /// </summary>
@@ -468,7 +468,7 @@ public static class ValidationChecks
     /// shortest observed salt length is surfaced via
     /// <see cref="ValidationContext.MinimumDisclosureSaltLengthBytes"/> by the verify step; this check
     /// compares it against <see cref="Verifiable.Cryptography.Salt.RecommendedByteLength"/>. Enforcement
-    /// is opt-in (<see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.EnforceMinimumSaltLength"/>,
+    /// is opt-in (<c>PolicyExchangeContextExtensions.EnforceMinimumSaltLength</c>,
     /// default observe): when enforcement is off the check always passes, leaving the length signal
     /// available for audit/telemetry; RFC 9901 §9.3 RECOMMENDS rather than mandates the length, so
     /// observe is the principled default.

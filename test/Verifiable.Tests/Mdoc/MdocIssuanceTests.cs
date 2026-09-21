@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Mdoc;
 /// downstream serializer's responsibility and is tested separately when that
 /// chunk lands. Tests here therefore assert that
 /// <see cref="MdocIssuerSignedItem.WireBytes"/> and
-/// <see cref="MdocIssuerSigned.EncodedIssuerAuth"/> are <see langword="null"/>
+/// <see cref="MdocIssuerSigned.IssuerAuth"/> are <see langword="null"/>
 /// on the function's output — the serializer fills them.
 /// </para>
 /// </remarks>

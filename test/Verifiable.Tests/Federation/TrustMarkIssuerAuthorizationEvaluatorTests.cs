@@ -126,7 +126,7 @@ internal sealed class TrustMarkIssuerAuthorizationEvaluatorTests
         //TA has no trust_mark_issuers claim at all.
         MintedChain mintedChain = await FederationTestRing.BuildDirectChainAsync(
             subject, anchor, now, now.AddHours(1),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         MintedTrustMark mark = await FederationTestRing.MintTrustMarkAsync(
             tmIssuer, subject, MarkId, now, now.AddHours(1),

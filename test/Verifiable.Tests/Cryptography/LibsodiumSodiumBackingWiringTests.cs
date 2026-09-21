@@ -144,7 +144,7 @@ namespace Verifiable.Tests.Cryptography
         /// <see cref="SodiumScratchPool.PinnedZeroOnReturnMemoryOwner"/> — the managed, pinned,
         /// zero-on-return owner that branch reserves for browser-wasm, where WebAssembly's linear
         /// memory has no guard-page or memory-locking primitive. This observes the branch
-        /// <see cref="Rent(int)"/> actually takes, rather than restating the
+        /// <see cref="SodiumScratchPool.Rent(int)"/> actually takes, rather than restating the
         /// <see cref="SodiumScratchPool.IsGuardedNativeMemory"/> predicate that branch is guarded by.
         /// </summary>
         [TestMethod]

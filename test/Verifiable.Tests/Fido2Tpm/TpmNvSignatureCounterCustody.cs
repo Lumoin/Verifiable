@@ -9,7 +9,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <summary>
 /// Composes a <see cref="CtapSignatureCounterCustody"/> bundle whose per-credential signature counters are
 /// each backed by their OWN NV Counter Index on an in-house simulated TPM — a thin
-/// adapter over the <see cref="TpmDeviceExtensions"/> business-capability verbs package B shipped
+/// adapter over the <see cref="Verifiable.Tpm.Extensions.Counter.TpmDeviceExtensions"/> business-capability verbs package B shipped
 /// (<c>DefineCounterAsync</c>/<c>IncrementCounterAsync</c>/<c>UndefineCounterAsync</c>), never a raw
 /// <c>TPM2_NV_Increment</c> input — the same dogfood posture <see cref="TpmSealedStateCustody"/> established
 /// over the <c>Extensions/Seal</c> verb group.

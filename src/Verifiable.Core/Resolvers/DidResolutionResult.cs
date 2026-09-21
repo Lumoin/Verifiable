@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -66,15 +67,21 @@ public sealed class DidResolutionResult
     /// <param name="document">The resolved DID document.</param>
     /// <param name="documentMetadata">Metadata about the document.</param>
     /// <param name="contentType">The media type of the representation.</param>
+    /// <param name="freshness">
+    /// The freshness the method's own wire fetch reports for <paramref name="document"/>, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>. Left at its
+    /// default (not storable) by a method that resolves without an HTTP fetch.
+    /// </param>
     public static DidResolutionResult Success(
         DidDocument document,
         DidDocumentMetadata documentMetadata,
-        string? contentType = null)
+        string? contentType = null,
+        HttpCacheFreshness freshness = default)
     {
         return new DidResolutionResult
         {
             Kind = DidResolutionKind.Document,
-            ResolutionMetadata = new DidResolutionMetadata { ContentType = contentType },
+            ResolutionMetadata = new DidResolutionMetadata { ContentType = contentType, Freshness = freshness },
             Document = document,
             DocumentMetadata = documentMetadata
         };
@@ -87,6 +94,11 @@ public sealed class DidResolutionResult
     /// </summary>
     /// <param name="documentMetadata">The document metadata, which MUST have <c>Deactivated == true</c>.</param>
     /// <param name="contentType">The media type the representation would have carried.</param>
+    /// <param name="freshness">
+    /// The freshness the method's own wire fetch reports for the deactivation record, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>. Left at its
+    /// default (not storable) by a method that resolves without an HTTP fetch.
+    /// </param>
     /// <remarks>
     /// A resolver MUST NOT return the DIDDoc for a deactivated DID and MUST include <c>deactivated: true</c>
     /// in the resolution metadata. This factory produces that shape: a successful document-kind result with a
@@ -94,12 +106,13 @@ public sealed class DidResolutionResult
     /// </remarks>
     public static DidResolutionResult SuccessDeactivated(
         DidDocumentMetadata documentMetadata,
-        string? contentType = null)
+        string? contentType = null,
+        HttpCacheFreshness freshness = default)
     {
         return new DidResolutionResult
         {
             Kind = DidResolutionKind.Document,
-            ResolutionMetadata = new DidResolutionMetadata { ContentType = contentType },
+            ResolutionMetadata = new DidResolutionMetadata { ContentType = contentType, Freshness = freshness },
             Document = null,
             DocumentMetadata = documentMetadata
         };

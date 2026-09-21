@@ -5,8 +5,6 @@ using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
-using Verifiable.OAuth.Pkce;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -61,12 +59,12 @@ internal sealed class AzpMultiAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //A conformant issuer: when minting for a second audience it adds azp
         //alongside (§3.1.3.7 rule 4's expectation on the token shape).
-        ApplyIdTokenContributor(host, ContributeMultiAudienceWithAzp);
+        await ApplyIdTokenContributorAsync(host, ContributeMultiAudienceWithAzp).ConfigureAwait(false);
 
         string idToken = await DriveCodeExchangeForIdTokenAsync(host, material).ConfigureAwait(false);
 
@@ -97,11 +95,11 @@ internal sealed class AzpMultiAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //A non-conformant issuer: multiple audiences but no azp.
-        ApplyIdTokenContributor(host, ContributeMultiAudienceWithoutAzp);
+        await ApplyIdTokenContributorAsync(host, ContributeMultiAudienceWithoutAzp).ConfigureAwait(false);
 
         string idToken = await DriveCodeExchangeForIdTokenAsync(host, material).ConfigureAwait(false);
 
@@ -129,8 +127,8 @@ internal sealed class AzpMultiAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //The stock pipeline: single audience (the client), no azp — the
         //ordinary OIDC shape needs no authorized-party claim (§3.1.3.7
@@ -151,7 +149,7 @@ internal sealed class AzpMultiAudienceScenarioTests
     /// supplied deployment contributor — the documented extension point for
     /// deployment-specific token shaping.
     /// </summary>
-    private void ApplyIdTokenContributor(
+    private async Task ApplyIdTokenContributorAsync(
         TestHostShell host,
         Func<ClaimContributionTarget, CancellationToken, ValueTask<List<Claim>>> contributor)
     {
@@ -159,8 +157,11 @@ internal sealed class AzpMultiAudienceScenarioTests
         rules.Add(new ClaimDelegate<ClaimContributionTarget>(
             new(contributor), [MultiAudienceClaimId, AuthorizedPartyClaimId]));
 
-        host.Server.OAuth().ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
-            WellKnownAssessorIds.ClaimContributors, rules, TimeProvider);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
+                WellKnownAssessorIds.ClaimContributors, rules, TimeProvider);
+        }).ConfigureAwait(false);
     }
 
 
@@ -221,56 +222,12 @@ internal sealed class AzpMultiAudienceScenarioTests
     private async Task<string> DriveCodeExchangeForIdTokenAsync(
         TestHostShell host, VerifierKeyMaterial material)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, WellKnownHttpMethods.Post,
-            parFields, [],
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = WellKnownScopes.OpenId },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        string requestUri = ExtractFromBody(parResponse.Body!, "request_uri");
 
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeToken, WellKnownHttpMethods.Post,
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-
-        return ExtractFromBody(tokenResponse.Body!, "id_token");
+        return ExtractFromBody(result.TokenResponse.Body, "id_token");
     }
 
 
@@ -316,19 +273,4 @@ resolveKey,
     }
 
 
-    private static string ExtractCode(string location)
-    {
-        Uri uri = new(location);
-        string query = uri.Query.TrimStart('?');
-        foreach(string pair in query.Split('&'))
-        {
-            string[] parts = pair.Split('=', 2);
-            if(parts.Length == 2 && parts[0] == "code")
-            {
-                return Uri.UnescapeDataString(parts[1]);
-            }
-        }
-
-        throw new InvalidOperationException($"No code in redirect: {location}");
-    }
 }

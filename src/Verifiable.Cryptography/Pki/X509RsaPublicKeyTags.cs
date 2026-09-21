@@ -17,7 +17,7 @@ public static class X509RsaPublicKeyTags
     /// <returns>
     /// One of the pre-built <see cref="CryptoTags"/> members for <paramref name="keySizeInBits"/>.
     /// The returned <see cref="Tag"/> is never constructed ad hoc: it is the carrier's algorithm/
-    /// purpose/encoding provenance context — the same instance <see cref="CryptoFunctionRegistry"/>
+    /// purpose/encoding provenance context — the same instance <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
     /// dispatch keys off and the CBOM area (<c>Verifiable.Cryptography.Cbom</c>) uses to identify the
     /// key material — so a certificate-derived RSA public key carries identical provenance regardless
     /// of which backend extracted it.

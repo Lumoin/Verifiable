@@ -8,7 +8,7 @@ using Verifiable.Core.Model.Did;
 namespace Verifiable.Core.Validation;
 
 /// <summary>
-/// Carries the outcome detail for <see cref="ContextValidationRules.ValidateFirstEntry"/>: which
+/// Carries the outcome detail for <see cref="ContextValidationRules.ValidateFirstEntry(Context?, string)"/>: which
 /// IRI (if any) the first <c>@context</c> entry actually carried, alongside the IRI the caller
 /// required.
 /// </summary>
@@ -285,7 +285,7 @@ public static class ContextValidationRules
     /// <para>
     /// A <see langword="null"/> context is <see cref="ClaimOutcome.NotApplicable"/>: there are no
     /// entries to check, and the absence of a context is the concern of
-    /// <see cref="ValidateFirstEntry"/>, not this rule.
+    /// <see cref="ValidateFirstEntry(Context?, string)"/>, not this rule.
     /// </para>
     /// </remarks>
     public static Claim ValidateEntriesAreUrlsOrDefinitions(Context? context)

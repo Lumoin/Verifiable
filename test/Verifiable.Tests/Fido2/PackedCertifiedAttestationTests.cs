@@ -63,7 +63,7 @@ internal sealed class PackedCertifiedAttestationTests
 
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -103,7 +103,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -137,7 +137,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -181,7 +181,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -214,7 +214,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -246,7 +246,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -282,7 +282,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(authDataAaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -314,7 +314,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
         signature[0] ^= 0xFF;
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
@@ -350,7 +350,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP384CoseKey(leafKey, WellKnownCoseAlgorithms.Es384), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP384(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP384(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -387,7 +387,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP521CoseKey(leafKey, WellKnownCoseAlgorithms.Es512), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP521(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP521(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -425,7 +425,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateRsaCoseKey(leafKey, WellKnownCoseAlgorithms.Rs256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithRsaPkcs1Sha256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithRsaPkcs1Sha256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -463,7 +463,7 @@ internal sealed class PackedCertifiedAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256), out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);

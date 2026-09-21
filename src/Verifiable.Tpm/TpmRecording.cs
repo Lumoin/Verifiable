@@ -9,7 +9,7 @@ namespace Verifiable.Tpm;
 /// information about the source TPM. This enables:
 /// </para>
 /// <list type="bullet">
-///   <item><description>Deterministic replay via <see cref="VirtualTpm.Load(TpmRecording)"/>.</description></item>
+///   <item><description>Deterministic replay via <see cref="TpmVirtualDevice.Load(TpmRecording)"/>.</description></item>
 ///   <item><description>Debugging by comparing recordings from different TPMs.</description></item>
 ///   <item><description>Compliance auditing with timestamped exchange logs.</description></item>
 /// </list>
@@ -35,7 +35,7 @@ namespace Verifiable.Tpm;
 /// <param name="Info">Metadata about the TPM that produced this recording.</param>
 /// <param name="Exchanges">The captured command/response pairs in chronological order.</param>
 /// <seealso cref="TpmRecorder"/>
-/// <seealso cref="VirtualTpm"/>
+/// <seealso cref="TpmVirtualDevice"/>
 /// <seealso cref="TpmSessionInfo"/>
 public sealed record TpmRecording(
     TpmSessionInfo Info,

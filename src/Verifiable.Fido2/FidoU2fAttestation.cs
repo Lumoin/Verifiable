@@ -223,6 +223,12 @@ public static class FidoU2fAttestation
     /// procedure step 5): <c>0x00 || rpIdHash || clientDataHash || credentialId || publicKeyU2F</c>,
     /// where <c>publicKeyU2F</c> (step 4's third sub-bullet) is <c>0x04 || x || y</c>.
     /// </summary>
+    /// <param name="rpIdHash">The SHA-256 hash of the RP ID.</param>
+    /// <param name="clientDataHash">The SHA-256 hash of the client data JSON.</param>
+    /// <param name="credentialId">The credential identifier.</param>
+    /// <param name="x">The credential public key's <c>x</c> coordinate.</param>
+    /// <param name="y">The credential public key's <c>y</c> coordinate.</param>
+    /// <param name="pool">The pool the returned buffer is rented from.</param>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
     private static IMemoryOwner<byte> RentVerificationData(
         DigestValue rpIdHash,

@@ -832,7 +832,7 @@ namespace Verifiable.JCose
         /// Default converter from a multibase-encoded <c>did:key</c> suffix to its algorithm
         /// representation. Accepts the two multibase forms the <c>did:key</c> ABNF
         /// <c>mb-value := z(base58btc) | u(base64url)</c> permits: the base58btc <c>z</c> form
-        /// (the canonical form, decoded with the supplied <paramref name="multibaseDecoder"/>)
+        /// (the canonical form, decoded with the supplied <c>multibaseDecoder</c>)
         /// and the base64url <c>u</c> form (decoded inline, since the supplied decoder is the
         /// base58 one). Both forms decode to the same <c>multicodec-varint || raw-key</c> bytes,
         /// which a single classifier maps to the algorithm and validates the raw-key length

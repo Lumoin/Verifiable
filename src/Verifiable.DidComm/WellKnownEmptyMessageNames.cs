@@ -11,7 +11,7 @@ namespace Verifiable.DidComm;
 /// no body content to attach them to. It is the spec-recommended carrier for a pure acknowledgment — an
 /// empty message with an <c>ack</c> header (DIDComm v2.1 §ACKs). The name declares its single UTF-8 source
 /// literal as a <c>ReadOnlySpan&lt;byte&gt;</c> property and derives the interned string view through
-/// <see cref="Utf8Constants.ToInternedString"/>, matching <see cref="WellKnownRoutingNames"/> and
+/// <see cref="Utf8Constants.ToInternedString"/>, matching <see cref="Verifiable.DidComm.Routing.WellKnownRoutingNames"/> and
 /// <see cref="WellKnownDidCommMemberNames"/>.
 /// </remarks>
 public static class WellKnownEmptyMessageNames

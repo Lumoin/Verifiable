@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// The event recorded into a PCR in one command: the TPM hashes these octets under every implemented hash
 /// algorithm and extends the named register with each bank's digest (TPM 2.0 Library Part 3, clause 22.3.1).
 /// The content is public — it is the log entry itself — so this carrier holds no
-/// <see cref="Verifiable.Cryptography.SensitiveMemory"/> tag, matching <see cref="Tpm2bMaxBuffer"/>.
+/// <see cref="Lumoin.Base.SensitiveMemory"/> tag, matching <see cref="Tpm2bMaxBuffer"/>.
 /// </para>
 /// <para>
 /// <b>Wire format:</b>

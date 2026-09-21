@@ -215,6 +215,7 @@ public static class JsonLdSelection
     /// Optional delegate for resolving JSON-LD contexts during canonicalization.
     /// Required for RDFC canonicalization, ignored by JCS canonicalization.
     /// </param>
+    /// <param name="context">The exchange context the canonicalization and context resolution run under.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// A task that resolves to the partition result containing statements and their indexes.

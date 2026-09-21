@@ -10,11 +10,17 @@ namespace Verifiable.Json.Converters
     /// </summary>
     public class SingleOrArrayControllerConverter: JsonConverter<Controller[]>
     {
+        /// <summary>Returns <see langword="true"/> when <paramref name="typeToConvert"/> is <see cref="Controller"/>[].</summary>
+        /// <param name="typeToConvert">The runtime type the serializer is about to (de)serialize.</param>
         public override bool CanConvert(Type typeToConvert)
         {
             return typeToConvert == typeof(Controller[]);
         }
 
+        /// <summary>Reads either a single controller string or a JSON array of them into a <see cref="Controller"/>[].</summary>
+        /// <param name="reader">The UTF-8 JSON reader positioned at the value.</param>
+        /// <param name="typeToConvert">The runtime type being converted.</param>
+        /// <param name="options">The active serializer options.</param>
         public override Controller[] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             if(reader.TokenType == JsonTokenType.PropertyName)
@@ -47,6 +53,10 @@ namespace Verifiable.Json.Converters
             return list.ToArray();
         }
 
+        /// <summary>Writes a one-element array as a bare string; writes a longer array as a JSON array of strings.</summary>
+        /// <param name="writer">The UTF-8 JSON writer.</param>
+        /// <param name="controller">The controllers to write.</param>
+        /// <param name="options">The active serializer options.</param>
         public override void Write(Utf8JsonWriter writer, Controller[] controller, JsonSerializerOptions options)
         {
             ArgumentNullException.ThrowIfNull(writer);
@@ -61,81 +71,6 @@ namespace Verifiable.Json.Converters
                 for(int i = 0; i < controller.Length; ++i)
                 {
                     writer.WriteStringValue(controller[i].Did);
-                }
-                writer.WriteEndArray();
-            }
-        }
-    }
-
-
-    //TODO: A temporary structure.
-    /// <summary>
-    /// A converter for array of <see cref="VerificationMethod"/> instances.
-    /// </summary>
-    public class SingleOrArrayVerificationMethodConverter: JsonConverter<VerificationMethod[]>
-    {
-        public override bool CanConvert(Type typeToConvert)
-        {
-            return typeToConvert == typeof(VerificationMethod[]);
-        }
-
-        public override VerificationMethod[] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            if(reader.TokenType == JsonTokenType.PropertyName)
-            {
-                _ = reader.Read();
-            }
-
-            var list = new List<VerificationMethod>();
-            if(reader.TokenType == JsonTokenType.StartArray)
-            {
-                while(reader.Read())
-                {
-                    if(reader.TokenType == JsonTokenType.EndArray)
-                    {
-                        break;
-                    }
-
-                    list.Add(JsonSerializer.Deserialize(
-                        ref reader,
-                        VerifiableJsonContext.Default.VerificationMethod)!);
-                }
-            }
-            else if(reader.TokenType == JsonTokenType.String)
-            {
-                list.Add(JsonSerializer.Deserialize(
-                    ref reader,
-                    VerifiableJsonContext.Default.VerificationMethod)!);
-            }
-            else
-            {
-                throw new JsonException();
-            }
-
-            return list.ToArray();
-        }
-
-
-        public override void Write(Utf8JsonWriter writer, VerificationMethod[] verificationMethod, JsonSerializerOptions options)
-        {
-            ArgumentNullException.ThrowIfNull(writer);
-            ArgumentNullException.ThrowIfNull(verificationMethod);
-            if(verificationMethod.Length == 1)
-            {
-                JsonSerializer.Serialize(
-                    writer,
-                    verificationMethod[0],
-                    VerifiableJsonContext.Default.VerificationMethod);
-            }
-            else
-            {
-                writer.WriteStartArray();
-                for(int i = 0; i < verificationMethod.Length; ++i)
-                {
-                    JsonSerializer.Serialize(
-                        writer,
-                        verificationMethod[i],
-                        VerifiableJsonContext.Default.VerificationMethod);
                 }
                 writer.WriteEndArray();
             }

@@ -329,3 +329,35 @@ internal sealed class BlankNodeRelabelingW3CTests
         Assert.IsFalse(BlankNodeRelabelingExtensions.IsHmacBlankNode("_:c14n1"));
     }
 }
+
+
+/// <summary>
+/// Tests that blank node relabeling scans N-Quad statements at term positions rather than by
+/// substring search, per
+/// <see href="https://www.w3.org/TR/n-quads/#sec-grammar">N-Quads, §2 Grammar</see>: a blank
+/// node term begins <c>"_:"</c> at the start of a term, and a quoted literal's content is not a
+/// term boundary even when it contains characters that look like a blank node label.
+/// </summary>
+[TestClass]
+internal sealed class BlankNodeRelabelingTermBoundaryTests
+{
+    /// <summary>
+    /// A quoted literal containing the text <c>"_:c14n0"</c> is not a blank node term: only the
+    /// genuine subject term is relabeled, and the literal's content passes through unchanged.
+    /// </summary>
+    [TestMethod]
+    public void LiteralContainingBlankNodeTextIsNotRelabeled()
+    {
+        const string Statement =
+            "_:c14n0 <https://schema.org/description> \"see _:c14n0 for details\" .\n";
+
+        const string Expected =
+            "_:uXYZ <https://schema.org/description> \"see _:c14n0 for details\" .\n";
+
+        var labelMap = new Dictionary<string, string> { ["c14n0"] = "uXYZ" };
+
+        string relabeled = BlankNodeRelabelingExtensions.ApplyLabelMapToStatement(Statement, labelMap);
+
+        Assert.AreEqual(Expected, relabeled);
+    }
+}

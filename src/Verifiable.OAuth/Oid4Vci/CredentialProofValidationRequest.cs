@@ -4,7 +4,7 @@ namespace Verifiable.OAuth.Oid4Vci;
 
 /// <summary>
 /// All inputs needed to validate one OID4VCI 1.0 <c>jwt</c> key proof (Appendix F.1 / F.4).
-/// Threaded into <see cref="CredentialProofValidator.ValidateAsync"/> as a single record so
+/// Threaded into <see cref="CredentialProofValidator.ValidateAsync(CredentialProofValidationRequest, Verifiable.Cryptography.VerificationDelegate, Func{string, bool}, CredentialProofValidator.ResolveProofKeyDelegate?, Oid4VciProofX509Verification?, Verifiable.Core.ExchangeContext, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.DecodeDelegate, TimeProvider, Lumoin.Base.BaseMemoryPool, TimeSpan, System.Threading.CancellationToken)"/> as a single record so
 /// adding new check inputs does not re-shape the method signature.
 /// </summary>
 /// <remarks>

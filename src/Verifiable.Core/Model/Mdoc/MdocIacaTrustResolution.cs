@@ -77,7 +77,7 @@ public sealed class MdocIacaTrustResolution: IDisposable
 
     /// <summary>
     /// The leaf certificate's public key, ready to pass to
-    /// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuerAuthVerifier"/>.
+    /// <see cref="MdocVerificationExtensions.extension(MdocIssuerAuth).VerifyAsync(PublicKeyMemory, BaseMemoryPool, Verifiable.JCose.ParseCoseSign1Delegate, Verifiable.JCose.BuildSigStructureDelegate, CancellationToken)"/>.
     /// Non-null when <see cref="IsTrusted"/> is <see langword="true"/>;
     /// null otherwise.
     /// </summary>

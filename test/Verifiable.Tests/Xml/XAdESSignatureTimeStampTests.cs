@@ -42,7 +42,7 @@ internal sealed class XAdESSignatureTimeStampTests
             using XmlNodeTable table = Parse(document, BaseMemoryPool.Shared);
             bool isRead = XAdESSignatureTimeStamp.TryRead(table, table.DocumentElementIndex, metered.Pool, out XAdESSignatureTimeStamp? value, out XAdESReadError error);
             Assert.IsTrue(isRead, $"Must read but was refused with {error.Failure}.");
-            Assert.HasCount(0, value!.TimeStamp.Includes);
+            Assert.IsEmpty(value!.TimeStamp.Includes);
             Assert.HasCount(1, value.TimeStamp.TimeStamps);
             Assert.AreEqual(XAdESTimeStampEntryKind.EncapsulatedTimeStamp, value.TimeStamp.TimeStamps[0].Kind);
 
@@ -121,3 +121,4 @@ internal sealed class XAdESSignatureTimeStampTests
         }
     }
 }
+

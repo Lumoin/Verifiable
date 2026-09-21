@@ -1,6 +1,7 @@
 using CsCheck;
 using System.Buffers.Binary;
 using Verifiable.Fido2;
+using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.Fido2.Fido2TestVectors;
 
 namespace Verifiable.Tests.Fido2;
@@ -52,7 +53,7 @@ internal sealed class AuthenticatorDataReaderPropertyTests
             {
                 return true;
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -81,7 +82,7 @@ internal sealed class AuthenticatorDataReaderPropertyTests
             {
                 return true;
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -99,6 +100,6 @@ internal sealed class AuthenticatorDataReaderPropertyTests
             using AuthenticatorData parsed = AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared);
 
             return parsed.Flags.Value == sample.Flags && parsed.SignCount == sample.SignCount;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

@@ -31,7 +31,7 @@ namespace Verifiable.Tests.WebFinger;
 /// <para>
 /// This type does triple duty, matching the file budget of this conformance slice: it is (1) the
 /// request-mapping skin itself (<see cref="ProcessRequestAsync"/>, matching a <c>RequestDelegate</c>),
-/// (2) the <see cref="BuildServer"/> factory that wires a fully-validated <see cref="EndpointServer"/>
+/// (2) the <see cref="BuildServerAsync"/> factory that wires a fully-validated <see cref="EndpointServer"/>
 /// around <see cref="WebFingerEndpoints.Builder"/> with a plain, OAuth-free <see cref="IRegistrationRecord"/>
 /// (used directly — dispatch only, no Kestrel — by <c>WebFingerServerResponseTests</c>), and (3) the
 /// nested <see cref="Host"/> that starts that server on a real HTTPS loopback listener with a fresh
@@ -53,7 +53,7 @@ internal sealed class WebFingerHttpApplication
 
 
     /// <summary>Wraps <paramref name="server"/> so Kestrel dispatches every inbound request through it.</summary>
-    /// <param name="server">A fully-validated <see cref="EndpointServer"/>, typically built by <see cref="BuildServer"/>.</param>
+    /// <param name="server">A fully-validated <see cref="EndpointServer"/>, typically built by <see cref="BuildServerAsync"/>.</param>
     public WebFingerHttpApplication(EndpointServer server)
     {
         ArgumentNullException.ThrowIfNull(server);
@@ -164,7 +164,7 @@ internal sealed class WebFingerHttpApplication
     /// The OPTIONAL §5 CORS origin resolver; when <see langword="null"/> every response falls back to
     /// the library's <c>*</c> wildcard default.
     /// </param>
-    public static EndpointServer BuildServer(
+    public static async Task<EndpointServer> BuildServerAsync(
         ResolveWebFingerResourceDelegate resolveResource,
         ResolveCorsOriginDelegate? resolveCorsOrigin = null)
     {
@@ -223,7 +223,7 @@ internal sealed class WebFingerHttpApplication
             ResolveCorsOriginAsync = resolveCorsOrigin
         });
 
-        server.Validate();
+        await server.RequestAlterationAsync(_ => { }).ConfigureAwait(false);
 
         return server;
     }
@@ -237,6 +237,9 @@ internal sealed class WebFingerHttpApplication
 
         /// <summary>The tenant this registration belongs to.</summary>
         public required TenantId TenantId { get; init; }
+
+        /// <summary>The display-safe tenant identifier this fixture never assigns.</summary>
+        public TenantHandle? TenantHandle { get; init; }
 
         /// <summary>The capabilities this registration is allowed to exercise.</summary>
         public required IReadOnlySet<CapabilityIdentifier> AllowedCapabilities { get; init; }
@@ -298,7 +301,7 @@ internal sealed class WebFingerHttpApplication
 
 
         /// <summary>Starts Node A on an OS-assigned loopback HTTPS port, serving <paramref name="server"/>.</summary>
-        /// <param name="server">A fully-validated <see cref="EndpointServer"/>, typically built by <see cref="BuildServer"/>.</param>
+        /// <param name="server">A fully-validated <see cref="EndpointServer"/>, typically built by <see cref="BuildServerAsync"/>.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         public static async Task<Host> StartAsync(EndpointServer server, CancellationToken cancellationToken)
         {

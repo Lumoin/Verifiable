@@ -1,4 +1,5 @@
 using CsCheck;
+using Verifiable.Tests.TestInfrastructure;
 using Ptr = Lumoin.Veritas.JsonPointer.JsonPointer;
 using Seg = Lumoin.Veritas.JsonPointer.JsonPointerSegment;
 
@@ -37,7 +38,7 @@ internal sealed class JsonPointerPropertyTests
             var parsed = Ptr.Parse(str);
 
             Assert.AreEqual(pointer, parsed, $"Roundtrip failed for '{str}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -50,7 +51,7 @@ internal sealed class JsonPointerPropertyTests
 
             Assert.IsTrue(success);
             Assert.AreEqual(pointer, result);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -62,7 +63,7 @@ internal sealed class JsonPointerPropertyTests
             var parsed = Ptr.ParseUriFragment(fragment);
 
             Assert.AreEqual(pointer, parsed, $"URI fragment roundtrip failed for '{pointer}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -75,7 +76,7 @@ internal sealed class JsonPointerPropertyTests
 
             Assert.AreEqual(token, pointer.Segments[0].Value,
                 $"Escape roundtrip failed for '{token}' (escaped: '{escaped}').");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -90,7 +91,7 @@ internal sealed class JsonPointerPropertyTests
 
             Assert.AreEqual(t.pointer, parent,
                 $"Append('{t.token}').Parent should equal original for '{t.pointer}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -105,7 +106,7 @@ internal sealed class JsonPointerPropertyTests
 
             Assert.AreEqual(t.pointer, parent,
                 $"Append({t.idx}).Parent should equal original for '{t.pointer}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -118,7 +119,7 @@ internal sealed class JsonPointerPropertyTests
             var appended = t.pointer.Append(t.seg);
 
             Assert.AreEqual(t.pointer.Depth + 1, appended.Depth);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -131,7 +132,7 @@ internal sealed class JsonPointerPropertyTests
             var combined = t.a.Append(t.b);
 
             Assert.AreEqual(t.a.Depth + t.b.Depth, combined.Depth);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -145,7 +146,7 @@ internal sealed class JsonPointerPropertyTests
                 $"'{t.ancestor}' should be ancestor of '{t.descendant}'.");
             Assert.IsFalse(t.descendant.IsAncestorOf(t.ancestor),
                 $"'{t.descendant}' should not be ancestor of '{t.ancestor}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -158,7 +159,7 @@ internal sealed class JsonPointerPropertyTests
             Assert.AreEqual(
                 t.ancestor.IsAncestorOf(t.descendant),
                 t.descendant.IsDescendantOf(t.ancestor));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -168,7 +169,7 @@ internal sealed class JsonPointerPropertyTests
         .Sample(pointer =>
         {
             Assert.IsTrue(Ptr.Root.IsAncestorOf(pointer));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -177,7 +178,7 @@ internal sealed class JsonPointerPropertyTests
         GenPointer.Sample(pointer =>
         {
             Assert.IsFalse(pointer.IsAncestorOf(Ptr.Root));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -186,7 +187,7 @@ internal sealed class JsonPointerPropertyTests
         GenPointer.Sample(pointer =>
         {
             Assert.IsTrue(pointer.IsAncestorOfOrEqualTo(pointer));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -201,7 +202,7 @@ internal sealed class JsonPointerPropertyTests
 
             Assert.AreEqual(t.suffix.Depth, relative.Depth,
                 $"RelativeTo should undo append for '{t.ancestor}' + '{t.suffix}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -212,7 +213,7 @@ internal sealed class JsonPointerPropertyTests
             int count = pointer.SelfAndAncestors().Count();
 
             Assert.AreEqual(pointer.Depth + 1, count);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -223,7 +224,7 @@ internal sealed class JsonPointerPropertyTests
             int count = pointer.Ancestors().Count();
 
             Assert.AreEqual(pointer.Depth, count);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -237,7 +238,7 @@ internal sealed class JsonPointerPropertyTests
 
             Assert.AreEqual(pointer, samePointer);
             Assert.AreEqual(pointer.GetHashCode(), samePointer.GetHashCode());
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -246,7 +247,7 @@ internal sealed class JsonPointerPropertyTests
         GenPointer.Sample(pointer =>
         {
             Assert.AreEqual(0, pointer.CompareTo(pointer));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -271,7 +272,7 @@ internal sealed class JsonPointerPropertyTests
             {
                 Assert.AreEqual(0, ba);
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -287,7 +288,7 @@ internal sealed class JsonPointerPropertyTests
             Assert.AreEqual(cmp <= 0, t.a <= t.b);
             Assert.AreEqual(cmp > 0, t.a > t.b);
             Assert.AreEqual(cmp >= 0, t.a >= t.b);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -300,6 +301,6 @@ internal sealed class JsonPointerPropertyTests
             var fromArray = pointer.Segments[pointer.Depth - 1];
 
             Assert.AreEqual(fromArray, last);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

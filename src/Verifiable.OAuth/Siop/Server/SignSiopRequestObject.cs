@@ -25,7 +25,7 @@ namespace Verifiable.OAuth.Siop.Server;
 /// The opaque per-flow token. The handler writes it as the Request Object's <c>state</c> claim per
 /// RFC 6749 §4.1.1; the Wallet echoes the value as the <c>state</c> form field on its Self-Issued ID
 /// Token response, and the application's
-/// <see cref="Verifiable.OAuth.Server.AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/>
 /// maps it back to the internal flow identifier.
 /// </param>
 /// <param name="ClientId">The RP's <c>client_id</c> the Request Object asserts (also the ID Token's required <c>aud</c>).</param>

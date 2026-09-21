@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Collections.Immutable;
+using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
-using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -25,8 +27,8 @@ namespace Verifiable.Tests.OAuth;
 /// expand it.
 /// </para>
 /// <para>
-/// Tests dispatch directly against <see cref="AuthorizationServer.DispatchAsync"/>
-/// rather than through <see cref="TestHostShell.DispatchAtEndpointAsync"/>
+/// Tests dispatch directly against <see cref="EndpointServer.DispatchAsync"/>
+/// rather than through <see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>
 /// — the latter constructs <see cref="RequestHeaders.Empty"/>, and
 /// UserInfo is the first library endpoint whose dispatch carries a
 /// per-request header (the <c>Authorization</c> bearer).
@@ -53,7 +55,7 @@ internal sealed class UserInfoEndpointTests
     public async Task PostWithoutAuthorizationHeaderReturnsUnauthorized()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterPlainUserInfoClient(host);
+        using VerifierKeyMaterial material = await RegisterPlainUserInfoClientAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchUserInfoAsync(
             host, material, WellKnownHttpMethods.Post, authorizationHeader: null)
@@ -69,7 +71,7 @@ internal sealed class UserInfoEndpointTests
     public async Task GetWithoutAuthorizationHeaderReturnsUnauthorized()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterPlainUserInfoClient(host);
+        using VerifierKeyMaterial material = await RegisterPlainUserInfoClientAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchUserInfoAsync(
             host, material, WellKnownHttpMethods.Get, authorizationHeader: null)
@@ -84,7 +86,7 @@ internal sealed class UserInfoEndpointTests
     public async Task PostWithMalformedAuthorizationHeaderReturnsUnauthorized()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterPlainUserInfoClient(host);
+        using VerifierKeyMaterial material = await RegisterPlainUserInfoClientAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchUserInfoAsync(
             host, material, WellKnownHttpMethods.Post,
@@ -99,7 +101,7 @@ internal sealed class UserInfoEndpointTests
     public async Task PostWithMalformedBearerJwtReturnsUnauthorized()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterPlainUserInfoClient(host);
+        using VerifierKeyMaterial material = await RegisterPlainUserInfoClientAsync(host).ConfigureAwait(false);
 
         //Bearer is present but the payload is not a well-formed JWS.
         ServerHttpResponse response = await DispatchUserInfoAsync(
@@ -108,6 +110,58 @@ internal sealed class UserInfoEndpointTests
             .ConfigureAwait(false);
 
         Assert.AreEqual(401, response.StatusCode);
+        Assert.Contains(OAuthErrors.InvalidToken, response.Body);
+    }
+
+
+    /// <summary>
+    /// RFC 7519 §4: "The JWT Claim Names within a Claims Set MUST be unique." An access token
+    /// whose Claims Set repeats <c>sub</c> — the attacker's value first, the honest value last —
+    /// is refused with the same 401 <c>invalid_token</c> outcome as any other malformed bearer
+    /// token, never a server error. Only the payload segment is rebuilt by hand (never through
+    /// this repository's serializers) and re-signed with the AS's own signing key for that
+    /// <c>kid</c>; the header is untouched, so only the payload's well-formedness gate — not an
+    /// invalid signature — can be responsible for the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task PostWithAccessTokenCarryingDuplicateSubClaimReturnsUnauthorized()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId, name: "Alice", email: "alice@example.com");
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId)
+            .ConfigureAwait(false);
+
+        string[] parts = accessToken.Split('.');
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
+        using JsonDocument headerDoc = JsonDocument.Parse(headerOwner.Memory);
+        string kid = headerDoc.RootElement.GetProperty("kid").GetString()!;
+
+        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        string payloadJson = Encoding.UTF8.GetString(payloadOwner.Memory.Span);
+
+        //Splice an attacker-controlled "sub" ahead of the honest one already in the serialized
+        //payload — raw string surgery, not a Dictionary<string,object> round trip, since a
+        //dictionary cannot itself carry two entries under the same key.
+        string tamperedPayloadJson = payloadJson.Insert(1, "\"sub\":\"attacker-subject\",");
+        string tamperedPayloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(tamperedPayloadJson));
+
+        PrivateKeyMemory signingKey = host.Host("default").SigningKeys[new KeyId(kid)];
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{tamperedPayloadB64}");
+        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+        string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+        string tamperedAccessToken = $"{parts[0]}.{tamperedPayloadB64}.{signatureB64}";
+
+        ServerHttpResponse response = await DispatchUserInfoAsync(
+            host, material, WellKnownHttpMethods.Post,
+            authorizationHeader: "Bearer " + tamperedAccessToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.IsLessThan(500, response.StatusCode, "A duplicate claim must never surface as a server error.");
         Assert.Contains(OAuthErrors.InvalidToken, response.Body);
     }
 
@@ -124,8 +178,8 @@ internal sealed class UserInfoEndpointTests
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OidcOpenIdConnect);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, capabilitiesWithoutUserInfo);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, capabilitiesWithoutUserInfo).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchUserInfoAsync(
             host, material, WellKnownHttpMethods.Post,
@@ -150,8 +204,8 @@ internal sealed class UserInfoEndpointTests
         //scope-driven claims.
         _ = host.SeedTestSubject(subject: SubjectId, name: "Alice", email: "alice@example.com");
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId)
             .ConfigureAwait(false);
@@ -179,8 +233,8 @@ internal sealed class UserInfoEndpointTests
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId, name: "Alice");
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile}";
         string accessToken = await IssueAccessTokenAsync(host, material, scope)
@@ -211,8 +265,8 @@ internal sealed class UserInfoEndpointTests
             email: "alice@example.com",
             emailVerified: true);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Email}";
         string accessToken = await IssueAccessTokenAsync(host, material, scope)
@@ -247,8 +301,8 @@ internal sealed class UserInfoEndpointTests
             }
         };
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Address}";
         string accessToken = await IssueAccessTokenAsync(host, material, scope)
@@ -271,16 +325,23 @@ internal sealed class UserInfoEndpointTests
     }
 
 
+    /// <summary>
+    /// The UserInfo response places the application-resolved subject identifier in the required sub claim.
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse">Core §5.3.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveSubjectIdentifierIsConsultedOnUserInfo()
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        host.Server.OAuth().ResolveSubjectIdentifierAsync =
-            (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        }).ConfigureAwait(false);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId)
             .ConfigureAwait(false);
@@ -316,7 +377,7 @@ internal sealed class UserInfoEndpointTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId,
             ClientBaseUri,
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -325,12 +386,15 @@ internal sealed class UserInfoEndpointTests
                 WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
                 WellKnownCapabilityIdentifiers.OidcUserInfo,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
         const string ClientSecret = "s3cret-of-the-machine";
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
         string accessToken = await IssueClientCredentialsAccessTokenAsync(
             host, material, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -382,8 +446,8 @@ internal sealed class UserInfoEndpointTests
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId)
             .ConfigureAwait(false);
@@ -402,69 +466,25 @@ internal sealed class UserInfoEndpointTests
     }
 
 
-    private static VerifierKeyMaterial RegisterPlainUserInfoClient(TestHostShell host)
+    private static async Task<VerifierKeyMaterial> RegisterPlainUserInfoClientAsync(TestHostShell host)
     {
         ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
             WellKnownCapabilityIdentifiers.OidcUserInfo);
-        return host.RegisterClient(ClientId, ClientBaseUri, capabilities);
+        return await host.RegisterClientAsync(ClientId, ClientBaseUri, capabilities).ConfigureAwait(false);
     }
 
 
     private async ValueTask<string> IssueAccessTokenAsync(
         TestHostShell host, VerifierKeyMaterial material, string scope)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = scope
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = scope },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
 
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-
-        using JsonDocument body = JsonDocument.Parse(tokenResponse.Body);
+        using JsonDocument body = JsonDocument.Parse(result.TokenResponse.Body);
         return body.RootElement.GetProperty("access_token").GetString()!;
     }
 
@@ -499,27 +519,4 @@ internal sealed class UserInfoEndpointTests
     }
 
 
-    private static string ExtractFromBody(string body, string property)
-    {
-        using JsonDocument doc = JsonDocument.Parse(body);
-        return doc.RootElement.GetProperty(property).GetString()!;
-    }
-
-
-    private static string ExtractCode(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Authorize redirect did not carry a code parameter: {location}");
-    }
 }

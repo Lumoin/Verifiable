@@ -10,9 +10,9 @@ namespace Verifiable.DidComm.ProblemReports;
 /// <remarks>
 /// Each name declares its single UTF-8 source literal as a <c>ReadOnlySpan&lt;byte&gt;</c> property and
 /// derives the interned string view through <see cref="Utf8Constants.ToInternedString"/>, matching
-/// <see cref="WellKnownRoutingNames"/> and <see cref="WellKnownDidCommMemberNames"/>. The body member
+/// <see cref="Verifiable.DidComm.Routing.WellKnownRoutingNames"/> and <see cref="WellKnownDidCommMemberNames"/>. The body member
 /// names are the keys of the problem report's <c>body</c> object; like
-/// <see cref="WellKnownRoutingNames.Next"/> they are used as dictionary keys when building and reading the
+/// <see cref="Verifiable.DidComm.Routing.WellKnownRoutingNames.Next"/> they are used as dictionary keys when building and reading the
 /// body (the message converter treats <c>body</c> as opaque JSON, so these need no allocation-free
 /// converter matching, but they follow the same idiom for consistency).
 /// </remarks>

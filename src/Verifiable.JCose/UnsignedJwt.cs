@@ -18,7 +18,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// <para>
 /// After construction, the unsigned JWT is signed via
-/// <see cref="JwtSigningExtensions.SignAsync"/> to produce a <see cref="JwsMessage"/>.
+/// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> to produce a <see cref="JwsMessage"/>.
 /// </para>
 /// <para>
 /// Example usage:

@@ -328,6 +328,7 @@ public static class GeneralJweEncryptionExtensions
         {
             JweContentEncryptionFamily.AesCbcHmac => CryptoTags.AesCbcHmacCek,
             JweContentEncryptionFamily.XChaCha20Poly1305 => CryptoTags.Xc20pCek,
+            JweContentEncryptionFamily.AesGcm => CryptoTags.AesGcmCek,
             _ => CryptoTags.AesGcmCek
         };
 

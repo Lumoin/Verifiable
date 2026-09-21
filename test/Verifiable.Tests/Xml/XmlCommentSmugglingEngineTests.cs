@@ -4,7 +4,7 @@ using Verifiable.Xml;
 namespace Verifiable.Tests.Xml;
 
 /// <summary>
-/// Proofs, through the full <see cref="XmlReferenceProcessing.TryComputeDigestInput"/> engine rather than
+/// Proofs, through the full <see cref="XmlReferenceProcessing.TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/> engine rather than
 /// the dereferencer alone, that content hidden in a comment follows the section 4.3.3.3 four-form matrix
 /// exactly and no other combination: absent from <c>""</c> and <c>#name</c> digest inputs under EVERY conversion (explicit or
 /// implicit — section 4.3.3.3 step 4 strips comments from these two forms AT DEREFERENCE, independent of

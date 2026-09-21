@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <c>data</c> is the first parameter and a sized TPM2B, so TPM 2.0 Library Part 1, clause 18.1 makes it
 /// decrypt-eligible in principle. The NV family keeps parameter encryption on <c>data</c> closed on both the
 /// host and the simulator, the same posture <see cref="NvWriteInput"/> takes for its own <c>data</c> parameter,
-/// so <see cref="FirstCommandParameterIsEncryptable"/> is left at its default <see langword="false"/> and the
+/// so <see cref="Verifiable.Tpm.Infrastructure.ITpmCommandInput.FirstCommandParameterIsEncryptable"/> is left at its default <see langword="false"/> and the
 /// executor refuses a decrypt session for this command client-side.
 /// </para>
 /// </remarks>

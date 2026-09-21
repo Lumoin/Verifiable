@@ -190,18 +190,22 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task GetInteractionProtocolsWithJsonAcceptReturnsProtocolsMap()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterCoordinator(app);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
         const string interactionId = "z8n38Dp7a";
-        app.Server.Vcalm().ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
-            ValueTask.FromResult<VcalmInteractionProtocols?>(
-                string.Equals(id, interactionId, StringComparison.Ordinal)
-                    ? new VcalmInteractionProtocols
-                    {
-                        InviteRequestUrl = "https://saas.example/interactions/123/invite-request/response",
-                        VcapiUrl = "https://saas.example/workflows/123/exchanges/987"
-                    }
-                    : null);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
+                ValueTask.FromResult<VcalmInteractionProtocols?>(
+                    string.Equals(id, interactionId, StringComparison.Ordinal)
+                        ? new VcalmInteractionProtocols
+                        {
+                            InviteRequestUrl = "https://saas.example/interactions/123/invite-request/response",
+                            VcapiUrl = "https://saas.example/workflows/123/exchanges/987"
+                        }
+
+                        : null);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
             segment, interactionId, WellKnownMediaTypes.Application.Json,
@@ -228,14 +232,17 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task GetInteractionProtocolsWithUnrecognizedAcceptReturnsHtml()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterCoordinator(app);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
         const string interactionId = "z8n38Dp7a";
-        app.Server.Vcalm().ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
-            ValueTask.FromResult<VcalmInteractionProtocols?>(new VcalmInteractionProtocols
-            {
-                InviteRequestUrl = "https://saas.example/interactions/123/invite-request/response"
-            });
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
+                ValueTask.FromResult<VcalmInteractionProtocols?>(new VcalmInteractionProtocols
+                {
+                    InviteRequestUrl = "https://saas.example/interactions/123/invite-request/response"
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
             segment, interactionId, "text/html", [], TestContext.CancellationToken)
@@ -259,13 +266,16 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task GetInteractionProtocolsWithNoAcceptReturnsHtml()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterCoordinator(app);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
-        app.Server.Vcalm().ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
-            ValueTask.FromResult<VcalmInteractionProtocols?>(new VcalmInteractionProtocols
-            {
-                VcapiUrl = "https://saas.example/workflows/123/exchanges/987"
-            });
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
+                ValueTask.FromResult<VcalmInteractionProtocols?>(new VcalmInteractionProtocols
+                {
+                    VcapiUrl = "https://saas.example/workflows/123/exchanges/987"
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
             segment, "z8n38Dp7a", acceptHeader: null, [], TestContext.CancellationToken)
@@ -284,10 +294,13 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task GetProtocolsOfUnknownInteractionYields404()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterCoordinator(app);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
-        app.Server.Vcalm().ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
-            ValueTask.FromResult<VcalmInteractionProtocols?>(null);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmInteractionProtocolsAsync = (id, _, _) =>
+                ValueTask.FromResult<VcalmInteractionProtocols?>(null);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
             segment, "never-created", WellKnownMediaTypes.Application.Json,
@@ -306,14 +319,18 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task PostInviteRequestYields200AndIsStored()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterCoordinator(app);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
         Dictionary<string, VcalmInviteRequest> store = new(StringComparer.Ordinal);
-        app.Server.Vcalm().StoreVcalmInviteRequestAsync = (inviteId, invite, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            store[inviteId] = invite;
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.StoreVcalmInviteRequestAsync = (inviteId, invite, _, _) =>
+            {
+                store[inviteId] = invite;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         const string inviteId = "8372974";
         const string body =
@@ -339,7 +356,7 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task PostMalformedInviteRequestYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterCoordinator(app);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmInviteRequestAsync(
             segment, "8372974", "\"not-an-object\"", [], TestContext.CancellationToken)
@@ -357,7 +374,7 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task PostInviteRequestWithoutUrlYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterCoordinator(app);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmInviteRequestAsync(
             segment, "8372974", "{\"purpose\":\"Checkout\"}", [], TestContext.CancellationToken)
@@ -381,7 +398,7 @@ internal sealed class VcalmInteractionEndpointTests
     public async Task VcapiProtocolEntryAddressesRealExchangeParticipateEndpoint()
     {
         await using TestHostShell app = new(TimeProvider);
-        ClientRecord coordinator = RegisterCoordinatorAndExchange(app);
+        ClientRecord coordinator = await RegisterCoordinatorAndExchangeAsync(app).ConfigureAwait(false);
         string segment = coordinator.TenantId.Value;
 
         //Create a real §3.6 exchange on the same host.
@@ -389,8 +406,9 @@ internal sealed class VcalmInteractionEndpointTests
 
         //§3.7.4: the coordinator advertises this interaction's vcapi protocol as the §3.6.5 participate
         //URL of the created exchange (the §3.7.6 "initiate a specific exchange" wiring).
-        app.Server.Vcalm().ResolveVcalmInteractionProtocolsAsync = (interactionId, ctx, ct) =>
-            ResolveProtocolsToExchangeAsync(app, coordinator, exchangeId, ctx, ct);
+        await app.Server.RequestAlterationAsync(candidate =>
+            candidate.Family<VcalmIntegration>().ResolveVcalmInteractionProtocolsAsync = (interactionId, ctx, ct) =>
+                ResolveProtocolsToExchangeAsync(app, coordinator, exchangeId, ctx, ct), TestContext.CancellationToken).ConfigureAwait(false);
 
         //Fetch the §3.7.4 protocols map and read the vcapi URL.
         ServerHttpResponse protocolsResponse = await app.DispatchVcalmInteractionProtocolsAsync(
@@ -440,34 +458,52 @@ internal sealed class VcalmInteractionEndpointTests
     }
 
 
-    private string RegisterCoordinator(TestHostShell app)
+    /// <summary>
+    /// Registers the interaction service with its protocol-discovery and invitation delegates.
+    /// </summary>
+    private async Task<string> RegisterCoordinatorAsync(TestHostShell app)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, CoordinatorCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, CoordinatorCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }
 
 
-    private ClientRecord RegisterCoordinatorAndExchange(TestHostShell app)
+    /// <summary>
+    /// Registers the interaction and exchange capabilities together with their request delegates.
+    /// </summary>
+    private async Task<ClientRecord> RegisterCoordinatorAndExchangeAsync(TestHostShell app)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, CoordinatorAndExchangeCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, CoordinatorAndExchangeCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         //Wire the §3.6 exchange seams so the vcapi URL the §3.7.4 map advertises addresses a real
         //participate endpoint (the §3.7.6 destination). The exchange-id -> flow-id resolver scans the
         //host's flow store; the step seam requests a DID Authentication presentation on the empty
         //initiating message.
-        app.Server.Vcalm().ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
-            ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
+                ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        }).ConfigureAwait(false);
 
-        app.Server.Vcalm().ResolveVcalmExchangeStepAsync = (exchangeId, message, _, _) =>
-            ValueTask.FromResult(
-                VcalmExchangeStepDecision.RequestPresentation("did-auth", DidAuthQueryJson, domain: "coordinator.verifier.test"));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmExchangeStepAsync = (exchangeId, message, _, _) =>
+                ValueTask.FromResult(
+                    VcalmExchangeStepDecision.RequestPresentation("did-auth", DidAuthQueryJson, domain: "coordinator.verifier.test"));
+        }).ConfigureAwait(false);
 
         return material.Registration;
     }

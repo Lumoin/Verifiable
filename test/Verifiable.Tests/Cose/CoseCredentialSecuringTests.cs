@@ -17,8 +17,8 @@ namespace Verifiable.Tests.Cose;
 /// <list type="bullet">
 /// <item><description>Credential serialization to COSE_Sign1 payload.</description></item>
 /// <item><description>Protected header construction with algorithm, key ID, content type, and type parameters.</description></item>
-/// <item><description>Signing via <see cref="CredentialCoseExtensions.SignCoseAsync"/>.</description></item>
-/// <item><description>Verification via <see cref="CredentialCoseExtensions.VerifyCoseAsync"/>.</description></item>
+/// <item><description>Signing via <see cref="CredentialCoseExtensions.SignCoseAsync(VerifiableCredential, Verifiable.Cryptography.PrivateKeyMemory, string, CredentialToCborBytesDelegate, CoseProtectedHeaderSerializer, BuildSigStructureDelegate, BaseMemoryPool, string?, string?, CancellationToken)"/>.</description></item>
+/// <item><description>Verification via <see cref="CredentialCoseExtensions.VerifyCoseAsync(CoseSign1Message, BuildSigStructureDelegate, Verifiable.Cryptography.PublicKeyMemory, CredentialFromJsonBytesDelegate, ParseProtectedHeaderDelegate, CancellationToken)"/>.</description></item>
 /// <item><description>CBOR wire format round-trip via <see cref="CoseSerialization"/>.</description></item>
 /// </list>
 /// </remarks>

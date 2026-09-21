@@ -8,7 +8,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.SelectiveDisclosure;
 
 /// <summary>
-/// Property-based tests using CsCheck for <see cref="SdJwtClaimRedaction.Redact"/>.
+/// Property-based tests using CsCheck for <see cref="SdJwtClaimRedaction.Redact(string, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate)"/>.
 /// Verifies partition invariants hold for arbitrary JSON structures and path selections.
 /// </summary>
 [TestClass]
@@ -65,7 +65,7 @@ internal sealed class SdJwtClaimRedactionPropertyTests
                 Assert.IsTrue(payload.ContainsKey(name),
                     $"Mandatory claim '{name}' must appear in payload.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -109,6 +109,6 @@ internal sealed class SdJwtClaimRedactionPropertyTests
             Assert.IsTrue(payload.ContainsKey(SdConstants.SdClaimName), "Payload must contain _sd.");
             var sdArray = (List<string>)payload[SdConstants.SdClaimName];
             Assert.HasCount(disclosableCount, sdArray);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

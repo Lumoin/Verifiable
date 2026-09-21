@@ -48,7 +48,7 @@ namespace Verifiable.Core.Assessment
     /// Error message if <see cref="CompletionStatus"/> is <see cref="AssessorCompletionStatus.Faulted"/>;
     /// otherwise <see langword="null"/>.
     /// </param>
-    /// <param name="Duration">Time taken by this assessor, useful for performance analysis.</param>
+    /// <param name="Duration">Time taken by this assessor, read from the injected <see cref="TimeProvider"/>.</param>
     /// <param name="SpanId">
     /// OpenTelemetry span ID for this specific assessor invocation, enabling trace correlation.
     /// </param>
@@ -115,7 +115,7 @@ namespace Verifiable.Core.Assessment
     /// <param name="IndividualResults">Results from each assessor, including completion status.</param>
     /// <param name="AggregationStrategy">The strategy used to determine overall success.</param>
     /// <param name="CreationTimestampInUtc">When this aggregated result was created.</param>
-    /// <param name="TotalDuration">Total wall-clock time for the composite assessment.</param>
+    /// <param name="TotalDuration">Total duration of the composite assessment, read from the injected <see cref="TimeProvider"/>.</param>
     /// <param name="TraceId">OpenTelemetry trace ID for the entire assessment operation.</param>
     /// <param name="SpanId">OpenTelemetry span ID for the aggregation operation.</param>
     /// <param name="Baggage">Distributed context propagated through the assessment pipeline.</param>

@@ -32,7 +32,7 @@ internal sealed class LoopbackKestrelTests
 
 
     /// <summary>
-    /// Proves that <see cref="LoopbackKestrel.ConfigureLoopbackListener"/> actually reaches the
+    /// Proves that <see cref="LoopbackKestrel.ConfigureLoopbackListener(KestrelServerOptions, X509Certificate2)"/> actually reaches the
     /// listener's <see cref="KestrelServerLimits"/>: the minimum-data-rate guards are disabled and the
     /// request-headers/keep-alive timeouts are widened to <see cref="LoopbackKestrel.RequestHeadersTimeout"/>
     /// and <see cref="LoopbackKestrel.KeepAliveTimeout"/>. Reads the limits back through
@@ -71,7 +71,7 @@ internal sealed class LoopbackKestrelTests
     /// Kestrel's unconfigured 10-second default <c>HttpsConnectionAdapterOptions.HandshakeTimeout</c> —
     /// and only then completes the handshake and sends one GET over the SAME socket. Under the
     /// framework default this connection would already have been closed with a clean, zero-byte FIN;
-    /// under <see cref="LoopbackKestrel.ConfigureLoopbackListener"/>'s widened
+    /// under <see cref="LoopbackKestrel.ConfigureLoopbackListener(KestrelServerOptions, X509Certificate2)"/>'s widened
     /// <see cref="LoopbackKestrel.HandshakeTimeout"/> the listener must still accept the handshake and
     /// answer the request.
     /// </summary>

@@ -20,7 +20,7 @@ public static class SigningCertificateReferenceBuilder
     /// cref="Tag"/> names (<see cref="PkiDigestAlgorithm.FromDigest"/>) — never aliasing <paramref name="digest"/>
     /// itself, so the returned reference's own <see cref="SigningCertificateReference.CertificateDigest"/> disposes
     /// independently of whatever owns <paramref name="digest"/> (the "copy bytes into fresh, this-instance-owned
-    /// pool memory" discipline <see cref="JAdESSignatureFacts.BuildFacts"/>/<see cref="CBAdESSignatureFacts.BuildFacts"/>
+    /// pool memory" discipline <c>JAdESSignatureFacts.BuildFacts</c>/<c>CBAdESSignatureFacts.BuildFacts</c>
     /// already hold every other carrier to).
     /// </summary>
     /// <param name="digest">The thumbprint digest, tagged with its own resolvable hash algorithm.</param>

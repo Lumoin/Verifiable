@@ -15,6 +15,7 @@ using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -23,6 +24,7 @@ using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Vcalm;
+using CoreStatusList = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -129,7 +131,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task ValidCredentialVerifiesTrue()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         string body = BuildCredentialRequestBody(credential, returnProblemDetails: true);
@@ -150,7 +152,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task TamperedCredentialVerifiesFalseWithError()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         //Tamper the subject claim after signing — the RDFC hash no longer matches the signature.
@@ -216,7 +218,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task MalformedCredentialNeverVerifiesTrue(string mutation, string reason)
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         string mutatedCredentialJson = MutateSignedCredentialJson(SerializeCredential(credential), mutation);
@@ -327,7 +329,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task MalformedPresentationNeverVerifiesTrue(string mutation, string reason)
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, canonicalizer: JcsCanonicalizer);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
             "challenge-xyz", "verifier.example").ConfigureAwait(false);
@@ -402,7 +404,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task UnsecuredVerifiablePresentationVerifiesFalseWithError()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, canonicalizer: JcsCanonicalizer);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
             "challenge-xyz", "verifier.example").ConfigureAwait(false);
@@ -441,7 +443,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task ExpiredCredentialVerifiesTrueWithValidityWarning()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: true).ConfigureAwait(false);
         string body = BuildCredentialRequestBody(credential, returnProblemDetails: true);
@@ -471,25 +473,30 @@ internal sealed class VcalmVerifierEndpointTests
     /// §3.8.1 status WARNING process-safety: a <c>credentialStatus</c> whose status-list resolver THROWS
     /// (an unresolvable / unverifiable / undecodable status list, or a §3.2 check failure over
     /// attacker-influenced input) must NOT become an unhandled 500. §3.8.1 makes status a WARNING, so an
-    /// undeterminable status yields no status result and no warning and never flips <c>verified</c> — the
-    /// credential still verifies TRUE.
+    /// undeterminable status yields no status result and never flips <c>verified</c> — the credential
+    /// still verifies TRUE. An exception that is not a <c>BitstringStatusListException</c> surfaces the
+    /// Bitstring Status List 1.0 §3.5 <c>STATUS_RETRIEVAL_ERROR</c>, never the legacy
+    /// <c>STATUS_WARNING</c> type.
     /// </summary>
     [TestMethod]
     public async Task StatusResolverThrowVerifiesTrueWithoutCrash()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         //A resolver that throws while dereferencing the status list — and records that it was reached, so
         //the test proves the credentialStatus entry mapped and the resolver was actually invoked (not a
         //false-positive where the entry never mapped and the throw path was never exercised).
         bool resolverInvoked = false;
-        app.Server.Vcalm().ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            resolverInvoked = true;
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
+            {
+                resolverInvoked = true;
 
-            throw new InvalidOperationException("The status list could not be dereferenced or decoded.");
-        };
+                throw new InvalidOperationException("The status list could not be dereferenced or decoded.");
+            };
+        }).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(
             validUntilPast: false, withStatus: true).ConfigureAwait(false);
@@ -502,7 +509,8 @@ internal sealed class VcalmVerifierEndpointTests
         Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "A status-list resolver throw is swallowed (§3.8.1 status is a WARNING): the credential still verifies TRUE.");
 
-        //A throw yields NO status result and NO status warning — an undeterminable status asserts nothing.
+        //A throw yields NO status result and never the legacy STATUS_WARNING type — it surfaces the
+        //Bitstring Status List 1.0 §3.5 STATUS_RETRIEVAL_ERROR instead.
         if(response.RootElement.TryGetProperty(VcalmParameterNames.ProblemDetails, out JsonElement problems))
         {
             foreach(JsonElement problem in problems.EnumerateArray())
@@ -517,12 +525,15 @@ internal sealed class VcalmVerifierEndpointTests
 
     /// <summary>
     /// §C.3 / §3.8.1 status shape branches: a <c>credentialStatus</c> that does NOT map to a resolvable
-    /// W3C status reference — a non-<c>BitstringStatusListEntry</c> type, an unparseable
-    /// <c>statusListIndex</c>, or a missing <c>statusListCredential</c> — is silently SKIPPED by
-    /// TryMapStatusEntry BEFORE the resolver is ever reached. It can neither warn nor crash: the
-    /// unparseable index in particular must not throw a 500. The credential still verifies TRUE with no
-    /// STATUS_WARNING (an undeterminable status asserts nothing). The complementary positive case — a
-    /// well-formed entry DOES reach the resolver — is pinned by StatusResolverThrowVerifiesTrueWithoutCrash.
+    /// W3C status reference is turned away by <c>TryMapStatusEntry</c> BEFORE the resolver is ever
+    /// reached, and never crashes (the unparseable index in particular must not throw a 500). A
+    /// non-<c>BitstringStatusListEntry</c> type asserts nothing (this verifier implements no algorithm
+    /// for it). A <c>BitstringStatusListEntry</c> with a missing <c>statusListCredential</c> or an
+    /// unparseable <c>statusListIndex</c> IS the specification's shape, malformed: Bitstring Status
+    /// List 1.0 §3.5 <c>STATUS_VERIFICATION_ERROR</c>. Neither shape surfaces the legacy
+    /// <c>STATUS_WARNING</c> type, and the credential still verifies TRUE in every case. The
+    /// complementary positive case — a well-formed entry DOES reach the resolver — is pinned by
+    /// StatusResolverThrowVerifiesTrueWithoutCrash.
     /// </summary>
     [TestMethod]
     [DataRow("NotABitstringStatusEntry", "94567", "https://status.example/list", "non-BitstringStatusListEntry type")]
@@ -532,17 +543,20 @@ internal sealed class VcalmVerifierEndpointTests
         string type, string statusListIndex, string statusListCredential, string reason)
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         //A resolver that records being reached but resolves nothing. A MAPPING entry would reach it;
         //a NON-mapping entry must be turned away by TryMapStatusEntry first, so resolverInvoked stays false.
         bool resolverInvoked = false;
-        app.Server.Vcalm().ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            resolverInvoked = true;
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
+            {
+                resolverInvoked = true;
 
-            return ValueTask.FromResult<VcalmResolvedStatusList?>(null);
-        };
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(null);
+            };
+        }).ConfigureAwait(false);
 
         CredentialStatus nonMapping = new()
         {
@@ -583,7 +597,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task ReturnResultsEmitsPerStepResults()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         string body = BuildCredentialRequestBody(credential, returnProblemDetails: false, returnResults: true);
@@ -601,6 +615,7 @@ internal sealed class VcalmVerifierEndpointTests
         Assert.IsTrue(validFrom.GetProperty(VcalmParameterNames.Verified).GetBoolean());
     }
 
+
     /// <summary>
     /// §3.3.1 <c>results.credentialSchema[]</c>: a credential conforming to its declared schema
     /// emits one <c>{verified:true, input:{id,type}}</c> item and stays verified. Each item MUST be
@@ -612,10 +627,10 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task ConformingCredentialSchemaEmitsVerifiedTrueResult()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(
+        string segment = await RegisterVerifierAsync(
             app,
             schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
-            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas)).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(
             validUntilPast: false,
@@ -647,10 +662,10 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task SchemaViolatingCredentialVerifiesFalseWithError()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(
+        string segment = await RegisterVerifierAsync(
             app,
             schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
-            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas)).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(
             validUntilPast: false,
@@ -685,10 +700,10 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task IndeterminateSchemaEntriesReportFalseWithoutFlippingVerified()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(
+        string segment = await RegisterVerifierAsync(
             app,
             schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
-            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas)).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(
             validUntilPast: false,
@@ -722,10 +737,10 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task SchemaEntryWithoutTypeVerifiesFalseWithMalformedValueError()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(
+        string segment = await RegisterVerifierAsync(
             app,
             schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
-            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas)).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(
             validUntilPast: false,
@@ -770,7 +785,6 @@ internal sealed class VcalmVerifierEndpointTests
     };
 
 
-
     /// <summary>
     /// §2.4 unknown-option MUST: an <c>options</c> member the verifier does not understand is rejected
     /// with HTTP 400 and the §3.8 <c>UNKNOWN_OPTION_PROVIDED</c> problem type. §2.4: "Implementations
@@ -781,7 +795,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task UnknownOptionYields400UnknownOptionProvided()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         string credentialJson = SerializeCredential(credential);
@@ -804,7 +818,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task UnknownTopLevelMemberYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         string credentialJson = SerializeCredential(credential);
@@ -822,7 +836,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task NonJsonContentTypeYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         byte[] bytes = Encoding.UTF8.GetBytes("{\"verifiableCredential\":{}}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
@@ -846,7 +860,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task OversizeBodyYields413()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, maxRequestBytes: 1024);
+        string segment = await RegisterVerifierAsync(app, maxRequestBytes: 1024).ConfigureAwait(false);
 
         //A body comfortably over the 1 KiB cap configured for this verifier instance.
         byte[] bytes = Encoding.UTF8.GetBytes("{\"verifiableCredential\":{\"x\":\"" + new string('a', 4096) + "\"}}");
@@ -873,7 +887,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task ChallengeOversizeBodyYields413()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, maxRequestBytes: 1024);
+        string segment = await RegisterVerifierAsync(app, maxRequestBytes: 1024).ConfigureAwait(false);
 
         byte[] bytes = Encoding.UTF8.GetBytes("{\"x\":\"" + new string('a', 4096) + "\"}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
@@ -898,7 +912,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task ValidPresentationWithChallengeAndDomainVerifiesTrue()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, canonicalizer: JcsCanonicalizer);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
 
         const string Challenge = "challenge-abc-123";
         const string Domain = "verifier.example";
@@ -921,7 +935,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task PresentationWithWrongChallengeVerifiesFalse()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, canonicalizer: JcsCanonicalizer);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
             "challenge-the-holder-signed", "verifier.example").ConfigureAwait(false);
@@ -943,7 +957,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task PresentationWithWrongDomainVerifiesFalse()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, canonicalizer: JcsCanonicalizer);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
             "challenge-xyz", "holder-signed-domain.example").ConfigureAwait(false);
@@ -967,7 +981,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task SwappedHolderDidVerifiesFalse()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app, canonicalizer: JcsCanonicalizer);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
 
         const string Challenge = "challenge-forged-holder";
         const string Domain = "verifier.example";
@@ -1023,7 +1037,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task UnproofedPresentationVerifies()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         VerifiablePresentation presentation = new()
         {
@@ -1053,7 +1067,7 @@ internal sealed class VcalmVerifierEndpointTests
         await using TestHostShell app = new(TimeProvider);
 
         HashSet<string> issuedChallenges = [];
-        string segment = RegisterVerifier(
+        string segment = await RegisterVerifierAsync(
             app,
             canonicalizer: JcsCanonicalizer,
             persistChallenge: (challenge, _, _) =>
@@ -1063,7 +1077,7 @@ internal sealed class VcalmVerifierEndpointTests
                 return ValueTask.CompletedTask;
             },
             consumeChallenge: (challenge, _, _) =>
-                ValueTask.FromResult(issuedChallenges.Contains(challenge)));
+                ValueTask.FromResult(issuedChallenges.Contains(challenge))).ConfigureAwait(false);
 
         //§3.3.3: an empty body POST mints and returns a challenge string.
         ServerHttpResponse challengeResponse = await app.DispatchWithBodyAsync(
@@ -1107,7 +1121,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task MalformedCredentialBodyYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterVerifier(app);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
         using JsonDocument _ = await PostCredentialAsync(app, segment, "{ not valid json", expectedStatus: 400).ConfigureAwait(false);
     }
@@ -1127,7 +1141,7 @@ internal sealed class VcalmVerifierEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         SdIssuerContext sd = await CreateSdIssuerContextAsync().ConfigureAwait(false);
-        string segment = RegisterVerifier(app, sd: sd);
+        string segment = await RegisterVerifierAsync(app, sd: sd).ConfigureAwait(false);
 
         DataIntegritySecuredCredential derived = await CreateDerivedCredentialAsync(sd).ConfigureAwait(false);
         string body = BuildCredentialRequestBody(derived, returnProblemDetails: true);
@@ -1155,7 +1169,7 @@ internal sealed class VcalmVerifierEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         SdIssuerContext sd = await CreateSdIssuerContextAsync().ConfigureAwait(false);
-        string segment = RegisterVerifier(app, sd: sd);
+        string segment = await RegisterVerifierAsync(app, sd: sd).ConfigureAwait(false);
 
         DataIntegritySecuredCredential derived = await CreateDerivedCredentialAsync(sd).ConfigureAwait(false);
 
@@ -1192,7 +1206,7 @@ internal sealed class VcalmVerifierEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         SdIssuerContext sd = await CreateSdIssuerContextAsync().ConfigureAwait(false);
-        string segment = RegisterVerifier(app, sd: sd);
+        string segment = await RegisterVerifierAsync(app, sd: sd).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         string body = BuildCredentialRequestBody(credential, returnProblemDetails: true);
@@ -1205,10 +1219,262 @@ internal sealed class VcalmVerifierEndpointTests
     }
 
 
-    //Registers a tenant with the VcalmVerifier capability and wires the parse seams, the Data
-    //Integrity verification record (RDFC + JCS canonicalizers via the supplied resolver), and any
-    //challenge persistence seams.
-    private string RegisterVerifier(
+    /// <summary>
+    /// In-process (calls <see cref="VcalmVerificationService.VerifyCredentialAsync"/> directly, not
+    /// over HTTP): the Bitstring Status List 1.0 §3.2 Validate Algorithm's result map carries the
+    /// entry's <c>statusPurpose</c>, and carries no <c>message</c> for a non-<c>message</c>-purpose
+    /// entry ("If the statusPurpose is message, set the message key in result…" — a <c>revocation</c>
+    /// entry never is).
+    /// </summary>
+    [TestMethod]
+    public async Task StatusResultCarriesPurposeAndNoMessageForNonMessagePurposeEntry()
+    {
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false, withStatus: true).ConfigureAwait(false);
+
+        VcalmCredentialVerification verification = new()
+        {
+            Resolver = KeyDidResolverSeam,
+            Canonicalize = RdfcCanonicalizer,
+            ContextResolver = ContextResolver,
+            KnownContext = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
+            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+            SerializeCredential = SerializeCredential,
+            SerializePresentation = SerializePresentation,
+            SerializeProofOptions = SerializeProofOptions,
+            Decoder = TestSetup.Base58Decoder,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            MemoryPool = Pool
+        };
+
+        static ValueTask<VcalmResolvedStatusList?> ResolveStatusList(
+            BitstringStatusListEntry entry, ExchangeContext exchangeContext, CancellationToken cancellationToken)
+        {
+            CoreStatusList list = CoreStatusList.Create(
+                BitstringStatusListCodec.MinimumEntries, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+
+            return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
+            {
+                StatusList = list,
+                Purposes = ["revocation"]
+            });
+        }
+
+        VcalmVerificationOutcome outcome = await VcalmVerificationService.VerifyCredentialAsync(
+            credential, verification, ResolveStatusList, TimeProvider.GetUtcNow(), EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.HasCount(1, outcome.StatusResults, "One credentialStatus entry maps to one status result.");
+        Assert.AreEqual("revocation", outcome.StatusResults[0].Purpose,
+            "Bitstring Status List 1.0 §3.2 Validate Algorithm: 'set the purpose key in result to the "
+            + "value of statusPurpose.'");
+        Assert.IsNull(outcome.StatusResults[0].Message,
+            "A non-message-purpose entry's result carries no message.");
+    }
+
+
+    /// <summary>
+    /// In-process (calls <see cref="VcalmVerificationService.VerifyCredentialAsync"/> directly, not
+    /// over HTTP), companion to <see cref="StatusResultCarriesPurposeAndNoMessageForNonMessagePurposeEntry"/>:
+    /// a <c>message</c>-purpose <c>credentialStatus</c> entry carrying <c>statusSize</c> 2 and four
+    /// <c>statusMessage</c> values must reach the mapped
+    /// <see cref="BitstringStatusListEntry"/>, so the Bitstring Status List 1.0 §3.2 Validate
+    /// Algorithm's result carries the message the status list's value maps to ("If the
+    /// statusPurpose is message, set the message key in result to the corresponding message of
+    /// the value as indicated in the statusMessages array").
+    /// </summary>
+    [TestMethod]
+    public async Task StatusResultCarriesTheMappedMessageForAMessagePurposeEntry()
+    {
+        CredentialStatus messageStatus = new()
+        {
+            Id = "https://status.example/list#94567",
+            Type = "BitstringStatusListEntry",
+            StatusPurpose = "message",
+            StatusListIndex = "94567",
+            StatusListCredential = "https://status.example/list",
+            StatusSize = 2,
+            StatusMessage =
+            [
+                new BitstringStatusMessage("0x0", "pending_review"),
+                new BitstringStatusMessage("0x1", "accepted"),
+                new BitstringStatusMessage("0x2", "rejected"),
+                new BitstringStatusMessage("0x3", "withdrawn")
+            ]
+        };
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false, customStatus: messageStatus).ConfigureAwait(false);
+
+        VcalmCredentialVerification verification = new()
+        {
+            Resolver = KeyDidResolverSeam,
+            Canonicalize = RdfcCanonicalizer,
+            ContextResolver = ContextResolver,
+            KnownContext = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
+            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+            SerializeCredential = SerializeCredential,
+            SerializePresentation = SerializePresentation,
+            SerializeProofOptions = SerializeProofOptions,
+            Decoder = TestSetup.Base58Decoder,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            MemoryPool = Pool
+        };
+
+        static ValueTask<VcalmResolvedStatusList?> ResolveStatusList(
+            BitstringStatusListEntry entry, ExchangeContext exchangeContext, CancellationToken cancellationToken)
+        {
+            CoreStatusList list = CoreStatusList.Create(
+                BitstringStatusListCodec.MinimumEntries, StatusListBitSize.TwoBits, Pool, BitOrder.MostSignificantFirst);
+            list[94567] = 2;
+
+            return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
+            {
+                StatusList = list,
+                Purposes = ["message"]
+            });
+        }
+
+        VcalmVerificationOutcome outcome = await VcalmVerificationService.VerifyCredentialAsync(
+            credential, verification, ResolveStatusList, TimeProvider.GetUtcNow(), EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.HasCount(1, outcome.StatusResults, "One credentialStatus entry maps to one status result.");
+        Assert.AreEqual("rejected", outcome.StatusResults[0].Message,
+            "The credentialStatus entry's statusSize and statusMessage must reach the mapped "
+            + "BitstringStatusListEntry so the message resolves to the value the status list holds at the index.");
+    }
+
+
+    /// <summary>
+    /// §C.3 / §3.8.1 malformed-entry shape: Bitstring Status List 1.0 §2.1 requires
+    /// <c>statusMessage</c> whenever <c>statusSize</c> is greater than <c>1</c>. Its absence IS the
+    /// specification's shape, malformed — the same §3.5 <c>STATUS_VERIFICATION_ERROR</c> the
+    /// existing non-mapping shapes (<see cref="NonMappingStatusEntryIsSkippedWithoutResolverOrCrash"/>)
+    /// already use, turned away by <c>TryMapStatusEntry</c> before the resolver.
+    /// </summary>
+    [TestMethod]
+    public async Task StatusSizeGreaterThanOneWithoutStatusMessageIsMalformedStatusEntry()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        bool resolverInvoked = false;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
+            {
+                resolverInvoked = true;
+
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(null);
+            };
+        }).ConfigureAwait(false);
+
+        CredentialStatus status = new()
+        {
+            Id = "https://status.example/list#492847",
+            Type = "BitstringStatusListEntry",
+            StatusPurpose = "message",
+            StatusListIndex = "492847",
+            StatusListCredential = "https://status.example/list",
+            StatusSize = 2
+        };
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false, customStatus: status).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true);
+
+        using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
+
+        Assert.IsFalse(resolverInvoked,
+            "statusSize greater than 1 without statusMessage is malformed; TryMapStatusEntry must turn it away before the resolver.");
+        Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "A malformed credentialStatus establishes no status: verified stays TRUE, never a 500.");
+
+        bool hasStatusVerificationError = false;
+        JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
+        foreach(JsonElement problem in problems.EnumerateArray())
+        {
+            if(string.Equals(problem.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+                VcalmProblemTypes.StatusVerificationError, StringComparison.Ordinal))
+            {
+                hasStatusVerificationError = true;
+            }
+        }
+
+        Assert.IsTrue(hasStatusVerificationError,
+            "Bitstring Status List 1.0 §2.1: statusSize greater than 1 REQUIRES statusMessage; its "
+            + "absence is the specification's shape, malformed.");
+    }
+
+
+    /// <summary>
+    /// §C.3 / §3.8.1 malformed-entry shape: Bitstring Status List 1.0 §2.1 requires the
+    /// <c>statusMessage</c> array's length to equal the number of possible status values
+    /// <c>statusSize</c> indicates (4 for a 2-bit entry). A shorter array is the specification's
+    /// shape, malformed, turned away by <c>TryMapStatusEntry</c> before the resolver.
+    /// </summary>
+    [TestMethod]
+    public async Task StatusMessageArrayOfWrongLengthIsMalformedStatusEntry()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        bool resolverInvoked = false;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
+            {
+                resolverInvoked = true;
+
+                return ValueTask.FromResult<VcalmResolvedStatusList?>(null);
+            };
+        }).ConfigureAwait(false);
+
+        CredentialStatus status = new()
+        {
+            Id = "https://status.example/list#492847",
+            Type = "BitstringStatusListEntry",
+            StatusPurpose = "message",
+            StatusListIndex = "492847",
+            StatusListCredential = "https://status.example/list",
+            StatusSize = 2,
+            StatusMessage =
+            [
+                new BitstringStatusMessage("0x0", "pending_review"),
+                new BitstringStatusMessage("0x1", "accepted")
+            ]
+        };
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false, customStatus: status).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true);
+
+        using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
+
+        Assert.IsFalse(resolverInvoked,
+            "A statusMessage array whose length does not match the number of values statusSize indicates is malformed.");
+        Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+
+        bool hasStatusVerificationError = false;
+        JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
+        foreach(JsonElement problem in problems.EnumerateArray())
+        {
+            if(string.Equals(problem.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+                VcalmProblemTypes.StatusVerificationError, StringComparison.Ordinal))
+            {
+                hasStatusVerificationError = true;
+            }
+        }
+
+        Assert.IsTrue(hasStatusVerificationError,
+            "Bitstring Status List 1.0 §2.1: the statusMessage array length MUST equal the number of "
+            + "possible status messages indicated by statusSize (4 for a 2-bit entry); a 2-element array is malformed.");
+    }
+
+
+    /// <summary>
+    /// Registers the verifier with the capabilities and delegates needed by the verification endpoint cases.
+    /// </summary>
+    private async Task<string> RegisterVerifierAsync(
         TestHostShell app,
         long maxRequestBytes = 10L * 1024 * 1024,
         CanonicalizationDelegate? canonicalizer = null,
@@ -1219,52 +1485,73 @@ internal sealed class VcalmVerifierEndpointTests
         VcalmSchemaValidatorRegistry? schemaValidators = null,
         ResolveVcalmSchemaDocumentDelegate? resolveSchemaDocument = null)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, VerifierCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, VerifierCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
-        app.Server.Vcalm().VcalmCredentialVerification = new VcalmCredentialVerification
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Resolver = KeyDidResolverSeam,
-            //The canonicalizer matches the suite the verifier instance serves: RDFC-1.0 +
-            //offline context resolver for eddsa-rdfc-2022 credentials, JCS for eddsa-jcs-2022
-            //presentations. The library does not hardcode the choice; a multi-suite deployment
-            //wires a canonicalizer that dispatches on the proof's cryptosuite.
-            Canonicalize = canonicalizer ?? RdfcCanonicalizer,
-            ContextResolver = contextResolver ?? ContextResolver,
-            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-            SerializeCredential = SerializeCredential,
-            SerializePresentation = SerializePresentation,
-            SerializeProofOptions = SerializeProofOptions,
-            Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            MemoryPool = Pool,
-            //§3.4 ecdsa-sd-2023 derived-proof seams: the CBOR derived-proof parser, the P-256
-            //verification function, and the base64url codec the SD verifier composes. When wired, a
-            //derived (0xd9 5d 01) proof routes to the derived-proof verifier; when null, an SD derived
-            //credential falls through to the generic path (verified:false). RDFC is the SD canonicalizer.
-            ParseDerivedProof = sd is null ? null : EcdsaSd2023CborSerializer.ParseDerivedProof,
-            VerifyDerivedSignature = sd is null ? null : BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
-            SdProofEncoder = sd is null ? null : TestSetup.Base64UrlEncoder,
-            SdProofDecoder = sd is null ? null : TestSetup.Base64UrlDecoder,
-            //The §3.3.1 results.credentialSchema seams: wired only by the schema tests; unwired
-            //deployments keep empty schema results.
-            SchemaValidators = schemaValidators,
-            ResolveSchemaDocument = resolveSchemaDocument
-        };
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmCredentialVerification = new VcalmCredentialVerification
+            {
+                Resolver = KeyDidResolverSeam,
+                //The canonicalizer matches the suite the verifier instance serves: RDFC-1.0 +
+                //offline context resolver for eddsa-rdfc-2022 credentials, JCS for eddsa-jcs-2022
+                //presentations. The library does not hardcode the choice; a multi-suite deployment
+                //wires a canonicalizer that dispatches on the proof's cryptosuite.
+                Canonicalize = canonicalizer ?? RdfcCanonicalizer,
+                ContextResolver = contextResolver ?? ContextResolver,
+                //JCS callers exercise the presentation path (SignPresentationAsync's bare, one-entry
+                //context); every other caller exercises the credential path (VcalmWireFixtures'
+                //base-plus-examples context).
+                KnownContext = ReferenceEquals(canonicalizer, JcsCanonicalizer)
+                    ? Context.FromIris(Context.Credentials20)
+                    : Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
+                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                SerializeCredential = SerializeCredential,
+                SerializePresentation = SerializePresentation,
+                SerializeProofOptions = SerializeProofOptions,
+                Decoder = TestSetup.Base58Decoder,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                MemoryPool = Pool,
+                //§3.4 ecdsa-sd-2023 derived-proof seams: the CBOR derived-proof parser, the P-256
+                //verification function, and the base64url codec the SD verifier composes. When wired, a
+                //derived (0xd9 5d 01) proof routes to the derived-proof verifier; when null, an SD derived
+                //credential falls through to the generic path (verified:false). RDFC is the SD canonicalizer.
+                ParseDerivedProof = sd is null ? null : EcdsaSd2023CborSerializer.ParseDerivedProof,
+                VerifyDerivedSignature = sd is null ? null : BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
+                SdProofEncoder = sd is null ? null : TestSetup.Base64UrlEncoder,
+                SdProofDecoder = sd is null ? null : TestSetup.Base64UrlDecoder,
+                //The §3.3.1 results.credentialSchema seams: wired only by the schema tests; unwired
+                //deployments keep empty schema results.
+                SchemaValidators = schemaValidators,
+                ResolveSchemaDocument = resolveSchemaDocument
+            };
+        }).ConfigureAwait(false);
 
         if(persistChallenge is not null)
         {
-            app.Server.Vcalm().PersistVcalmChallengeAsync = persistChallenge;
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.PersistVcalmChallengeAsync = persistChallenge;
+            }).ConfigureAwait(false);
         }
 
         if(consumeChallenge is not null)
         {
-            app.Server.Vcalm().ConsumeVcalmChallengeAsync = consumeChallenge;
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.ConsumeVcalmChallengeAsync = consumeChallenge;
+            }).ConfigureAwait(false);
         }
 
         //The §2.4 / B.4 payload-size cap is a server-level instance configuration.
-        app.Server.Vcalm().VcalmMaxRequestBytes = maxRequestBytes;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmMaxRequestBytes = maxRequestBytes;
+        }).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }

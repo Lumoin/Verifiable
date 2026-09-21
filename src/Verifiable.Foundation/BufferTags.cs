@@ -11,6 +11,12 @@ namespace Verifiable.Foundation;
 /// formats, on top of a <see cref="BufferKind"/> created through <see cref="BufferKind.Create"/>.
 /// </para>
 /// <para>
+/// <see cref="Tag"/> is declared in <c>Lumoin.Base</c>; a consumer that imports only
+/// <c>Verifiable.Foundation</c> and writes the bare <see cref="Tag"/> name needs its own
+/// <c>using Lumoin.Base;</c> as well, since a <c>global using</c> inside this project's own
+/// compilation is not re-exported to a downstream consumer.
+/// </para>
+/// <para>
 /// <strong>Usage</strong>
 /// </para>
 /// <code>

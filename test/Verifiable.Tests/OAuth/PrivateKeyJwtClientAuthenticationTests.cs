@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
@@ -7,6 +8,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -18,7 +20,7 @@ namespace Verifiable.Tests.OAuth;
 /// §8.2 (CIMD-047/048/049/050) requires. Part A exercises the pure
 /// <see cref="PrivateKeyJwtClientAuthentication.Validate"/> claim rules directly, mirroring
 /// <c>Rfc7523AssertionValidationTests</c>'s style. Part B exercises the full
-/// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?)"/>
+/// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
 /// pipeline — parse, key resolution from a JWKS, real signature verification, then the claim rules —
 /// against a project-crypto-generated P-256 key pair via <see cref="TestKeyMaterialProvider"/> and
 /// <see cref="ClientAssertionSigning"/>, never <c>System.Security.Cryptography</c> directly.
@@ -234,8 +236,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     public async Task HappyPathWithProjectCryptoGeneratedKeyAuthenticates()
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
-            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
@@ -263,12 +265,202 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see> makes
+    /// distinct <c>kid</c> values within a set a SHOULD, so a duplicate can arrive. A registered key
+    /// set carrying two keys under the
+    /// SAME <c>kid</c> must refuse the assertion outright — a first-match scan that trusts whichever
+    /// element sits first lets whoever controls the array's order pick which key is trusted.
+    /// </summary>
+    [TestMethod]
+    public async Task DuplicateKeyIdInRegisteredSetIsRefused()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        const string DuplicateKeyId = "duplicated-kid";
+
+        var firstKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var secondKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = material.Registration with
+            {
+                TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                ClientJwks = BuildJwksJson(
+                    (JwkOf(firstKeys.PublicKey), DuplicateKeyId),
+                    (JwkOf(secondKeys.PublicKey), DuplicateKeyId))
+            };
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString,
+                firstKeys.PrivateKey, DuplicateKeyId).ConfigureAwait(false);
+
+            RequestFields fields = BuildFields(assertion);
+            ExchangeContext context = BuildContext(app.Server);
+
+            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated,
+                "A key identifier repeated across the registered set must refuse rather than pick a winner.");
+        }
+        finally
+        {
+            firstKeys.PublicKey.Dispose();
+            firstKeys.PrivateKey.Dispose();
+            secondKeys.PublicKey.Dispose();
+            secondKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see> makes
+    /// <c>kid</c> optional only for a single-key set; a multi-key set with no <c>kid</c> header on the
+    /// assertion carries no way to tell which key was meant, so it is refused rather than defaulting
+    /// to whichever key sits first in the registered set.
+    /// </summary>
+    [TestMethod]
+    public async Task TwoKeySetWithNoKidHeaderIsRefused()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var firstKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var secondKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = material.Registration with
+            {
+                TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                ClientJwks = BuildJwksJson(
+                    (JwkOf(firstKeys.PublicKey), "key-a"),
+                    (JwkOf(secondKeys.PublicKey), "key-b"))
+            };
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionWithoutKidAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, firstKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            RequestFields fields = BuildFields(assertion);
+            ExchangeContext context = BuildContext(app.Server);
+
+            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated, "A multi-key set with no kid header must refuse, not pick the first key.");
+        }
+        finally
+        {
+            firstKeys.PublicKey.Dispose();
+            firstKeys.PrivateKey.Dispose();
+            secondKeys.PublicKey.Dispose();
+            secondKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see>: <c>kid</c>
+    /// is optional, so a legitimate single-key set with no <c>kid</c> header must still authenticate.
+    /// Green both before and after the duplicate/no-kid refusal fix — the regression guard on it.
+    /// </summary>
+    [TestMethod]
+    public async Task SingleKeySetWithNoKidHeaderStillAuthenticates()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionWithoutKidAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            RequestFields fields = BuildFields(assertion);
+            ExchangeContext context = BuildContext(app.Server);
+
+            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(authenticated,
+                "A single-key set with no kid header must still authenticate (RFC 7517 §4.5: kid is optional).");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// A rotated set publishing both the old and the new key: the assertion's <c>kid</c> selects the
+    /// new key by identifier and authenticates, proving selection tracks the identifier rather than
+    /// array position.
+    /// </summary>
+    [TestMethod]
+    public async Task RotatedKeySetSelectsTheNewKeyByKid()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        const string OldKeyId = "old-key";
+        const string NewKeyId = "new-key";
+
+        var oldKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var newKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = material.Registration with
+            {
+                TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                ClientJwks = BuildJwksJson(
+                    (JwkOf(oldKeys.PublicKey), OldKeyId),
+                    (JwkOf(newKeys.PublicKey), NewKeyId))
+            };
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString,
+                newKeys.PrivateKey, NewKeyId).ConfigureAwait(false);
+
+            RequestFields fields = BuildFields(assertion);
+            ExchangeContext context = BuildContext(app.Server);
+
+            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(authenticated,
+                "The current key's kid must select it out of a rotated set that still carries the old key.");
+        }
+        finally
+        {
+            oldKeys.PublicKey.Dispose();
+            oldKeys.PrivateKey.Dispose();
+            newKeys.PublicKey.Dispose();
+            newKeys.PrivateKey.Dispose();
+        }
+    }
+
+
     [TestMethod]
     public async Task TamperedSignatureIsRejected()
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
-            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
@@ -311,8 +503,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     public async Task AssertionSignedByAnUnregisteredKeyIsRejected()
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
-            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         var registeredKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         var attackerKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
@@ -345,12 +537,71 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// RFC 7519 §4: "The JWT Claim Names within a Claims Set MUST be unique." An assertion whose
+    /// Claims Set repeats <c>sub</c> — the attacker's value first, the honest client id last — is
+    /// refused (401 <c>invalid_client</c> at the token endpoint this delegate feeds) rather than
+    /// crashing the caller. Only the payload segment is rebuilt by hand (never through this
+    /// repository's serializers) and re-signed with the SAME client private key, so only the
+    /// payload's well-formedness gate — not an invalid signature — can be responsible for the
+    /// refusal. The call completing and returning <see langword="false"/>, rather than an escaped
+    /// exception, is itself part of what this test proves.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionWithDuplicateSubClaimIsRejected()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            string[] segments = assertion.Split('.');
+            using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(segments[1], BaseMemoryPool.Shared);
+            string payloadJson = Encoding.UTF8.GetString(payloadOwner.Memory.Span);
+
+            //Splice an attacker-controlled "sub" ahead of the honest one already in the serialized
+            //payload — raw string surgery, not a Dictionary<string,object> round trip, since a
+            //dictionary cannot itself carry two entries under the same key.
+            string tamperedPayloadJson = payloadJson.Insert(1, "\"sub\":\"attacker-client\",");
+            string tamperedPayloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(tamperedPayloadJson));
+
+            byte[] signingInput = Encoding.ASCII.GetBytes($"{segments[0]}.{tamperedPayloadB64}");
+            using Signature signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared)
+                .ConfigureAwait(false);
+            string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+            string tamperedAssertion = $"{segments[0]}.{tamperedPayloadB64}.{signatureB64}";
+
+            RequestFields fields = BuildFields(tamperedAssertion);
+            ExchangeContext context = BuildContext(app.Server);
+
+            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
     [TestMethod]
     public async Task MissingClientAssertionTypeIsRejected()
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
-            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
@@ -384,8 +635,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     public async Task WrongClientAssertionTypeIsRejected()
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
-            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
@@ -419,8 +670,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     public async Task MissingClientJwksFailsClosed()
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
-            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
@@ -452,6 +703,107 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-2">RFC 7591 §2</see>'s <c>jwks_uri</c>
+    /// registration — "URL string referencing the client's JSON Web Key (JWK) Set [RFC7517] document,
+    /// which contains the client's public keys... these keys might be used by some applications for
+    /// validating signed requests made to the token endpoint when using JWTs for client authentication"
+    /// — authenticates once the caller wires the key-set resolution seam.
+    /// </summary>
+    [TestMethod]
+    public async Task RegisteredJwksUriWithAWiredResolutionSeamAuthenticates()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            Uri jwksUri = new("https://client.example/jwks.json");
+            string jwksJson = BuildJwksJson((JwkOf(clientKeys.PublicKey), SigningKeyId));
+
+            ClientRecord registration = material.Registration with
+            {
+                TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                ClientJwksUri = jwksUri
+            };
+
+            ValueTask<JwksUriResolution> ResolveJwksUriAsync(Uri uri, ExchangeContext context, CancellationToken ct) =>
+                ValueTask.FromResult(new JwksUriResolution
+                {
+                    Outcome = JwksUriResolutionOutcome.Resolved,
+                    Jwks = jwksJson
+                });
+
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                resolveJwksUriAsync: ResolveJwksUriAsync);
+
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            RequestFields fields = BuildFields(assertion);
+            ExchangeContext context = BuildContext(app.Server);
+
+            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(authenticated,
+                "A registration with only a jwks_uri must authenticate once the caller wires a key-set resolution seam.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// The same RFC 7591 §2 <c>jwks_uri</c> registration with NO resolution seam wired fails closed —
+    /// the application owns what reaches the wire, so nothing here dereferences <c>jwks_uri</c> on its
+    /// own; the refusal is identical to a registration with no key material at all
+    /// (<see cref="MissingClientJwksFailsClosed"/>).
+    /// </summary>
+    [TestMethod]
+    public async Task RegisteredJwksUriWithNoResolutionSeamWiredFailsClosed()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = material.Registration with
+            {
+                TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                ClientJwksUri = new Uri("https://client.example/jwks.json")
+            };
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            RequestFields fields = BuildFields(assertion);
+            ExchangeContext context = BuildContext(app.Server);
+
+            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated,
+                "A jwks_uri registration with no resolution seam wired must fail closed, not dereference it on its own.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
     private static ClientRecord BuildConfidentialRegistration(ClientRecord baseline, PublicKeyMemory clientPublicKey)
     {
         string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientPublicKey.Tag);
@@ -461,28 +813,53 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         return baseline with
         {
             TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
-            ClientJwks = BuildJwksJson(jwk, SigningKeyId)
+            ClientJwks = BuildJwksJson((jwk, SigningKeyId))
         };
     }
 
 
-    private static string BuildJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)
+    /// <summary>
+    /// Builds a JWK Set JSON document carrying one key per <paramref name="keys"/> entry, each tagged
+    /// with its paired <c>kid</c> — callers pass the same <c>kid</c> twice to build a duplicate-identifier
+    /// fixture.
+    /// </summary>
+    private static string BuildJwksJson(params (IReadOnlyDictionary<string, string> Jwk, string Kid)[] keys)
     {
         StringBuilder sb = new();
-        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
-        foreach(KeyValuePair<string, string> member in jwk)
+        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[");
+        for(int index = 0; index < keys.Length; ++index)
         {
-            _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
+            if(index > 0)
+            {
+                _ = sb.Append(',');
+            }
+
+            _ = sb.Append('{');
+            foreach(KeyValuePair<string, string> member in keys[index].Jwk)
+            {
+                _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
+            }
+
+            _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(keys[index].Kid).Append("\"}");
         }
 
-        _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
+        _ = sb.Append(']').Append('}');
 
         return sb.ToString();
     }
 
 
+    private static IReadOnlyDictionary<string, string> JwkOf(PublicKeyMemory publicKey)
+    {
+        string alg = CryptoFormatConversions.DefaultTagToJwaConverter(publicKey.Tag);
+
+        return DpopJwkUtilities.ToJwk(publicKey, alg, TestSetup.Base64UrlEncoder);
+    }
+
+
     private async Task<string> SignAssertionAsync(
-        EndpointServer server, string clientId, string audience, PrivateKeyMemory clientPrivateKey)
+        EndpointServer server, string clientId, string audience, PrivateKeyMemory clientPrivateKey,
+        string signingKeyId = SigningKeyId)
     {
         var oauth = server.OAuth();
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
@@ -494,12 +871,54 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             now.AddMinutes(-1),
             now.AddMinutes(5),
             clientPrivateKey,
-            SigningKeyId,
+            signingKeyId,
             oauth.Codecs.JwtHeaderSerializer!,
             oauth.Codecs.JwtPayloadSerializer!,
             oauth.Codecs.Encoder!,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Signs a client assertion with no <c>kid</c> header member at all — the RFC 7517 §4.5 optional
+    /// case a legitimate single-key set relies on. Mirrors <see cref="ClientAssertionSigning.SignAsync"/>'s
+    /// header and payload shape, since that method requires a non-empty <c>kid</c> and so cannot
+    /// produce this header itself.
+    /// </summary>
+    private async Task<string> SignAssertionWithoutKidAsync(
+        EndpointServer server, string clientId, string audience, PrivateKeyMemory clientPrivateKey)
+    {
+        var oauth = server.OAuth();
+        DateTimeOffset now = server.TimeProvider.GetUtcNow();
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(clientPrivateKey.Tag);
+
+        JwtHeader header = new(capacity: 2)
+        {
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
+        };
+
+        JwtPayload payload = new(capacity: 6)
+        {
+            [WellKnownJwtClaimNames.Iss] = clientId,
+            [WellKnownJwtClaimNames.Sub] = clientId,
+            [WellKnownJwtClaimNames.Aud] = audience,
+            [WellKnownJwtClaimNames.Jti] = Guid.NewGuid().ToString("N"),
+            [WellKnownJwtClaimNames.Iat] = now.AddMinutes(-1).ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddMinutes(5).ToUnixTimeSeconds()
+        };
+
+        UnsignedJwt unsigned = new(header, payload);
+        using JwsMessage jws = await unsigned.SignAsync(
+            clientPrivateKey,
+            oauth.Codecs.JwtHeaderSerializer!,
+            oauth.Codecs.JwtPayloadSerializer!,
+            oauth.Codecs.Encoder!,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
     }
 
 

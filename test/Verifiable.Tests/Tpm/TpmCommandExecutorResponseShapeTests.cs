@@ -65,7 +65,7 @@ internal sealed class TpmCommandExecutorResponseShapeTests
 
     /// <summary>
     /// A device answering a 14-octet <c>TPM_RC_SUCCESS</c> header carrying one output handle and NO
-    /// parameters — Table 88's exact shape — to <see cref="TpmResponseCodec.SignSequenceStart"/> must yield a
+    /// parameters — Table 88's exact shape — to <c>TpmResponseCodec.SignSequenceStart</c> must yield a
     /// successful, correctly-bound response: a handle-returning codec with
     /// <see cref="TpmResponseCodec.OutHandleCount"/> greater than zero parses over the (genuinely empty)
     /// parameter area so the parser can bind the handle into the typed response
@@ -139,7 +139,7 @@ internal sealed class TpmCommandExecutorResponseShapeTests
 
     /// <summary>
     /// A device answering a 14-octet <c>TPM_RC_SUCCESS</c> header carrying one output handle and NO
-    /// parameters to <see cref="TpmResponseCodec.Load"/> — a handle-returning codec whose response ALSO
+    /// parameters to <c>TpmResponseCodec.Load</c> — a handle-returning codec whose response ALSO
     /// carries a parameter (the object's Name, TPM2B_NAME) — must yield <c>TPM_RC_SIZE</c>, not a thrown
     /// exception: parsing runs (OutHandleCount is greater than zero) but the parser's own read of the Name
     /// field underruns the empty parameter area

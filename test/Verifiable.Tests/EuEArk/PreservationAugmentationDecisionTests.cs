@@ -382,7 +382,7 @@ internal sealed class PreservationAugmentationDecisionTests
             int after = UrgencyOf(PreservationAugmentation.Decide(Context(new CryptographicConstraints { Entries = extended }, uses, leadTime)));
 
             return after <= before;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -405,7 +405,7 @@ internal sealed class PreservationAugmentationDecisionTests
             PreservationAugmentationDecision second = PreservationAugmentation.Decide(Context(constraints, uses, leadTime));
 
             return first == second;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -432,7 +432,7 @@ internal sealed class PreservationAugmentationDecisionTests
             }
 
             return PreservationAugmentation.Decide(Context(constraints, uses, leadTime)).Kind != PreservationAugmentationDecisionKind.Sound;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

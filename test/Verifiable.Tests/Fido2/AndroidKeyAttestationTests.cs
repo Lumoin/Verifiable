@@ -79,7 +79,7 @@ internal sealed class AndroidKeyAttestationTests
         AuthenticatorData authenticatorData = Fido2RegistrationVerifierTests.BuildRegistrationAuthenticatorData(
             Fido2TestVectors.CreateRpIdHash(), aaguid, credentialPublicKey, credentialId, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory credCertPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(credCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -388,7 +388,7 @@ internal sealed class AndroidKeyAttestationTests
         CoseKey credentialPublicKey = Fido2AttestationTestVectors.CreateP256CoseKey(credentialKey, WellKnownCoseAlgorithms.Es256);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
         using PkiCertificateMemory credCertPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(credCert.RawData);
@@ -423,7 +423,7 @@ internal sealed class AndroidKeyAttestationTests
         CoseKey credentialPublicKey = Fido2AttestationTestVectors.CreateP256CoseKey(credentialKey, WellKnownCoseAlgorithms.Es256);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
         using PkiCertificateMemory credCertPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(credCert.RawData);
@@ -453,7 +453,7 @@ internal sealed class AndroidKeyAttestationTests
         CoseKey credentialPublicKey = Fido2AttestationTestVectors.CreateP256CoseKey(credentialKey, WellKnownCoseAlgorithms.Es256);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         //Hand-encoded directly: the shipped AndroidKeyAttestationStatementCborWriter always writes x5c
         //(android-key has no self-attestation branch), so this packed-shaped, x5c-omitted map is a shape
@@ -516,7 +516,7 @@ internal sealed class AndroidKeyAttestationTests
         CoseKey credentialPublicKey = Fido2AttestationTestVectors.CreateP256CoseKey(credentialKey, WellKnownCoseAlgorithms.Es256);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
         using PkiCertificateMemory credCertPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(credCert.RawData);
@@ -576,7 +576,7 @@ internal sealed class AndroidKeyAttestationTests
             useMismatchedCredentialKey ? mismatchedKey : credentialKey, WellKnownCoseAlgorithms.Es256);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid ?? Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
         if(tamperSignature)
         {
             signature[0] ^= 0xFF;
@@ -640,7 +640,7 @@ internal sealed class AndroidKeyAttestationTests
         CoseKey credentialPublicKey = Fido2AttestationTestVectors.CreateRsaCoseKey(credentialKey, WellKnownCoseAlgorithms.Rs256);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithRsaPkcs1Sha256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithRsaPkcs1Sha256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
         using PkiCertificateMemory credCertPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(credCert.RawData);

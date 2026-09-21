@@ -14,7 +14,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Drives <c>TPM2_PolicyCounterTimer()</c> against the in-house behavioural <see cref="TpmSimulator"/> — entirely
 /// in-process, with no external assets — through the same production command path the production code uses (the
-/// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
+/// <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
 /// command/response codecs). The command compares a live-marshaled <c>TPMS_TIME_INFO</c> against a caller operand
 /// (TPM 2.0 Library Part 3, clause 23.10).
 /// </summary>

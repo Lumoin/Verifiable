@@ -25,10 +25,23 @@ public static class OutboundFetchPolicyExchangeContextExtensions
         /// rather than no policy at all.
         /// </summary>
         public OutboundFetchPolicy OutboundFetchPolicy =>
+            context.ResolveOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
+
+        /// <summary>
+        /// Gets the outbound-fetch policy this operation carries, or
+        /// <paramref name="configurationDefault"/> when none has been set on the
+        /// context. Lets a deployment's own configuration — a client infrastructure or wallet
+        /// configuration's own <c>OutboundFetchPolicy</c> member — stand in for the library-wide
+        /// <see cref="OutboundFetchPolicy.SecureDefault"/> as the fallback, while a policy set
+        /// explicitly on this context — via <see cref="SetOutboundFetchPolicy"/> — still takes
+        /// precedence.
+        /// </summary>
+        /// <param name="configurationDefault">The policy to use when this context carries none.</param>
+        public OutboundFetchPolicy ResolveOutboundFetchPolicy(OutboundFetchPolicy configurationDefault) =>
             context.TryGetValue(OutboundFetchPolicyKey, out object? value)
                 && value is OutboundFetchPolicy policy
                 ? policy
-                : OutboundFetchPolicy.SecureDefault;
+                : configurationDefault;
 
         /// <summary>
         /// Sets the outbound-fetch policy for this operation. A deployment calls

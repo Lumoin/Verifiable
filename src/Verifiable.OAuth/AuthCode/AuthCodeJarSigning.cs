@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// <para>
 /// Composes <see cref="JwtHeaderExtensions.ForJar"/> for the protected header
 /// (with <c>typ = oauth-authz-req+jwt</c> per RFC 9101 §4) and
-/// <see cref="JwtSigningExtensions.SignAsync"/> for the JWS — the same JCose
+/// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> for the JWS — the same JCose
 /// composition pattern used by OID4VP JAR signing, token issuance, and the
 /// Verifier attestation pipeline.
 /// </para>
@@ -73,6 +73,11 @@ public static class AuthCodeJarSigning
     }
 
 
+    /// <summary>
+    /// Projects request parameters into signed claims. The method is optional per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// </summary>
     private static JwtPayload BuildPayload(AuthCodeRequestObject requestObject)
     {
         JwtPayload payload = new(capacity: 13)
@@ -84,11 +89,15 @@ public static class AuthCodeJarSigning
             [OAuthRequestParameterNames.State] = requestObject.State,
             [WellKnownJwtClaimNames.Nonce] = requestObject.Nonce,
             [OAuthRequestParameterNames.CodeChallenge] = requestObject.CodeChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = requestObject.CodeChallengeMethod,
             [WellKnownJwtClaimNames.Iat] = requestObject.Iat.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Nbf] = requestObject.Nbf.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = requestObject.Exp.ToUnixTimeSeconds()
         };
+
+        if(requestObject.CodeChallengeMethod is string method)
+        {
+            payload[OAuthRequestParameterNames.CodeChallengeMethod] = method;
+        }
 
         if(requestObject.Iss is string iss)
         {

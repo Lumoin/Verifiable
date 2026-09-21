@@ -76,7 +76,7 @@ public static class TrustedListCriteriaEvaluation
         return results.Pop();
 
 
-        /// <summary>Combines the completed child outcomes of <paramref name="composite"/> per its <c>assert</c> value.</summary>
+        //Combines the completed child outcomes of composite per its assert value.
         static CriteriaMatchResult CombineChildren(CriteriaListCondition composite, Stack<CriteriaMatchResult> results)
         {
             //Clause 5.5.9.2.2.0 requires "a non-empty sequence of assertions": an empty CriteriaList is
@@ -135,7 +135,7 @@ public static class TrustedListCriteriaEvaluation
         }
 
 
-        /// <summary>Evaluates one leaf assertion against the certificate facts.</summary>
+        //Evaluates one leaf assertion against the certificate facts.
         static CriteriaMatchResult EvaluateLeaf(QualifierCondition leaf, QualifiedCertificateFacts certificate) => leaf switch
         {
             KeyUsageCondition keyUsage => EvaluateKeyUsage(keyUsage, certificate),
@@ -149,7 +149,7 @@ public static class TrustedListCriteriaEvaluation
         };
 
 
-        /// <summary>Clause 5.5.9.2.2.1: the KeyUsage extension is present and every asserted bit matches the certificate's bit.</summary>
+        //Clause 5.5.9.2.2.1: the KeyUsage extension is present and every asserted bit matches the certificate's bit.
         static CriteriaMatchResult EvaluateKeyUsage(KeyUsageCondition condition, QualifiedCertificateFacts certificate)
         {
             if(!certificate.HasKeyUsageExtension)
@@ -179,7 +179,7 @@ public static class TrustedListCriteriaEvaluation
         }
 
 
-        /// <summary>Clause 5.5.9.2.2.2: the CertificatePolicies extension is present and every listed policy identifier is present in it.</summary>
+        //Clause 5.5.9.2.2.2: the CertificatePolicies extension is present and every listed policy identifier is present in it.
         static CriteriaMatchResult EvaluatePolicySet(PolicySetCondition condition, QualifiedCertificateFacts certificate)
         {
             if(!certificate.HasCertificatePoliciesExtension)
@@ -199,7 +199,7 @@ public static class TrustedListCriteriaEvaluation
         }
 
 
-        /// <summary>Clause 5.5.9.2.2.3 (1): the ExtendedKeyUsage extension is present and every listed key purpose is present in it.</summary>
+        //Clause 5.5.9.2.2.3 (1): the ExtendedKeyUsage extension is present and every listed key purpose is present in it.
         static CriteriaMatchResult EvaluateExtendedKeyUsage(ExtendedKeyUsageCondition condition, QualifiedCertificateFacts certificate)
         {
             if(!certificate.HasExtendedKeyUsageExtension)
@@ -219,7 +219,7 @@ public static class TrustedListCriteriaEvaluation
         }
 
 
-        /// <summary>Clause 5.5.9.2.2.3 (2): every listed attribute type object identifier is present in the certificate's subject distinguished name.</summary>
+        //Clause 5.5.9.2.2.3 (2): every listed attribute type object identifier is present in the certificate's subject distinguished name.
         static CriteriaMatchResult EvaluateSubjectAttributes(CertSubjectDistinguishedNameAttributeCondition condition, QualifiedCertificateFacts certificate)
         {
             foreach(string requiredOid in condition.AttributeOids)
@@ -234,7 +234,7 @@ public static class TrustedListCriteriaEvaluation
         }
 
 
-        /// <summary>Determines whether <paramref name="values"/> contains <paramref name="candidate"/> by ordinal comparison.</summary>
+        //Determines whether values contains candidate by ordinal comparison.
         static bool ContainsOrdinal(IReadOnlyList<string> values, string candidate)
         {
             foreach(string value in values)

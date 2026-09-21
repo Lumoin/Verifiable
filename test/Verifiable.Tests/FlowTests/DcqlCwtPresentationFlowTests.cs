@@ -16,7 +16,7 @@ namespace Verifiable.Tests.FlowTests;
 /// End-to-end tests for the DCQL presentation flow with SD-CWT credentials:
 /// issuer signs SD-CWT → verifier sends DCQL query → wallet evaluates via
 /// <see cref="DisclosureComputation{TCredential}"/> → wallet selects disclosures
-/// via <see cref="SdToken{TEnvelope}.SelectDisclosures(Func{SdDisclosure, bool})"/> →
+/// via <see cref="SdToken{TEnvelope}.SelectDisclosures(Func{SdDisclosure, bool}, BaseMemoryPool)"/> →
 /// verifier validates COSE_Sign1 signature.
 /// </summary>
 /// <remarks>
@@ -32,7 +32,7 @@ namespace Verifiable.Tests.FlowTests;
 /// </para>
 /// <para>
 /// The COSE_Sign1 signature covers only the protected header and payload, so
-/// <see cref="SdToken{TEnvelope}.SelectDisclosures(Func{SdDisclosure, bool})"/>
+/// <see cref="SdToken{TEnvelope}.SelectDisclosures(Func{SdDisclosure, bool}, BaseMemoryPool)"/>
 /// produces a new token whose <see cref="SdToken{TEnvelope}.IssuerSigned"/>
 /// remains cryptographically valid.
 /// </para>
@@ -313,7 +313,7 @@ internal sealed class DcqlCwtPresentationFlowTests
 
     /// <summary>
     /// Issues a signed SD-CWT token with selective disclosure using
-    /// <see cref="SdCwtIssuance.IssueAsync"/>.
+    /// <see cref="SdCwtIssuance.IssueAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/>.
     /// </summary>
     private static async ValueTask<SdToken<ReadOnlyMemory<byte>>> IssueSdCwtTokenAsync(
         PrivateKeyMemory privateKey, CancellationToken cancellationToken)

@@ -12,7 +12,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The CMS analog of <see cref="Verifiable.JCose"/>'s <c>EncodedCoseSign1</c>: sealed,
+/// The CMS analog of <c>Verifiable.JCose</c>'s <c>EncodedCoseSign1</c>: sealed,
 /// <see cref="SensitiveMemory"/>-derived, carrying <see cref="CryptoTags.CmsEncodedSignedData"/>
 /// for CBOM/OTel provenance. This is the input to <see cref="VerifyCmsSignedDataDelegate"/>; the
 /// verified result is a <see cref="CmsVerifiedContent"/>.

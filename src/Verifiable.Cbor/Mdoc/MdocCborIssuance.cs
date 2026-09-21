@@ -92,7 +92,7 @@ public sealed class MdocIssuerSigningConfig
 /// encodes each <see cref="MdocLogicalIssuerSignedItem"/> as Tag 24 wire
 /// bytes, hashes those bytes to build the MSO <c>valueDigests</c> map,
 /// encodes the MSO, wraps it in Tag 24, signs the result as COSE_Sign1 via
-/// <see cref="Cose.SignAsync(ReadOnlyMemory{byte}, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, BaseMemoryPool, System.Threading.CancellationToken)"/>,
+/// <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, BaseMemoryPool, System.Threading.CancellationToken)"/>,
 /// and returns a wire-valid <see cref="MdocDocument"/> with item wire bytes
 /// filled and <see cref="MdocIssuerSigned.IssuerAuth"/> populated.
 /// </summary>
@@ -115,7 +115,7 @@ public sealed class MdocIssuerSigningConfig
 /// </para>
 /// <para>
 /// <strong>Ownership.</strong> The function consumes the input
-/// <paramref name="logical"/> document: it transfers each item's
+/// <c>logical</c> document: it transfers each item's
 /// <see cref="MdocLogicalIssuerSignedItem.Random"/> salt onto a new
 /// <see cref="MdocIssuerSignedItem"/> that also carries the
 /// freshly-computed <see cref="MdocIssuerSignedItem.WireBytes"/>. The

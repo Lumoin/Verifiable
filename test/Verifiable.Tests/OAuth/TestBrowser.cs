@@ -14,7 +14,7 @@ namespace Verifiable.Tests.OAuth;
 /// In a real deployment the browser follows the redirect to the authorization
 /// endpoint, the user authenticates via the server's login UI, and the server
 /// redirects back with an authorization code. In tests, the authentication
-/// step is collapsed: the <paramref name="subjectId"/> is placed directly in
+/// step is collapsed: the <c>subjectId</c> is placed directly in
 /// the request context, exactly as the ASP.NET authentication middleware would
 /// do after validating the user's session cookie.
 /// </para>
@@ -78,6 +78,7 @@ internal static class TestBrowser
 
         if(codeChallenge is not null)
         {
+            fields[OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code;
             fields[OAuthRequestParameterNames.CodeChallenge] = codeChallenge;
             fields[OAuthRequestParameterNames.CodeChallengeMethod] =
                 WellKnownCodeChallengeMethods.S256;

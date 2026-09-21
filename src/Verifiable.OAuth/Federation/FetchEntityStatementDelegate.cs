@@ -1,4 +1,5 @@
 using Verifiable.Core;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
@@ -31,6 +32,14 @@ namespace Verifiable.OAuth.Federation;
 /// subject to the outbound-fetch (SSRF) policy the <see cref="ExchangeContext"/>
 /// carries.
 /// </para>
+/// <para>
+/// <see cref="Verifiable.OAuth.Federation.FederationHttpTransport"/>'s composition reports the fetch's
+/// <see cref="HttpCacheFreshness"/> on <see cref="FetchedEntityStatement.Freshness"/>. An application
+/// that stores the returned statement stores it for that reported lifetime: "A cache MUST NOT generate a
+/// stale response unless it is disconnected or doing so is explicitly permitted by the client or origin
+/// server" (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>). The
+/// library stores nothing itself.
+/// </para>
 /// </remarks>
 public delegate ValueTask<FetchedEntityStatement?> FetchEntityStatementDelegate(
     EntityIdentifier subject,
@@ -47,4 +56,15 @@ public delegate ValueTask<FetchedEntityStatement?> FetchEntityStatementDelegate(
 public sealed record FetchedEntityStatement(
     EntityStatement Statement,
     UnverifiedJwtHeader Header,
-    string CompactJws);
+    string CompactJws)
+{
+    /// <summary>
+    /// The freshness the fetch's response headers imply, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>, when this
+    /// statement was reached over the wire by <see cref="FederationHttpTransport"/>. Left at its default
+    /// value — not storable, zero lifetime — when parsed from an inline compact JWS
+    /// (<see cref="TrustChainValidation.BuildInlineValidator"/>) that carried no HTTP response to compute
+    /// freshness from.
+    /// </summary>
+    public HttpCacheFreshness Freshness { get; init; }
+}

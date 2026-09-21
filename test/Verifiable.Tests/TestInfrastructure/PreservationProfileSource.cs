@@ -53,7 +53,7 @@ internal sealed record PreservationTimestampAuthority: IDisposable
 /// <strong>Everything under test is minted, not invented.</strong> A container comes from
 /// <see cref="AsicContainerCreation.CreateEvidenceRecordAsync"/> and carries a real Evidence Record over a real
 /// hash tree, time-stamped by an authority that signs what it is asked to sign; a digest value is computed
-/// through <see cref="CryptographicKeyEvents.ComputeDigestAsync"/>. A profile evaluation that only ever saw
+/// through <see cref="CryptographicKeyEvents.ComputeDigestAsync(ComputeDigestDelegate, System.Buffers.ReadOnlySequence{byte}, int, Lumoin.Base.Tag, Lumoin.Base.BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, System.Threading.CancellationToken)"/>. A profile evaluation that only ever saw
 /// hand-written octets would not have been told anything.
 /// </para>
 /// <para>

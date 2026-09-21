@@ -4,7 +4,7 @@ using Verifiable.Core.Assessment;
 namespace Verifiable.Fido2;
 
 /// <summary>
-/// The result of <see cref="Fido2AssertionVerifier.VerifyAsync"/>: the raw assertion-signature
+/// The result of <see cref="Fido2AssertionVerifier.VerifyAsync(Verifiable.JCose.CoseKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AssertionCeremonyInput, ClaimIssuer{AssertionCeremonyInput}, string, BaseMemoryPool, CancellationToken)"/>: the raw assertion-signature
 /// verification outcome, the WebAuthn L3 §7.2 ceremony rule claims, and a policy-neutral summary
 /// of whether the assertion is acceptable.
 /// </summary>

@@ -68,7 +68,7 @@ public sealed record PdfSignaturePlaceholder
     /// <summary>Gets the whole document's bytes, <c>ByteRange</c> already patched to its true values, <c>Contents</c> still all-zero placeholder digits.</summary>
     public required byte[] Document { get; init; }
 
-    /// <summary>Gets the placeholder's own <c>ByteRange</c> — the two segments <see cref="CompleteSignature"/>'s embedded signature is computed to cover.</summary>
+    /// <summary>Gets the placeholder's own <c>ByteRange</c> — the two segments <see cref="PdfIncrementalUpdateWriter.CompleteSignature"/>'s embedded signature is computed to cover.</summary>
     public required PdfByteRange ByteRange { get; init; }
 
     /// <summary>Gets the byte offset of the first <c>Contents</c> hexadecimal digit.</summary>

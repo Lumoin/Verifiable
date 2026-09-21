@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Tpm;
 /// behavioural <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same
 /// production command path the production code uses (<see cref="TpmCommandExecutor"/> with the real
 /// <see cref="CreateInput"/>, <see cref="LoadInput"/>, and <see cref="UnsealInput"/>, the
-/// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmSession"/>, and
+/// <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions"/> policy commands, <see cref="TpmSession"/>, and
 /// <see cref="TpmPolicySession"/> over the real command/response codecs).
 /// </summary>
 /// <remarks>

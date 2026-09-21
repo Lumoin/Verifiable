@@ -162,7 +162,7 @@ public sealed class TimestampTokenInfo: IDisposable
 
 
     /// <summary>
-    /// Initialises a new instance. Private: an instance only ever comes from <see cref="Read"/>, so a status and
+    /// Initialises a new instance. Private: an instance only ever comes from <see cref="Read(ReadOnlyMemory{byte}, BaseMemoryPool)"/>, so a status and
     /// the fields that status implies cannot disagree.
     /// </summary>
     /// <param name="status">Whether the read succeeded, and if not why.</param>
@@ -266,7 +266,7 @@ public sealed class TimestampTokenInfo: IDisposable
     /// optional <c>certificates</c> set (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">
     /// IETF RFC 5652 §5.1</see>) — <see cref="EmbeddedCertificates"/>' count. Only
     /// <see cref="ReadFromTokenAsync"/> ever sees the wrapping CMS layer, so this is always
-    /// <see langword="false"/> on an instance <see cref="Read"/> produced directly from already-unwrapped
+    /// <see langword="false"/> on an instance <see cref="Read(ReadOnlyMemory{byte}, BaseMemoryPool)"/> produced directly from already-unwrapped
     /// <c>TSTInfo</c> content — not a genuine "no embedded certificates" fact there, just the absence of the
     /// visibility needed to establish one; <see cref="EmbeddedMaterialStatus"/> disambiguates that case from a
     /// <see cref="CmsEmbeddedMaterialStatus.Malformed"/> embedded structure.

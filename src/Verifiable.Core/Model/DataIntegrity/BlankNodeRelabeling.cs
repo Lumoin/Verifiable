@@ -114,24 +114,18 @@ public static class BlankNodeRelabeling
         string result = nquad;
         int searchStart = 0;
 
-        while(true)
+        while(NQuadBlankNodeScanner.FindNext(result, searchStart) is (int markerStart, int identifierEnd))
         {
-            //Find the next blank node pattern "_:c".
-            int index = result.IndexOf("_:c", searchStart, StringComparison.Ordinal);
-            if(index < 0)
+            //A blank node term that is not canonical (_:c14nN) has nothing to relabel here.
+            string fullBlankNodeId = result[markerStart..identifierEnd];
+            if(!BlankNodeRelabelingExtensions.IsCanonicalBlankNode(fullBlankNodeId))
             {
-                break;
-            }
-
-            //Find the end of the blank node identifier (digits after "c14n" or similar).
-            int endIndex = index + 3;
-            while(endIndex < result.Length && (char.IsLetterOrDigit(result[endIndex]) || result[endIndex] == 'n'))
-            {
-                endIndex++;
+                searchStart = identifierEnd;
+                continue;
             }
 
             //Extract the blank node identifier (without the "_:" prefix).
-            string blankNodeId = result[(index + 2)..endIndex];
+            string blankNodeId = fullBlankNodeId[2..];
             string canonicalId = blankNodeId;
 
             //Compute HMAC and encode through the registered HMAC primitive.
@@ -163,8 +157,8 @@ public static class BlankNodeRelabeling
             _ = (labelMap?.TryAdd(canonicalId, hmacId));
 
             //Replace in result.
-            result = string.Concat(result.AsSpan(0, index), hmacFullId, result.AsSpan(endIndex));
-            searchStart = index + hmacFullId.Length;
+            result = string.Concat(result.AsSpan(0, markerStart), hmacFullId, result.AsSpan(identifierEnd));
+            searchStart = markerStart + hmacFullId.Length;
         }
 
         return result;

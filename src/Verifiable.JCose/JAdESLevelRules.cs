@@ -15,8 +15,8 @@ namespace Verifiable.JCose;
 /// <remarks>
 /// <para>
 /// <strong>Two postures, one implementation, exactly like <see cref="JAdESHeaderRules"/>.</strong>
-/// <see cref="Check"/> is the COLLECT posture — it never throws on malformed or non-conformant content,
-/// returning every violation found. <see cref="EnsureConformant"/> is the THROW posture — the augmentation
+/// <see cref="JAdESLevelRules.Check"/> is the COLLECT posture — it never throws on malformed or non-conformant content,
+/// returning every violation found. <see cref="JAdESLevelRules.EnsureConformant"/> is the THROW posture — the augmentation
 /// path's trusted-caller-input guard. Every violation this file's rules can report is a
 /// <see cref="JAdESRuleViolation"/> sibling appended to the SAME closed sum <see cref="JAdESHeaderRules"/>
 /// already declares (this file adds no violation type of its own — see that file for the sealed records this
@@ -60,7 +60,7 @@ namespace Verifiable.JCose;
 /// <strong>Annex D disclosure, opt-in.</strong> Mirroring <see cref="CBAdESLevelRules"/>'s
 /// Annex-E <see cref="CBAdESUndisclosedAlternativeMechanismViolation"/> check: when a caller supplies a
 /// non-<see langword="null"/> <see cref="JAdESLevelRuleContext.AlternativeMechanismDisclosures"/> registry,
-/// <see cref="Check"/> reports a <see cref="JAdESUndisclosedAlternativeMechanismViolation"/> for every
+/// <see cref="JAdESLevelRules.Check"/> reports a <see cref="JAdESUndisclosedAlternativeMechanismViolation"/> for every
 /// <see cref="JAdESUnsignedHeaderElementUnknown"/> whose own kind carries no registered disclosure. A
 /// <see langword="null"/> registry (the default) performs no check at all — the caller never opted in.
 /// </para>
@@ -71,12 +71,12 @@ namespace Verifiable.JCose;
 /// </para>
 /// <para>
 /// <strong>Two async resolution classes, mirroring <see cref="CBAdESLevelRules"/>'s own sync/async
-/// split rationale.</strong> <see cref="CheckReferencesResolveToValidationDataAsync"/> (the JA-A.1.1-12/
+/// split rationale.</strong> <see cref="JAdESLevelRules.CheckReferencesResolveToValidationDataAsync"/> (the JA-A.1.1-12/
 /// JA-A.1.2-35/JA-A.1.3-08/JA-A.1.4-10 cross-component "all referenced material is present elsewhere" family,
-/// the CB-A.1.1-30 analog) and <see cref="CheckCounterSignaturesAsync"/> (a failing <c>cSig</c> countersignature)
+/// the CB-A.1.1-30 analog) and <see cref="JAdESLevelRules.CheckCounterSignaturesAsync"/> (a failing <c>cSig</c> countersignature)
 /// each need the registered digest/verification seams a decoded <c>etsiU</c> snapshot alone cannot supply, so
 /// both are their own <see cref="ValueTask"/>-returning Check/Ensure pairs, composed separately by the
-/// augmentation/validation orchestrators — never folded into the synchronous <see cref="Check"/>.
+/// augmentation/validation orchestrators — never folded into the synchronous <see cref="JAdESLevelRules.Check"/>.
 /// </para>
 /// </remarks>
 /// <summary>
@@ -104,6 +104,14 @@ namespace Verifiable.JCose;
 public delegate PublicKeyMemory? ResolveJAdESCounterSignaturePublicKeyDelegate(UnverifiedJAdESMessage counterSignature);
 
 
+/// <summary>
+/// The shared JAdES B-T/B-LT/B-LTA level-scoped rule surface: every level-dependent conformance rule Table 1
+/// (clause 6.3) and Annex A of
+/// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11918201/01.02.01_60/ts_11918201v010201p.pdf">
+/// ETSI TS 119 182-1 V1.2.1</see> impose OVER AND ABOVE the B-B rule surface (<c>JAdESHeaderRules</c>),
+/// implemented exactly once and consumed by both postures a caller needs, mirroring
+/// <see cref="CBAdESLevelRules"/>'s identical discipline.
+/// </summary>
 public static class JAdESLevelRules
 {
     /// <summary>
@@ -238,6 +246,14 @@ public static class JAdESLevelRules
                     case JAdESUnsignedHeaderElementUnknown unknown:
                         CheckAlternativeMechanismDisclosed(unknown, context.AlternativeMechanismDisclosures, violations);
                         break;
+
+                    case JAdESUnsignedHeaderElementCertificateValues:
+                    case JAdESUnsignedHeaderElementRevocationValues:
+                    case JAdESUnsignedHeaderElementAttributeCertificateValues:
+                    case JAdESUnsignedHeaderElementAttributeRevocationValues:
+                        //Carries no level-rule obligation this synchronous surface evaluates; an explicit
+                        //no-op arm preserving this switch's original silent fall-through for these kinds.
+                        break;
                 }
             }
         }
@@ -341,6 +357,23 @@ public static class JAdESLevelRules
                 case JAdESUnsignedHeaderElementAttributeCertificateReferences:
                 case JAdESUnsignedHeaderElementAttributeRevocationReferences:
                     return true;
+
+                case JAdESUnsignedHeaderElementSignaturePolicyStore:
+                case JAdESUnsignedHeaderElementCounterSignature:
+                case JAdESUnsignedHeaderElementSignatureTimestamp:
+                case JAdESUnsignedHeaderElementCertificateValues:
+                case JAdESUnsignedHeaderElementRevocationValues:
+                case JAdESUnsignedHeaderElementAttributeCertificateValues:
+                case JAdESUnsignedHeaderElementAttributeRevocationValues:
+                case JAdESUnsignedHeaderElementAnyValidationData:
+                case JAdESUnsignedHeaderElementTimestampValidationData:
+                case JAdESUnsignedHeaderElementArchiveTimestamp:
+                case JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                case JAdESUnsignedHeaderElementReferencesTimestamp:
+                case JAdESUnsignedHeaderElementUnknown:
+                    //Not a references-family element this scan looks for; an explicit no-op arm preserving
+                    //this switch's original silent fall-through for every other kind.
+                    break;
             }
         }
 
@@ -801,6 +834,19 @@ public static class JAdESLevelRules
                 case JAdESUnsignedHeaderElementArchiveTimestamp { Carriage: JAdESClearUnsignedValue<AdESTimestampContainer> clear }:
                     archiveTimestampContainers.Add(clear.Value);
                     break;
+
+                case JAdESUnsignedHeaderElementSignaturePolicyStore:
+                case JAdESUnsignedHeaderElementCounterSignature:
+                case JAdESUnsignedHeaderElementSignatureTimestamp:
+                case JAdESUnsignedHeaderElementAnyValidationData:
+                case JAdESUnsignedHeaderElementTimestampValidationData:
+                case JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                case JAdESUnsignedHeaderElementReferencesTimestamp:
+                case JAdESUnsignedHeaderElementUnknown:
+                    //Carries no candidate material this collection gathers (and, for the reference/value
+                    //kinds above, no opaque-carriage instance of them either); an explicit no-op arm
+                    //preserving this switch's original silent fall-through for every other kind.
+                    break;
             }
         }
 
@@ -1092,7 +1138,7 @@ public static class JAdESLevelRules
     /// Maps <paramref name="identifier"/> to the <see cref="Tag"/> the registered digest delegate needs to
     /// select the same hash function — recognizing only the three IANA "Named Information Hash Algorithm
     /// Registry" (<see href="https://www.rfc-editor.org/rfc/rfc6920">RFC 6920</see>) names this library carries
-    /// a <see cref="CryptoTags"/> entry for, compared case-insensitively (mirroring <see cref="IsMd5"/>'s own
+    /// a <see cref="CryptoTags"/> entry for, compared case-insensitively (mirroring <see cref="IsMd5(string)"/>'s own
     /// case-insensitive convention for the same registry). Returns <see langword="null"/> for every other
     /// identifier — resolution cannot be confirmed without knowing which hash function to run, so the caller
     /// reports the reference as unresolved rather than guessing.

@@ -204,7 +204,7 @@ verificationDelegate,
 
     /// <summary>
     /// A malformed signature segment — base64url the decoder rejects, such as an out-of-alphabet
-    /// character or a non-canonical final character — must make <see cref="Jws.VerifyAsync"/> return
+    /// character or a non-canonical final character — must make <see cref="Jws.VerifyAsync(Verifiable.JCose.JwsMessage, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.PublicKeyMemory, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/> return
     /// <see langword="false"/>, never throw. Verification of untrusted input fails closed: a signature
     /// that cannot be decoded cannot verify. Regression for an unguarded signature decode that
     /// surfaced malformed tokens as an escaping exception (a 500) instead of a clean rejection.

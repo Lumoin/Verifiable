@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -8,12 +9,16 @@ using Verifiable.OAuth.Oid4Vp;
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// Serializes an <see cref="AuthorizationRequestObject"/> sub-object to a JSON
-/// string for embedding as a JWT payload claim.
+/// Serializes an <see cref="AuthorizationRequestObject"/> sub-object to its JSON
+/// text. The caller decodes that text and writes the resulting JSON value —
+/// for <see cref="AuthorizationRequestObject.DcqlQuery"/> and
+/// <see cref="AuthorizationRequestObject.ClientMetadata"/>, a JSON object — into
+/// the JWT payload claim, so the claim's wire shape is that JSON value itself,
+/// never a JSON string that carries the JSON text as its content.
 /// </summary>
 /// <typeparam name="T">The sub-object type to serialize.</typeparam>
 /// <param name="value">The value to serialize.</param>
-/// <returns>A JSON string representation of the value.</returns>
+/// <returns>The JSON text representation of the value.</returns>
 public delegate string JarClaimSerializer<T>(T value);
 
 
@@ -63,11 +68,13 @@ public static class JarExtensions
         /// <param name="payloadSerializer">Delegate for serializing the JWT payload.</param>
         /// <param name="dcqlQuerySerializer">
         /// Delegate for serializing <see cref="AuthorizationRequestObject.DcqlQuery"/>
-        /// to a JSON string for embedding in the payload.
+        /// to JSON text; the returned text is decoded and embedded in the payload
+        /// as a JSON object, not as a JSON string carrying that text.
         /// </param>
         /// <param name="clientMetadataSerializer">
         /// Delegate for serializing <see cref="AuthorizationRequestObject.ClientMetadata"/>
-        /// to a JSON string for embedding in the payload.
+        /// to JSON text; the returned text is decoded and embedded in the payload
+        /// as a JSON object, not as a JSON string carrying that text.
         /// </param>
         /// <param name="base64UrlEncoder">Delegate for Base64Url encoding.</param>
         /// <param name="memoryPool">Memory pool for allocations.</param>
@@ -173,14 +180,16 @@ public static class JarExtensions
 
             if(request.DcqlQuery is not null)
             {
-                payload[Oid4VpAuthorizationRequestParameterNames.DcqlQuery] =
-                    dcqlQuerySerializer(request.DcqlQuery);
+                payload[Oid4VpAuthorizationRequestParameterNames.DcqlQuery] = DecodeJsonObjectClaim(
+                    Oid4VpAuthorizationRequestParameterNames.DcqlQuery,
+                    dcqlQuerySerializer(request.DcqlQuery));
             }
 
             if(request.ClientMetadata is not null)
             {
-                payload[Oid4VpAuthorizationRequestParameterNames.ClientMetadata] =
-                    clientMetadataSerializer(request.ClientMetadata);
+                payload[Oid4VpAuthorizationRequestParameterNames.ClientMetadata] = DecodeJsonObjectClaim(
+                    Oid4VpAuthorizationRequestParameterNames.ClientMetadata,
+                    clientMetadataSerializer(request.ClientMetadata));
             }
 
             if(request.TransactionData is { Count: > 0 } txData)
@@ -294,14 +303,16 @@ public static class JarExtensions
 
             if(request.DcqlQuery is not null)
             {
-                payload[Oid4VpAuthorizationRequestParameterNames.DcqlQuery] =
-                    dcqlQuerySerializer(request.DcqlQuery);
+                payload[Oid4VpAuthorizationRequestParameterNames.DcqlQuery] = DecodeJsonObjectClaim(
+                    Oid4VpAuthorizationRequestParameterNames.DcqlQuery,
+                    dcqlQuerySerializer(request.DcqlQuery));
             }
 
             if(request.ClientMetadata is not null)
             {
-                payload[Oid4VpAuthorizationRequestParameterNames.ClientMetadata] =
-                    clientMetadataSerializer(request.ClientMetadata);
+                payload[Oid4VpAuthorizationRequestParameterNames.ClientMetadata] = DecodeJsonObjectClaim(
+                    Oid4VpAuthorizationRequestParameterNames.ClientMetadata,
+                    clientMetadataSerializer(request.ClientMetadata));
             }
 
             if(request.TransactionData is { Count: > 0 } txData)
@@ -329,6 +340,68 @@ public static class JarExtensions
     }
 
 
+    //Decodes the JSON text a JarClaimSerializer<T> returns into the CLR graph
+    //the payload writer already emits as a JSON object — a Dictionary<string,
+    //object> of the same shape DictionaryStringObjectJsonConverter (Verifiable.
+    //Json) produces when it parses a JSON object directly, so the enclosing
+    //JwtPayload writes this claim as a nested object rather than as a JSON
+    //string that itself contains JSON. JsonScalarText is the hand-rolled JSON
+    //value decoder Verifiable.OAuth already uses for the same purpose on
+    //AuthorizationDetail.ExtensionData; using it here keeps this decode step
+    //behind the library's firewall against a direct System.Text.Json reference.
+    private static Dictionary<string, object?> DecodeJsonObjectClaim(string claimName, string json)
+    {
+        if(JsonScalarText.DecodeValue(json) is not Dictionary<string, object?> decoded)
+        {
+            throw new FormatException(
+                $"JAR claim '{claimName}' serializer must produce a JSON object; produced: '{json}'.");
+        }
+
+        return decoded;
+    }
+
+
+    //Resolves a dcql_query/client_metadata claim value to its JSON text
+    //regardless of which of the two accepted shapes it arrived as. A JSON
+    //object — a Dictionary<string, object> produced when the payload
+    //deserializer parses a JSON object claim (see
+    //DictionaryStringObjectJsonConverter in Verifiable.Json) — is re-encoded
+    //to text with JsonAppender, the same pooled writer the rest of
+    //Verifiable.OAuth uses wherever a CLR JSON graph needs to become wire
+    //text without a System.Text.Json reference (e.g. EntityStatementJson-
+    //Builder.EncodeJwtPart). A JSON string is returned as-is. Routing the
+    //object form through the same JarClaimDeserializer<T> the string form
+    //uses keeps one parsing path for the claim rather than two.
+    private static string? ResolveClaimJson(object claimValue)
+    {
+        switch(claimValue)
+        {
+            case string json:
+            {
+                return json;
+            }
+            case Dictionary<string, object> jsonObject:
+            {
+                StringBuilder builder = JsonAppender.Rent();
+                try
+                {
+                    JsonAppender.AppendObject(builder, jsonObject);
+
+                    return builder.ToString();
+                }
+                finally
+                {
+                    JsonAppender.Return(builder);
+                }
+            }
+            default:
+            {
+                return null;
+            }
+        }
+    }
+
+
     /// <summary>
     /// Parses a compact JWS JAR string fetched from a <c>request_uri</c> endpoint
     /// into a typed <see cref="AuthorizationRequestObject"/>.
@@ -345,6 +418,7 @@ public static class JarExtensions
     /// Delegate for deserializing the <c>client_metadata</c> claim JSON string into a
     /// <see cref="VerifierClientMetadata"/>.
     /// </param>
+    /// <param name="statePolicy">Whether the <c>state</c> claim must be present; see <see cref="StateParameterPolicy"/>.</param>
     /// <param name="memoryPool">Memory pool for allocations.</param>
     /// <returns>
     /// The parsed <see cref="AuthorizationRequestObject"/>. Signature verification
@@ -392,6 +466,16 @@ public static class JarExtensions
                 $"Wallets MUST NOT process Request Objects with an absent or incorrect typ per OID4VP 1.0 §5.");
         }
 
+        //RFC 7519 §4: the Claim Names within a JWT Claims Set MUST be unique. Gate the decoded
+        //payload for well-formedness before it reaches the wired deserializer — the same refusal
+        //path JarVerification.VerifyAsync uses for its own payload — so a duplicate claim name is
+        //refused here rather than escaping the deserializer as an unhandled exception.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
+        {
+            throw new FormatException(
+                "JAR payload is not well-formed JSON, or carries a duplicate claim name.");
+        }
+
         IReadOnlyDictionary<string, object> claims =
             payloadDeserializer(unverified.Payload.Span);
 
@@ -432,75 +516,6 @@ public static class JarExtensions
 
 
     /// <summary>
-    /// Verifies the signature of a compact JWS JAR and parses its payload into a typed
-    /// <see cref="AuthorizationRequestObject"/> in a single operation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is the correct Wallet-side entry point for processing a JAR fetched from a
-    /// <c>request_uri</c> endpoint. It enforces that signature verification always
-    /// precedes claim extraction — an invalid or unverified JAR never produces a usable
-    /// <see cref="AuthorizationRequestObject"/>.
-    /// </para>
-    /// <para>
-    /// Timing claims (<c>iat</c>, <c>nbf</c>, <c>exp</c>) are parsed but not validated
-    /// here. Callers validate them against the current time with their deployment's
-    /// clock-skew tolerance — see
-    /// <see cref="Verifiable.OAuth.Server.TimingPolicy.ClockSkewTolerance"/> for the
-    /// library's default value.
-    /// </para>
-    /// <para>
-    /// The <paramref name="signingPublicKey"/> must be resolved by the caller before
-    /// invoking this method. The resolution mechanism depends on the Client Identifier
-    /// Prefix in the <c>client_id</c> parameter:
-    /// </para>
-    /// <list type="bullet">
-    ///   <item><description>
-    ///     <c>verifier_attestation:</c> — resolved from the <c>cnf.jwk</c> claim of the
-    ///     Verifier Attestation JWT carried in the <c>jwt</c> JOSE header, validated by
-    ///     <see cref="VerifierAttestationKeyResolver.ResolveAsync"/>.
-    ///   </description></item>
-    ///   <item><description>
-    ///     <c>x509_san_dns:</c> — resolved from the leaf certificate in the <c>x5c</c>
-    ///     JOSE header after chain validation and DNS SAN check.
-    ///   </description></item>
-    ///   <item><description>
-    ///     <c>decentralized_identifier:</c> — resolved via DID resolution from the
-    ///     <c>verificationMethod</c> identified by the <c>kid</c> JOSE header.
-    ///   </description></item>
-    /// </list>
-    /// </remarks>
-    /// <param name="compactJar">The compact JWS string fetched from <c>request_uri</c>.</param>
-    /// <param name="signingPublicKey">
-    /// The Verifier's JAR signing public key, resolved via the appropriate Client
-    /// Identifier Prefix mechanism before calling this method.
-    /// </param>
-    /// <param name="base64UrlDecoder">Delegate for Base64Url decoding.</param>
-    /// <param name="headerDeserializer">Delegate for deserializing the JWT header.</param>
-    /// <param name="payloadDeserializer">Delegate for deserializing the JWT payload claims.</param>
-    /// <param name="dcqlQueryDeserializer">
-    /// Delegate for deserializing the <c>dcql_query</c> claim JSON string into a
-    /// <see cref="DcqlQuery"/>.
-    /// </param>
-    /// <param name="clientMetadataDeserializer">
-    /// Delegate for deserializing the <c>client_metadata</c> claim JSON string into a
-    /// <see cref="VerifierClientMetadata"/>.
-    /// </param>
-    /// <param name="memoryPool">Memory pool for allocations.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>
-    /// The verified and parsed <see cref="AuthorizationRequestObject"/>. The signature
-    /// has been cryptographically verified; timing claims are still subject to caller
-    /// validation against the current time.
-    /// </returns>
-    /// <exception cref="System.Security.SecurityException">
-    /// Thrown when the JAR signature does not verify against the provided public key.
-    /// </exception>
-    /// <exception cref="FormatException">
-    /// Thrown when the compact JWS is malformed, the <c>typ</c> header is missing or
-    /// incorrect, or a required claim is absent.
-    /// </exception>
-    /// <summary>
     /// Parses an unsigned compact JAR (<c>alg=none</c> per RFC 7515 §6.1 /
     /// RFC 7519 §6.1) without performing signature verification. The header
     /// MUST carry <c>"alg": "none"</c>; any other algorithm value is a
@@ -517,9 +532,32 @@ public static class JarExtensions
     /// enforcing that gate before dispatching here.
     /// </para>
     /// </remarks>
+    /// <param name="compactJar">The compact JWS string to parse.</param>
+    /// <param name="base64UrlDecoder">Delegate for Base64Url decoding.</param>
+    /// <param name="headerDeserializer">Delegate for deserializing the JWT header.</param>
+    /// <param name="payloadDeserializer">Delegate for deserializing the JWT payload claims.</param>
+    /// <param name="dcqlQueryDeserializer">
+    /// Delegate for deserializing the <c>dcql_query</c> claim JSON string into a
+    /// <see cref="DcqlQuery"/>.
+    /// </param>
+    /// <param name="clientMetadataDeserializer">
+    /// Delegate for deserializing the <c>client_metadata</c> claim JSON string into a
+    /// <see cref="VerifierClientMetadata"/>.
+    /// </param>
+    /// <param name="statePolicy">Whether the <c>state</c> claim must be present; see <see cref="StateParameterPolicy"/>.</param>
+    /// <param name="memoryPool">Memory pool for allocations.</param>
+    /// <returns>
+    /// The parsed <see cref="AuthorizationRequestObject"/>. Timing claims
+    /// <c>nbf</c> and <c>exp</c> must still be checked against the current
+    /// time with the deployment's clock-skew tolerance.
+    /// </returns>
     /// <exception cref="System.Security.SecurityException">
     /// Thrown when the JAR's <c>alg</c> header is anything other than
     /// <c>none</c> — including missing.
+    /// </exception>
+    /// <exception cref="FormatException">
+    /// Thrown when the compact JWS is malformed, the <c>typ</c> header is missing or
+    /// incorrect, or a required claim is absent.
     /// </exception>
     public static ValueTask<AuthorizationRequestObject> ParseUnsignedJarAsync(
         string compactJar,
@@ -551,6 +589,16 @@ public static class JarExtensions
 
         using IMemoryOwner<byte> headerBytes = base64UrlDecoder(
             compactJar.AsSpan(0, firstDot).ToString(), memoryPool);
+
+        //RFC 7515 §4: gate the decoded header for well-formedness — a repeated "alg" at any nesting
+        //depth — before reading it, so the alg=none dispatch below never runs against a first
+        //occurrence while a duplicate second occurrence goes unnoticed.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(headerBytes.Memory.Span))
+        {
+            throw new FormatException(
+                "Unsigned JAR header is not a well-formed JSON object, or contains a duplicate Header "
+                + "Parameter name, which MUST be unique (RFC 7515 §4).");
+        }
 
         string? alg = JwkJsonReader.ExtractStringValue(
             headerBytes.Memory.Span, WellKnownJoseHeaderNames.AlgUtf8);
@@ -639,18 +687,25 @@ public static class JarExtensions
         string? iss = OptionalClaim(claims, WellKnownJwtClaimNames.Iss);
         string? aud = OptionalClaim(claims, WellKnownJwtClaimNames.Aud);
 
+        //dcql_query/client_metadata primarily arrive as a JSON object — the
+        //shape OID4VP 1.0 §5/§11 defines, and the shape SignJarAsync and
+        //BuildUnsignedJarCompact write. A JSON string carrying the claim's
+        //JSON text is also accepted, as a documented legacy tolerance:
+        //refusing a shape some deployment's Request Object already carries
+        //helps nobody. Any other JSON kind is left unset rather than guessed
+        //at. ResolveClaimJson re-encodes the object form back to JSON text so
+        //both shapes route through this one deserializer call rather than a
+        //second parser for the same claim.
         DcqlQuery? dcqlQuery = null;
-        if(claims.TryGetValue(
-                Oid4VpAuthorizationRequestParameterNames.DcqlQuery, out object? dcqlObj)
-            && dcqlObj is string dcqlJson)
+        if(claims.TryGetValue(Oid4VpAuthorizationRequestParameterNames.DcqlQuery, out object? dcqlObj)
+            && ResolveClaimJson(dcqlObj) is string dcqlJson)
         {
             dcqlQuery = dcqlQueryDeserializer(dcqlJson);
         }
 
         VerifierClientMetadata? clientMetadata = null;
-        if(claims.TryGetValue(
-                Oid4VpAuthorizationRequestParameterNames.ClientMetadata, out object? metaObj)
-            && metaObj is string metaJson)
+        if(claims.TryGetValue(Oid4VpAuthorizationRequestParameterNames.ClientMetadata, out object? metaObj)
+            && ResolveClaimJson(metaObj) is string metaJson)
         {
             clientMetadata = clientMetadataDeserializer(metaJson);
         }
@@ -686,6 +741,76 @@ public static class JarExtensions
     }
 
 
+    /// <summary>
+    /// Verifies the signature of a compact JWS JAR and parses its payload into a typed
+    /// <see cref="AuthorizationRequestObject"/> in a single operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the correct Wallet-side entry point for processing a JAR fetched from a
+    /// <c>request_uri</c> endpoint. It enforces that signature verification always
+    /// precedes claim extraction — an invalid or unverified JAR never produces a usable
+    /// <see cref="AuthorizationRequestObject"/>.
+    /// </para>
+    /// <para>
+    /// Timing claims (<c>iat</c>, <c>nbf</c>, <c>exp</c>) are parsed but not validated
+    /// here. Callers validate them against the current time with their deployment's
+    /// clock-skew tolerance — see
+    /// <see cref="Verifiable.OAuth.Server.TimingPolicy.ClockSkewTolerance"/> for the
+    /// library's default value.
+    /// </para>
+    /// <para>
+    /// The <paramref name="signingPublicKey"/> must be resolved by the caller before
+    /// invoking this method. The resolution mechanism depends on the Client Identifier
+    /// Prefix in the <c>client_id</c> parameter:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     <c>verifier_attestation:</c> — resolved from the <c>cnf.jwk</c> claim of the
+    ///     Verifier Attestation JWT carried in the <c>jwt</c> JOSE header, validated by
+    ///     <see cref="VerifierAttestationKeyResolver.ResolveAsync"/>.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>x509_san_dns:</c> — resolved from the leaf certificate in the <c>x5c</c>
+    ///     JOSE header after chain validation and DNS SAN check.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>decentralized_identifier:</c> — resolved via DID resolution from the
+    ///     <c>verificationMethod</c> identified by the <c>kid</c> JOSE header.
+    ///   </description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="compactJar">The compact JWS string fetched from <c>request_uri</c>.</param>
+    /// <param name="signingPublicKey">
+    /// The Verifier's JAR signing public key, resolved via the appropriate Client
+    /// Identifier Prefix mechanism before calling this method.
+    /// </param>
+    /// <param name="base64UrlDecoder">Delegate for Base64Url decoding.</param>
+    /// <param name="headerDeserializer">Delegate for deserializing the JWT header.</param>
+    /// <param name="payloadDeserializer">Delegate for deserializing the JWT payload claims.</param>
+    /// <param name="dcqlQueryDeserializer">
+    /// Delegate for deserializing the <c>dcql_query</c> claim JSON string into a
+    /// <see cref="DcqlQuery"/>.
+    /// </param>
+    /// <param name="clientMetadataDeserializer">
+    /// Delegate for deserializing the <c>client_metadata</c> claim JSON string into a
+    /// <see cref="VerifierClientMetadata"/>.
+    /// </param>
+    /// <param name="statePolicy">Whether the <c>state</c> claim must be present; see <see cref="StateParameterPolicy"/>.</param>
+    /// <param name="memoryPool">Memory pool for allocations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The verified and parsed <see cref="AuthorizationRequestObject"/>. The signature
+    /// has been cryptographically verified; timing claims are still subject to caller
+    /// validation against the current time.
+    /// </returns>
+    /// <exception cref="System.Security.SecurityException">
+    /// Thrown when the JAR signature does not verify against the provided public key.
+    /// </exception>
+    /// <exception cref="FormatException">
+    /// Thrown when the compact JWS is malformed, the <c>typ</c> header is missing or
+    /// incorrect, or a required claim is absent.
+    /// </exception>
     public static async ValueTask<AuthorizationRequestObject> VerifyAndParseJarAsync(
         string compactJar,
         PublicKeyMemory signingPublicKey,

@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// crosses a process boundary. The application identifies a flow externally
 /// only via the <c>request_uri</c> token and the URL it appears in. The
 /// per-flow opaque token is placed on the context by the library before
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/> is
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/> is
 /// invoked, so the delegate can compose URLs that incorporate the token.
 /// </para>
 /// </remarks>
@@ -125,7 +125,7 @@ public static class Oid4VpContextKeys
 
     /// <summary>
     /// The opaque per-flow token that the application's
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
     /// delegate reads when composing the <c>request_uri</c> URL with key
     /// <see cref="Oid4VpEndpointKeys.RequestUri"/>.
     /// Value type: <see cref="string"/>.
@@ -133,7 +133,7 @@ public static class Oid4VpContextKeys
     /// <remarks>
     /// <para>
     /// Placed on the context by the library's PAR endpoint immediately before
-    /// it invokes <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>.
+    /// it invokes <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>.
     /// The token is unrelated to the internal flow identifier; the flow
     /// identifier never leaves the server process. The delegate composes the
     /// URL using the deployment's routing scheme, incorporating the token
@@ -144,7 +144,7 @@ public static class Oid4VpContextKeys
     /// The same token value becomes the JAR's <c>state</c> claim and the
     /// form field the Wallet echoes in the direct_post per OID4VP 1.0 §6.1
     /// and RFC 6749 §4.1.1, so that
-    /// <see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/>
     /// can map the inbound handle back to the internal flow identifier.
     /// </para>
     /// </remarks>

@@ -24,12 +24,19 @@ internal sealed class SubjectIdentifierContributorTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch.AddDays(-15));
 
 
+    /// <summary>
+    /// The ID-token contributor emits the application-resolved subject identifier as its single subject claim.
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">Core §2</see>.
+    /// </summary>
     [TestMethod]
     public async Task IdTokenTargetEmitsResolvedSubject()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.Server.OAuth().ResolveSubjectIdentifierAsync =
-            (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        }).ConfigureAwait(false);
 
         IdTokenTarget target = BuildIdTokenTargetWithServer(host.Server, "subject-X");
 
@@ -44,12 +51,19 @@ internal sealed class SubjectIdentifierContributorTests
     }
 
 
+    /// <summary>
+    /// The UserInfo contributor emits the application-resolved subject identifier as its single subject claim.
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse">Core §5.3.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task UserInfoTargetEmitsResolvedSubject()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.Server.OAuth().ResolveSubjectIdentifierAsync =
-            (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        }).ConfigureAwait(false);
 
         UserInfoTarget target = BuildUserInfoTargetWithServer(host.Server, "subject-Y");
 

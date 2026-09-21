@@ -45,14 +45,14 @@ public enum JtiReplayOutcome
 /// Identity Assertion JWT Authorization Grant (ID-JAG) redemption always exercises since §3.1
 /// makes its <c>jti</c> REQUIRED. They all consult the
 /// one <c>(issuer, jti)</c>-keyed correlation store
-/// (<see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/> /
-/// <see cref="AuthorizationServerIntegration.SaveFlowStateAsync"/> under
-/// <see cref="FlowKind.JtiReplay"/>), so there is no second parallel tracker to keep
+/// (<c>AuthorizationServerIntegration.ResolveCorrelationKeyAsync</c> /
+/// <c>AuthorizationServerIntegration.SaveFlowStateAsync</c> under
+/// <see cref="JtiReplayFlowKind.Instance"/>), so there is no second parallel tracker to keep
 /// coherent. The <c>(issuer, jti)</c> composite isolates issuers — a bare <c>jti</c> would
 /// conflate independent issuers into false rejections. A store that records a first use is
 /// proved, not assumed: immediately after saving, the guard resolves the very key it just
 /// wrote and requires the resolved value to equal the saved flow id, so a store wired for
-/// other correlation kinds but never for <see cref="FlowKind.JtiReplay"/> — which would
+/// other correlation kinds but never for <see cref="JtiReplayFlowKind.Instance"/> — which would
 /// otherwise answer <see cref="JtiReplayOutcome.FirstUse"/> to every consultation and make
 /// the defense a silent no-op — is caught on its first use.
 /// </summary>

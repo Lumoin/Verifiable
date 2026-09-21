@@ -1,7 +1,12 @@
 namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
+    /// <summary>
+    /// The <c>Ed25519VerificationKey2020</c> verification method type: an Ed25519 public key encoded as
+    /// <see cref="PublicKeyMultibase"/>, per the Ed25519 Signature 2020 suite.
+    /// </summary>
     public sealed class Ed25519VerificationKey2020VerificationMethodTypeInfo: VerificationMethodTypeInfo
     {
+        /// <summary>The shared <see cref="Ed25519VerificationKey2020VerificationMethodTypeInfo"/> instance.</summary>
         public static Ed25519VerificationKey2020VerificationMethodTypeInfo Instance { get; } = new()
         {
             TypeName = "Ed25519VerificationKey2020",

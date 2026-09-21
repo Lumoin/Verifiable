@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Spec;
 /// </para>
 /// <para>
 /// The generic parameter ensures type safety at compile time. For example,
-/// <c>Tpm2bRef&lt;Tpm2bNonce&gt;</c> can only be created from a <see cref="Tpm2bNonce"/>,
+/// <c>Tpm2bRef&lt;Tpm2bNonce&gt;</c> can only be created from a <see cref="Verifiable.Tpm.Spec.Structures.Tpm2bNonce"/>,
 /// preventing accidental misuse of auth values as nonces.
 /// </para>
 /// <para>

@@ -18,11 +18,11 @@ namespace Verifiable.Fido2;
 /// Statement Format</see>'s self attestation branch, both sign the same message: <c>authenticatorData ‖
 /// clientDataHash</c> (step 20). This type assembles that message into a pooled buffer — mirroring
 /// <see cref="PackedAttestation"/>'s <c>RentToBeSigned</c> and <see cref="Fido2AssertionVerifier"/>'s
-/// own copy of it — and signs it with <paramref name="credentialKey"/>'s bound
+/// own copy of it — and signs it with the <c>credentialKey</c>'s bound
 /// <see cref="SigningDelegate"/>.
 /// </para>
 /// <para>
-/// <see cref="PrivateKey"/> abstracts key custody: <paramref name="credentialKey"/> may wrap a software
+/// <see cref="PrivateKey"/> abstracts key custody: the <c>credentialKey</c> may wrap a software
 /// key, or a hardware-held key such as a TPM-resident or smart-card/APDU-held credential whose private
 /// scalar never leaves the device. <see cref="SignAssertionAsync"/> signs identically either way, without
 /// knowing or caring which — the same seam <c>Verifiable.Apdu.Eac.TerminalAuthenticationSignature</c>
@@ -98,6 +98,9 @@ public static class Fido2CredentialSigner
     /// and fills it with their concatenation — the bytes every WebAuthn assertion (section 7.2 step 21)
     /// and packed self-attestation (section 8.2) signature covers.
     /// </summary>
+    /// <param name="authenticatorData">The raw <c>authData</c> wire bytes to place at the start of the buffer.</param>
+    /// <param name="clientDataHash">The SHA-256 hash of <c>clientDataJSON</c> to append after <c>authenticatorData</c>.</param>
+    /// <param name="pool">The memory pool the returned buffer rents from.</param>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
     private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {

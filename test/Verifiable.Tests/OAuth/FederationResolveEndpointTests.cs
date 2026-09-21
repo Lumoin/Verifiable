@@ -34,6 +34,10 @@ internal sealed class FederationResolveEndpointTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
+    /// <summary>
+    /// Signs the resolved entity metadata, trust chain and trust marks.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.2">Federation §8.3.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveEndpointServesSignedResolveResponse()
     {
@@ -44,7 +48,7 @@ internal sealed class FederationResolveEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial resolverKeys = RegisterResolver(app, resolverEntityId, federationKeys);
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
 
         EntityIdentifier subject = new("https://leaf.example.com");
         EntityIdentifier anchor = new("https://anchor.example.com");
@@ -53,36 +57,39 @@ internal sealed class FederationResolveEndpointTests
         EntityIdentifier? observedAnchor = null;
         EntityTypeIdentifier? observedType = null;
 
-        app.Server.OAuth().ResolveSubjectTrustChainAsync =
-            (sub, trustAnchor, entityTypeFilter, _, _, _) =>
-            {
-                observedSubject = sub;
-                observedAnchor = trustAnchor;
-                observedType = entityTypeFilter;
-
-                Dictionary<string, object> rpMetadata = new(StringComparer.Ordinal)
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (sub, trustAnchor, entityTypeFilter, _, _, _) =>
                 {
-                    ["client_name"] = "Leaf RP"
-                };
-                Dictionary<string, object> metadata = new(StringComparer.Ordinal)
-                {
-                    [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value] = rpMetadata
-                };
+                    observedSubject = sub;
+                    observedAnchor = trustAnchor;
+                    observedType = entityTypeFilter;
 
-                Dictionary<string, object> trustMark = new(StringComparer.Ordinal)
-                {
-                    ["trust_mark_type"] = "https://anchor.example.com/marks/onboarded",
-                    ["trust_mark"] = "eyJ0rust.mark.jwt"
-                };
-
-                return ValueTask.FromResult<ResolveResponseContribution?>(
-                    new ResolveResponseContribution
+                    Dictionary<string, object> rpMetadata = new(StringComparer.Ordinal)
                     {
-                        Metadata = metadata,
-                        TrustChain = ["eyJleaf.statement.jws", "eyJanchor.statement.jws"],
-                        TrustMarks = [trustMark]
-                    });
-            };
+                        ["client_name"] = "Leaf RP"
+                    };
+                    Dictionary<string, object> metadata = new(StringComparer.Ordinal)
+                    {
+                        [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value] = rpMetadata
+                    };
+
+                    Dictionary<string, object> trustMark = new(StringComparer.Ordinal)
+                    {
+                        ["trust_mark_type"] = "https://anchor.example.com/marks/onboarded",
+                        ["trust_mark"] = "eyJ0rust.mark.jwt"
+                    };
+
+                    return ValueTask.FromResult<FederationResolveOutcome?>(
+                        FederationResolveOutcome.Resolved(new ResolveResponseContribution
+                        {
+                            Metadata = metadata,
+                            TrustChain = ["eyJleaf.statement.jws", "eyJanchor.statement.jws"],
+                            TrustMarks = [trustMark]
+                        }));
+                };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -155,6 +162,10 @@ internal sealed class FederationResolveEndpointTests
     }
 
 
+    /// <summary>
+    /// Returns invalid_subject when the application cannot resolve the requested entity.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveEndpointReturns404WhenSubjectUnresolvable()
     {
@@ -164,10 +175,13 @@ internal sealed class FederationResolveEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial resolverKeys = RegisterResolver(app, resolverEntityId, federationKeys);
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveSubjectTrustChainAsync =
-            (_, _, _, _, _, _) => ValueTask.FromResult<ResolveResponseContribution?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (_, _, _, _, _, _) => ValueTask.FromResult<FederationResolveOutcome?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -190,6 +204,181 @@ internal sealed class FederationResolveEndpointTests
     }
 
 
+    /// <summary>
+    /// Returns <c>invalid_trust_chain</c> with HTTP 400 when the resolver names that outcome.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>:
+    /// "The Trust Chain cannot be validated. The HTTP response status code SHOULD be 400 (Bad Request)."
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveEndpointReturns400WithInvalidTrustChainWhenResolverNamesIt()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        Uri resolverEntityId = new("https://resolver.example.com");
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (_, _, _, _, _, _) => ValueTask.FromResult<FederationResolveOutcome?>(
+                    FederationResolveOutcome.Failed(FederationResolveError.InvalidTrustChain));
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+
+        string segment = resolverKeys.Registration.TenantId.Value;
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_resolve?sub={Uri.EscapeDataString("https://leaf.example.com")}"
+            + $"&anchor={Uri.EscapeDataString("https://anchor.example.com")}");
+
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode,
+            "Federation §8.9: invalid_trust_chain SHOULD be reported with HTTP 400.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTrustChain}\"", body, StringComparison.Ordinal,
+            $"The resolver named invalid_trust_chain; the wire body must carry that code, not invalid_subject. Got: {body}");
+    }
+
+
+    /// <summary>
+    /// Returns <c>invalid_metadata</c> with HTTP 400 when the resolver names that outcome.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>:
+    /// "Metadata or Metadata Policy values are invalid or conflict. The HTTP response status code
+    /// SHOULD be 400 (Bad Request)."
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveEndpointReturns400WithInvalidMetadataWhenResolverNamesIt()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        Uri resolverEntityId = new("https://resolver.example.com");
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (_, _, _, _, _, _) => ValueTask.FromResult<FederationResolveOutcome?>(
+                    FederationResolveOutcome.Failed(FederationResolveError.InvalidMetadata));
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+
+        string segment = resolverKeys.Registration.TenantId.Value;
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_resolve?sub={Uri.EscapeDataString("https://leaf.example.com")}"
+            + $"&anchor={Uri.EscapeDataString("https://anchor.example.com")}");
+
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode,
+            "Federation §8.9: invalid_metadata SHOULD be reported with HTTP 400.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidMetadata}\"", body, StringComparison.Ordinal,
+            $"The resolver named invalid_metadata; the wire body must carry that code, not invalid_subject. Got: {body}");
+    }
+
+
+    /// <summary>
+    /// Returns <c>invalid_trust_anchor</c> with HTTP 404 when the resolver names that outcome.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>:
+    /// "The Trust Anchor cannot be found or used. The HTTP response status code SHOULD be 404
+    /// (Not Found)."
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveEndpointReturns404WithInvalidTrustAnchorWhenResolverNamesIt()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        Uri resolverEntityId = new("https://resolver.example.com");
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (_, _, _, _, _, _) => ValueTask.FromResult<FederationResolveOutcome?>(
+                    FederationResolveOutcome.Failed(FederationResolveError.InvalidTrustAnchor));
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+
+        string segment = resolverKeys.Registration.TenantId.Value;
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_resolve?sub={Uri.EscapeDataString("https://leaf.example.com")}"
+            + $"&anchor={Uri.EscapeDataString("https://anchor.example.com")}");
+
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(404, (int)response.StatusCode,
+            "Federation §8.9: invalid_trust_anchor SHOULD be reported with HTTP 404.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTrustAnchor}\"", body, StringComparison.Ordinal,
+            $"The resolver named invalid_trust_anchor; the wire body must carry that code, not invalid_subject. Got: {body}");
+    }
+
+
+    /// <summary>
+    /// Returns <c>not_found</c> with HTTP 404 when the resolver names that outcome.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>:
+    /// "The requested Entity Identifier cannot be found. The HTTP response status code SHOULD be
+    /// 404 (Not Found)."
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveEndpointReturns404WithNotFoundWhenResolverNamesIt()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        Uri resolverEntityId = new("https://resolver.example.com");
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (_, _, _, _, _, _) => ValueTask.FromResult<FederationResolveOutcome?>(
+                    FederationResolveOutcome.Failed(FederationResolveError.NotFound));
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+
+        string segment = resolverKeys.Registration.TenantId.Value;
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_resolve?sub={Uri.EscapeDataString("https://leaf.example.com")}"
+            + $"&anchor={Uri.EscapeDataString("https://anchor.example.com")}");
+
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(404, (int)response.StatusCode,
+            "Federation §8.9: not_found SHOULD be reported with HTTP 404.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.NotFound}\"", body, StringComparison.Ordinal,
+            $"The resolver named not_found; the wire body must carry that code, not invalid_subject. Got: {body}");
+    }
+
+
+    /// <summary>
+    /// Rejects a resolution request missing its required subject before invoking the resolver.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation §8.3.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveEndpointRejectsMissingSub()
     {
@@ -199,15 +388,19 @@ internal sealed class FederationResolveEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial resolverKeys = RegisterResolver(app, resolverEntityId, federationKeys);
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
 
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveSubjectTrustChainAsync =
-            (_, _, _, _, _, _) =>
-            {
-                delegateInvoked = true;
-                return ValueTask.FromResult<ResolveResponseContribution?>(null);
-            };
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (_, _, _, _, _, _) =>
+                {
+                    delegateInvoked = true;
+
+                    return ValueTask.FromResult<FederationResolveOutcome?>(null);
+                };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -225,6 +418,10 @@ internal sealed class FederationResolveEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects a resolution request missing its required trust anchor before invoking the resolver.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation §8.3.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveEndpointRejectsMissingAnchor()
     {
@@ -234,15 +431,19 @@ internal sealed class FederationResolveEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial resolverKeys = RegisterResolver(app, resolverEntityId, federationKeys);
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(app, resolverEntityId, federationKeys).ConfigureAwait(false);
 
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveSubjectTrustChainAsync =
-            (_, _, _, _, _, _) =>
-            {
-                delegateInvoked = true;
-                return ValueTask.FromResult<ResolveResponseContribution?>(null);
-            };
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (_, _, _, _, _, _) =>
+                {
+                    delegateInvoked = true;
+
+                    return ValueTask.FromResult<FederationResolveOutcome?>(null);
+                };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -264,7 +465,7 @@ internal sealed class FederationResolveEndpointTests
     }
 
 
-    private static VerifierKeyMaterial RegisterResolver(
+    private static async Task<VerifierKeyMaterial> RegisterResolverAsync(
         TestHostShell app,
         Uri resolverEntityId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys)
@@ -274,12 +475,12 @@ internal sealed class FederationResolveEndpointTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownFederationCapabilityIdentifiers.ResolveTrustChain);
 
-        return app.RegisterFederationCapableClient(
+        return await app.RegisterFederationCapableClientAsync(
             clientId: resolverEntityId.ToString(),
             baseUri: resolverEntityId,
             federationEntityId: resolverEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
     }
 
 

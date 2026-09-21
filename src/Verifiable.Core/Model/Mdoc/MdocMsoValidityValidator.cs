@@ -23,7 +23,7 @@ namespace Verifiable.Core.Model.Mdoc;
 ///     issuer's lifecycle is contradictory.
 ///   </description></item>
 ///   <item><description>
-///     Currency — <paramref name="validationTime"/> must lie within
+///     Currency — the caller-supplied instant to validate against must lie within
 ///     [<see cref="MdocValidityInfo.ValidFrom"/>,
 ///     <see cref="MdocValidityInfo.ValidUntil"/>]. Strict bounds at both
 ///     ends.

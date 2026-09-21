@@ -62,6 +62,7 @@ public static class AuthorizationRequestObjectFormFields
     /// Window applied as <c>exp = now + requestObjectLifetime</c> when the
     /// <c>exp</c> claim is absent from the inline parameters.
     /// </param>
+    /// <param name="statePolicy">Governs whether a missing or empty <c>state</c> value is accepted or refused.</param>
     /// <param name="transactionDataEntries">
     /// Optional pre-split <c>transaction_data</c> entries (each a base64url-
     /// encoded JSON descriptor per OID4VP 1.0 §8.4). Inline URL parameters

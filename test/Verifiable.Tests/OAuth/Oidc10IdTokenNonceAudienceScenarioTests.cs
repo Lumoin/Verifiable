@@ -6,8 +6,6 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
-using Verifiable.OAuth.Pkce;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -51,18 +49,21 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //acr is emitted on the original-authentication id_token exclusively from the application's
         //OIDC-claims resolver (AcrAmrClaimContributor's documented behaviour); sid comes from the
         //authorize-time ExchangeContext stamp instead, wired below via SetSessionId.
-        host.Server.OAuth().ResolveOidcClaimsAsync = (subject, grantedScope, tenantId, ctx, cancellationToken) =>
-            ValueTask.FromResult<OidcClaims?>(new OidcClaims
-            {
-                Subject = subject,
-                AuthContext = new AuthenticationContext { Acr = EstablishedAcr }
-            });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveOidcClaimsAsync = (subject, grantedScope, tenantId, ctx, cancellationToken) =>
+                ValueTask.FromResult<OidcClaims?>(new OidcClaims
+                {
+                    Subject = subject,
+                    AuthContext = new AuthenticationContext { Acr = EstablishedAcr }
+                });
+        }).ConfigureAwait(false);
 
         const string RequestNonce = "nonce-match-01";
         string idToken = await DriveCodeExchangeForIdTokenAsync(
@@ -86,8 +87,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string idToken = await DriveCodeExchangeForIdTokenAsync(
             host, material, nonce: "nonce-actual-01", stampSessionId: false).ConfigureAwait(false);
@@ -107,8 +108,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //No nonce sent in the authentication request — the id_token carries none.
         string idToken = await DriveCodeExchangeForIdTokenAsync(
@@ -141,10 +142,10 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        ApplySecondAudienceContributor(host);
+        await ApplySecondAudienceContributorAsync(host).ConfigureAwait(false);
 
         string idToken = await DriveCodeExchangeForIdTokenAsync(
             host, material, nonce: null, stampSessionId: false).ConfigureAwait(false);
@@ -187,8 +188,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string idToken = await DriveCodeExchangeForIdTokenAsync(
             host, material, nonce: null, stampSessionId: false).ConfigureAwait(false);
@@ -215,8 +216,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string idToken = await DriveCodeExchangeForIdTokenAsync(
             host, material, nonce: null, stampSessionId: false).ConfigureAwait(false);
@@ -236,14 +237,17 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     /// adds a second, application-chosen audience to the ID Token — the shape the untrusted-audience
     /// scenarios validate against.
     /// </summary>
-    private void ApplySecondAudienceContributor(TestHostShell host)
+    private async Task ApplySecondAudienceContributorAsync(TestHostShell host)
     {
         List<ClaimDelegate<ClaimContributionTarget>> rules = ContributionProfiles.StandardRules();
         rules.Add(new ClaimDelegate<ClaimContributionTarget>(
             new(ContributeSecondAudience), [SecondAudienceClaimId]));
 
-        host.Server.OAuth().ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
-            WellKnownAssessorIds.ClaimContributors, rules, TimeProvider);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
+                WellKnownAssessorIds.ClaimContributors, rules, TimeProvider);
+        }).ConfigureAwait(false);
     }
 
 
@@ -274,66 +278,17 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     private async Task<string> DriveCodeExchangeForIdTokenAsync(
         TestHostShell host, VerifierKeyMaterial material, string? nonce, bool stampSessionId)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-        };
-        if(nonce is not null)
-        {
-            parFields[WellKnownJwtClaimNames.Nonce] = nonce;
-        }
-
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, WellKnownHttpMethods.Post,
-            parFields, [],
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions
+            {
+                Scope = WellKnownScopes.OpenId,
+                Nonce = nonce,
+                SessionId = stampSessionId ? EstablishedSessionId : null
+            },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        string requestUri = ExtractFromBody(parResponse.Body!, "request_uri");
 
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        if(stampSessionId)
-        {
-            authorizeContext.SetSessionId(EstablishedSessionId);
-        }
-
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeToken, WellKnownHttpMethods.Post,
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-
-        return ExtractFromBody(tokenResponse.Body!, "id_token");
+        return ExtractFromBody(result.TokenResponse.Body, "id_token");
     }
 
 
@@ -384,19 +339,4 @@ resolveKey,
     }
 
 
-    private static string ExtractCode(string location)
-    {
-        Uri uri = new(location);
-        string query = uri.Query.TrimStart('?');
-        foreach(string pair in query.Split('&'))
-        {
-            string[] parts = pair.Split('=', 2);
-            if(parts.Length == 2 && parts[0] == "code")
-            {
-                return Uri.UnescapeDataString(parts[1]);
-            }
-        }
-
-        throw new InvalidOperationException($"No code in redirect: {location}");
-    }
 }

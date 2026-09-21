@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// First proving tests for <see cref="TpmtSignature"/> and its <see cref="TpmuSignature"/> member — round-trip
-/// fidelity for both signing families, and the leak-safety <see cref="Tpm2bEccParameter.Parse"/> and
+/// fidelity for both signing families, and the leak-safety <see cref="Tpm2bEccParameter.Parse(ref TpmReader, BaseMemoryPool)"/> and
 /// <see cref="TpmuSignature.Parse"/> owe a truncated frame, mirroring <see cref="TpmSpecBufferAndListTests"/>'s
 /// pool-balance idiom.
 /// </summary>
@@ -14,7 +14,7 @@ namespace Verifiable.Tests.Tpm;
 internal sealed class TpmtSignatureTests
 {
     /// <summary>
-    /// Proves <see cref="Tpm2bEccParameter.Parse"/> refuses a declared size exceeding the octets actually
+    /// Proves <see cref="Tpm2bEccParameter.Parse(ref TpmReader, BaseMemoryPool)"/> refuses a declared size exceeding the octets actually
     /// remaining in the reader before it rents anything, so a truncated ECC coordinate leaves the pool balanced
     /// rather than orphaning a rental
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library

@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Drives <c>TPM2_PolicySigned()</c> against the in-house behavioural <see cref="TpmSimulator"/> — entirely
 /// in-process, with no external assets — through the same production command path the production code uses (the
-/// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
+/// <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
 /// command/response codecs). Each test starts a real or trial policy session, builds <c>aHash</c> from the
 /// session's real, retained nonceTPM, signs it through the production <c>TPM2_Sign()</c> wire path, and drives
 /// <c>TPM2_PolicySigned()</c> itself over the wire (TPM 2.0 Library Part 3, clause 23.3).
@@ -1206,7 +1206,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     /// <summary>
     /// Hand-frames a <c>TPM2_PolicySigned()</c> command whose <c>auth</c> (<c>TPMT_SIGNATURE</c>) body is
     /// supplied verbatim — letting a caller express a declared/actual TPM2B size mismatch or an over-bound
-    /// declared size that <see cref="TpmDeviceExtensions.PolicySignedAsync"/>'s typed parameters cannot. No
+    /// declared size that <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions.extension(TpmDevice).PolicySignedAsync(uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, ReadOnlyMemory{byte}, TpmAlgIdConstants, TpmAlgIdConstants, CancellationToken)"/>'s typed parameters cannot. No
     /// authorization area: neither <c>authObject</c> nor <c>policySession</c> requires authorization (TPM 2.0
     /// Library Part 3, Table 144), the same as <c>TPM2_VerifySignature()</c>. nonceTPM, cpHashA and policyRef are
     /// framed empty and expiration zero, since these tests only probe the trailing signature body.
@@ -1246,7 +1246,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
     /// <summary>
     /// Submits a hand-framed <c>TPM2_PolicySigned()</c> built by <see cref="FramePolicySignedCommand"/> straight
-    /// to the simulator (bypassing <see cref="TpmDeviceExtensions.PolicySignedAsync"/>) and yields the response
+    /// to the simulator (bypassing <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions.extension(TpmDevice).PolicySignedAsync(uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, ReadOnlyMemory{byte}, TpmAlgIdConstants, TpmAlgIdConstants, CancellationToken)"/>) and yields the response
     /// code.
     /// </summary>
     /// <param name="simulator">The simulator to submit against.</param>

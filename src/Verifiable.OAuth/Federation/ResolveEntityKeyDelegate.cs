@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Federation;
 /// <summary>
 /// Resolves the verification key for an Entity Statement against the
 /// declared <c>jwks</c> of its issuer. The orchestrator calls this once
-/// per chain link before invoking <see cref="Jws.VerifyAsync"/>; the
+/// per chain link before invoking <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>; the
 /// result is fed into
 /// <see cref="TrustChainValidationContext.LinkSignaturesVerified"/>
 /// indirectly via the verify call.
@@ -35,7 +35,7 @@ namespace Verifiable.OAuth.Federation;
 /// </returns>
 /// <remarks>
 /// Implementations MUST NOT verify the signature themselves — the
-/// signature verify call (via <see cref="Jws.VerifyAsync"/>) lives in the
+/// signature verify call (via <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>) lives in the
 /// orchestrator and consumes the returned key. Splitting key resolution
 /// from verification keeps deployment-overridable policy (kid matching,
 /// algorithm hinting, key set caching) separate from the cryptographic

@@ -258,6 +258,7 @@ namespace Verifiable.Cryptography
         /// Returns a value that indicates if the provided material is the specified multicodec header.
         /// </summary>
         /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <param name="header">The specific multicodec header bytes to compare against.</param>
         /// <returns>
         /// <see langword="true" /> if the material matches the specified header; otherwise, <see langword="false" />.
         /// </returns>

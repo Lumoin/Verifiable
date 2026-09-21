@@ -33,16 +33,16 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <see cref="ExchangeContext"/> via
 /// <see cref="Oid4VpServerExchangeContextExtensions.SetParHandle"/>, and asks the
 /// application's
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/> delegate
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/> delegate
 /// to compose the absolute <c>request_uri</c> URL using key
 /// <see cref="Oid4VpEndpointKeys.RequestUri"/>. The internal flow identifier
 /// minted by the dispatcher never crosses a process boundary; the application's
-/// <see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/> maps
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/> maps
 /// the inbound token back to the flow identifier on the JAR-fetch and direct_post
 /// endpoints.
 /// </para>
 /// <para>
-/// Register at startup via <see cref="EndpointServer.EndpointBuilders"/>:
+/// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// server.EndpointBuilders.AddRange([
@@ -109,12 +109,13 @@ public static class Oid4VpEndpoints
 
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="EndpointServer.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.VcVerifiablePresentation))
         {
+
             return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
 
@@ -165,17 +166,19 @@ public static class Oid4VpEndpoints
                 if(context.TransactionNonce is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(context.PreparedQuery is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(context.DecryptionKeyId is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
+
                     return (null,
                         ServerHttpResponse.ServerError(
                             OAuthErrors.ServerError,
@@ -185,6 +188,7 @@ public static class Oid4VpEndpoints
                 PreparedDcqlQuery? preparedQuery = context.PreparedQuery;
                 if(preparedQuery is null)
                 {
+
                     return (null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Missing DCQL query in context."));
@@ -193,6 +197,7 @@ public static class Oid4VpEndpoints
                 TransactionNonce? nonce = context.TransactionNonce;
                 if(nonce is null)
                 {
+
                     return (null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Missing transaction nonce in context."));
@@ -201,6 +206,7 @@ public static class Oid4VpEndpoints
                 KeyId? decryptionKeyId = context.DecryptionKeyId;
                 if(decryptionKeyId is null)
                 {
+
                     return (null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
@@ -228,6 +234,7 @@ public static class Oid4VpEndpoints
                 //deployment's routing scheme. The library does not compose URLs.
                 if(oauth.ResolveEndpointUriAsync is null)
                 {
+
                     return (null,
                         ServerHttpResponse.ServerError(
                             OAuthErrors.ServerError,
@@ -243,6 +250,7 @@ public static class Oid4VpEndpoints
 
                 if(requestUri is null)
                 {
+
                     return (null,
                         ServerHttpResponse.ServerError(
                             OAuthErrors.ServerError,
@@ -291,6 +299,7 @@ public static class Oid4VpEndpoints
             {
                 if(state is not VerifierParReceivedState par)
                 {
+
                     return ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
                         $"Unexpected state after OID4VP PAR: {state.GetType().Name}.");
@@ -301,11 +310,14 @@ public static class Oid4VpEndpoints
                     $"\"expires_in\":{par.Par.ExpiresIn}}}";
 
                 //RFC 9126 §2.2: a successful PAR response MUST use HTTP 201 Created.
+
                 return ServerHttpResponse.Created(body, WellKnownMediaTypes.Application.Json);
             }
         };
 
 
+    /// <summary>Builds the request URI endpoint using admitted wiring and signed-response gates.</summary>
+    /// <remarks><see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10.1">Section 5.10.1</see> requires the POST response Request Object to be signed.</remarks>
     private static EndpointCandidate BuildOid4VpJarRequest() =>
         new()
         {
@@ -330,31 +342,30 @@ public static class Oid4VpEndpoints
                 if(!WellKnownHttpMethods.IsGet(req.Method)
                     && !WellKnownHttpMethods.IsPost(req.Method))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(string.IsNullOrWhiteSpace(context.CorrelationKey))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 if(currentState is not VerifierParReceivedState parReceived)
                 {
+
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "Flow not in expected state for JAR request."));
-                }
-
-                if(oauth.ActionExecutor is null)
-                {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "Action executor not configured."));
                 }
 
                 //POST path — request_uri_method=post per OID4VP 1.0 §5.10.
@@ -370,6 +381,7 @@ public static class Oid4VpEndpoints
                             out string? walletNonce)
                         || string.IsNullOrWhiteSpace(walletNonce))
                     {
+
                         return (null, ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
                             "POST to request_uri must carry the wallet_nonce form parameter " +
@@ -396,11 +408,19 @@ public static class Oid4VpEndpoints
                         WalletMetadataReader.DescribeWalletPostDefect(walletMetadataJson);
                     if(walletMetadataDefect is not null)
                     {
+
                         return (null, ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
                             $"POST to request_uri carried incompatible wallet metadata: " +
                             $"{walletMetadataDefect}. wallet_metadata is the Wallet's Authorization " +
                             "Server metadata (OID4VP 1.0 §10) and must be a complete document."));
+                    }
+
+                    if(oauth.ActionExecutor is null || !oauth.ActionExecutor.IsRegistered<SignJarAction>())
+                    {
+
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError, "The server is not ready to serve this request."));
                     }
 
                     DateTimeOffset postNow = server.TimeProvider.GetUtcNow();
@@ -452,6 +472,13 @@ public static class Oid4VpEndpoints
                 //is threaded from the PAR state so the JAR carries the
                 //descriptors and the response-verification step can recompute
                 //expected hashes.
+                if(oauth.ActionExecutor is null || !oauth.ActionExecutor.IsRegistered<SignJarAction>())
+                {
+
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "The server is not ready to serve this request."));
+                }
+
                 FlowInput signed = await oauth.ActionExecutor.ExecuteAsync(
                     new SignJarAction(
                         parReceived.ParHandle,
@@ -472,9 +499,10 @@ public static class Oid4VpEndpoints
             {
                 if(state is not VerifierJarServedState)
                 {
+
                     return ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
-                        $"Unexpected state after JAR request: {state.GetType().Name}.");
+                        "The server is not ready to serve this request.");
                 }
 
                 return ServerHttpResponse.Ok(
@@ -609,22 +637,36 @@ public static class Oid4VpEndpoints
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!fields.ContainsKey(OAuthRequestParameterNames.State))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!fields.ContainsKey(OAuthRequestParameterNames.Response))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
+
+            //A present-but-blank state matches (the acceptance test above only requires the field's
+            //presence) then falls through here to null — the parameter this endpoint keys its
+            //continuing flow on is known, so the refusal names it rather than falling back to the
+            //host's generic "Cannot determine correlation key."
+            MissingCorrelationKeyErrorDescription = "Missing state.",
 
             //The Wallet echoes the JAR's state claim as the state form field per
             //OID4VP 1.0 §6.1 and RFC 6749 §4.1.1. The state value equals the
@@ -636,7 +678,7 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
 
                 //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
                 //is the inline (no-JAR) path for the redirect_uri prefix per
@@ -644,6 +686,7 @@ public static class Oid4VpEndpoints
                 if(currentState is not VerifierJarServedState
                     and not VerifierParReceivedState)
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
@@ -654,6 +697,7 @@ public static class Oid4VpEndpoints
                     out string? compactJwe)
                     || string.IsNullOrWhiteSpace(compactJwe))
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Missing response parameter.")));
@@ -729,23 +773,36 @@ public static class Oid4VpEndpoints
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!fields.ContainsKey(AuthorizationResponseParameters.VpToken))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!fields.ContainsKey(OAuthRequestParameterNames.State))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
+
+            //A present-but-blank state matches (the acceptance test above only requires the field's
+            //presence) then falls through here to null — the parameter this endpoint keys its
+            //continuing flow on is known, so the refusal names it rather than falling back to the
+            //host's generic "Cannot determine correlation key."
+            MissingCorrelationKeyErrorDescription = "Missing state.",
 
             //State carries the per-flow request_uri token in the same form
             //field as the encrypted path.
@@ -755,7 +812,7 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
 
                 //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
                 //is the inline (no-JAR) path for the redirect_uri prefix per
@@ -763,6 +820,7 @@ public static class Oid4VpEndpoints
                 if(currentState is not VerifierJarServedState
                     and not VerifierParReceivedState)
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
@@ -773,6 +831,7 @@ public static class Oid4VpEndpoints
                         out string? vpTokenJson)
                     || string.IsNullOrWhiteSpace(vpTokenJson))
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Missing vp_token parameter.")));
@@ -855,28 +914,43 @@ public static class Oid4VpEndpoints
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!fields.ContainsKey(OAuthRequestParameterNames.State))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!fields.ContainsKey(OAuthRequestParameterNames.Error))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(fields.ContainsKey(OAuthRequestParameterNames.Response)
                     || fields.ContainsKey(AuthorizationResponseParameters.VpToken))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
+
+            //A present-but-blank state matches (the acceptance test above only requires the field's
+            //presence) then falls through here to null — the parameter this endpoint keys its
+            //continuing flow on is known, so the refusal names it rather than falling back to the
+            //host's generic "Cannot determine correlation key."
+            MissingCorrelationKeyErrorDescription = "Missing state.",
 
             //The Wallet echoes the JAR's state claim as the state form field per
             //OID4VP 1.0 §6.1 and RFC 6749 §4.1.1, the same as either presentation candidate.
@@ -886,7 +960,7 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
 
                 //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
                 //is the inline (no-JAR) path for the redirect_uri prefix per
@@ -894,6 +968,7 @@ public static class Oid4VpEndpoints
                 if(currentState is not VerifierJarServedState
                     and not VerifierParReceivedState)
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
@@ -903,6 +978,7 @@ public static class Oid4VpEndpoints
                 if(!fields.TryGetValue(OAuthRequestParameterNames.Error, out string? walletError)
                     || string.IsNullOrWhiteSpace(walletError))
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Missing error parameter.")));
@@ -915,6 +991,7 @@ public static class Oid4VpEndpoints
                 if(walletError.Length > MaxWalletErrorLength
                     || !ErrorDescriptionCharset.IsConformant(walletError))
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Malformed error parameter.")));
@@ -927,6 +1004,7 @@ public static class Oid4VpEndpoints
                     && (walletErrorDescription.Length > MaxWalletErrorDescriptionLength
                         || !ErrorDescriptionCharset.IsConformant(walletErrorDescription)))
                 {
+
                     return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Malformed error_description parameter.")));

@@ -94,6 +94,23 @@ public delegate DecodeDelegate DecoderSelector(Type keyFormatType);
 /// </remarks>
 public static class DefaultCoderSelector
 {
+    /// <summary>The throwing default <see cref="SelectEncoder"/> installs until <see cref="CryptoLibrary.InitializeProviders"/> replaces it.</summary>
+    private static EncoderSelector ThrowingEncoderDefault { get; } = keyFormatType =>
+    {
+        throw new InvalidOperationException(
+            $"The {nameof(SelectEncoder)} delegate has not been initialized. " +
+            $"Call {nameof(CryptoLibrary)}.{nameof(CryptoLibrary.InitializeProviders)}() during application startup.");
+    };
+
+    /// <summary>The throwing default <see cref="SelectDecoder"/> installs until <see cref="CryptoLibrary.InitializeProviders"/> replaces it.</summary>
+    private static DecoderSelector ThrowingDecoderDefault { get; } = keyFormatType =>
+    {
+        throw new InvalidOperationException(
+            $"The {nameof(SelectDecoder)} delegate has not been initialized. " +
+            $"Call {nameof(CryptoLibrary)}.{nameof(CryptoLibrary.InitializeProviders)}() during application startup.");
+    };
+
+
     /// <summary>
     /// Gets or sets the delegate that selects an encoder based on key format type.
     /// </summary>
@@ -103,12 +120,7 @@ public static class DefaultCoderSelector
     /// before use. The default implementation throws <see cref="InvalidOperationException"/>.
     /// </para>
     /// </remarks>
-    public static EncoderSelector SelectEncoder { get; set; } = keyFormatType =>
-    {
-        throw new InvalidOperationException(
-            $"The {nameof(SelectEncoder)} delegate has not been initialized. " +
-            $"Call {nameof(CryptoLibrary)}.{nameof(CryptoLibrary.InitializeProviders)}() during application startup.");
-    };
+    public static EncoderSelector SelectEncoder { get; set; } = ThrowingEncoderDefault;
 
 
     /// <summary>
@@ -120,12 +132,17 @@ public static class DefaultCoderSelector
     /// before use. The default implementation throws <see cref="InvalidOperationException"/>.
     /// </para>
     /// </remarks>
-    public static DecoderSelector SelectDecoder { get; set; } = keyFormatType =>
+    public static DecoderSelector SelectDecoder { get; set; } = ThrowingDecoderDefault;
+
+
+    /// <summary>
+    /// Gets whether <see cref="CryptoLibrary.InitializeProviders"/> has replaced both throwing
+    /// defaults with real encoder/decoder selectors.
+    /// </summary>
+    public static bool IsInitialized
     {
-        throw new InvalidOperationException(
-            $"The {nameof(SelectDecoder)} delegate has not been initialized. " +
-            $"Call {nameof(CryptoLibrary)}.{nameof(CryptoLibrary.InitializeProviders)}() during application startup.");
-    };
+        get => !ReferenceEquals(SelectEncoder, ThrowingEncoderDefault) && !ReferenceEquals(SelectDecoder, ThrowingDecoderDefault);
+    }
 }
 
 
@@ -190,5 +207,30 @@ public static class CryptoLibrary
 
         DefaultCoderSelector.SelectEncoder = encoderSelector;
         DefaultCoderSelector.SelectDecoder = decoderSelector;
+    }
+
+
+    /// <summary>
+    /// Verifies that every registry <see cref="InitializeProviders"/> configures is initialized.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown naming each such registry that is not yet initialized.
+    /// </exception>
+    public static void EnsureInitialized()
+    {
+        List<string>? uninitialized = null;
+
+        if(!DefaultCoderSelector.IsInitialized)
+        {
+            uninitialized ??= [];
+            uninitialized.Add(nameof(DefaultCoderSelector));
+        }
+
+        if(uninitialized is not null)
+        {
+            throw new InvalidOperationException(
+                $"The following registries have not been initialized: {string.Join(", ", uninitialized)}. " +
+                $"Call {nameof(CryptoLibrary)}.{nameof(InitializeProviders)}() during application startup.");
+        }
     }
 }

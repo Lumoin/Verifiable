@@ -224,7 +224,7 @@ internal sealed class XmlTransformChainCostTests
     /// <c>Reference</c>s one <c>SignedInfo</c> may declare, and each same-document dereference costs a document-wide
     /// <c>Id</c> scan (<see cref="XmlNodeTable.TryFindElementById"/>). <see cref="WideReferenceCount"/> references
     /// over as many distinct bare-name <c>Id</c> targets each compute the correct digest input through <see
-    /// cref="XmlReferenceProcessing.TryComputeDigestInput"/> — every reference in the list, not a sample — with the
+    /// cref="XmlReferenceProcessing.TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out XmlSignatureProcessingError)"/> — every reference in the list, not a sample — with the
     /// pool balanced after disposal. This scale is intentionally far below the security lens's adversarial
     /// ~20 000-reference concrete input; it proves the per-reference behavior is correct at a CI-safe size without
     /// asserting anything about the unbounded reference-count axis itself, which the contract does not bound. The

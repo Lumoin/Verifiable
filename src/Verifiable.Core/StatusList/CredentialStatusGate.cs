@@ -21,6 +21,14 @@ namespace Verifiable.Core.StatusList;
 /// (<see cref="ResolvedStatusListToken.ResolvedAt"/> — a fresh fetch reports its fetch instant, a cache
 /// reports the cached instant), or <see langword="null"/> when no Status List Token could be obtained.
 /// </returns>
+/// <remarks>
+/// An implementation composed over <c>Verifiable.OAuth.StatusList.StatusListTokenFetch.FetchAsync</c> reads
+/// the fetch's <c>StatusListTokenFetchResult.Freshness</c> — the RFC 9111 §5.2 freshness the Status
+/// Provider's response headers imply — before deciding what to cache: "A cache MUST NOT generate a stale
+/// response unless it is disconnected or doing so is explicitly permitted by the client or origin server"
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>). The library
+/// stores nothing itself; this delegate's implementation is the cache.
+/// </remarks>
 public delegate ValueTask<ResolvedStatusListToken?> ResolveVerifiedStatusListTokenDelegate(
     StatusListResolutionContext context,
     CancellationToken cancellationToken = default);

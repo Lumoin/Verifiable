@@ -165,8 +165,7 @@ public static class MdocCborMsoReader
     {
         //valueDigests = { + NameSpace => DigestIDs }; DigestIDs = { + DigestID => Digest }
         int? namespaceCount = reader.ReadStartMap();
-        Dictionary<string, IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>> namespaces =
-            new(StringComparer.Ordinal);
+        Dictionary<string, IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>> namespaces = new(StringComparer.Ordinal);
 
         int nsRead = 0;
         while(namespaceCount is null ? reader.PeekState() != CborReaderState.EndMap : nsRead < namespaceCount.Value)

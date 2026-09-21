@@ -2,7 +2,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
 /// Signals that the PAR request body has been composed and is ready to POST.
-/// Transitions from <see cref="PkceGenerated"/> to <see cref="ParRequestReady"/>.
+/// Transitions from <see cref="Verifiable.OAuth.AuthCode.States.PkceGeneratedState"/> to <see cref="Verifiable.OAuth.AuthCode.States.ParRequestReadyState"/>.
 /// </summary>
 /// <param name="EncodedBody">
 /// The serialized PAR request body in <c>application/x-www-form-urlencoded</c> form per

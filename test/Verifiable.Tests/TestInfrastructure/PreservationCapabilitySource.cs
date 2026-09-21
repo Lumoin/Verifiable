@@ -16,7 +16,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <remarks>
 /// <para>
 /// <strong>The digests are computed, not invented.</strong> A submitted hash value comes from
-/// <see cref="CryptographicKeyEvents.ComputeDigestAsync"/> over real octets, so a length check that passes has
+/// <see cref="CryptographicKeyEvents.ComputeDigestAsync(System.Buffers.ReadOnlySequence{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/> over real octets, so a length check that passes has
 /// been shown something a real submitter could have sent. The one builder that produces a value of the wrong
 /// length says so in its name and exists for the refusal that check owes.
 /// </para>

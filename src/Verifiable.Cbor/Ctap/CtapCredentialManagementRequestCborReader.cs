@@ -16,7 +16,7 @@ namespace Verifiable.Cbor.Ctap;
 /// pass, mirroring <see cref="CtapAuthenticatorConfigRequestCborReader"/>. <c>subCommandParams</c>
 /// (<c>0x02</c>)'s still-encoded bytes are captured as
 /// <see cref="CtapCredentialManagementRequest.SubCommandParams"/> UNCHANGED (a slice of
-/// <paramref name="parametersCbor"/> itself, via <see cref="CborReader.ReadEncodedValue"/> — never
+/// <c>parametersCbor</c> itself, via <see cref="CborReader.ReadEncodedValue"/> — never
 /// re-encoded) and, when present, decoded a second time for <c>rpIDHash</c>/<c>credentialID</c>/<c>user</c>
 /// via the SHARED <see cref="CtapCommandEntityCborCodec"/> readers. The optional-raw-value local function
 /// uses the identical if/else shape <see cref="CtapAuthenticatorConfigRequestCborReader"/> documents (the

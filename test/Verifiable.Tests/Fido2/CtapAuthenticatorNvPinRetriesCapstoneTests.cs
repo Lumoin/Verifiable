@@ -653,7 +653,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// Index vanishing BEHIND the adapter's own back mid-session — the owner-authorized undefine that
     /// simulates the crash window — must make <see cref="CtapPinRetriesCustody.VerifyPinAttemptAsync"/>
     /// answer a fail-closed non-match verdict, never throw. This is the narrower race
-    /// <see cref="CreateWithCustodyAsync"/>'s own rehydration reconciliation cannot reach (it only runs at
+    /// <see cref="CtapAuthenticatorSimulator.CreateWithCustodyAsync"/>'s own rehydration reconciliation cannot reach (it only runs at
     /// composition time): a genuine attempt lands on the live adapter's own <c>TPM_RC_HANDLE</c> tolerance.
     /// </summary>
     [TestMethod]

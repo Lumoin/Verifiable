@@ -83,7 +83,7 @@ public sealed class DisclosureDecisionRecord<TCredential>
     public required DateTimeOffset Timestamp { get; init; }
 
     /// <summary>
-    /// How long the computation took.
+    /// How long the computation took, read from the injected <see cref="TimeProvider"/>.
     /// </summary>
     public required TimeSpan Duration { get; init; }
 

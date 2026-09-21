@@ -41,10 +41,10 @@ public delegate DidDocument? PeerDidDocumentDeserializer(ReadOnlySpan<byte> didD
 /// and surface as <see cref="DidResolutionErrors.MethodNotSupported"/>.
 /// </para>
 /// <para>
-/// Like <see cref="KeyDidResolver"/>, the resolver needs a <see cref="MemoryPool{T}"/> for decoded key
+/// Like <see cref="Verifiable.Core.Did.Methods.Key.KeyDidResolver"/>, the resolver needs a <see cref="MemoryPool{T}"/> for decoded key
 /// and service material; numalgo 4 additionally needs a <see cref="PeerDidDocumentDeserializer"/> for the
 /// embedded document, whose SHA-256 hash is verified through the registered <see cref="ComputeDigestDelegate"/>.
-/// Build the delegate via <see cref="Build"/> and register the returned instance:
+/// Build the delegate via <see cref="Build(BaseMemoryPool, PeerDidDocumentDeserializer)"/> and register the returned instance:
 /// </para>
 /// <code>
 /// DidMethodResolverDelegate peerResolver = PeerDidResolver.Build(pool, deserializeDidDocument);
@@ -115,7 +115,7 @@ public static class PeerDidResolver
 
 
     /// <summary>
-    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the no-digest <see cref="Build"/> overload.
+    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the no-digest <see cref="Build(BaseMemoryPool, PeerDidDocumentDeserializer)"/> overload.
     /// </summary>
     /// <returns>The registered digest delegate.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no <see cref="ComputeDigestDelegate"/> is registered.</exception>
@@ -134,6 +134,7 @@ public static class PeerDidResolver
     /// <param name="longFormDid">The stored long-form <c>did:peer:4</c> identifier.</param>
     /// <param name="pool">Memory pool for decoded material.</param>
     /// <param name="didDocumentDeserializer">Deserializer for the embedded DID document.</param>
+    /// <param name="cancellationToken">Token observed while resolving the registered digest delegate and the short form.</param>
     /// <returns>The resolution result, contextualized with the short-form DID.</returns>
     public static ValueTask<DidResolutionResult> ResolveShortForm(
         string longFormDid,
@@ -153,6 +154,7 @@ public static class PeerDidResolver
     /// <param name="pool">Memory pool for decoded material.</param>
     /// <param name="didDocumentDeserializer">Deserializer for the embedded DID document.</param>
     /// <param name="computeDigest">The digest implementation verifying the embedded SHA-256 multihash.</param>
+    /// <param name="cancellationToken">Token observed while resolving the short form.</param>
     /// <returns>The resolution result, contextualized with the short-form DID.</returns>
     public static async ValueTask<DidResolutionResult> ResolveShortForm(
         string longFormDid,
@@ -172,7 +174,7 @@ public static class PeerDidResolver
         }
 
         string numalgoAndElements = longFormDid[PeerDidMethod.Prefix.Length..];
-        if(numalgoAndElements.Length == 0 || numalgoAndElements[0] != '4')
+        if(numalgoAndElements.Length == 0 || numalgoAndElements[0] != PeerDidMethod.Numalgo4Indicator)
         {
             return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
         }
@@ -203,13 +205,13 @@ public static class PeerDidResolver
         char numalgo = numalgoAndElements[0];
 
         //numalgo 4 embeds the whole DID document; everything after the numalgo is "{hash}:{encoded}".
-        if(numalgo == '4')
+        if(numalgo == PeerDidMethod.Numalgo4Indicator)
         {
             return await PeerDid4.Resolve(did, numalgoAndElements[1..], pool, didDocumentDeserializer, computeDigest, cancellationToken).ConfigureAwait(false);
         }
 
         //numalgo 0 (single inception key) and 1 (genesis-document hash) are not resolved by this build.
-        if(numalgo != '2')
+        if(numalgo != PeerDidMethod.Numalgo2Indicator)
         {
             return numalgo is '0' or '1'
                 ? DidResolutionResult.Failure(DidResolutionErrors.MethodNotSupported)

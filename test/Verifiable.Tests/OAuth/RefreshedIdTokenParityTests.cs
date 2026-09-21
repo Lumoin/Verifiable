@@ -27,7 +27,7 @@ namespace Verifiable.Tests.OAuth;
 /// <para>
 /// Drives PAR → Authorize → Token → Refresh against a real Kestrel <see cref="LoopbackTls"/> host. PAR,
 /// token, and refresh all run over the genuine TLS wire
-/// (<see cref="OAuthTestTransport.PostFormAsync(System.Net.Http.HttpClient, Uri, IReadOnlyDictionary{string, string}, OutgoingHeaders?, System.Threading.CancellationToken)"/>);
+/// (<see cref="OAuthTestTransport.PostFormAsync(System.Net.Http.HttpClient, Uri, IReadOnlyCollection{KeyValuePair{string, string}}, OutgoingHeaders?, System.Threading.CancellationToken)"/>);
 /// the authorize leg dispatches in-process on the SAME <see cref="EndpointServer"/> instance the Kestrel
 /// host serves, mirroring <see cref="RefreshedIdTokenAuthContextTests"/> and <see cref="SessionIdClaimTests"/>.
 /// </para>
@@ -92,10 +92,13 @@ internal sealed class RefreshedIdTokenParityTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId, name: ExpectedName, email: ExpectedEmail, emailVerified: true);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
-        _ = host.EnableDpop();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
+        //Kept inline rather than on InProcessAuthCodeDriver: the token and refresh legs below carry a
+        //DPoP proof per attempt, including an RFC 9449 §8.1 nonce-retry, which the driver's plain
+        //field-only options cannot express.
         await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
         string segment = material.Registration.TenantId.Value;
@@ -115,6 +118,7 @@ internal sealed class RefreshedIdTokenParityTests
             using HttpResponseMessage parResponse = await OAuthTestTransport.PostFormAsync(
                 hosted.SharedHttpClient!, parUrl, new Dictionary<string, string>
                 {
+                    [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
                     [OAuthRequestParameterNames.ClientId] = ClientId,
                     [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
                     [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -154,11 +158,13 @@ internal sealed class RefreshedIdTokenParityTests
                 [OAuthRequestParameterNames.ClientId] = ClientId,
                 [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             };
-            using HttpResponseMessage tokenResponse = await PostTokenEndpointWithDpopAsync(
+            (HttpResponseMessage tokenResponse, string tokenBody) = await PostTokenEndpointWithDpopAsync(
                 hosted.SharedHttpClient!, tokenUrl, tokenFields, dpopKey, material.Registration, segment)
                 .ConfigureAwait(false);
-            string tokenBody = await tokenResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(200, (int)tokenResponse.StatusCode, tokenBody);
+            using(tokenResponse)
+            {
+                Assert.AreEqual(200, (int)tokenResponse.StatusCode, tokenBody);
+            }
 
             using JsonDocument tokenDoc = JsonDocument.Parse(tokenBody);
             Assert.IsTrue(tokenDoc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out JsonElement initialIdTokenElement),
@@ -199,11 +205,13 @@ internal sealed class RefreshedIdTokenParityTests
                 [OAuthRequestParameterNames.RefreshToken] = refreshToken,
                 [OAuthRequestParameterNames.ClientId] = ClientId
             };
-            using HttpResponseMessage refreshResponse = await PostTokenEndpointWithDpopAsync(
+            (HttpResponseMessage refreshResponse, string refreshBody) = await PostTokenEndpointWithDpopAsync(
                 hosted.SharedHttpClient!, tokenUrl, refreshFields, dpopKey, material.Registration, segment)
                 .ConfigureAwait(false);
-            string refreshBody = await refreshResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(200, (int)refreshResponse.StatusCode, refreshBody);
+            using(refreshResponse)
+            {
+                Assert.AreEqual(200, (int)refreshResponse.StatusCode, refreshBody);
+            }
 
             using JsonDocument refreshDoc = JsonDocument.Parse(refreshBody);
             Assert.IsTrue(refreshDoc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out JsonElement refreshedIdTokenElement),
@@ -258,41 +266,25 @@ internal sealed class RefreshedIdTokenParityTests
 
     /// <summary>
     /// Posts <paramref name="formFields"/> to the token endpoint with a DPoP proof for
-    /// <paramref name="dpopKey"/>. When the first (nonce-less) attempt draws an RFC 9449 §8.1
-    /// <c>use_dpop_nonce</c> challenge (400 + a <c>DPoP-Nonce</c> response header — the ONLY failure
-    /// path in <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation"/> that sets that
+    /// <paramref name="dpopKey"/>, through the shared
+    /// <see cref="OAuthTestTransport.PostFormWithDpopNonceRetryAsync"/> helper — reused rather than
+    /// open-coded here, so this policy has exactly one implementation across the suite to drift
+    /// from. When the first (nonce-less) attempt draws an RFC 9449 §8.1 <c>use_dpop_nonce</c>
+    /// challenge (400 + a <c>DPoP-Nonce</c> response header — the ONLY failure path in
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation"/> that sets that
     /// header), retries once with the echoed nonce.
     /// </summary>
-    private async Task<HttpResponseMessage> PostTokenEndpointWithDpopAsync(
+    private Task<(HttpResponseMessage Response, string Body)> PostTokenEndpointWithDpopAsync(
         HttpClient httpClient,
         Uri tokenUrl,
         Dictionary<string, string> formFields,
         DpopKey dpopKey,
         ClientRecord clientRegistration,
-        string segment)
-    {
-        string firstProof = await BuildTokenEndpointDpopProofAsync(dpopKey, clientRegistration, segment, nonce: null)
-            .ConfigureAwait(false);
-        HttpResponseMessage firstResponse = await OAuthTestTransport.PostFormAsync(
-            httpClient, tokenUrl, formFields, OutgoingHeaders.Empty.WithDpop(firstProof),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        if((int)firstResponse.StatusCode != 400
-            || !firstResponse.Headers.TryGetValues(WellKnownHttpHeaderNames.DPoPNonce, out IEnumerable<string>? nonceValues))
-        {
-            return firstResponse;
-        }
-
-        string freshNonce = nonceValues.First();
-        firstResponse.Dispose();
-
-        string retryProof = await BuildTokenEndpointDpopProofAsync(dpopKey, clientRegistration, segment, freshNonce)
-            .ConfigureAwait(false);
-
-        return await OAuthTestTransport.PostFormAsync(
-            httpClient, tokenUrl, formFields, OutgoingHeaders.Empty.WithDpop(retryProof),
-            TestContext.CancellationToken).ConfigureAwait(false);
-    }
+        string segment) =>
+        OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+            httpClient, tokenUrl, formFields,
+            nonce => BuildTokenEndpointDpopProofAsync(dpopKey, clientRegistration, segment, nonce),
+            TestContext.CancellationToken);
 
 
     /// <summary>

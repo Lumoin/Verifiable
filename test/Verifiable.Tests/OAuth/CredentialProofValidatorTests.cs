@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -29,6 +30,18 @@ internal sealed class CredentialProofValidatorTests
     private const string CredentialNonce = "c-nonce-LarRGSbmUPYtRYO6BQ4yn8";
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
+
+    /// <summary>
+    /// The three public key parameters <see href="https://www.rfc-editor.org/rfc/rfc8037#section-2">RFC
+    /// 8037 §2</see> defines for an OKP key, in ordinal order.
+    /// </summary>
+    private static string[] OkpPublicJwkMemberNames { get; } = ["crv", "kty", "x"];
+
+    /// <summary>
+    /// The public key parameters <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC
+    /// 7518 §6.3.1</see> defines for an RSA key beside <c>kty</c>, in ordinal order.
+    /// </summary>
+    private static string[] RsaPublicJwkMemberNames { get; } = ["e", "kty", "n"];
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
@@ -74,6 +87,85 @@ internal sealed class CredentialProofValidatorTests
         //Credential binds to.
         string expectedThumbprint = JwkThumbprintFor(holderPublic);
         Assert.AreEqual(expectedThumbprint, result.BoundKeyThumbprint);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-F.1">Appendix
+    /// F.1</see>: "<c>jwk</c>: OPTIONAL. JOSE Header containing the key material the new Credential is to
+    /// be bound to." An Ed25519 holder key is an OKP key, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8037#section-2">RFC 8037 §2</see> defines its
+    /// public form by exactly three parameters — "the three public key fields ... "crv", "kty", and
+    /// "x"" — so the proof header's <c>jwk</c> carries those three and no EC <c>y</c> member, and the
+    /// proof validates.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidatesAFreshProductionMintedProofWithAnEd25519HolderKey()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+
+        string proof = await MintAsync(holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.AreSequenceEqual(
+            OkpPublicJwkMemberNames,
+            ReadHeaderJwkMemberNames(proof),
+            "RFC 8037 §2: an OKP public key is kty, crv and x; the header jwk must carry no other member.");
+
+        CredentialProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, $"Validation must succeed for an Ed25519 holder key; got {result.FailureReason}.");
+        Assert.AreEqual(JwkThumbprintFor(holderPublic), result.BoundKeyThumbprint);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-F.1">Appendix
+    /// F.1</see>: "<c>jwk</c>: OPTIONAL. JOSE Header containing the key material the new Credential is to
+    /// be bound to." An RSA holder key's public form is
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC 7518 §6.3.1</see>'s
+    /// "n" (Modulus) and "e" (Exponent) parameters beside <c>kty</c>, so the proof header's <c>jwk</c>
+    /// carries those three and no EC member, and the proof validates.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidatesAFreshProductionMintedProofWithAnRsaHolderKey()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+
+        string proof = await MintAsync(holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.AreSequenceEqual(
+            RsaPublicJwkMemberNames,
+            ReadHeaderJwkMemberNames(proof),
+            "RFC 7518 §6.3.1: an RSA public key is kty, n and e; the header jwk must carry no other member.");
+
+        CredentialProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, $"Validation must succeed for an RSA holder key; got {result.FailureReason}.");
+        Assert.AreEqual(JwkThumbprintFor(holderPublic), result.BoundKeyThumbprint);
+    }
+
+
+    /// <summary>
+    /// Reads the member names of the <c>jwk</c> object in a compact proof JWT's protected header, in
+    /// ordinal order, so a test can assert the exact public-key parameter set the header carries.
+    /// </summary>
+    /// <param name="compactProof">The compact-serialized proof JWT.</param>
+    /// <returns>The header <c>jwk</c> object's member names, ordinally sorted.</returns>
+    private static string[] ReadHeaderJwkMemberNames(string compactProof)
+    {
+        string headerSegment = compactProof[..compactProof.IndexOf('.', StringComparison.Ordinal)];
+        using System.Buffers.IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(headerSegment, Pool);
+        using System.Text.Json.JsonDocument header = System.Text.Json.JsonDocument.Parse(headerBytes.Memory);
+
+        return [.. header.RootElement
+            .GetProperty(WellKnownJoseHeaderNames.Jwk)
+            .EnumerateObject()
+            .Select(static member => member.Name)
+            .Order(StringComparer.Ordinal)];
     }
 
 
@@ -367,6 +459,73 @@ internal sealed class CredentialProofValidatorTests
         Assert.HasCount(2, results);
         Assert.IsTrue(results[0].IsValid, $"Entry 0 must validate; got {results[0].FailureReason}.");
         Assert.AreEqual(CredentialProofValidationFailureReason.NonceMismatch, results[1].FailureReason);
+    }
+
+
+    /// <summary>
+    /// RFC 7515 §4: "The Header Parameter names within the JOSE Header ... MUST be unique." A
+    /// header repeating the <c>jwk</c> member is rejected as <c>Malformed</c> before the key is
+    /// reconstructed; the same header and payload with the duplicate removed validate. The header
+    /// and payload are built by hand, never through <see cref="HeaderSerializer"/> or
+    /// <see cref="PayloadSerializer"/>, and signed over their exact bytes with the project's own
+    /// signing primitive, so only the header well-formedness gate — not an invalid signature — can
+    /// be responsible for the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsProofHeaderWithDuplicateJwkMember()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
+        JsonWebKey jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+            holderPublic.Tag.Get<CryptoAlgorithm>(),
+            holderPublic.Tag.Get<Purpose>(),
+            holderPublic.AsReadOnlySpan(),
+            TestSetup.Base64UrlEncoder);
+        string jwkJson =
+            "{\"kty\":\"" + jwk.Kty + "\",\"crv\":\"" + jwk.Crv + "\",\"x\":\"" + jwk.X + "\",\"y\":\"" + jwk.Y + "\"}";
+
+        string payloadJson =
+            "{\"aud\":\"" + Audience + "\",\"nonce\":\"" + CredentialNonce + "\"," +
+            $"\"iat\":{NowInstant.ToUnixTimeSeconds()}}}";
+
+        string duplicateHeaderJson =
+            "{\"alg\":\"" + algorithm + "\",\"typ\":\"" + Oid4VciProofIssuance.ProofJwtType + "\"," +
+            "\"jwk\":" + jwkJson + ",\"jwk\":" + jwkJson + "}";
+
+        string duplicateProof = await SignRawAsync(holderPrivate, duplicateHeaderJson, payloadJson).ConfigureAwait(false);
+
+        CredentialProofValidationResult duplicateResult = await ValidateAsync(duplicateProof).ConfigureAwait(false);
+        Assert.AreEqual(CredentialProofValidationFailureReason.Malformed, duplicateResult.FailureReason);
+
+        string singleHeaderJson =
+            "{\"alg\":\"" + algorithm + "\",\"typ\":\"" + Oid4VciProofIssuance.ProofJwtType + "\"," +
+            "\"jwk\":" + jwkJson + "}";
+
+        string acceptedProof = await SignRawAsync(holderPrivate, singleHeaderJson, payloadJson).ConfigureAwait(false);
+
+        CredentialProofValidationResult acceptedResult = await ValidateAsync(acceptedProof).ConfigureAwait(false);
+
+        Assert.IsTrue(acceptedResult.IsValid,
+            $"the same proof without the duplicate must validate; got {acceptedResult.FailureReason}.");
+    }
+
+
+    //Signs a hand-built header/payload JSON pair over their exact UTF-8 bytes with the project's
+    //signing primitive, never through HeaderSerializer/PayloadSerializer — proves the well-formedness
+    //gate's refusal is independent of how a JSON serializer would itself react to a repeated member.
+    private static async Task<string> SignRawAsync(PrivateKeyMemory signingKey, string headerJson, string payloadJson)
+    {
+        string headerB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+        string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+
+        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+
+        return $"{headerB64}.{payloadB64}.{signatureB64}";
     }
 
 

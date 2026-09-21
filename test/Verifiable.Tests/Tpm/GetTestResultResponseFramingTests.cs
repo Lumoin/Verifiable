@@ -134,7 +134,7 @@ internal sealed class GetTestResultResponseFramingTests
 
     /// <summary>
     /// Parses <paramref name="wire"/> through <see cref="GetTestResultResponse.Parse"/> and immediately disposes
-    /// the result — the single-statement body <see cref="Assert.ThrowsExactly{T}(Action, string)"/> requires,
+    /// the result — the single-statement body <see cref="Assert.ThrowsExactly{T}(Action, string?, string)"/> requires,
     /// since a <see cref="TpmReader"/> is a ref struct a lambda cannot capture.
     /// </summary>
     /// <param name="wire">The wire octets to parse.</param>

@@ -1,12 +1,14 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Collections.Immutable;
+using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Tests.TestInfrastructure;
@@ -60,15 +62,19 @@ internal sealed class EndSessionLogoutTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         List<(string Subject, string? SessionId)> terminated = [];
-        host.Server.OAuth().TerminateSessionAsync = (sub, sid, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            terminated.Add((sub, sid));
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionAsync = (sub, sid, _, _, _) =>
+            {
+                terminated.Add((sub, sid));
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
 
@@ -94,15 +100,19 @@ internal sealed class EndSessionLogoutTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         bool terminated = false;
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            terminated = true;
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) =>
+            {
+                terminated = true;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
 
@@ -125,15 +135,19 @@ internal sealed class EndSessionLogoutTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         bool terminated = false;
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            terminated = true;
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) =>
+            {
+                terminated = true;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
 
@@ -158,15 +172,19 @@ internal sealed class EndSessionLogoutTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         bool terminated = false;
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            terminated = true;
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) =>
+            {
+                terminated = true;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
 
@@ -190,6 +208,69 @@ internal sealed class EndSessionLogoutTests
 
 
     /// <summary>
+    /// RFC 7519 §4: "The JWT Claim Names within a Claims Set MUST be unique." An
+    /// <c>id_token_hint</c> whose Claims Set repeats <c>sub</c> — the attacker's value first, the
+    /// honest value last, the shape a last-value-wins deserializer resolves to the honest subject
+    /// while a first-match reader elsewhere disagrees — is refused with the same malformed-hint
+    /// outcome as an unverifiable hint, never a server error. Only the payload segment is rebuilt
+    /// by hand (never through this repository's serializers) and re-signed with the AS's own
+    /// signing key for that <c>kid</c>; the header is untouched, so only the payload's
+    /// well-formedness gate — not an invalid signature — can be responsible for the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task EndSessionRejectsIdTokenHintWithDuplicateSubClaim()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        bool terminated = false;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) =>
+            {
+                terminated = true;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
+
+        string[] parts = idToken.Split('.');
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
+        using JsonDocument headerDoc = JsonDocument.Parse(headerOwner.Memory);
+        string kid = headerDoc.RootElement.GetProperty("kid").GetString()!;
+
+        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        string payloadJson = Encoding.UTF8.GetString(payloadOwner.Memory.Span);
+
+        //Splice an attacker-controlled "sub" ahead of the honest one already in the serialized
+        //payload — raw string surgery, not a Dictionary<string,object> round trip, since a
+        //dictionary cannot itself carry two entries under the same key.
+        string tamperedPayloadJson = payloadJson.Insert(1, "\"sub\":\"attacker-subject\",");
+        string tamperedPayloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(tamperedPayloadJson));
+
+        PrivateKeyMemory signingKey = host.Host("default").SigningKeys[new KeyId(kid)];
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{tamperedPayloadB64}");
+        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+        string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+        string tamperedIdToken = $"{parts[0]}.{tamperedPayloadB64}.{signatureB64}";
+
+        ServerHttpResponse response = await EndSessionAsync(host, material, new RequestFields
+        {
+            [OAuthRequestParameterNames.IdTokenHint] = tamperedIdToken,
+            [OAuthRequestParameterNames.PostLogoutRedirectUri] = RegisteredPostLogout
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.IsLessThan(500, response.StatusCode, "A duplicate claim must never surface as a server error.");
+        Assert.IsFalse(terminated, "A hint carrying a duplicate claim must not terminate a session.");
+    }
+
+
+    /// <summary>
     /// RP-Initiated Logout §3: an EXPIRED <c>id_token_hint</c> is still accepted —
     /// logging out a session whose ID Token has expired is valid. The clock is advanced
     /// well past the token's <c>exp</c> before the logout call.
@@ -199,15 +280,19 @@ internal sealed class EndSessionLogoutTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         bool terminated = false;
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            terminated = true;
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) =>
+            {
+                terminated = true;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
 
@@ -241,16 +326,20 @@ internal sealed class EndSessionLogoutTests
         _ = host.SeedTestSubject(subject: SubjectId);
 
         //No explicit profile → HAIP 1.0 default → DPoP enforced at the token endpoint.
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, capabilities: LogoutCapabilities);
-        _ = host.EnableDpop();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: LogoutCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         List<(string Subject, string? SessionId)> terminated = [];
-        host.Server.OAuth().TerminateSessionAsync = (sub, sid, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            terminated.Add((sub, sid));
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionAsync = (sub, sid, _, _, _) =>
+            {
+                terminated.Add((sub, sid));
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
@@ -334,17 +423,21 @@ internal sealed class EndSessionLogoutTests
     public async Task DiscoveryAdvertisesContributedUiLocalesAndEndSession()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         //Wiring the terminate seam activates the end_session_endpoint candidate (and thus its
         //discovery field); the ui_locales_supported field is app-contributed.
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
-        host.Server.OAuth().ContributeDiscoveryFieldsAsync = static (_, _, _) =>
-            ValueTask.FromResult(new DiscoveryDocumentContribution(
-                [new DiscoveryStringArrayField(
-                    AuthorizationServerMetadataParameterNames.UiLocalesSupported,
-                    ["en-US", "fi-FI"])]));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+
+            candidateIntegration.ContributeDiscoveryFieldsAsync = static (_, _, _) =>
+                ValueTask.FromResult(new DiscoveryDocumentContribution(
+                    [new DiscoveryStringArrayField(
+                        AuthorizationServerMetadataParameterNames.UiLocalesSupported,
+                        ["en-US", "fi-FI"])]));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse discovery = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -378,18 +471,25 @@ internal sealed class EndSessionLogoutTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         //The endpoint gate still requires the id_token_hint terminate seam; wire it (unused here).
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        }).ConfigureAwait(false);
 
         List<string> hints = [];
-        host.Server.OAuth().TerminateSessionByHintAsync = (hint, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            hints.Add(hint);
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionByHintAsync = (hint, _, _, _) =>
+            {
+                hints.Add(hint);
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await EndSessionAsync(host, material, new RequestFields
         {
@@ -414,10 +514,13 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionRejectsLogoutHintWhenByHintSeamNotWired()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        }).ConfigureAwait(false);
         //TerminateSessionByHintAsync intentionally left unwired.
 
         ServerHttpResponse response = await EndSessionAsync(host, material, new RequestFields
@@ -441,22 +544,28 @@ internal sealed class EndSessionLogoutTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
 
         List<string> order = [];
         (string Subject, string? SessionId) delivered = default;
-        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            order.Add("terminate");
-            return ValueTask.CompletedTask;
-        };
-        host.Server.OAuth().DeliverBackChannelLogoutAsync = (sub, sid, _, _, _) =>
-        {
-            order.Add("deliver");
-            delivered = (sub, sid);
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) =>
+            {
+                order.Add("terminate");
+
+                return ValueTask.CompletedTask;
+            };
+
+            candidateIntegration.DeliverBackChannelLogoutAsync = (sub, sid, _, _, _) =>
+            {
+                order.Add("deliver");
+                delivered = (sub, sid);
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-BC").ConfigureAwait(false);
 
@@ -494,79 +603,14 @@ internal sealed class EndSessionLogoutTests
     private async Task<string> IssueIdTokenAsync(
         TestHostShell host, VerifierKeyMaterial material, string sessionId)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = WellKnownScopes.OpenId, SessionId = sessionId },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        using JsonDocument parDoc = JsonDocument.Parse(parResponse.Body);
-        string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
 
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        authorizeContext.SetSessionId(sessionId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-
-        using JsonDocument tokenDoc = JsonDocument.Parse(tokenResponse.Body);
+        using JsonDocument tokenDoc = JsonDocument.Parse(result.TokenResponse.Body);
 
         return tokenDoc.RootElement.GetProperty("id_token").GetString()!;
-    }
-
-
-    /// <summary>Extracts the <c>code</c> query parameter from an authorize redirect Location.</summary>
-    private static string ExtractCode(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Authorize redirect did not carry a code parameter: {location}");
     }
 
 

@@ -36,7 +36,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 ///   <item>
 ///     <term>SD-JWT (JOSE)</term>
 ///     <description>
-///       Uses hash-based redaction with <c>_sd</c> arrays. See <see cref="Verifiable.JCose.Sd.SdJwtToken"/>.
+///       Uses hash-based redaction with <c>_sd</c> arrays. See <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdToken{TEnvelope}"/>.
 ///       Simpler implementation but reveals claim structure even when redacted.
 ///     </description>
 ///   </item>
@@ -85,7 +85,6 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 /// <seealso cref="EcdsaSdBaseProof"/>
 /// <seealso cref="EcdsaSdDerivedProof"/>
-/// <seealso cref="EcdsaSd2023ProofSerializer"/>
 public sealed class EcdsaSd2023CryptosuiteInfo: CryptosuiteInfo
 {
     private static IReadOnlyList<string> ContextsArray { get; } =

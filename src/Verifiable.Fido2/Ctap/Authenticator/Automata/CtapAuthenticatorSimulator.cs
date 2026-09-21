@@ -462,7 +462,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// The authenticator's only time source: every stamped instant — <c>PoweredOnAt</c> (the power-up
     /// instant CTAP 2.3 section 6.6's 10-second <c>authenticatorReset</c> window, lines 6365-6366/6374,
     /// is measured from) and every trace timestamp alike — reads from this clock, never from
-    /// <see cref="System.DateTimeOffset.UtcNow"/> or <see cref="System.TimeProvider.System"/> directly.
+    /// <see cref="TimeProvider.GetUtcNow"/> or <see cref="System.TimeProvider.System"/> directly.
     /// Required rather than defaulted: a hidden system-clock fallback here would make the power-up-window
     /// comparison depend on real wall-clock time elapsing during test setup, an unreliable oracle. Callers
     /// composing a deterministic simulator pass a fixed clock explicitly.
@@ -2749,9 +2749,9 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// response as its TOP-LEVEL <c>0x05</c> member.
     /// </summary>
     /// <remarks>
-    /// <paramref name="keyPair"/>, <paramref name="credentialId"/>, <paramref name="storedUserId"/>,
-    /// <paramref name="credRandomWithUV"/>, <paramref name="credRandomWithoutUV"/>, and
-    /// <paramref name="largeBlobKey"/> are tracked in locals spanning the whole method (rather than
+    /// <c>keyPair</c>, <c>credentialId</c>, <c>storedUserId</c>,
+    /// <c>credRandomWithUV</c>, <c>credRandomWithoutUV</c>, and
+    /// <c>largeBlobKey</c> are tracked in locals spanning the whole method (rather than
     /// disposed with <c>using</c> at their point of creation) so a later step's failure — including
     /// cancellation, or a <see cref="CtapGenerateCredentialKeyAction.HmacSecretMc"/> crypto sequence that
     /// concludes without success — can dispose exactly what was actually constructed, mirroring
@@ -3328,7 +3328,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// 7947/6321): <c>32×0xff || 0x0d || uint8(subCommand) || subCommandParams</c>.
     /// <paramref name="subCommandParams"/> is empty when the platform sent none, contributing zero
     /// trailing bytes rather than an encoded empty CBOR map — the caller resolves that emptiness before
-    /// calling this method (<see cref="OnAuthenticatorConfigRequested"/>'s <c>?? ReadOnlyMemory&lt;byte&gt;.Empty</c>).
+    /// calling this method (<see cref="DecodeCtapAuthenticatorConfigRequestDelegate"/>'s <c>?? ReadOnlyMemory&lt;byte&gt;.Empty</c>).
     /// A private sibling of <see cref="BuildConcatenatedMessage"/> rather than a generalized overload of
     /// it, since this message has a fixed 32-byte prefix and a command byte <c>BuildConcatenatedMessage</c>'s
     /// two-segment shape does not carry.

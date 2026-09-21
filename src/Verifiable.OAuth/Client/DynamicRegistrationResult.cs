@@ -4,7 +4,7 @@ namespace Verifiable.OAuth.Client;
 
 /// <summary>
 /// The result of a successful
-/// <see cref="OAuthDynamicRegistrationClient.RegisterAsync"/> call. Carries
+/// <see cref="OAuthDynamicRegistrationClient.RegisterAsync(RegisterClientOptions, System.Threading.CancellationToken)"/> call. Carries
 /// both the AS's raw <see cref="RegistrationResponse"/> and the constructed
 /// runtime <see cref="ClientRegistration"/> that combines that response
 /// with the application's locally-held key material from

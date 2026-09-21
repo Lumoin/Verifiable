@@ -252,7 +252,7 @@ public static class DidBuilderExtensions
     /// <typeparam name="TBuilder">The type of the builder implementing <see cref="IBuilder"/>.</typeparam>
     /// <typeparam name="TState">The type of the build state passed between transformations.</typeparam>
     /// <returns>
-    /// A transformation function that can be used with <see cref="Builder{TResult, TState, TBuilder}.With"/>
+    /// A transformation function that can be used with <see cref="Builder{TResult, TState, TBuilder}.With(Func{TResult, TBuilder, TState, CancellationToken, ValueTask{TResult}})"/>
     /// to add default context during document construction.
     /// </returns>
     /// <remarks>
@@ -286,7 +286,7 @@ public static class DidBuilderExtensions
     /// <typeparam name="TState">The type of the build state passed between transformations.</typeparam>
     /// <param name="context">The custom context to apply to DID documents.</param>
     /// <returns>
-    /// A transformation function that can be used with <see cref="Builder{TResult, TState, TBuilder}.With"/>
+    /// A transformation function that can be used with <see cref="Builder{TResult, TState, TBuilder}.With(Func{TResult, TBuilder, TState, CancellationToken, ValueTask{TResult}})"/>
     /// to add the specified context during document construction.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is null.</exception>

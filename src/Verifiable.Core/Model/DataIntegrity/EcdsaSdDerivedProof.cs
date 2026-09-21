@@ -32,7 +32,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 ///       In SD-JWT, the holder selects which disclosures to include. The presentation is
 ///       <c>&lt;JWT&gt;~&lt;Disclosure1&gt;~&lt;Disclosure2&gt;~</c>. Unlike ECDSA-SD-2023,
 ///       SD-JWT reveals claim structure through <c>_sd</c> arrays even for undisclosed claims.
-///       See <see cref="Verifiable.JCose.Sd.SdJwtToken"/>.
+///       See <c>Verifiable.Json.Sd.SdJwtIssuance</c>.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -51,7 +51,6 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 /// <seealso cref="EcdsaSdBaseProof"/>
 /// <seealso cref="EcdsaSd2023CryptosuiteInfo"/>
-/// <seealso cref="EcdsaSd2023ProofSerializer"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class EcdsaSdDerivedProof: IEquatable<EcdsaSdDerivedProof>

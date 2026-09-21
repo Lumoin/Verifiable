@@ -32,7 +32,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// Clause 13 mandates an <c>exp</c> claim and constrains the <c>exp - nbf</c>
 /// window. Setting them unconditionally keeps the library conformant with the
 /// most demanding profile it supports;
-/// <see cref="Server.TimingPolicy.Oid4VpRequestObjectLifetime"/> controls the
+/// <see cref="Verifiable.OAuth.Server.TimingPolicy.Oid4VpRequestObjectLifetime"/> controls the
 /// chosen window.
 /// </para>
 /// <para>
@@ -96,7 +96,7 @@ public sealed class AuthorizationRequestObject: IEquatable<AuthorizationRequestO
     /// <remarks>
     /// In the OID4VP server flow this value equals the per-flow token the PAR
     /// endpoint generated. The Verifier's
-    /// <see cref="Server.AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/>
     /// maps the echoed value back to the internal flow identifier on the
     /// inbound direct_post.
     /// </remarks>

@@ -17,7 +17,7 @@ namespace Verifiable.OAuth;
 /// <remarks>
 /// Lives in the root <c>Verifiable.OAuth</c> namespace rather than
 /// <c>Verifiable.OAuth.Jar</c> because <see cref="Verifiable.OAuth.Server.AuthorizationServerCodecs"/>
-/// references this type. Symmetric with <see cref="JwtPayloadSerializer"/>.
+/// references this type. Symmetric with <see cref="Verifiable.JCose.JwtPayloadSerializer"/>.
 /// </remarks>
 public delegate IReadOnlyDictionary<string, object> JwtPayloadDeserializer(
     ReadOnlySpan<byte> payloadBytes);

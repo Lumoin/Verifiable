@@ -28,7 +28,7 @@ public delegate DidCommPlaintextMessage DidCommMessageSerializer(DidCommMessage 
 /// <c>expires_time</c> members to integers and rejecting non-integer values — and for carrying any
 /// unrecognized top-level header into <see cref="DidCommMessage.AdditionalHeaders"/>. The
 /// domain-level structural validation (required headers, message-type-URI shape, recipient
-/// identifier shape) is applied by <see cref="DidCommPlaintextExtensions.UnpackPlaintext"/> after
+/// identifier shape) is applied by <see cref="DidCommPlaintextExtensions.UnpackPlaintext(ReadOnlySpan{byte}, DidCommMessageParser)"/> after
 /// parsing.
 /// </remarks>
 /// <param name="plaintextJson">The UTF-8 <c>application/didcomm-plain+json</c> bytes.</param>

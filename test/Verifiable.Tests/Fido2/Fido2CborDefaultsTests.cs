@@ -487,7 +487,7 @@ internal sealed class Fido2CborDefaultsTests
         MdocTestFixtures.DisposeKeyMaterial(credentialKeys);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(aaguid, credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         //Mint the wire attestationObject CBOR exactly as an authenticator would: the packed attStmt
         //map (alg/sig/x5c) wrapped in the fmt/attStmt/authData attestationObject map.

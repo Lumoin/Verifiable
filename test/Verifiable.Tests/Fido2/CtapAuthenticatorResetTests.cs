@@ -264,7 +264,7 @@ internal sealed class CtapAuthenticatorResetTests
     /// unchanged. Also proves the
     /// FactoryReset-disposes half: both records' <see cref="CtapCredentialRecord.CredRandomWithUV"/>/
     /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/> are rented from a
-    /// <see cref="ZeroOnDisposeTrackingMemoryPool"/> at their exact 32-byte length, so the credential-store
+    /// <see cref="MeteredHousePool"/> at their exact 32-byte length, so the credential-store
     /// walk's own <see cref="CtapCredentialRecord.Dispose"/> call disposing all four is observable through
     /// the existing pool seam, without any test-only hook. The two <c>ImmutableDictionary&lt;,&gt;.Empty</c>
     /// reads that seed the populated stores need no lock: each is a get-only BCL singleton that nothing mutates in place.

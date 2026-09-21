@@ -91,6 +91,53 @@ namespace Verifiable.Tests.Jose
             AssertCanonicalizationRoundtrips(canonical, isMatch, canonicalize);
 
 
+        /// <summary>
+        /// "A recipient using the media type value MUST treat it as if 'application/' were prepended
+        /// to any 'typ' value not containing a '/'," and per RFC 2045 media type values are case
+        /// insensitive — so <see cref="WellKnownJwkValues.IsTypeJwt(string)"/> recognizes the short
+        /// form, its long <c>application/</c> form, and any casing of either as the same media type.
+        /// </summary>
+        /// <param name="typ">A spelling of the JWT media type.</param>
+        /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>.</remarks>
+        [TestMethod]
+        [DataRow("jwt")]
+        [DataRow("application/jwt")]
+        [DataRow("APPLICATION/JWT")]
+        public void TypeJwtIsRecognizedAsTheJwtMediaTypeRegardlessOfCaseOrForm(string typ)
+        {
+            Assert.IsTrue(WellKnownJwkValues.IsTypeJwt(typ), $"'{typ}' names the same media type as '{WellKnownJwkValues.TypeJwt}'.");
+        }
+
+
+        /// <summary>
+        /// A genuinely different media type — including one that merely shares the JWT subtype under
+        /// a different top-level type — does not name <see cref="WellKnownJwkValues.TypeJwt"/>.
+        /// </summary>
+        /// <param name="typ">A media type that is not the JWT type.</param>
+        [TestMethod]
+        [DataRow("JWS")]
+        [DataRow("text/jwt")]
+        public void ATypeThatIsNotJwtIsNotRecognizedAsOne(string typ)
+        {
+            Assert.IsFalse(WellKnownJwkValues.IsTypeJwt(typ), $"'{typ}' does not name the JWT media type.");
+        }
+
+
+        /// <summary>
+        /// "Per RFC 7517 parameter values are case-sensitive" — unlike the <c>typ</c> media-type
+        /// comparison <see cref="WellKnownJwkValues.IsTypeJwt(string)"/> performs, a differently-cased
+        /// spelling of the <c>use</c> parameter's <c>sig</c>/<c>enc</c> values is not recognized.
+        /// </summary>
+        [TestMethod]
+        public void UseValuesStayCaseSensitive()
+        {
+            Assert.IsTrue(WellKnownJwkValues.IsUseSig("sig"), "The exact spelling is recognized.");
+            Assert.IsTrue(WellKnownJwkValues.IsUseEnc("enc"), "The exact spelling is recognized.");
+            Assert.IsFalse(WellKnownJwkValues.IsUseSig("SIG"), "'use' values are case-sensitive per RFC 7517.");
+            Assert.IsFalse(WellKnownJwkValues.IsUseEnc("ENC"), "'use' values are case-sensitive per RFC 7517.");
+        }
+
+
         private static void AssertCanonicalizationRoundtrips(
             string canonical, Func<string, bool> isMatch, Func<string, string> canonicalize)
         {

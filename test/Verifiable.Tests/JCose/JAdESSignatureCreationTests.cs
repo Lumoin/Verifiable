@@ -20,7 +20,8 @@ namespace Verifiable.Tests.JCose;
 /// <para>
 /// <strong>Key material.</strong> Every signing key is P-256, minted through
 /// <see cref="TestKeyMaterialProvider.CreateP256KeyMaterial"/>, signed via the explicit-delegate
-/// <see cref="JAdESSignatureCreation.SignAsync"/> overload with <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/> —
+/// <see cref="JAdESSignatureCreation.SignAsync(JAdESProtectedHeaders, JAdESSigningPayloadInput, JAdESUnsignedHeaders?, EncodeJAdESProtectedHeaderDelegate, EncodeJAdESUnprotectedHeaderDelegate, EncodeDelegate, PrivateKeyMemory, SigningDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, JAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
+/// overload with <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/> —
 /// mirroring <c>CBAdESSignatureCreationTests</c>'s own explicit-delegate composition pattern.
 /// </para>
 /// <para>

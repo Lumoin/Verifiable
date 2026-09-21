@@ -41,7 +41,7 @@ public sealed record StatusListKeyResolutionContext
     /// <see cref="UnverifiedJwtHeader"/>, and only verification promotes data to a verified carrier. A
     /// resolver reads <c>kid</c>, <c>x5c</c>, <c>x5t#S256</c> here to select which key to <em>try</em>,
     /// and treats nothing in it as a trust statement — mirroring
-    /// <see cref="Verifiable.Cryptography.Context.JoseKeyContext"/>'s role in the generic
+    /// <see cref="JoseKeyContext"/>'s role in the generic
     /// resolver/binder verification path.
     /// </para>
     /// </remarks>

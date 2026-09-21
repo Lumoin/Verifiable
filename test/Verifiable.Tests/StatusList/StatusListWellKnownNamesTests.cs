@@ -58,15 +58,34 @@ internal sealed class StatusListWellKnownNamesTests
 
 
     /// <summary>
+    /// "A recipient using the media type value MUST treat it as if 'application/' were prepended to
+    /// any 'typ' value not containing a '/'." The long <c>application/statuslist+jwt</c> form, in any
+    /// casing, names the same Status List Token in JWT format as the short <c>typ</c> form.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515, Section 4.1.9</see>.
+    /// </summary>
+    /// <param name="typ">The long media-type form of <c>statuslist+jwt</c>, in some casing.</param>
+    [TestMethod]
+    [DataRow("application/statuslist+jwt")]
+    [DataRow("APPLICATION/STATUSLIST+JWT")]
+    public void TheStatusListJwtTypeIsRecognizedInItsLongMediaTypeForm(string typ)
+    {
+        Assert.IsTrue(WellKnownMediaTypes.Jwt.IsStatusListJwt(typ), "The long media-type form declares the same Status List Token.");
+        Assert.IsTrue(WellKnownMediaTypes.Jwt.Equals(typ, WellKnownMediaTypes.Jwt.StatusListJwt), "The long media-type form equals the short typ form.");
+        Assert.AreSame(WellKnownMediaTypes.Jwt.StatusListJwt, WellKnownMediaTypes.Jwt.GetCanonicalizedValue(typ), "A recognized type canonicalizes onto the one instance the table holds.");
+    }
+
+
+    /// <summary>
     /// The same sentence read the other way: a header carrying any other type does not declare a
     /// Status List Token in JWT format, so none of the neighbouring types may be mistaken for it —
-    /// the CWT type of Section 5.2 least of all.
+    /// the CWT type of Section 5.2 least of all, in either its short or its long media-type form.
     /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
     /// </summary>
     /// <param name="typ">A type value that is not <c>statuslist+jwt</c>.</param>
     [TestMethod]
     [DataRow("statuslist+cwt")]
-    [DataRow("application/statuslist+jwt")]
+    [DataRow("text/statuslist+jwt")]
+    [DataRow("application/statuslist+cwt")]
     [DataRow("statuslist")]
     [DataRow("kb+jwt")]
     [DataRow("JWT")]

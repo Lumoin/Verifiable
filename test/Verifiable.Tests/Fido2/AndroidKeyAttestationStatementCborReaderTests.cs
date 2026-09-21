@@ -84,7 +84,7 @@ internal sealed class AndroidKeyAttestationStatementCborReaderTests
 
         Assert.AreEqual(-7, statement.Alg);
         Assert.IsTrue(statement.Signature.Span.SequenceEqual(signature));
-        Assert.HasCount(0, statement.X5c);
+        Assert.IsEmpty(statement.X5c);
     }
 
 
@@ -206,3 +206,4 @@ internal sealed class AndroidKeyAttestationStatementCborReaderTests
         return writerBuffer.WrittenSpan.ToArray();
     }
 }
+

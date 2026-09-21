@@ -34,7 +34,7 @@ public static class Oid4VciEndpoints
         //OID4VCI 1.0 §7 Nonce Endpoint materializes only when the capability is allowed AND
         //the nonce-issuance seam is wired — fail-closed: an advertised Nonce Endpoint that
         //cannot mint a c_nonce would break every key-bound Credential Request.
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciNonceEndpoint)
             && server?.OAuth().IssueCredentialNonceAsync is not null)
         {
@@ -132,7 +132,7 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 //OID4VCI 1.0 §7.2: c_nonce is a server-chosen, unpredictable challenge the
@@ -210,7 +210,7 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 //§4.1.3: the offer is addressed by the id the credential_offer_uri carries. The
@@ -285,7 +285,7 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -590,7 +590,7 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -984,7 +984,8 @@ public static class Oid4VciEndpoints
 
         IReadOnlyDictionary<string, object>? configuration = LookupRequestedConfiguration(contribution, request);
 
-        ServerHttpResponse? scopeFailure = ValidateScopeConfigurationBinding(configuration, accessToken);
+        ServerHttpResponse? scopeFailure = ValidateScopeConfigurationBinding(
+            configuration, accessToken, request.CredentialConfigurationId);
         if(scopeFailure is not null)
         {
             return scopeFailure;
@@ -1023,19 +1024,33 @@ public static class Oid4VciEndpoints
 
 
     /// <summary>
-    /// §8.2: when the requested configuration declares a <c>scope</c>, that scope MUST be among the
-    /// scopes the Access Token was granted. The check applies only on the scope-authorization path —
-    /// when the token carries no scope, or the configuration declares none, the binding is via
-    /// authorization_details / credential_identifier and is left to <c>IssueCredentialAsync</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">OID4VCI 1.0</see>
+    /// §8.2: "The corresponding object in the <c>credential_configurations_supported</c> map MUST
+    /// contain one of the value(s) used in the <c>scope</c> parameter in the Authorization Request."
+    /// §8.2 further scopes that requirement to the request path where <c>credential_configuration_id</c>
+    /// is used at all — "REQUIRED if a <c>credential_identifiers</c> parameter was not returned from
+    /// the Token Response as part of the <c>authorization_details</c> parameter" — and §5.1.1 names
+    /// <c>credential_configuration_id</c> as the RFC 9396 <c>openid_credential</c> authorization
+    /// detail's own required field. When the Access Token's granted <c>authorization_details</c>
+    /// claim carries an <c>openid_credential</c> detail naming this request's
+    /// <paramref name="credentialConfigurationId"/>, that grant is the authorization for this
+    /// Credential Request and the scope rule does not apply; the scope rule applies only on the
+    /// scope-authorization path, where the token carries no such grant.
     /// </summary>
     private static ServerHttpResponse? ValidateScopeConfigurationBinding(
         IReadOnlyDictionary<string, object>? configuration,
-        JwtPayload accessToken)
+        JwtPayload accessToken,
+        string? credentialConfigurationId)
     {
         if(configuration is null
             || !configuration.TryGetValue(CredentialIssuerMetadataParameterNames.Scope, out object? scopeValue)
             || scopeValue is not string configurationScope
             || string.IsNullOrWhiteSpace(configurationScope))
+        {
+            return null;
+        }
+
+        if(IsConfigurationGrantedByAuthorizationDetails(accessToken, credentialConfigurationId))
         {
             return null;
         }
@@ -1058,6 +1073,52 @@ public static class Oid4VciEndpoints
         return CredentialError(
             Oid4VciCredentialErrors.InvalidCredentialRequest,
             "The requested credential_configuration_id is not authorized by the Access Token's scope (§8.2).");
+    }
+
+
+    /// <summary>
+    /// Reads the Access Token's RFC 9396 §9.1 <c>authorization_details</c> claim (structured by
+    /// <see cref="AuthorizationServerHandlers.GrantedAuthorizationDetailsClaimKey"/> at the token
+    /// endpoint) and returns <see langword="true"/> when it carries an
+    /// <see cref="AuthorizationDetailsTypeValues.OpenIdCredential"/> detail whose
+    /// <see cref="Oid4VciCredentialParameterNames.CredentialConfigurationId"/> field names
+    /// <paramref name="credentialConfigurationId"/> — the OID4VCI 1.0 §5.1.1 grant this Credential
+    /// Request's scope binding is satisfied by.
+    /// </summary>
+    private static bool IsConfigurationGrantedByAuthorizationDetails(
+        JwtPayload accessToken,
+        string? credentialConfigurationId)
+    {
+        if(string.IsNullOrWhiteSpace(credentialConfigurationId)
+            || !accessToken.TryGetValue(OAuthRequestParameterNames.AuthorizationDetails, out object? rawDetails)
+            || rawDetails is not IReadOnlyList<object> details)
+        {
+            return false;
+        }
+
+        foreach(object detail in details)
+        {
+            if(detail is not IReadOnlyDictionary<string, object> detailMap)
+            {
+                continue;
+            }
+
+            if(!detailMap.TryGetValue(AuthorizationDetailsParameterNames.Type, out object? typeValue)
+                || typeValue is not string type
+                || !string.Equals(type, AuthorizationDetailsTypeValues.OpenIdCredential, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if(detailMap.TryGetValue(Oid4VciCredentialParameterNames.CredentialConfigurationId, out object? idValue)
+                && idValue is string grantedConfigurationId
+                && string.Equals(grantedConfigurationId, credentialConfigurationId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 
@@ -1372,6 +1433,15 @@ public static class Oid4VciEndpoints
         }
 
         byte[] encryptionBytes = Encoding.UTF8.GetBytes(encryptionObject);
+
+        //RFC 8259 §4 uniqueness posture applied to the client-supplied encryption request: a repeated
+        //"jwk" or "enc" would let this reader select the first occurrence while another consumer of the
+        //same bytes resolves the last.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(encryptionBytes))
+        {
+            return null;
+        }
+
         Dictionary<string, object>? jwk = JwkJsonReader.ExtractObjectProperties(
             encryptionBytes, Oid4VciCredentialParameterNames.JwkUtf8);
 
@@ -1424,7 +1494,7 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -1614,7 +1684,7 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;

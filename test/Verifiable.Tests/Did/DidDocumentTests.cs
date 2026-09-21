@@ -150,7 +150,7 @@ internal sealed class DidDocumentTests
         //adds the default one — STJ uses first-match order for converters.
         var options = new JsonSerializerOptions();
         options.Converters.Insert(0, new ServiceConverter(serviceSelector));
-        _ = options.ApplyVerifiableDefaults();
+        _ = options.ApplyVerifiableDefaults(BaseMemoryPool.Shared);
         //ServiceConverter.Read calls options.GetTypeInfo for derived service types.
         //The test-internal types (OpenIdConnectVersion1 etc.) must be reachable via
         //the resolver — combine the library context with the test context.
@@ -175,7 +175,9 @@ internal sealed class DidDocumentTests
         _ = Assert.IsInstanceOfType<SocialWebInboxService>(deserializedDidDocument.Service[6], "Service type does not match.");
         _ = Assert.IsInstanceOfType<Service>(deserializedDidDocument.Service[7], "Service type does not match.");
 
+        Assert.IsNotNull(deserializedDidDocument.VerificationMethod, "Verification method count does not match.");
         Assert.HasCount(3, deserializedDidDocument.VerificationMethod, "Verification method count does not match.");
+        Assert.IsNotNull(deserializedDidDocument.Authentication, "Authentication count does not match.");
         Assert.HasCount(3, deserializedDidDocument.Authentication, "Authentication count does not match.");
 
         bool areJsonElementsEqual = JsonSerializationUtilities.CompareJsonElements(MultiServiceTestDocument, reserializedDidDocument);
@@ -195,7 +197,7 @@ internal sealed class DidDocumentTests
     {
         TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = TestSetup.DefaultSerializationOptions;
 
         var (deserializedDidDocument, reserializedDidDocument) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
         Assert.IsNotNull(deserializedDidDocument?.Id);
@@ -222,7 +224,7 @@ internal sealed class DidDocumentTests
     {
         TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared);
         options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
             VerifiableJsonContext.Default,
             DidDocumentTestsJsonContext.Default);
@@ -253,7 +255,7 @@ internal sealed class DidDocumentTests
     {
         TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = TestSetup.DefaultSerializationOptions;
 
         var (deserializedDidDocument, reserializedDidDocument) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
 

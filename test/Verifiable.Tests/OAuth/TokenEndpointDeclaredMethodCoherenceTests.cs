@@ -10,6 +10,7 @@ using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.JwtBearer;
+using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.TokenExchange;
 using Verifiable.Tests.TestDataProviders;
@@ -99,27 +100,33 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// client, and any communication with the authorization server MUST include client authentication
     /// of the registered type." A registration declaring <c>private_key_jwt</c> on a token endpoint
     /// that advertises only <see cref="ClientAuthenticationMethod.None"/> is incoherent — the endpoint
-    /// cannot honour the method — so the authorization-code grant is refused with
+    /// cannot honour the method — so the pushed authorization request is refused with
     /// <c>401 invalid_client</c> before <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
-    /// is ever consulted. The counting validator would authenticate every request, so a count of zero
-    /// proves the refusal is the coherence gate, not the validator's verdict.
+    /// is ever consulted, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see>'s rule that a
+    /// pushed request authenticates the client exactly as the token endpoint would. The counting
+    /// validator would authenticate every request, so a count of zero proves the refusal is the
+    /// coherence gate, not the validator's verdict.
     /// </summary>
     [TestMethod]
-    public async Task AuthorizationCodeGrantRefusesDeclaredMethodTheEndpointDoesNotAdvertise()
+    public async Task AuthorizationCodeGrantRefusesDeclaredMethodTheEndpointDoesNotAdvertiseAtThePushedRequest()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         int validatorInvocations = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            validatorInvocations++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                validatorInvocations++;
 
-            return ValueTask.FromResult(true);
-        };
+                return ValueTask.FromResult(true);
+            };
+        }).ConfigureAwait(false);
 
-        DeclareServerSideMethodWithoutAdvertising(host, material, ClientAuthenticationMethod.PrivateKeyJwt);
+        await DeclareServerSideMethodWithoutAdvertisingAsync(host, material, ClientAuthenticationMethod.PrivateKeyJwt).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -127,23 +134,16 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
                 RedirectUri.OriginalString,
                 profile: PolicyProfile.Rfc6749WithPkce,
                 TestContext.CancellationToken).ConfigureAwait(false);
+        _ = clientFlowStore;
         //The client-side registration stays at its None default — the coherence refusal keys off the
         //server-side declaration, not on whether a credential was attached.
 
-        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
-        HostedAuthorizationServer hosted = host.Host("default");
-        string segment = material.Registration.TenantId.Value;
+        AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
+            registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken).ConfigureAwait(false);
 
-        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
-            hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-        AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
-            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
-            "A registration declaring a method the token endpoint does not advertise must not be issued a token.");
-        Assert.AreEqual(OAuthErrors.InvalidClient, tokenResult.ErrorCode,
+        Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
+            "A registration declaring a method the token endpoint does not advertise must not be pushed.");
+        Assert.AreEqual(OAuthErrors.InvalidClient, parResult.ErrorCode,
             "Section 8.2's confidential-client coherence rule refuses with invalid_client.");
         Assert.AreEqual(0, validatorInvocations,
             "The coherence refusal must precede any client-authentication validation.");
@@ -163,16 +163,19 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task RefreshGrantRefusesDeclaredMethodTheEndpointDoesNotAdvertise()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         int validatorInvocations = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            validatorInvocations++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                validatorInvocations++;
 
-            return ValueTask.FromResult(true);
-        };
+                return ValueTask.FromResult(true);
+            };
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -192,7 +195,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         string originalRefreshToken = (string)drive.TokenResult.Body![OAuthRequestParameterNames.RefreshToken];
 
         //Upgrade the server-side record to declare private_key_jwt without advertising it, then refresh.
-        DeclareServerSideMethodWithoutAdvertising(host, material, ClientAuthenticationMethod.PrivateKeyJwt);
+        await DeclareServerSideMethodWithoutAdvertisingAsync(host, material, ClientAuthenticationMethod.PrivateKeyJwt).ConfigureAwait(false);
 
         RefreshTokenRequest refreshRequest = new()
         {
@@ -226,26 +229,32 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task JwtBearerGrantRefusesDeclaredMethodTheEndpointDoesNotAdvertise()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: JwtBearerCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: JwtBearerCapabilities).ConfigureAwait(false);
 
         int clientAuthInvocations = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            clientAuthInvocations++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                clientAuthInvocations++;
 
-            return ValueTask.FromResult(true);
-        };
+                return ValueTask.FromResult(true);
+            };
+        }).ConfigureAwait(false);
 
         int assertionInvocations = 0;
-        host.Server.OAuth().ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            assertionInvocations++;
+            candidateIntegration.ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>
+            {
+                assertionInvocations++;
 
-            return ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant { Subject = SubjectId, Scope = string.Empty });
-        };
+                return ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant { Subject = SubjectId, Scope = string.Empty });
+            };
+        }).ConfigureAwait(false);
 
-        DeclareServerSideMethodWithoutAdvertising(host, material, ClientAuthenticationMethod.PrivateKeyJwt);
+        await DeclareServerSideMethodWithoutAdvertisingAsync(host, material, ClientAuthenticationMethod.PrivateKeyJwt).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -289,8 +298,8 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         try
         {
             await using TestHostShell host = new(TimeProvider);
-            using VerifierKeyMaterial material = host.RegisterDpopClient(
-                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
             await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
             HostedAuthorizationServer hosted = host.Host("default");
@@ -300,18 +309,23 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
 
             string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
             string jwksJson = BuildJwksJson(clientKeys.PublicKey, alg, SigningKeyId);
-            DeclareServerSideMethodAdvertised(
-                host, material, ClientAuthenticationMethod.PrivateKeyJwt, jwksJson, alg);
+
 
             int validatorInvocations = 0;
             var realValidator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
-            host.Server.OAuth().ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                validatorInvocations++;
+                candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+                {
+                    validatorInvocations++;
 
-                return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
-            };
+                    return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
+                };
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideMethodAdvertisedAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt, jwksJson, alg).ConfigureAwait(false);
 
             (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
                 await host.CreateOAuthClientAndRegistrationAsync(
@@ -356,21 +370,23 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// Client ID Metadata Document, Section 8.2</see> requires client authentication "using the
     /// corresponding key discovered from the client's metadata document." When the endpoint advertises
     /// <c>private_key_jwt</c> the coherence gate passes and the assertion is judged by the real
-    /// validator (<see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523, Section 2.2</see>); a
-    /// client that signs with a key absent from the server's published <c>ClientJwks</c> — a foreign
-    /// key — fails the signature check and is refused with <c>401 invalid_client</c>. The validator was
-    /// reached and rendered the verdict.
+    /// validator (<see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523, Section 2.2</see>) at
+    /// the PUSHED request too, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see>; a client that
+    /// signs with a key absent from the server's published <c>ClientJwks</c> — a foreign key — fails
+    /// the signature check and is refused with <c>401 invalid_client</c> before a <c>request_uri</c>
+    /// is ever issued. The validator was reached and rendered the verdict.
     /// </summary>
     [TestMethod]
-    public async Task AdvertisedPrivateKeyJwtWithForeignKeyIsJudgedAndRefused()
+    public async Task AdvertisedPrivateKeyJwtWithForeignKeyIsJudgedAndRefusedAtThePushedRequest()
     {
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         var foreignKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
             await using TestHostShell host = new(TimeProvider);
-            using VerifierKeyMaterial material = host.RegisterDpopClient(
-                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
             await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
             HostedAuthorizationServer hosted = host.Host("default");
@@ -382,50 +398,49 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
             //key, so the resolved verification key never matches the assertion's signature.
             string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
             string foreignJwksJson = BuildJwksJson(foreignKeys.PublicKey, alg, SigningKeyId);
-            DeclareServerSideMethodAdvertised(
-                host, material, ClientAuthenticationMethod.PrivateKeyJwt, foreignJwksJson, alg);
+
 
             int validatorInvocations = 0;
             var realValidator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
-            host.Server.OAuth().ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                validatorInvocations++;
-
-                return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
-            };
-
-            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
-                await host.CreateOAuthClientAndRegistrationAsync(
-                    material.Registration,
-                    RedirectUri.OriginalString,
-                    profile: PolicyProfile.Rfc6749WithPkce,
-                    TestContext.CancellationToken).ConfigureAwait(false);
-            registration = registration with
-            {
-                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
-                AuthenticationKeyMaterial = clientKeys
-            };
-
-            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
-            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
-                hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-            AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
-                registration, flowId, [],
-                new ClientAssertionOptions
+                candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
                 {
-                    SigningKeyId = SigningKeyId,
-                    HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
-                    PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
-                },
-                TestContext.CancellationToken).ConfigureAwait(false);
+                    validatorInvocations++;
 
-            Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
-                "A client assertion signed by a key absent from the published JWKS must not authenticate.");
-            Assert.AreEqual(OAuthErrors.InvalidClient, tokenResult.ErrorCode,
-                "A foreign-key assertion is refused with invalid_client.");
+                    return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
+                };
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideMethodAdvertisedAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt, foreignJwksJson, alg).ConfigureAwait(false);
+
+            //The client's OWN key signs the assertion (matching the RFC 9126 §2 audience the real
+            //validator above accepts); the server's published JWKS is the FOREIGN key, so the
+            //signature never verifies.
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            string clientAssertion = await ClientAssertionSigning.SignAsync(
+                ClientId, tokenEndpoint.OriginalString, "par-foreign-key-jti", TimeProvider.GetUtcNow(),
+                TimeProvider.GetUtcNow().AddMinutes(1), clientKeys.PrivateKey, SigningKeyId,
+                host.Server.OAuth().Codecs.JwtHeaderSerializer!, host.Server.OAuth().Codecs.JwtPayloadSerializer!,
+                TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
+                [OAuthRequestParameterNames.ClientAssertion] = clientAssertion
+            };
+
+            (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+                host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(401, statusCode, body);
+            Assert.Contains($"\"error\":\"{OAuthErrors.InvalidClient}\"", body, StringComparison.Ordinal);
             Assert.IsGreaterThanOrEqualTo(1, validatorInvocations,
                 "The advertised-method path must reach the client-authentication validator to render the verdict.");
         }
@@ -444,61 +459,65 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// Client ID Metadata Document, Section 8.2</see>: "any communication with the authorization server
     /// MUST include client authentication of the registered type." A confidential registration declaring
     /// an advertised <c>private_key_jwt</c> that attaches NO client assertion is refused with
-    /// <c>401 invalid_client</c> — the coherence gate passes, the validator is reached
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523, Section 2.2</see>), and a request
-    /// carrying no assertion of the registered type fails closed.
+    /// <c>401 invalid_client</c> at the PUSHED request — the coherence gate passes, the validator is
+    /// reached (<see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523, Section 2.2</see>), and a
+    /// request carrying no assertion of the registered type fails closed before a <c>request_uri</c>
+    /// is ever issued (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see>).
     /// </summary>
     [TestMethod]
-    public async Task AdvertisedPrivateKeyJwtWithoutAnyAssertionIsRefused()
+    public async Task AdvertisedPrivateKeyJwtWithoutAnyAssertionIsRefusedAtThePushedRequest()
     {
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
             await using TestHostShell host = new(TimeProvider);
-            using VerifierKeyMaterial material = host.RegisterDpopClient(
-                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
             await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
             HostedAuthorizationServer hosted = host.Host("default");
             string segment = material.Registration.TenantId.Value;
             Uri tokenEndpoint = new(
                 hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
+            _ = hosted;
 
             string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
             string jwksJson = BuildJwksJson(clientKeys.PublicKey, alg, SigningKeyId);
-            DeclareServerSideMethodAdvertised(
-                host, material, ClientAuthenticationMethod.PrivateKeyJwt, jwksJson, alg);
+
 
             int validatorInvocations = 0;
             var realValidator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
-            host.Server.OAuth().ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                validatorInvocations++;
+                candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+                {
+                    validatorInvocations++;
 
-                return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
+                    return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
+                };
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideMethodAdvertisedAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt, jwksJson, alg).ConfigureAwait(false);
+
+            //No client_assertion / client_assertion_type field at all — the client-side registration
+            //would stay at its None default too, attaching nothing.
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             };
 
-            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
-                await host.CreateOAuthClientAndRegistrationAsync(
-                    material.Registration,
-                    RedirectUri.OriginalString,
-                    profile: PolicyProfile.Rfc6749WithPkce,
-                    TestContext.CancellationToken).ConfigureAwait(false);
-            //The client-side registration stays at its None default — it attaches no client_assertion at all.
+            (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+                host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
 
-            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
-            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
-                hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-            AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
-                registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
-
-            Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
-                "A confidential client attaching no assertion of the registered type must not be issued a token.");
-            Assert.AreEqual(OAuthErrors.InvalidClient, tokenResult.ErrorCode,
-                "A missing client assertion for an advertised confidential method is refused with invalid_client.");
+            Assert.AreEqual(401, statusCode, body);
+            Assert.Contains($"\"error\":\"{OAuthErrors.InvalidClient}\"", body, StringComparison.Ordinal);
             Assert.IsGreaterThanOrEqualTo(1, validatorInvocations,
                 "The advertised-method path reaches the validator, which fails closed on the absent assertion.");
         }
@@ -522,11 +541,16 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task UndeclaredRegistrationCredentiallessRequestProceedsAsPublicClient()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //The endpoint advertises only private_key_jwt; the registration declares nothing.
-        host.Server.OAuth().ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.PrivateKeyJwt];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.PrivateKeyJwt];
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) => ValueTask.FromResult(false);
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -567,21 +591,24 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         try
         {
             await using TestHostShell host = new(TimeProvider);
-            using VerifierKeyMaterial material = host.RegisterDpopClient(
-                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
             //The endpoint advertises only private_key_jwt; the registration declares nothing.
-            host.Server.OAuth().ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.PrivateKeyJwt];
-
             int validatorInvocations = 0;
-            host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                validatorInvocations++;
+                candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.PrivateKeyJwt];
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
+                candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+                {
+                    validatorInvocations++;
 
-                return ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
-            };
+                    return ValueTask.FromResult(
+                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+                };
+            }).ConfigureAwait(false);
 
             (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
                 await host.CreateOAuthClientAndRegistrationAsync(
@@ -630,11 +657,11 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task DeclaredNoneOnNoneAdvertisingEndpointIsUnaffected()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //Declare None explicitly server-side and advertise only None.
-        DeclareServerSideMethodWithoutAdvertising(host, material, ClientAuthenticationMethod.None);
+        await DeclareServerSideMethodWithoutAdvertisingAsync(host, material, ClientAuthenticationMethod.None).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -672,18 +699,21 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task ClientCredentialsGrantRefusesDeclaredMethodTheEndpointDoesNotAdvertise()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities).ConfigureAwait(false);
 
         int validatorInvocations = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            validatorInvocations++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                validatorInvocations++;
 
-            return ValueTask.FromResult(true);
-        };
+                return ValueTask.FromResult(true);
+            };
+        }).ConfigureAwait(false);
 
-        DeclareServerSideMethodWithoutAdvertising(host, material, ClientAuthenticationMethod.ClientSecretPost);
+        await DeclareServerSideMethodWithoutAdvertisingAsync(host, material, ClientAuthenticationMethod.ClientSecretPost).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -719,20 +749,23 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task ClientCredentialsGrantAdvertisedMethodReachesTheValidator()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities).ConfigureAwait(false);
 
         int validatorInvocations = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            validatorInvocations++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                validatorInvocations++;
 
-            return ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
-        };
+                return ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+            };
+        }).ConfigureAwait(false);
 
-        DeclareServerSideSecretMethodAdvertised(host, material, ClientAuthenticationMethod.ClientSecretPost);
+        await DeclareServerSideSecretMethodAdvertisedAsync(host, material, ClientAuthenticationMethod.ClientSecretPost).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -768,26 +801,32 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task TokenExchangeGrantRefusesDeclaredMethodTheEndpointDoesNotAdvertise()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities).ConfigureAwait(false);
 
         int validatorInvocations = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            validatorInvocations++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                validatorInvocations++;
 
-            return ValueTask.FromResult(true);
-        };
+                return ValueTask.FromResult(true);
+            };
 
-        //The seams are wired only so the RFC 8693 grant is placed on the endpoint chain; the coherence
-        //refusal fires before either of them is consulted.
-        host.Server.OAuth().ValidateTokenExchangeTokenAsync = static (token, tokenType, registration, context, ct) =>
-            ValueTask.FromResult<ValidatedSecurityToken?>(new ValidatedSecurityToken { Subject = SubjectId });
-        host.Server.OAuth().AuthorizeTokenExchangeAsync = static (subject, actor, request, registration, context, ct) =>
-            ValueTask.FromResult<TokenExchangeAuthorization?>(
-                new TokenExchangeAuthorization { Subject = subject.Subject, Scope = WellKnownScopes.OpenId });
 
-        DeclareServerSideMethodWithoutAdvertising(host, material, ClientAuthenticationMethod.ClientSecretPost);
+            //The seams are wired only so the RFC 8693 grant is placed on the endpoint chain; the coherence
+            //refusal fires before either of them is consulted.
+
+            candidateIntegration.ValidateTokenExchangeTokenAsync = static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(new ValidatedSecurityToken { Subject = SubjectId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync = static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization { Subject = subject.Subject, Scope = WellKnownScopes.OpenId });
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideMethodWithoutAdvertisingAsync(host, material, ClientAuthenticationMethod.ClientSecretPost).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -825,30 +864,35 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     public async Task TokenExchangeGrantAdvertisedMethodReachesTheValidator()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: StatelessGrantCapabilities).ConfigureAwait(false);
 
         int validatorInvocations = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            validatorInvocations++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                validatorInvocations++;
 
-            return ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
-        };
-        host.Server.OAuth().ValidateTokenExchangeTokenAsync = static (token, tokenType, registration, context, ct) =>
-            ValueTask.FromResult<ValidatedSecurityToken?>(new ValidatedSecurityToken { Subject = SubjectId });
-        host.Server.OAuth().AuthorizeTokenExchangeAsync = static (subject, actor, request, registration, context, ct) =>
-            ValueTask.FromResult<TokenExchangeAuthorization?>(
-                new TokenExchangeAuthorization
-                {
-                    Subject = subject.Subject,
-                    Scope = WellKnownScopes.OpenId,
-                    IssuedTokenType = TokenType.AccessToken
-                });
+                return ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+            };
 
-        DeclareServerSideSecretMethodAdvertised(host, material, ClientAuthenticationMethod.ClientSecretPost);
+            candidateIntegration.ValidateTokenExchangeTokenAsync = static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(new ValidatedSecurityToken { Subject = SubjectId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync = static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = subject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.AccessToken
+                    });
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideSecretMethodAdvertisedAsync(host, material, ClientAuthenticationMethod.ClientSecretPost).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -883,13 +927,16 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// <param name="host">The test host whose default server-side record is upgraded.</param>
     /// <param name="material">The registration whose method is declared and advertised.</param>
     /// <param name="method">The secret-based confidential method to declare and advertise.</param>
-    private static void DeclareServerSideSecretMethodAdvertised(
+    private static async Task DeclareServerSideSecretMethodAdvertisedAsync(
         TestHostShell host,
         VerifierKeyMaterial material,
         ClientAuthenticationMethod method)
     {
-        UpdateServerRecordMethod(host, material, method, clientJwks: null);
-        host.Server.OAuth().ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.None, method];
+        _ = await host.SetTokenEndpointAuthMethodAsync(material, method, clientJwks: null).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.None, method];
+        }).ConfigureAwait(false);
     }
 
 
@@ -902,13 +949,16 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// Client ID Metadata Document, Section 8.2</see>. Uses the register-then-upgrade pattern the
     /// sibling grant suites use, because the routing dictionaries are host-internal.
     /// </summary>
-    private static void DeclareServerSideMethodWithoutAdvertising(
+    private static async Task DeclareServerSideMethodWithoutAdvertisingAsync(
         TestHostShell host,
         VerifierKeyMaterial material,
         ClientAuthenticationMethod method)
     {
-        UpdateServerRecordMethod(host, material, method, clientJwks: null);
-        host.Server.OAuth().ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.None];
+        _ = await host.SetTokenEndpointAuthMethodAsync(material, method, clientJwks: null).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.None];
+        }).ConfigureAwait(false);
     }
 
 
@@ -921,47 +971,20 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// (RFC 8414, Section 2) — the coherent arrangement where the declared method is one the endpoint
     /// honours and the assertion is handed to the validator for judgment.
     /// </summary>
-    private static void DeclareServerSideMethodAdvertised(
+    private static async Task DeclareServerSideMethodAdvertisedAsync(
         TestHostShell host,
         VerifierKeyMaterial material,
         ClientAuthenticationMethod method,
         string clientJwks,
         string assertionSigningAlgorithm)
     {
-        UpdateServerRecordMethod(host, material, method, clientJwks);
-        host.Server.OAuth().ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.None, method];
-        host.Server.OAuth().ClientAssertionSigningAlgorithmsSupported = [assertionSigningAlgorithm];
-    }
-
-
-    /// <summary>
-    /// Swaps the default host's server-side <see cref="ClientRecord"/> for one whose
-    /// <see cref="ClientRecord.TokenEndpointAuthMethod"/> is <paramref name="method"/> and whose
-    /// <see cref="ClientRecord.ClientJwks"/> is <paramref name="clientJwks"/>, updating both routing
-    /// keys and <paramref name="material"/>'s registration so subsequent flow steps see the upgraded
-    /// record. The routing dictionaries are host-internal, so the record is replaced through
-    /// <see cref="EndpointServer.UpdateClient"/> the way the sibling grant suites do.
-    /// </summary>
-    private static void UpdateServerRecordMethod(
-        TestHostShell host,
-        VerifierKeyMaterial material,
-        ClientAuthenticationMethod method,
-        string? clientJwks)
-    {
-        HostedAuthorizationServer hosted = host.Host("default");
-        string segment = material.Registration.TenantId.Value;
-        ClientRecord previous = hosted.Registrations[segment];
-        ClientRecord updated = previous with
+        _ = await host.SetTokenEndpointAuthMethodAsync(material, method, clientJwks).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            TokenEndpointAuthMethod = method,
-            ClientJwks = clientJwks
-        };
+            candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.None, method];
 
-        hosted.Registrations[segment] = updated;
-        hosted.Registrations[updated.ClientId] = updated;
-        hosted.Server.UpdateClient(previous, updated, []);
-
-        material.Registration = updated;
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [assertionSigningAlgorithm];
+        }).ConfigureAwait(false);
     }
 
 

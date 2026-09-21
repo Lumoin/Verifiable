@@ -9,9 +9,7 @@ namespace Verifiable.Core.Assessment
     /// </summary>
     public static class WebDidClaims
     {
-        /// <summary>
-        /// Represents a claim for <c>did:web</c> ID encoding.
-        /// </summary>
+        //Represents a claim for did:web ID encoding.
         //public static ClaimId WebDidIdEncoding { get; } = ClaimId.Create(600, "WebDidIdEncoding");
     }
 

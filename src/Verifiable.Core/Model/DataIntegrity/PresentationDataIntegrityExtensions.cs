@@ -1,9 +1,11 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -89,7 +91,9 @@ public static class PresentationDataIntegrityExtensions
         /// <param name="deserialize">Delegate for deserializing presentations.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="encoder">The encoding delegate (e.g., Base58 encoder) passed to the proof value encoder.</param>
+        /// <param name="computeDigest">Delegate for computing the cryptosuite's digest over the canonicalized data.</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
+        /// <param name="context">The per-operation exchange context.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The embedded-secured presentation carrying the proof.</returns>
         /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
@@ -225,11 +229,22 @@ public static class PresentationDataIntegrityExtensions
         /// <param name="contextResolver">
         /// Optional delegate for resolving JSON-LD contexts. Required for RDFC-based cryptosuites.
         /// </param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c> for the presentation's own <c>@context</c>
+        /// (embedded credentials are not checked here — see the remarks on
+        /// <see cref="VerifyCoreAsync"/>). Checked after the proof verifies, per
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data
+        /// Integrity 1.0 §2.4.1 Validating Contexts</see> and
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+        /// Validation</see>.
+        /// </param>
         /// <param name="decodeProofValue">Delegate for decoding the proof value string to signature bytes.</param>
         /// <param name="serialize">Delegate for serializing presentations.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="decoder">The decoding delegate (e.g., Base58 decoder).</param>
+        /// <param name="computeDigest">Delegate for computing the cryptosuite's digest over the canonicalized data.</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
+        /// <param name="context">The per-operation exchange context.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The verification result indicating cryptographic validity.</returns>
         /// <remarks>
@@ -251,6 +266,7 @@ public static class PresentationDataIntegrityExtensions
             string expectedDomain,
             CanonicalizationDelegate canonicalize,
             ContextResolverDelegate? contextResolver,
+            Context knownContext,
             ProofValueDecoderDelegate decodeProofValue,
             PresentationSerializeDelegate serialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
@@ -291,6 +307,7 @@ public static class PresentationDataIntegrityExtensions
                 ValidateBinding,
                 canonicalize,
                 contextResolver,
+                knownContext,
                 decodeProofValue,
                 serialize,
                 serializeProofOptions,
@@ -315,6 +332,15 @@ public static class PresentationDataIntegrityExtensions
         /// <param name="canonicalize">The canonicalization function for the cryptosuite's algorithm.</param>
         /// <param name="contextResolver">
         /// Optional delegate for resolving JSON-LD contexts. Required for RDFC-based cryptosuites.
+        /// </param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c> for the presentation's own <c>@context</c>
+        /// (embedded credentials are not checked here — see the remarks on
+        /// <see cref="VerifyCoreAsync"/>). Checked after the proof verifies, per
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data
+        /// Integrity 1.0 §2.4.1 Validating Contexts</see> and
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+        /// Validation</see>.
         /// </param>
         /// <param name="decodeProofValue">Delegate for decoding the proof value string to signature bytes.</param>
         /// <param name="serialize">Delegate for serializing presentations.</param>
@@ -347,6 +373,7 @@ public static class PresentationDataIntegrityExtensions
             DidDocument holderDidDocument,
             CanonicalizationDelegate canonicalize,
             ContextResolverDelegate? contextResolver,
+            Context knownContext,
             ProofValueDecoderDelegate decodeProofValue,
             PresentationSerializeDelegate serialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
@@ -362,6 +389,7 @@ public static class PresentationDataIntegrityExtensions
                 RejectBoundPresentation,
                 canonicalize,
                 contextResolver,
+                knownContext,
                 decodeProofValue,
                 serialize,
                 serializeProofOptions,
@@ -411,12 +439,25 @@ public static class PresentationDataIntegrityExtensions
     /// are acceptable for the calling path — the only behavioural difference between the
     /// interactive and the static linked-presentation verify.
     /// </summary>
+    /// <remarks>
+    /// After the proof verifies, the presentation's own <c>@context</c> is checked against
+    /// <paramref name="knownContext"/> per
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data Integrity
+    /// 1.0 §2.4.1 Validating Contexts</see> and
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+    /// Validation</see> — the normative pipeline
+    /// (<see cref="ContextValidationRules.ValidatePresentationContextAsync"/>) first, then the
+    /// §4.6 deep-equality comparison. Neither this method nor either public verify path above
+    /// takes a per-embedded-credential input, so an embedded <see cref="VerifiablePresentation.VerifiableCredential"/>
+    /// entry's own <c>@context</c> is not checked here.
+    /// </remarks>
     private static async ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyCoreAsync(
         DataIntegritySecuredPresentation presentation,
         DidDocument holderDidDocument,
         PresentationBindingValidator validateBinding,
         CanonicalizationDelegate canonicalize,
         ContextResolverDelegate? contextResolver,
+        Context knownContext,
         ProofValueDecoderDelegate decodeProofValue,
         PresentationSerializeDelegate serialize,
         ProofOptionsSerializeDelegate serializeProofOptions,
@@ -428,6 +469,7 @@ public static class PresentationDataIntegrityExtensions
     {
         ArgumentNullException.ThrowIfNull(holderDidDocument);
         ArgumentNullException.ThrowIfNull(canonicalize);
+        ArgumentNullException.ThrowIfNull(knownContext);
         ArgumentNullException.ThrowIfNull(decodeProofValue);
         ArgumentNullException.ThrowIfNull(serialize);
         ArgumentNullException.ThrowIfNull(serializeProofOptions);
@@ -485,10 +527,26 @@ public static class PresentationDataIntegrityExtensions
         var proofOptions = ProofOptionsDocument.FromProof(proof, requiresContext ? presentation.Context : null);
         var proofOptionsSerialized = serializeProofOptions(proofOptions);
 
-        var presentationCanonicalization = await canonicalize(presentationWithoutProofSerialized, contextResolver, context, cancellationToken)
-            .ConfigureAwait(false);
-        var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
-            .ConfigureAwait(false);
+        //The presentation's own @context is untrusted caller input; a context the canonicalizer
+        //cannot load (an unresolvable remote URI, for RDFC-based cryptosuites) is a FAILED
+        //verification, per Data Integrity 1.0 §2.4.1, never an escaping exception.
+        CanonicalizationResult presentationCanonicalization;
+        CanonicalizationResult proofOptionsCanonicalization;
+        try
+        {
+            presentationCanonicalization = await canonicalize(presentationWithoutProofSerialized, contextResolver, context, cancellationToken)
+                .ConfigureAwait(false);
+            proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch(Exception)
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ContextValidationFailed);
+        }
 
         var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
         int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
@@ -532,6 +590,18 @@ public static class PresentationDataIntegrityExtensions
         if(!isValid)
         {
             return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.SignatureInvalid);
+        }
+
+        //Data Integrity 1.0 §2.4.1: context validation runs after the proof verifies. The
+        //normative pipeline runs before §4.6's own deep-equality comparison.
+        List<Claim> normativeContextClaims = await ContextValidationRules.ValidatePresentationContextAsync(presentation, cancellationToken)
+            .ConfigureAwait(false);
+        if(normativeContextClaims.Exists(static claim => claim.Outcome == ClaimOutcome.Failure)
+            || presentation.Context is not { } documentContext
+            || !documentContext.Equals(knownContext)
+            || HasNestedContextProperty(presentation))
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ContextValidationFailed);
         }
 
         //Controller-RESOLUTION semantics: bind holder == the resolved method's own
@@ -590,5 +660,15 @@ public static class PresentationDataIntegrityExtensions
             AdditionalData = source.AdditionalData,
             Proof = proofs
         };
+    }
+
+
+    //VC Data Integrity 1.0 §4.6 step 3's subtree condition, over the presentation's own subtrees.
+    //Embedded credentials are out of scope (see the remarks on VerifyCoreAsync): only the
+    //presentation's own AdditionalData bag and its terms-of-use entries are walked.
+    private static bool HasNestedContextProperty(VerifiablePresentation presentation)
+    {
+        return ContextDeepValidation.ContainsContextKey(presentation.AdditionalData)
+            || ContextDeepValidation.AnyContainsContextKey(presentation.TermsOfUse, static terms => terms.AdditionalData);
     }
 }

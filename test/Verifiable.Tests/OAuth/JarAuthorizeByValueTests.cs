@@ -56,8 +56,8 @@ internal sealed class JarAuthorizeByValueTests
         await using TestHostShell host = new(TimeProvider);
         //JAR-by-value is a non-PAR path; FAPI 2.0 (the default profile) forbids it, so
         //this exercises it under the RFC 6749 + PKCE profile, which permits it.
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
@@ -83,12 +83,81 @@ internal sealed class JarAuthorizeByValueTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see>: the front
+    /// channel carries only <c>request</c>/<c>request_uri</c> and <c>client_id</c> as REQUIRED
+    /// query parameters; every other OAuth 2.0 parameter, including
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">response_type</see>, rides
+    /// inside the Request Object. This proves the omission still succeeds.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptsJarByValueWithResponseTypeOnlyInRequestObject()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
+        Assert.Contains(OAuthRequestParameterNames.ResponseType, claims.Keys,
+            "The fixture carries response_type inside the signed claims, never in the outer query.");
+
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //DispatchAuthorizeAsync's outer query never sets response_type — only
+        //request and (optionally) client_id — so a success here proves the
+        //Request Object claim alone drives the grant.
+        ServerHttpResponse response = await DispatchAuthorizeAsync(
+            host, material, compactJar, ClientId, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode,
+            $"response_type carried only inside the Request Object must still issue a code. Body: {response.Body}");
+        Assert.IsNotNull(response.Location);
+        Assert.Contains("code=", response.Location, StringComparison.Ordinal,
+            $"Redirect Location must include the authorization code. Got: {response.Location}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>:
+    /// "response_type: REQUIRED." <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.3">RFC 9101 §6.3</see>:
+    /// "The authorization server MUST only use the parameters in the Request Object... The
+    /// authorization server then validates the request, as specified in OAuth 2.0 [RFC6749]."
+    /// A Request Object omitting a required claim is an invalid Request Object.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsJarMissingResponseType()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
+        _ = claims.Remove(OAuthRequestParameterNames.ResponseType);
+
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchAuthorizeAsync(
+            host, material, compactJar, ClientId, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode);
+        AssertErrorCode(response, OAuthErrors.InvalidRequestObject);
+    }
+
+
     [TestMethod]
     public async Task RejectsJarWithMissingOuterClientId()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
@@ -110,8 +179,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarWithRedirectUriNotInRegistration()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -134,8 +203,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarWithExpiredExp()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset signedAt = TimeProvider.GetUtcNow();
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
@@ -158,8 +227,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarWithWrongTypHeader()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         string compactJar = await OAuthJarFixtures.BuildSignedJarWithCustomTypAsync(
@@ -181,8 +250,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarMissingClientId()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -205,8 +274,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarMissingExp()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -232,8 +301,8 @@ internal sealed class JarAuthorizeByValueTests
         //neither "expired" nor "not yet valid", so only the mutual-consistency check
         //rejects it — without that check this JAR would be accepted.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -260,8 +329,8 @@ internal sealed class JarAuthorizeByValueTests
         //exp before nbf (but after iat): the validity window never opens. Within skew
         //it is not "not yet valid", so only the mutual-consistency check rejects it.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -286,8 +355,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarSignedWithDifferentClientKey()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> attackerKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
@@ -313,8 +382,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarWithWrongAudience()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -333,27 +402,165 @@ internal sealed class JarAuthorizeByValueTests
     }
 
 
+    /// <summary>
+    /// A verified JAR with a plain transformation receives the unsupported-method error per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">RFC 7636 §4.4.1</see>:
+    /// "authorization error response with "error" value set to "invalid_request"."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.3">RFC 9101 §6.3</see> sends
+    /// parameter errors "as specified in Section 5.2 of [RFC6749]", yielding a direct JSON error.
+    /// </summary>
     [TestMethod]
     public async Task RejectsJarWithCodeChallengeMethodPlain()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
             material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[OAuthRequestParameterNames.CodeChallengeMethod] = "plain";
+        claims[OAuthRequestParameterNames.CodeChallenge] = new string('a', 43);
 
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
             material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
-        ServerHttpResponse response = await DispatchAuthorizeAsync(
-            host, material, compactJar, ClientId, TestContext.CancellationToken)
-            .ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + $"?client_id={Uri.EscapeDataString(ClientId)}&request={Uri.EscapeDataString(compactJar)}");
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(400, response.StatusCode);
-        AssertErrorCode(response, OAuthErrors.InvalidRequestObject);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// An absent method requests the refused plain transformation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">§4.4.1</see> requires
+    /// "authorization error response with "error" value set to "invalid_request"."
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsJarWithAbsentCodeChallengeMethod()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
+        _ = claims.Remove(OAuthRequestParameterNames.CodeChallengeMethod);
+        claims[OAuthRequestParameterNames.CodeChallenge] = new string('a', 43);
+
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + $"?client_id={Uri.EscapeDataString(ClientId)}&request={Uri.EscapeDataString(compactJar)}");
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// A verified JAR with a plain transformation receives the unsupported-method error per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">RFC 7636 §4.4.1</see>:
+    /// "authorization error response with "error" value set to "invalid_request"."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.3">RFC 9101 §6.3</see> sends
+    /// parameter errors "as specified in Section 5.2 of [RFC6749]", yielding a direct JSON error.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsJarWithCodeChallengeMethodPlainAtEphemeralLoopbackPort()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
+        using System.Net.Sockets.Socket socket = new(
+            System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream,
+            System.Net.Sockets.ProtocolType.Tcp);
+        socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+        int port = Assert.IsInstanceOfType<System.Net.IPEndPoint>(socket.LocalEndPoint).Port;
+        Uri loopbackRedirectUri = new($"http://127.0.0.1:{port}/cb");
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, loopbackRedirectUri, JarState, JarNonce);
+        claims[OAuthRequestParameterNames.CodeChallengeMethod] = "plain";
+        claims[OAuthRequestParameterNames.CodeChallenge] = new string('a', 43);
+
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + $"?client_id={Uri.EscapeDataString(ClientId)}&request={Uri.EscapeDataString(compactJar)}");
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// An absent method requests the refused plain transformation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">§4.4.1</see> requires
+    /// "authorization error response with "error" value set to "invalid_request"."
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsJarWithAbsentCodeChallengeMethodAtEphemeralLoopbackPort()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
+        using System.Net.Sockets.Socket socket = new(
+            System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream,
+            System.Net.Sockets.ProtocolType.Tcp);
+        socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+        int port = Assert.IsInstanceOfType<System.Net.IPEndPoint>(socket.LocalEndPoint).Port;
+        Uri loopbackRedirectUri = new($"http://127.0.0.1:{port}/cb");
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, loopbackRedirectUri, JarState, JarNonce);
+        _ = claims.Remove(OAuthRequestParameterNames.CodeChallengeMethod);
+        claims[OAuthRequestParameterNames.CodeChallenge] = new string('a', 43);
+
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + $"?client_id={Uri.EscapeDataString(ClientId)}&request={Uri.EscapeDataString(compactJar)}");
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", body, StringComparison.Ordinal);
     }
 
 
@@ -361,8 +568,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task JarAuthorizeMatcherAbsentWhenJwtSecuredAuthorizationRequestCapabilityNotAllowed()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, DirectOnlyCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, DirectOnlyCapabilities).ConfigureAwait(false);
 
         EndpointChain chain = await host.GetEndpointsAsync(material.Registration, []).ConfigureAwait(false);
 
@@ -377,8 +584,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task JarAuthorizeMatcherAbsentWhenDirectAuthorizationCapabilityNotAllowed()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarOnlyCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarOnlyCapabilities).ConfigureAwait(false);
 
         EndpointChain chain = await host.GetEndpointsAsync(material.Registration, []).ConfigureAwait(false);
 
@@ -397,11 +604,12 @@ internal sealed class JarAuthorizeByValueTests
         //(code_challenge + S256, no 'request' parameter). Direct authorize is a
         //non-PAR path forbidden under FAPI 2.0, so it runs under RFC 6749 + PKCE.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -434,12 +642,13 @@ internal sealed class JarAuthorizeByValueTests
         //carries max_age must fail with unmet_authentication_requirements when the
         //established authentication is older than max_age (beyond the default 60 s skew).
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -474,8 +683,8 @@ internal sealed class JarAuthorizeByValueTests
         //unmet_authentication_requirements. Proves the JAR projection carries max_age and the
         //shared enforcement runs on the signed-request path (closing the step-up bypass gap).
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -513,11 +722,12 @@ internal sealed class JarAuthorizeByValueTests
         //RFC 6749 §4.1.2 — the direct (query-parameter) authorize path captures state from the
         //request and echoes it on the success redirect alongside the code.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -546,8 +756,8 @@ internal sealed class JarAuthorizeByValueTests
         //RFC 6749 §4.1.2 — the state carried inside the signed request object (a required JAR
         //claim) is echoed on the success redirect, proving the projection carries it through.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
@@ -573,11 +783,12 @@ internal sealed class JarAuthorizeByValueTests
         //FAPI 2.0 §5.2.2 — under a PAR-mandating profile (the default Haip10/Fapi20),
         //the direct Authorize path is refused with invalid_request.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, DirectOnlyCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, DirectOnlyCapabilities).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -614,8 +825,8 @@ internal sealed class JarAuthorizeByValueTests
         //explicitly with invalid_request — deterministically, before any flow-state
         //correlation, so the spec violation (not an incidental state error) is reported.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
@@ -659,8 +870,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarWithIssuerNotMatchingClientId()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -683,8 +894,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarWithMissingAudience()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
@@ -707,8 +918,8 @@ internal sealed class JarAuthorizeByValueTests
     public async Task RejectsJarWithLifetimeExceedingPolicyCeiling()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarDirectCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(

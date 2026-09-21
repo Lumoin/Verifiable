@@ -175,7 +175,7 @@ internal sealed class XAdESIndividualDataObjectsTimeStampTests
         Assert.IsTrue(isRead, $"Zero Include elements must not be refused, but was refused with {error.Failure}.");
         using(value)
         {
-            Assert.HasCount(0, value!.TimeStamp.Includes);
+            Assert.IsEmpty(value!.TimeStamp.Includes);
         }
     }
 
@@ -209,3 +209,4 @@ internal sealed class XAdESIndividualDataObjectsTimeStampTests
         }
     }
 }
+

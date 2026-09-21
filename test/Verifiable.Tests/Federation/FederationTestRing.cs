@@ -55,7 +55,7 @@ internal static class FederationTestRing
     /// P-256 private key bytes. The resulting node's <c>JwksObject</c>
     /// publishes the public side derived from that scalar — so a chain
     /// minted from this node leaks the same JAR-signing public key the
-    /// caller will register with an <see cref="OAuth.Server.AuthorizationServer"/>.
+    /// caller will register with an authorization server.
     /// </summary>
     /// <remarks>
     /// Use this when a federation chain must publish the verifier's JAR
@@ -150,17 +150,38 @@ internal static class FederationTestRing
     ///   <item><description>The anchor's Subordinate Statement about the subject at position 1.</description></item>
     ///   <item><description>The anchor's Entity Configuration at position 2.</description></item>
     /// </list>
+    /// <param name="subject">The chain's leaf entity.</param>
+    /// <param name="anchor">The chain's trust anchor.</param>
+    /// <param name="issuedAt">The <c>iat</c> claim every minted statement carries.</param>
+    /// <param name="expiresAt">The <c>exp</c> claim every minted statement carries.</param>
+    /// <param name="subjectJwksOverride">
+    /// When supplied, replaces the <c>jwks</c> claim of the two statements that carry the SUBJECT's
+    /// keys — the subject's own Entity Configuration (position 0) and the anchor's Subordinate
+    /// Statement about the subject (position 1), which by default both publish
+    /// <paramref name="subject"/>'s <see cref="FederationTestRingNode.JwksObject"/> unchanged. The
+    /// anchor's own Entity Configuration (position 2) is never touched by this override, since it
+    /// carries the anchor's key, not the subject's.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<MintedChain> BuildDirectChainAsync(
         FederationTestRingNode subject,
         FederationTestRingNode anchor,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
+        IReadOnlyDictionary<string, object>? subjectJwksOverride = null,
         CancellationToken cancellationToken = default)
     {
+        Dictionary<string, object>? subjectExtraClaims = subjectJwksOverride is null
+            ? null
+            : new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownFederationClaimNames.Jwks] = subjectJwksOverride
+            };
+
         MintedStatement subjectEc = await MintEntityConfigurationAsync(
-            subject, issuedAt, expiresAt, cancellationToken: cancellationToken).ConfigureAwait(false);
+            subject, issuedAt, expiresAt, subjectExtraClaims, cancellationToken).ConfigureAwait(false);
         MintedStatement anchorAboutSubject = await MintSubordinateStatementAsync(
-            anchor, subject, issuedAt, expiresAt, cancellationToken: cancellationToken).ConfigureAwait(false);
+            anchor, subject, issuedAt, expiresAt, subjectExtraClaims, cancellationToken).ConfigureAwait(false);
         MintedStatement anchorEc = await MintEntityConfigurationAsync(
             anchor, issuedAt, expiresAt, cancellationToken: cancellationToken).ConfigureAwait(false);
 

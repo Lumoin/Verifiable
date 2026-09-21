@@ -32,7 +32,7 @@ namespace Verifiable.OAuth.Logout;
 /// deliberately <strong>not</strong> enforced — RP-Initiated Logout §3 expects logout to
 /// work for a session whose ID Token has already expired. (Hence this does not reuse
 /// <see cref="JwsAccessTokenValidator"/>, which rejects expired tokens.) In this
-/// per-tenant model <see cref="ExchangeContext.Registration"/> is the client, so the same
+/// per-tenant model <c>context.ClientRegistration</c> is the client, so the same
 /// record both verifies the hint (its signing key) and supplies the allowed post-logout
 /// redirect URIs.
 /// </para>
@@ -50,7 +50,7 @@ public static class EndSessionEndpoints
         //Fail-closed: the endpoint must be able to verify the id_token_hint and to
         //terminate the session, so it materializes only when the capability is allowed
         //and both the verification-key resolver and the terminate seam are wired.
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcRpInitiatedLogout)
             && server?.OAuth().Cryptography.VerificationKeyResolver is not null
             && server?.OAuth().TerminateSessionAsync is not null)
@@ -94,7 +94,7 @@ public static class EndSessionEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -253,6 +253,17 @@ public static class EndSessionEndpoints
                     OAuthErrors.InvalidRequest, $"No verification key found for kid '{kid}'."));
             }
 
+            //RFC 7519 §4: the Claim Names within a JWT Claims Set MUST be unique. Gate the already-
+            //decoded payload for well-formedness before it reaches the wired deserializer inside
+            //VerifyAndDecodeAsync below, so a duplicate claim name is refused here rather than
+            //escaping the deserializer as an unhandled exception.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
+            {
+                return (null, null, ServerHttpResponse.BadRequest(
+                    OAuthErrors.InvalidRequest,
+                    "id_token_hint payload is not well-formed JSON, or carries a duplicate claim name."));
+            }
+
             //Verify AND decode in one call: the payload is read from the VERIFIED
             //result, not re-deserialized from the unverified message — the trust state
             //is carried in the type (JwsVerificationResult), not asserted by convention.
@@ -267,7 +278,7 @@ public static class EndSessionEndpoints
                     publicKey,
                     cancellationToken).ConfigureAwait(false);
             }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+            catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
             {
                 return (null, null, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidRequest, $"id_token_hint verification raised: {ex.Message}"));

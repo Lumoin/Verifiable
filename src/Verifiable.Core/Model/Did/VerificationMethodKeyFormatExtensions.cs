@@ -98,7 +98,7 @@ namespace Verifiable.Core.Model.Did
     /// <strong>Thread Safety:</strong>
     /// </para>
     /// <para>
-    /// The <see cref="Default"/> property is static and should be set once during application initialization.
+    /// The <see cref="VerificatioMethodTypeInfoKeyFormatSelector.Default"/> property is static and should be set once during application initialization.
     /// Changing the selector after initialization may lead to inconsistent behavior if multiple threads
     /// are creating verification methods simultaneously.
     /// </para>
@@ -116,7 +116,7 @@ namespace Verifiable.Core.Model.Did
         /// <remarks>
         /// <para>
         /// This property allows global customization of key format selection behavior. When set,
-        /// all calls to <see cref="VerificationMethodTypeInfoExtensions.SelectKeyFormatType"/> will
+        /// all calls to <see cref="VerificationMethodKeyFormatExtensions.SelectKeyFormatType"/> will
         /// use the specified selector logic.
         /// </para>
         /// <para>
@@ -192,7 +192,7 @@ namespace Verifiable.Core.Model.Did
     /// </para>
     /// <list type="bullet">
     /// <item><description>
-    /// <see cref="VerificationMethodTypeInfoKeyFormatSelector.Default"/> - Controls format type selection.
+    /// <see cref="VerificatioMethodTypeInfoKeyFormatSelector.Default"/> - Controls format type selection.
     /// </description></item>
     /// <item><description>
     /// <see cref="KeyFormatFactory.DefaultKeyFormatCreator"/> - Controls format instance creation.
@@ -218,7 +218,7 @@ namespace Verifiable.Core.Model.Did
         /// </returns>
         /// <remarks>
         /// <para>
-        /// This method delegates to the current <see cref="VerificationMethodTypeInfoKeyFormatSelector.Default"/>
+        /// This method delegates to the current <see cref="VerificatioMethodTypeInfoKeyFormatSelector.Default"/>
         /// selector, allowing the selection logic to be customized globally. By default, it returns the
         /// verification method's <see cref="VerificationMethodTypeInfo.DefaultKeyFormatType"/>.
         /// </para>
@@ -233,7 +233,7 @@ namespace Verifiable.Core.Model.Did
         /// <strong>Custom Selection:</strong>
         /// </para>
         /// <para>
-        /// When custom selection logic is configured via <see cref="VerificationMethodTypeInfoKeyFormatSelector.Default"/>,
+        /// When custom selection logic is configured via <see cref="VerificatioMethodTypeInfoKeyFormatSelector.Default"/>,
         /// this method will apply that logic to determine the most appropriate format type based on the
         /// specific verification method and key characteristics.
         /// </para>
@@ -249,7 +249,7 @@ namespace Verifiable.Core.Model.Did
         /// Thrown when <paramref name="vmType"/> or <paramref name="key"/> is null.
         /// </exception>
         /// <seealso cref="CreateKeyFormat"/>
-        /// <seealso cref="VerificationMethodTypeInfoKeyFormatSelector.Default"/>
+        /// <seealso cref="VerificatioMethodTypeInfoKeyFormatSelector.Default"/>
         public static Type SelectKeyFormatType(this VerificationMethodTypeInfo vmType, PublicKeyMemory key)
         {
             return VerificatioMethodTypeInfoKeyFormatSelector.Default(vmType, key);
@@ -325,7 +325,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <list type="bullet">
         /// <item><description>
-        /// Modify <see cref="VerificationMethodTypeInfoKeyFormatSelector.Default"/> to change format type selection.
+        /// Modify <see cref="VerificatioMethodTypeInfoKeyFormatSelector.Default"/> to change format type selection.
         /// </description></item>
         /// <item><description>
         /// Modify <see cref="KeyFormatFactory.DefaultKeyFormatCreator"/> to change format creation logic.
@@ -339,6 +339,7 @@ namespace Verifiable.Core.Model.Did
         /// Thrown when the selected format type is not supported by the key format creator, or when
         /// the key material is invalid for the selected format type.
         /// </exception>
+        /// <param name="pool">The memory pool the returned <see cref="KeyFormat"/>'s encoded key material is allocated from.</param>
         /// <exception cref="InvalidOperationException">
         /// Thrown when the format creation process fails due to incompatible algorithm or encoding issues.
         /// </exception>

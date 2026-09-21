@@ -29,7 +29,7 @@ namespace Verifiable.OAuth.Oidc;
 /// <see cref="WellKnownHttpMethods.Post"/> request — sharing the
 /// <see cref="WellKnownEndpointNames.UserInfo"/> role identifier so the
 /// application's
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+/// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
 /// resolves both to the same URL.
 /// </para>
 /// <para>
@@ -90,6 +90,7 @@ public static class UserInfoEndpoints
     };
 
 
+    /// <summary>Builds the UserInfo endpoint using the admitted token validation and claim operations.</summary>
     private static EndpointCandidate BuildUserInfo(string httpMethod) =>
         new()
         {
@@ -124,7 +125,7 @@ public static class UserInfoEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
 

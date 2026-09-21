@@ -34,7 +34,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 ///       In SD-JWT, the issuer creates a JWT with <c>_sd</c> arrays containing digests of
 ///       disclosures, plus the disclosures themselves. The holder receives both the JWT and
 ///       all disclosures. Unlike ECDSA-SD-2023, SD-JWT uses hash-based redaction rather than
-///       individual signatures. See <see cref="Verifiable.JCose.Sd.SdJwtToken"/>.
+///       individual signatures. See <c>Verifiable.Json.Sd.SdJwtIssuance</c>.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -52,7 +52,8 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 /// <seealso cref="EcdsaSdDerivedProof"/>
 /// <seealso cref="EcdsaSd2023CryptosuiteInfo"/>
-/// <seealso cref="EcdsaSd2023ProofSerializer"/>
+/// <seealso cref="SerializeBaseProofDelegate"/>
+/// <seealso cref="ParseBaseProofDelegate"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class EcdsaSdBaseProof: IEquatable<EcdsaSdBaseProof>

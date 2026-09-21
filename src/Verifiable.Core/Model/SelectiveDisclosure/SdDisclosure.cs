@@ -47,7 +47,7 @@ public sealed class SdDisclosure: IEquatable<SdDisclosure>, IDisposable
     /// <remarks>
     /// Per RFC 9901 Section 4.2.2, the salt is at least 128 bits of cryptographically
     /// secure random data. The salt is owned by this disclosure; reading
-    /// <see cref="Cryptography.Salt.AsReadOnlySpan"/> on it is safe until disposal.
+    /// <see cref="Lumoin.Base.SensitiveMemory.AsReadOnlySpan"/> on it is safe until disposal.
     /// </remarks>
     public Salt Salt { get; }
 

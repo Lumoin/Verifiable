@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
 
@@ -27,7 +26,7 @@ public sealed record SiopRequestObjectServedState: FlowState
 
     /// <summary>
     /// The opaque per-flow request handle. Carried forward so the application's
-    /// <see cref="AuthorizationServerIntegration.SaveFlowStateAsync"/> can index by it for the
+    /// <see cref="Verifiable.Server.ServerIntegration.SaveFlowStateAsync"/> can index by it for the
     /// inbound response lookup, and so terminal-state auditors can correlate flow records to the
     /// wire-observable <c>state</c> the Wallet echoes.
     /// </summary>

@@ -13,7 +13,7 @@ namespace Verifiable.Server.Pipeline;
 /// Returned by matchers whose decision is fully captured in the act of
 /// returning non-<see langword="null"/> — for example, the PAR-vs-direct
 /// authorize disambiguation matchers in
-/// <see cref="AuthCodeEndpoints"/>, which return
+/// <c>AuthCodeEndpoints</c>, which return
 /// <see cref="MatchPayload.Empty"/> when the request matches and
 /// <see langword="null"/> otherwise.
 /// </para>

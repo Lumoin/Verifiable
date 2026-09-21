@@ -11,7 +11,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.JCose;
 
 /// <summary>
-/// The JAdES certificate-accepting <see cref="JAdESSignatureValidation.ValidateAsync"/> overload earns
+/// The JAdES certificate-accepting <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PkiCertificateMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> overload earns
 /// <see cref="BoundProvenance"/> through <see cref="BoundProvenance.TryBindByCertificateDigestAsync"/>, and the
 /// bare-<see cref="PublicKeyMemory"/> overloads stay the honest bring-your-own-key <see cref="AssertedProvenance"/>
 /// primitive; the JA-A.1.1-02 trivial-PASS hole <see cref="SigningCertificateIdentification"/> otherwise takes

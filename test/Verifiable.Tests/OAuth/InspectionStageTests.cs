@@ -13,7 +13,7 @@ namespace Verifiable.Tests.OAuth;
 /// dispatcher fires <see cref="IncomingRequestStage"/>,
 /// <see cref="MatchedStage"/>, and <see cref="OutgoingResponseStage"/> on
 /// every request; <see cref="StateTransitionStage"/> fires from
-/// <see cref="FlowRunner.StepWithEffectsAsync"/> after every successful
+/// <see cref="Verifiable.Server.Pipeline.FlowRunner.StepWithEffectsAsync"/> after every successful
 /// PDA transition.
 /// </summary>
 /// <remarks>
@@ -44,6 +44,10 @@ internal sealed class InspectionStageTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
 
 
+    /// <summary>
+    /// Checks that a successful state transition emits the inspection record used for replay capture.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#24-replay-determinism">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task StateTransitionStageFiresOnSuccessfulPdaTransition()
     {
@@ -51,18 +55,21 @@ internal sealed class InspectionStageTests
 
         List<StateTransitionStage> recorded = [];
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(stage is StateTransitionStage transition)
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
             {
-                recorded.Add(transition);
-            }
+                if(stage is StateTransitionStage transition)
+                {
+                    recorded.Add(transition);
+                }
 
-            return previousInspect(stage, ctx, ct);
-        };
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //Drive the OID4VP PAR flow — context-state-driven, but goes through
         //FlowRunner because the endpoint is stateful (ParFlowKind).
@@ -88,6 +95,10 @@ internal sealed class InspectionStageTests
     }
 
 
+    /// <summary>
+    /// Checks that a stateful request emits incoming, matched, transition, and outgoing inspection stages in order.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#2-pipeline-overview">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task InspectAsyncFiresAtAllFourStages()
     {
@@ -95,14 +106,18 @@ internal sealed class InspectionStageTests
 
         List<InspectionStage> recorded = [];
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            recorded.Add(stage);
-            return previousInspect(stage, ctx, ct);
-        };
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
+            {
+                recorded.Add(stage);
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //OID4VP PAR drives a stateful flow (ParFlowKind) — exercises the full
         //dispatch envelope: IncomingRequestStage at entry, MatchedStage after
@@ -134,6 +149,10 @@ internal sealed class InspectionStageTests
     }
 
 
+    /// <summary>
+    /// Checks that matched-stage inspection identifies an unmatched request with a null endpoint.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task InspectAsyncMatchedStageHasNullEndpointOnNoMatch()
     {
@@ -141,14 +160,21 @@ internal sealed class InspectionStageTests
 
         MatchedStage? recordedMatched = null;
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(stage is MatchedStage matched) { recordedMatched = matched; }
-            return previousInspect(stage, ctx, ct);
-        };
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
+            {
+                if(stage is MatchedStage matched)
+                {
+                    recordedMatched = matched;
+                }
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //Dispatch to a path that's served by no endpoint in this registration's
         //chain — every matcher's acceptance test returns null.
@@ -177,6 +203,10 @@ internal sealed class InspectionStageTests
     }
 
 
+    /// <summary>
+    /// Checks that an unmatched request still emits incoming, matched, and outgoing inspection stages.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#2-pipeline-overview">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task InspectAsyncFiresEnvelopeStagesEvenOnUnmatchedRequest()
     {
@@ -184,14 +214,18 @@ internal sealed class InspectionStageTests
 
         List<InspectionStage> recorded = [];
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            recorded.Add(stage);
-            return previousInspect(stage, ctx, ct);
-        };
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
+            {
+                recorded.Add(stage);
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId.Value;
         IncomingRequest request = new(
@@ -213,12 +247,16 @@ internal sealed class InspectionStageTests
         _ = Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
             "OutgoingResponseStage must fire even on the 404 path — observers "
             + "see the response envelope on every code path.");
-        Assert.HasCount(0, recorded.OfType<StateTransitionStage>(),
+        Assert.IsEmpty(recorded.OfType<StateTransitionStage>(),
             "StateTransitionStage must not fire when no endpoint matched — "
             + "no flow ran, so no transition could have happened.");
     }
 
 
+    /// <summary>
+    /// Checks that stateless dispatch produces no state-transition inspection record.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task StateTransitionStageDoesNotFireForStatelessEndpointDispatch()
     {
@@ -226,18 +264,21 @@ internal sealed class InspectionStageTests
 
         List<StateTransitionStage> recorded = [];
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(stage is StateTransitionStage transition)
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
             {
-                recorded.Add(transition);
-            }
+                if(stage is StateTransitionStage transition)
+                {
+                    recorded.Add(transition);
+                }
 
-            return previousInspect(stage, ctx, ct);
-        };
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
         ExchangeContext context = [];
@@ -254,7 +295,7 @@ internal sealed class InspectionStageTests
 
         Assert.AreEqual(200, response.StatusCode,
             "Stateless JWKS dispatch precondition for the no-emission assertion below.");
-        Assert.HasCount(0, recorded,
+        Assert.IsEmpty(recorded,
             "Stateless endpoints serve computed responses without driving the PDA. "
             + "StateTransitionStage must not fire on stateless paths because "
             + "FlowRunner.StepWithEffectsAsync is the only emission site and "
@@ -267,3 +308,4 @@ internal sealed class InspectionStageTests
     private static PreparedDcqlQuery CreatePreparedQuery() =>
         DcqlFixtures.PidFamilyNamePrepared();
 }
+

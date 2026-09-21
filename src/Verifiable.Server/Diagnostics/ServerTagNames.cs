@@ -23,15 +23,16 @@ public static class ServerTagNames
     /// <summary>The flow kind name (e.g., <c>AuthorizationCode</c>, <c>VerifiablePresentation</c>).</summary>
     public static string FlowKind { get; } = Utf8Constants.ToInternedString(FlowKindUtf8);
 
-    /// <summary>The UTF-8 source literal of <see cref="TenantId"/>.</summary>
-    public static ReadOnlySpan<byte> TenantIdUtf8 => "server.tenant.id"u8;
+    /// <summary>The UTF-8 source literal of <see cref="TenantHandle"/>.</summary>
+    public static ReadOnlySpan<byte> TenantHandleUtf8 => "server.tenant.handle"u8;
 
     /// <summary>
-    /// The tenant identifier the request was resolved against. Opaque from the
-    /// library's perspective; meaningful to the application's tenant resolver
-    /// and registration store.
+    /// The application-assigned tenant handle the request's registration carries, safe to write
+    /// to any configured exporter. A registration with no
+    /// <see cref="IRegistrationRecord.TenantHandle"/> produces no tenant-shaped tag on the
+    /// dispatch span — never the tenant key, which stays inside the process.
     /// </summary>
-    public static string TenantId { get; } = Utf8Constants.ToInternedString(TenantIdUtf8);
+    public static string TenantHandle { get; } = Utf8Constants.ToInternedString(TenantHandleUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RegistrationId"/>.</summary>
     public static ReadOnlySpan<byte> RegistrationIdUtf8 => "server.registration.id"u8;
@@ -52,6 +53,16 @@ public static class ServerTagNames
 
     /// <summary>The HTTP response status code.</summary>
     public static string StatusCode { get; } = Utf8Constants.ToInternedString(StatusCodeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ErrorCode"/>.</summary>
+    public static ReadOnlySpan<byte> ErrorCodeUtf8 => "server.response.error_code"u8;
+
+    /// <summary>
+    /// The error code of a non-success response, from
+    /// <see cref="Verifiable.Server.ServerHttpResponse.ErrorCode"/>. Absent when the response
+    /// carries no typed error code.
+    /// </summary>
+    public static string ErrorCode { get; } = Utf8Constants.ToInternedString(ErrorCodeUtf8);
 
     //Flow state.
 

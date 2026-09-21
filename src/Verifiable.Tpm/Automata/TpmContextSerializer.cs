@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Automata;
 /// context in the TPM. ... The internal structure TPMS_CONTEXT_DATA of the actual context is vendor
 /// specific."). One write/read pair exists per <see cref="TpmContextResourceKind"/>; each writes and reads its
 /// resource's fields in exactly the order the record declares them, omitting the <c>Handle</c> field — the
-/// metadata (<see cref="Structures.TpmsContext.SavedHandle"/>) already carries the handle, and the load side
+/// metadata (<see cref="Verifiable.Tpm.Spec.Structures.TpmsContext.SavedHandle"/>) already carries the handle, and the load side
 /// re-stamps it: the saved handle itself for a session, a freshly drawn handle for an object or sequence.
 /// </summary>
 /// <remarks>
@@ -49,7 +49,7 @@ namespace Verifiable.Tpm.Automata;
 /// <see cref="TpmPolicyCpHashKind"/>) — and a nullable field (a signing or KDF scheme's optional presence, or a
 /// policy session's latched command code) as one presence octet then the value. The exported public point rides
 /// the same <c>UINT16 length ‖ octets</c> run as a private or session key — the raw SEC1 concatenation, not the
-/// two-<c>TPM2B</c> <c>TPMS_ECC_POINT</c> shape <see cref="Structures.Tpm2bEccPoint"/> frames — rebuilt over a
+/// two-<c>TPM2B</c> <c>TPMS_ECC_POINT</c> shape <see cref="Verifiable.Tpm.Spec.Structures.Tpm2bEccPoint"/> frames — rebuilt over a
 /// fresh rental tagged from the already-read <c>Curve</c>
 /// (<see cref="TpmCryptographicProjections.ToExchangePublicKeyTag"/>), with the Empty sentinel for a zero-length
 /// (RSA) run; a sequence's retained segments ride a <c>UINT32</c> count then each segment's own framing; every
@@ -186,7 +186,7 @@ internal static class TpmContextSerializer
 
     /// <summary>
     /// Rebuilds a <see cref="TransientKeyState"/> from its serialized fields. Every pooled carrier is rented in
-    /// wire order under a nested dispose-on-throw ladder — the <see cref="Structures.TpmsContext"/>/
+    /// wire order under a nested dispose-on-throw ladder — the <see cref="Verifiable.Tpm.Spec.Structures.TpmsContext"/>/
     /// <c>TpmsCreationData.Parse</c> shape — so a later field's refusal disposes every earlier one before the
     /// exception leaves this method.
     /// </summary>
@@ -829,6 +829,68 @@ internal static class TpmContextSerializer
         {
             TpmAlgIdConstants.TPM_ALG_ECC => TpmSimulator.EccPrivateKeyTag(curve.Value),
             TpmAlgIdConstants.TPM_ALG_RSA => TpmSimulator.RsaPrivateKeyTag(keyBits),
+            TpmAlgIdConstants.TPM_ALG_ERROR => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_TDES => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_HMAC => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_AES => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_MGF1 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_XOR => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA256 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA384 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA512 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_NULL => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SM4 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_RSASSA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_RSAES => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_OAEP => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_ECDSA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_ECDH => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_ECDAA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SM2 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_ECMQV => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_HKDF => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KDF2 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_CMAC => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_CTR => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_OFB => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_CBC => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_CFB => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_ECB => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_CCM => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_GCM => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KW => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KWP => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_EAX => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_LMS => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_XMSS => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_MLKEM => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_MLDSA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'."),
             _ => throw new InvalidOperationException($"No private-key tag is defined for key type '{keyType.Value}'.")
         };
 

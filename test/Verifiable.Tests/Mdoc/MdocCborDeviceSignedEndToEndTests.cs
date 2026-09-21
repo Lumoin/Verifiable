@@ -18,9 +18,9 @@ namespace Verifiable.Tests.Mdoc;
 /// <item><description><see cref="MdocIssuance.BuildDocument"/> assembles the logical mdoc.</description></item>
 /// <item><description><see cref="MdocCborIssuance.SignAsync"/> signs the issuer-side MSO.</description></item>
 /// <item><description><see cref="MdocCborDeviceSignedSigner.SignAsync"/> attaches the device-side COSE_Sign1 over <c>DeviceAuthentication</c>.</description></item>
-/// <item><description><see cref="MdocCborIssuerAuthVerifier.VerifyAsync"/> verifies the issuer MSO signature.</description></item>
-/// <item><description><see cref="MdocMsoDigestBindingValidator.Validate"/> checks the issuer's digest commitments.</description></item>
-/// <item><description><see cref="MdocCborDeviceSignedVerifier.VerifyAsync"/> verifies the device signature.</description></item>
+/// <item><description><c>MdocDocument.VerifyIssuerAuthAsync</c> verifies the issuer MSO signature.</description></item>
+/// <item><description><see cref="MdocMsoDigestBindingValidator.Validate(MdocIssuerSigned, BaseMemoryPool)"/> checks the issuer's digest commitments.</description></item>
+/// <item><description><c>MdocDeviceSigned.VerifyAsync</c> verifies the device signature.</description></item>
 /// </list>
 /// <remarks>
 /// <para>

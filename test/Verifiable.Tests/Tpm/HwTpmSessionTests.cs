@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Tpm;
 [TestCategory("RequiresHardwareTpm")]
 internal class HwTpmSessionTests
 {
-    // <summary>
+    /// <summary>
     /// The TPM device for the tests.
     /// </summary>
     private static TpmDevice Tpm { get; set; } = null!;

@@ -39,8 +39,8 @@ internal sealed class AuthorizeStateEchoTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, state: StateWithSpecialChars, maxAge: null, staleAuth: false)
@@ -65,8 +65,8 @@ internal sealed class AuthorizeStateEchoTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, state: StateWithSpecialChars, maxAge: "0", staleAuth: true)
@@ -89,8 +89,8 @@ internal sealed class AuthorizeStateEchoTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
             host, material, state: null, maxAge: null, staleAuth: false).ConfigureAwait(false);
@@ -116,6 +116,7 @@ internal sealed class AuthorizeStateEchoTests
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,

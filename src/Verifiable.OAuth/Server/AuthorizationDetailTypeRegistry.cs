@@ -65,6 +65,7 @@ public sealed record AuthorizationDetailHandler
     /// </summary>
     public required string Type { get; init; }
 
+
     /// <summary>
     /// Shape-validates an object of <see cref="Type"/>. Returns <see langword="null"/> when the
     /// object is acceptable, or the <c>invalid_authorization_details</c> error description
@@ -89,37 +90,67 @@ public sealed record AuthorizationDetailHandler
 /// <see cref="RegisteredTypes"/> is what the AS metadata advertises as
 /// <c>authorization_details_types_supported</c> (RFC 9396 §10).
 /// </remarks>
-[DebuggerDisplay("AuthorizationDetailTypeRegistry({handlers.Count} types)")]
-public sealed class AuthorizationDetailTypeRegistry
+[DebuggerDisplay("AuthorizationDetailTypeRegistry({Handlers.Count} types)")]
+public sealed class AuthorizationDetailTypeRegistry: WiringComponent
 {
-    //Keyed by the RFC 9396 §2 type value, compared ordinally (RFC 9396 §12).
-    private Dictionary<string, AuthorizationDetailHandler> Handlers { get; } =
-        new(StringComparer.Ordinal);
+    /// <summary>Handlers keyed by the RFC 9396 §2 type value, compared ordinally under §12.</summary>
+    private Dictionary<string, AuthorizationDetailHandler> Handlers { get; set; } = new(StringComparer.Ordinal);
 
-    //The type values in registration order — the deterministic order RegisteredTypes
-    //advertises; Dictionary enumeration order carries no such guarantee.
-    private List<string> RegistrationOrder { get; } = [];
+    /// <summary>Type names in the registration order advertised by discovery.</summary>
+    private List<string> RegistrationOrder { get; set; } = [];
+
+
+    /// <summary>Copies registered handlers into an independent alteration candidate.</summary>
+    protected override WiringComponent CloneCore()
+    {
+        AuthorizationDetailTypeRegistry copy = (AuthorizationDetailTypeRegistry)base.CloneCore();
+        copy.Handlers = new(Handlers);
+        copy.RegistrationOrder = [.. RegistrationOrder];
+
+        return copy;
+    }
+
+
+    /// <summary>Checks that every registered type has its required shape validator before publication.</summary>
+    public void Validate()
+    {
+        IsValidated = false;
+        foreach(AuthorizationDetailHandler handler in Handlers.Values)
+        {
+            if(string.IsNullOrEmpty(handler.Type) || handler.ValidateShape is null)
+            {
+                throw new InvalidOperationException("AuthorizationDetailTypes requires Type and ValidateShape for every handler.");
+            }
+        }
+
+        IsValidated = true;
+    }
 
 
     /// <summary>
     /// Registers <paramref name="handler"/> for its <see cref="AuthorizationDetailHandler.Type"/>.
     /// </summary>
+    /// <remarks>Serving registration requires an alteration candidate; a live call throws a named configuration fault.</remarks>
     /// <param name="handler">The handler to register.</param>
     /// <exception cref="ArgumentException">
     /// Thrown when a handler is already registered for the handler's <c>type</c>.
     /// </exception>
     public void Register(AuthorizationDetailHandler handler)
     {
-        ArgumentNullException.ThrowIfNull(handler);
-
-        if(!Handlers.TryAdd(handler.Type, handler))
+        lock(MutationLock)
         {
-            throw new ArgumentException(
-                $"A handler is already registered for authorization details type '{handler.Type}'.",
-                nameof(handler));
-        }
+            EnsureMutable();
+            ArgumentNullException.ThrowIfNull(handler);
 
-        RegistrationOrder.Add(handler.Type);
+            if(!Handlers.TryAdd(handler.Type, handler))
+            {
+                throw new ArgumentException(
+                    $"A handler is already registered for authorization details type '{handler.Type}'.",
+                    nameof(handler));
+            }
+
+            RegistrationOrder.Add(handler.Type);
+        }
     }
 
 

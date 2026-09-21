@@ -240,7 +240,7 @@ internal sealed class CoseTests
     /// <summary>
     /// RFC 9052 §3's <c>empty_or_serialized_map</c> CDDL (<c>bstr
     /// .cbor header_map / bstr .size 0</c>) admits a genuinely zero-length protected header, distinct from a
-    /// serialized empty map (<c>{}</c> encodes to <c>0xa0</c>, a one-byte bstr payload). <see cref="BaseMemoryPool.Rent"/>
+    /// serialized empty map (<c>{}</c> encodes to <c>0xa0</c>, a one-byte bstr payload). <see cref="BaseMemoryPool.Rent(int)"/>
     /// refuses a zero-length rental, so <see cref="CoseSerialization.ParseCoseSign1"/> must route this through
     /// the <c>EncodedCoseProtectedHeader.FromBytes</c> <c>EmptyMemoryOwner</c> idiom rather than a bare rental,
     /// or this KAT throws instead of round-tripping.

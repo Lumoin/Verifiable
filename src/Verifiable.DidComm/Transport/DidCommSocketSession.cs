@@ -389,6 +389,8 @@ public sealed class DidCommSocketSession: IAsyncDisposable
                 {
                     DidCommTransmitError.DeniedByPolicy => DidCommExchangeResult.DeniedByPolicy(),
                     DidCommTransmitError.Rejected => DidCommExchangeResult.Rejected(sent.TransportStatusCode),
+                    DidCommTransmitError.None => DidCommExchangeResult.TransportFailed(),
+                    DidCommTransmitError.TransportFailed => DidCommExchangeResult.TransportFailed(),
                     _ => DidCommExchangeResult.TransportFailed()
                 };
 

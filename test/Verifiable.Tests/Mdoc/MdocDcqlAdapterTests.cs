@@ -187,7 +187,7 @@ internal sealed class MdocDcqlAdapterTests
             metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
             claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
-        Assert.HasCount(0, matches);
+        Assert.IsEmpty(matches);
     }
 
 
@@ -223,7 +223,7 @@ internal sealed class MdocDcqlAdapterTests
             metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
             claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
-        Assert.HasCount(0, matches);
+        Assert.IsEmpty(matches);
     }
 
 
@@ -291,3 +291,4 @@ internal sealed class MdocDcqlAdapterTests
         return path;
     }
 }
+

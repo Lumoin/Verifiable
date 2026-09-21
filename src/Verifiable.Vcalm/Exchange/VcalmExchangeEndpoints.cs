@@ -48,7 +48,7 @@ public static class VcalmExchangeEndpoints
     {
         List<EndpointCandidate> candidates = [];
 
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
 
         //The §3.6.4 / §3.6.6 reads need the exchange-id → flow-id resolver. The §3.6.3 create and
         //§3.6.5 participate additionally need their parsers and (for §3.6.5) the step-decision seam.
@@ -81,7 +81,11 @@ public static class VcalmExchangeEndpoints
     };
 
 
-    //§3.6.3 POST /workflows/{localWorkflowId}/exchanges.
+    /// <summary>
+    /// Builds the endpoint for §3.6.3 POST /workflows/{localWorkflowId}/exchanges.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildCreateExchange() =>
         new()
         {
@@ -98,7 +102,7 @@ public static class VcalmExchangeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -184,7 +188,11 @@ public static class VcalmExchangeEndpoints
         };
 
 
-    //§3.6.4 GET /workflows/{localWorkflowId}/exchanges/{localExchangeId}/protocols.
+    /// <summary>
+    /// Builds the endpoint for §3.6.4 GET /workflows/{localWorkflowId}/exchanges/{localExchangeId}/protocols.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildGetExchangeProtocols() =>
         new()
         {
@@ -200,7 +208,7 @@ public static class VcalmExchangeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 string? exchangeId = ExtractExchangeId(context);
@@ -239,7 +247,11 @@ public static class VcalmExchangeEndpoints
         };
 
 
-    //§3.6.6 GET /workflows/{localWorkflowId}/exchanges/{localExchangeId}.
+    /// <summary>
+    /// Builds the endpoint for §3.6.6 GET /workflows/{localWorkflowId}/exchanges/{localExchangeId}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildGetExchangeState() =>
         new()
         {
@@ -255,7 +267,7 @@ public static class VcalmExchangeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 string? exchangeId = ExtractExchangeId(context);
@@ -298,7 +310,11 @@ public static class VcalmExchangeEndpoints
         };
 
 
-    //§3.6.5 POST /workflows/{localWorkflowId}/exchanges/{localExchangeId}.
+    /// <summary>
+    /// Builds the endpoint for §3.6.5 POST /workflows/{localWorkflowId}/exchanges/{localExchangeId}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildParticipateInExchange() =>
         new()
         {
@@ -319,7 +335,7 @@ public static class VcalmExchangeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -568,6 +584,8 @@ public static class VcalmExchangeEndpoints
 
             //AcceptPresentation with no presentation in the message, or Complete: the engine has nothing
             //more to request nor offer.
+            VcalmExchangeStepKind.AcceptPresentation => CompleteStep(referenceId, ImmutableDictionary<string, string>.Empty, context, now),
+            VcalmExchangeStepKind.Complete => CompleteStep(referenceId, ImmutableDictionary<string, string>.Empty, context, now),
             _ => CompleteStep(referenceId, ImmutableDictionary<string, string>.Empty, context, now)
         };
     }
@@ -644,6 +662,7 @@ public static class VcalmExchangeEndpoints
                 });
             }
 
+            case VcalmWorkflowAdvanceKind.Complete:
             default:
             {
                 context.SetVcalmExchangeReply(CompletionReply(referenceId));
@@ -880,6 +899,12 @@ public static class VcalmExchangeEndpoints
                 validation.Errors.Count > 0
                     ? $"The presented presentation does not conform to the step's presentationSchema: {validation.Errors[0].Message} (instance {validation.Errors[0].InstanceLocation}, keyword {validation.Errors[0].KeywordLocation})."
                     : "The presented presentation does not conform to the step's presentationSchema."),
+            CredentialSchemaValidationOutcome.Indeterminate => VcalmProblemDetail.Error(
+                VcalmProblemTypes.MalformedValueError,
+                "MALFORMED_VALUE_ERROR",
+                "The step's presentationSchema could not be evaluated (an unsupported schema version "
+                + "or an unevaluable schema); the declared validation cannot assert conformance, so "
+                + "the presentation is refused."),
             _ => VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
                 "MALFORMED_VALUE_ERROR",

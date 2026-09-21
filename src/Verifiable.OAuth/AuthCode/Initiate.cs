@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Initiates a new Authorization Code flow. Transitions to
-/// <see cref="PkceGenerated"/>.
+/// <see cref="Verifiable.OAuth.AuthCode.States.PkceGeneratedState"/>.
 /// </summary>
 /// <param name="Pkce">The freshly generated PKCE parameters for this flow.</param>
 /// <param name="RedirectUri">The redirect URI registered for this flow instance.</param>

@@ -6,7 +6,7 @@ namespace Verifiable.Tpm.Extensions.Policy;
 /// (<see cref="TpmPolicy.ExecuteAsync"/>) from the one description.
 /// </summary>
 /// <remarks>
-/// A convenience layer over the library's policy primitives (<see cref="TpmPolicyDigest"/> and the
+/// A convenience layer over the library's policy primitives (<see cref="Verifiable.Tpm.Infrastructure.TpmPolicyDigest"/> and the
 /// <see cref="TpmDeviceExtensions"/> policy commands); for full control, use those directly.
 /// </remarks>
 public sealed class TpmPolicyBuilder
@@ -46,7 +46,7 @@ public sealed class TpmPolicyBuilder
     /// <c>PolicyUpdate(TPM_CC_PolicySecret, ...)</c> fold using the ticket's OWN <c>policyRef</c> (TPM 2.0
     /// Library Part 3, clause 23.5), selected by the ticket's tag rather than by <c>TPM_CC_PolicyTicket</c>
     /// itself. For a ticket minted with a non-empty <c>policyRef</c>, this method predicts a different digest;
-    /// there is no builder verb for that case — fold it directly with <see cref="TpmPolicyDigest.ExtendForSecret"/>.
+    /// there is no builder verb for that case — fold it directly with <see cref="Verifiable.Tpm.Infrastructure.TpmPolicyDigest.ExtendForSecret"/>.
     /// </remarks>
     /// <param name="authHandle">The permanent handle whose authorization the policy requires (for example <c>(uint)TpmRh.TPM_RH_ENDORSEMENT</c>).</param>
     /// <returns>This builder.</returns>

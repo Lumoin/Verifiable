@@ -28,17 +28,18 @@ namespace Verifiable.Fido2;
 /// <c>required</c>/<c>init</c> members instead.
 /// </para>
 /// <para>
-/// <strong>Extension inputs.</strong> This registration-options surface carves out five named
+/// <strong>Extension inputs.</strong> This registration-options surface carves out six named
 /// extension-input members — <see cref="AppIdExclude"/>, <see cref="LargeBlob"/>,
-/// <see cref="MinPinLength"/>, and <see cref="CredProtect"/> here, and
-/// <c>PublicKeyCredentialRequestOptions.AppId</c>/<c>LargeBlob</c> on the assertion side — mirroring
-/// how the shipped <c>appid</c> support bypassed the generic extension-registry entirely.
+/// <see cref="MinPinLength"/>, <see cref="CredProtect"/> and <see cref="Prf"/> here, and
+/// <c>PublicKeyCredentialRequestOptions.AppId</c>/<c>LargeBlob</c>/<c>Prf</c> on the assertion side —
+/// mirroring how the shipped <c>appid</c> support bypassed the generic extension-registry entirely.
 /// <c>minPinLength</c>/<c>credProtect</c> are registration-only (CTAP 2.3 §12.5's own "only applicable
 /// during credential creation"; §12.1's own extension-input section covers only <c>create()</c>) — the
-/// assertion-side options gain no corresponding members. The CR's generic <c>extensions</c>
-/// client-input member (<c>AuthenticationExtensionsClientInputs</c>, tally rows 3559/3939, tagged
-/// <c>WP-Extensions</c>) remains unbuilt beyond these five carve-outs — a future extension needs its
-/// own equally-named member here, not a dictionary-typed catch-all.
+/// assertion-side options gain no corresponding members; <c>prf</c> ships on BOTH sides, with a
+/// narrower registration-side input (see <see cref="Prf"/>'s own remarks). The CR's generic
+/// <c>extensions</c> client-input member (<c>AuthenticationExtensionsClientInputs</c>, tally rows
+/// 3559/3939, tagged <c>WP-Extensions</c>) remains unbuilt beyond these six carve-outs — a future
+/// extension needs its own equally-named member here, not a dictionary-typed catch-all.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PublicKeyCredentialCreationOptions(Rp={Rp}, User={User}, PubKeyCredParams={PubKeyCredParams?.Count})")]
@@ -58,7 +59,7 @@ public sealed record PublicKeyCredentialCreationOptions
     /// The base64url-encoded challenge the authenticator signs over. Required by the CR.
     /// </summary>
     /// <remarks>
-    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.BaseMemoryPool)"/>
+    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(BaseMemoryPool)"/>
     /// returns this exact shape, matching <c>RegistrationCeremonyInput.ExpectedChallenge</c>'s own
     /// plain-<see cref="string"/> modeling. See
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-cryptographic-challenges">section 13.4.3:
@@ -181,4 +182,17 @@ public sealed record PublicKeyCredentialCreationOptions
     /// <see cref="Fido2CredProtectRegistrationExtensionInput"/>).
     /// </remarks>
     public Fido2CredProtectRegistrationExtensionInput? CredProtect { get; set; }
+
+    /// <summary>
+    /// The <c>prf</c> extension's registration-side client extension input, or
+    /// <see langword="null"/> when not requested.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication Level 3,
+    /// section 10.1.4: Pseudo-random function extension (prf)</see>. One of this type's six named
+    /// extension-input carve-outs (see the type-level remarks and
+    /// <see cref="Fido2PrfRegistrationExtensionInput"/>, which carries only the <c>eval</c> member —
+    /// <c>evalByCredential</c> is assertion-only, see <see cref="PublicKeyCredentialRequestOptions.Prf"/>).
+    /// </remarks>
+    public Fido2PrfRegistrationExtensionInput? Prf { get; set; }
 }

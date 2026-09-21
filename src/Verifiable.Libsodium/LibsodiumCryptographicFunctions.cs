@@ -56,10 +56,24 @@ public static class LibsodiumCryptographicFunctions
     /// <param name="privateKeyBytes">The 32-byte RFC 8032 Ed25519 seed.</param>
     /// <param name="dataToSign">The data to be signed.</param>
     /// <param name="signaturePool">The pool from where to reserve the memory for <see cref="Signature"/>.</param>
+    /// <param name="timeProvider">The time source stamped onto the produced <see cref="SignatureProducedEvent"/>.</param>
     /// <param name="context">Optional context (unused).</param>
     /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
     /// <returns>The signature created from <paramref name="dataToSign"/> using <paramref name="privateKeyBytes"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="privateKeyBytes"/> is not a 32-byte seed.</exception>
+    /// <remarks>
+    /// Expands the 32-byte seed into libsodium's 64-byte secret key form inside a
+    /// <see cref="SodiumScratchPool"/> owner from
+    /// <see cref="LibsodiumCrypto.AllocateSecretKeyScratch"/>, signs, and disposes the owner (which
+    /// wipes and frees it) before this method returns. The expanded 64-byte form never touches
+    /// managed memory off browser-wasm: it is reached only by pinning the owner's native memory and
+    /// passing the raw pointer to the crypto imports. On browser-wasm the pinned owner's memory IS
+    /// managed (WebAssembly's linear memory has no guard-page primitive for anything to sit behind)
+    /// but is still zeroed on dispose. The scratch always gets the strongest posture the platform
+    /// can offer regardless of which pool the caller supplied for the signature output —
+    /// <see cref="LibsodiumCrypto.AllocateSecretKeyScratch"/> rents from exactly the pool it is
+    /// given, so a caller-supplied general-purpose pool would drop that guarding silently.
+    /// </remarks>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of Signature is transferred to the caller.")]
     public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEd25519Async(
         ReadOnlyMemory<byte> privateKeyBytes,
@@ -96,22 +110,10 @@ public static class LibsodiumCryptographicFunctions
 
         return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
 
-        /// <summary>
-        /// Expands the 32-byte seed into libsodium's 64-byte secret key form inside a
-        /// <see cref="SodiumScratchPool"/> owner from
-        /// <see cref="LibsodiumCrypto.AllocateSecretKeyScratch"/>, signs, and disposes the owner (which
-        /// wipes and frees it) before this method returns. The expanded 64-byte form never touches
-        /// managed memory off browser-wasm: it is reached only by pinning the owner's native memory and
-        /// passing the raw pointer to the crypto imports. On browser-wasm the pinned owner's memory IS
-        /// managed (WebAssembly's linear memory has no guard-page primitive for anything to sit behind)
-        /// but is still zeroed on dispose. The scratch always gets the strongest posture the platform
-        /// can offer regardless of which pool the caller supplied for the signature output —
-        /// <see cref="LibsodiumCrypto.AllocateSecretKeyScratch"/> rents from exactly the pool it is
-        /// given, so a caller-supplied general-purpose pool would drop that guarding silently.
-        /// </summary>
-        /// <param name="seed">The 32-byte RFC 8032 Ed25519 seed.</param>
-        /// <param name="message">The data to sign.</param>
-        /// <param name="signature">The buffer that receives the 64-byte detached signature.</param>
+        //Expands the seed into libsodium's secret key form in guarded scratch memory, signs, and
+        //disposes the scratch owner before returning; see this method's own <remarks> for the guarding
+        //discipline. seed: the 32-byte RFC 8032 Ed25519 seed. message: the data to sign. signature: the
+        //buffer that receives the 64-byte detached signature.
         static void SignWithSeed(ReadOnlySpan<byte> seed, ReadOnlySpan<byte> message, Span<byte> signature)
         {
             using IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumCrypto.AllocateSecretKeyScratch(
@@ -146,6 +148,7 @@ public static class LibsodiumCryptographicFunctions
     /// <param name="dataToVerify">The data that was signed.</param>
     /// <param name="signature">The signature bytes.</param>
     /// <param name="publicKeyMaterial">The public key bytes.</param>
+    /// <param name="timeProvider">The time source stamped onto the produced signature-verification event.</param>
     /// <param name="context">Optional context (unused).</param>
     /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
     /// <returns>

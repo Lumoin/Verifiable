@@ -826,6 +826,14 @@ public static class TpmLifecycleTransitions
                 },
                 "SelfTest:Failed"),
 
+            TpmSelfTestBehavior.Passes => Transition(
+                state with
+                {
+                    SelfTest = TpmSelfTestStatus.Passed,
+                    ResponseIntent = new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS)
+                },
+                "SelfTest:Passed"),
+
             _ => Transition(
                 state with
                 {
@@ -1312,6 +1320,7 @@ public static class TpmLifecycleTransitions
         static bool RequiresEightOctetDataSize(TpmNt indexType) => indexType switch
         {
             TpmNt.TPM_NT_COUNTER or TpmNt.TPM_NT_BITS or TpmNt.TPM_NT_PIN_FAIL or TpmNt.TPM_NT_PIN_PASS => true,
+            TpmNt.TPM_NT_ORDINARY or TpmNt.TPM_NT_EXTEND => false,
             _ => false
         };
     }
@@ -1751,7 +1760,7 @@ public static class TpmLifecycleTransitions
     /// <param name="firstIsPolicySession">
     /// Whether the first slot resolved to a POLICY session rather than an HMAC session or <c>TPM_RS_PW</c> —
     /// <see langword="false"/> by default, since most arms admit no policy session at a generic slot at all
-    /// (<see cref="TryResolveCommandSession"/> refuses one with a bare marker before this runs). An arm that
+    /// (<see cref="TryResolveCommandSession(TpmSimulatorState, TpmiShAuthSession, int, TpmaSession, out HmacSessionState?, out TpmRcConstants)"/> refuses one with a bare marker before this runs). An arm that
     /// resolves a policy session directly (<c>TPM2_Unseal()</c>, <c>TPM2_NV_ChangeAuth()</c>,
     /// <c>TPM2_NV_UndefineSpaceSpecial()</c>, <c>TPM2_ObjectChangeAuth()</c>'s policy arm,
     /// <c>TPM2_PolicySecret()</c>'s authorizing slot) passes <see langword="true"/> here so the slot's own
@@ -2675,7 +2684,7 @@ public static class TpmLifecycleTransitions
     /// <c>OnNvChangeAuthOverSession</c>'s own ADMIN slot answers: a password or HMAC session is bare
     /// <c>TPM_RC_AUTH_TYPE</c>, an unloaded handle <c>TPM_RC_REFERENCE_S0</c>, a trial session bare
     /// <c>TPM_RC_POLICY_FAIL</c>. Slot 1 (<c>@platform</c>, USER role) resolves through the one shared ladder
-    /// every other session-authorized arm uses (<see cref="TryResolveCommandSession"/>); its <c>TPM_RS_PW</c>
+    /// every other session-authorized arm uses (<see cref="TryResolveCommandSession(TpmSimulatorState, TpmiShAuthSession, int, TpmaSession, out HmacSessionState?, out TpmRcConstants)"/>); its <c>TPM_RS_PW</c>
     /// or command-HMAC compare is judged in WIRE ORDER through the verification queue
     /// <see cref="ContinueNvUndefineSpaceSpecialNameComputed"/> builds, never inline here — the platform slot's
     /// only work at entry is this structural resolution and the shared session-area validation below; its
@@ -4057,7 +4066,7 @@ public static class TpmLifecycleTransitions
     /// Dictionary-attack behaviour is mechanism-blind (Part 1, clause 16.8.1: "All uses of a DA protected
     /// authValue receive DA protection"), and it is routed through the shared helpers rather than reimplemented:
     /// the pre-authorization Lockout-mode refusal is <see cref="IsNvIndexLockedOut"/>, the very predicate the
-    /// password arm calls, and the mismatch itself is registered by <see cref="RejectSessionAuthFailure"/> once
+    /// password arm calls, and the mismatch itself is registered by <see cref="RejectSessionAuthFailure(TpmSimulatorState, TpmCcConstants, int, bool, bool)"/> once
     /// the effect reports it — the session-index-encoding counterpart of <see cref="RejectNvAuthFailure"/>,
     /// carrying the identical AUTH_FAIL-versus-BAD_AUTH and <c>FailedTries</c> rules, fed the
     /// <c>IsDaProtected</c> flag <c>OnNvIndexNameComputed</c> derives for the entity actually authorizing. The
@@ -4367,7 +4376,7 @@ public static class TpmLifecycleTransitions
     /// </para>
     /// <para>
     /// Dictionary-attack behaviour is mechanism-blind (Part 1, clause 16.8.1) and routed through the shared
-    /// helpers — <see cref="IsNvIndexLockedOut"/> before authorization, <see cref="RejectSessionAuthFailure"/> once
+    /// helpers — <see cref="IsNvIndexLockedOut"/> before authorization, <see cref="RejectSessionAuthFailure(TpmSimulatorState, TpmCcConstants, int, bool, bool)"/> once
     /// the effect reports a mismatch, fed the <c>IsDaProtected</c> flag <c>OnNvIndexNameComputed</c> derives. The
     /// owner arm keeps its DA exemption. Both arms declare a <c>TpmComputeNvIndexNameAction</c> over the Index as
     /// this command found it, so cpHash's Name terms hash the pre-extend <c>TPMA_NV_WRITTEN</c> state the caller
@@ -6065,6 +6074,24 @@ public static class TpmLifecycleTransitions
             return ResumeNoAuthOverSessionsWithNames(state, noAuthOverSessions, computed.Name);
         }
 
+        //TPM2_PolicySecret()'s password arm shares the Name computation but nothing after it: its cpHash carries
+        //no Name term at all (it is not session-HMAC-authorized), so the computed Name is needed only for the
+        //policyDigest fold's PolicyUpdate(TPM_CC_PolicySecret, authEntity->Name, policyRef) term, resumed through
+        //its own dedicated continuation rather than the eight USER-role NV arms' shared body below.
+        if(computed.Resume is TpmPolicySecretPasswordArmNvNameResume policySecretPasswordArm)
+        {
+            return ContinuePolicySecretPasswordArmNvNameComputed(state, computed.Name, policySecretPasswordArm);
+        }
+
+        //TPM2_PolicySecret()'s HMAC/POLICY-session arm shares the Name computation but nothing after it either:
+        //its cpHash's Name1/Name2 pair is the Index's Name and the policySession PARAMETER's raw handle (Part 1,
+        //Table 9: a session's Name is its own raw handle), not the eight USER-role NV arms' hierarchy-arm/
+        //Index-arm shape, so it takes its own continuation the way TPM2_NV_ChangeAuth() does.
+        if(computed.Resume is TpmPolicySecretOverSessionRequested policySecretOverSession)
+        {
+            return ContinuePolicySecretOverSessionNvNameComputed(state, computed.Name, policySecretOverSession);
+        }
+
         //TPM2_NV_ChangeAuth() shares the Name computation but nothing after it: its cpHash has a single
         //handle (no Name1/Name2 pair, no owner arm) and its authValue term is decided by the authorizing
         //policy session's own assertions rather than by HMAC-session bind-omission, so it takes its own
@@ -6226,9 +6253,10 @@ public static class TpmLifecycleTransitions
     /// <summary>
     /// Registers a genuine session command-HMAC mismatch against an NV Index-authorizing session and rejects
     /// with the matching, session-index-encoded response code — the NV-family specialization of
-    /// <c>RejectSessionAuthFailure</c> for the four arms among the session-authorized NV commands whose entity
+    /// <c>RejectSessionAuthFailure</c> for the five arms among the session-authorized commands whose entity
     /// can be a PIN Index: <c>TPM2_NV_Read()</c>'s Index arm, <c>TPM2_NV_ReadLock()</c>'s Index arm,
-    /// <c>TPM2_NV_Certify()</c>'s Index arm, and <c>TPM2_NV_ChangeAuth()</c>.
+    /// <c>TPM2_NV_Certify()</c>'s Index arm, <c>TPM2_NV_ChangeAuth()</c>, and <c>TPM2_PolicySecret()</c>'s
+    /// HMAC/POLICY-session arm against an NV Index authHandle.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -6311,6 +6339,17 @@ public static class TpmLifecycleTransitions
             state = state with { NvIndexes = state.NvIndexes.SetItem(updated.NvIndex, updated) };
         }
 
+        //TPM2_PolicySecret()'s HMAC/POLICY-session arm against an NV Index authHandle throttles the SAME way
+        //(Part 3, clause 23.4: "If authEntity references a NV PIN Fail index, a failing authorization check
+        //increments pinCount") — authHandle IS the Index directly here, with no owner-arm alternative the eight
+        //USER-role NV commands above carry, so no session-index or authValue-folded precondition is needed.
+        if(verified.NextRequest is TpmPolicySecretOverSessionRequested policySecretOverSession
+            && state.NvIndexes.TryGetValue(TpmiRhNvIndex.FromValue(policySecretOverSession.AuthHandle.Value), out NvIndexState? policySecretIndex) && policySecretIndex.IsPinIndex)
+        {
+            NvIndexState updated = ApplyPinAuthOutcome(policySecretIndex, authMatched: false);
+            state = state with { NvIndexes = state.NvIndexes.SetItem(updated.NvIndex, updated) };
+        }
+
         return RejectSessionAuthFailure(state, verified.CommandCode, verified.SessionIndex, verified.IsDaProtected, verified.IsLockoutEntity);
     }
 
@@ -6365,10 +6404,10 @@ public static class TpmLifecycleTransitions
             : objectHierarchy is ((uint)TpmRh.TPM_RH_OWNER) or ((uint)TpmRh.TPM_RH_ENDORSEMENT);
 
     /// <summary>
-    /// Whether a persistent handle lies in the owner range <paramref name="auth"/> of <c>TPM_RH_OWNER</c> may
+    /// Whether a persistent handle lies in the owner range <c>auth</c> of <c>TPM_RH_OWNER</c> may
     /// assign or address for <c>TPM2_EvictControl()</c> (TPM 2.0 Library Part 3, clause 28.5.1, item 3.1: "If
     /// auth is TPM_RH_OWNER, then persistentHandle shall be in the inclusive range of 81 00 00 00₁₆ to 81 7F FF
-    /// FF₁₆"). Only meaningful when <paramref name="auth"/> is <c>TPM_RH_OWNER</c>: the platform range has no
+    /// FF₁₆"). Only meaningful when <c>auth</c> is <c>TPM_RH_OWNER</c>: the platform range has no
     /// symmetric callers of this predicate — item 3.2's platform range is checked as "not the owner range" on
     /// the persist arm (a persistent handle's own well-formedness already confines it to one of the two ranges),
     /// and item 8 grants <c>TPM_RH_PLATFORM</c> unrestricted evict reach ("PLATFORM evicts any").
@@ -7441,6 +7480,7 @@ public static class TpmLifecycleTransitions
             {
                 TpmSequenceKind.Verification => "VerifySequenceStart:Completed",
                 TpmSequenceKind.Hmac => "HmacStart:Completed",
+                TpmSequenceKind.Signing or TpmSequenceKind.Hash or TpmSequenceKind.Event => "SignSequenceStart:Completed",
                 _ => "SignSequenceStart:Completed"
             });
 
@@ -10404,7 +10444,7 @@ public static class TpmLifecycleTransitions
     /// <param name="inPrivate">The caller-supplied sensitive area, or <see langword="null"/> for a public-only load.</param>
     /// <param name="inPublic">The public area to load.</param>
     /// <param name="hierarchy">The raw <c>hierarchy</c> handle value, unvalidated.</param>
-    /// <param name="request">The request being resolved — the plain or the (decrypted, rebuilt) session form — threaded through to <see cref="Reject"/> and into the declared action.</param>
+    /// <param name="request">The request being resolved — the plain or the (decrypted, rebuilt) session form — threaded through to <see cref="Reject(TpmSimulatorState, TpmCcConstants, TpmRcConstants, IDisposable)"/> and into the declared action.</param>
     /// <returns>The resulting <see cref="TransitionResult{TState, TStackSymbol}"/> declaring the load action, or a rejection.</returns>
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> ValidateAndDeclareLoadExternal(
         TpmSimulatorState state, TpmtSensitive? inPrivate, Tpm2bPublic inPublic, uint hierarchy, TpmSimulatorInput request)
@@ -13223,6 +13263,70 @@ public static class TpmLifecycleTransitions
                 new TpmMakeCredentialAction(request.Credential, request.ObjectName, key.PublicPoint.AsReadOnlyMemory(), key.Curve, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)),
             TpmAlgIdConstants.TPM_ALG_RSA when !key.PublicModulus.IsEmpty =>
                 new TpmRsaMakeCredentialAction(request.Credential, request.ObjectName, key.PublicModulus, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)),
+            TpmAlgIdConstants.TPM_ALG_ECC or
+            TpmAlgIdConstants.TPM_ALG_RSA or
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA1 or
+            TpmAlgIdConstants.TPM_ALG_HMAC or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_NULL or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSASSA or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_RSAPSS or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDSA or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => null,
             _ => null
         };
 
@@ -13560,6 +13664,68 @@ public static class TpmLifecycleTransitions
         {
             TpmAlgIdConstants.TPM_ALG_ECC => !key.PublicPoint.IsEmpty,
             TpmAlgIdConstants.TPM_ALG_RSA => !key.PublicModulus.IsEmpty,
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA1 or
+            TpmAlgIdConstants.TPM_ALG_HMAC or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_NULL or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSASSA or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_RSAPSS or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDSA or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => false,
             _ => false
         };
 
@@ -13591,6 +13757,70 @@ public static class TpmLifecycleTransitions
         {
             TpmAlgIdConstants.TPM_ALG_RSA => new TpmRsaActivateCredentialAction(
                 credentialBlob, secret, activateObject.Name, key.PrivateKey, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)),
+            TpmAlgIdConstants.TPM_ALG_ECC or
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA1 or
+            TpmAlgIdConstants.TPM_ALG_HMAC or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_NULL or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSASSA or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_RSAPSS or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDSA or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => new TpmActivateCredentialAction(
+                credentialBlob, secret, activateObject.Name, key.PrivateKey, key.PublicPoint.AsReadOnlyMemory(), key.Curve, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)),
             _ => new TpmActivateCredentialAction(
                 credentialBlob, secret, activateObject.Name, key.PrivateKey, key.PublicPoint.AsReadOnlyMemory(), key.Curve, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256))
         };
@@ -17270,7 +17500,7 @@ public static class TpmLifecycleTransitions
     /// <see cref="VerifyHierarchyAuthorization"/>, carrying the same enable and Lockout-mode gates because they
     /// precede the HMAC rather than depending on it. <c>TPM2_NV_GlobalWriteLock()</c>'s session arm is a
     /// consumer alongside the hierarchy commands, resolving its own slot through
-    /// <see cref="TryResolveCommandSession"/> rather than a bare <c>HmacSessions</c> lookup so a loaded policy
+    /// <see cref="TryResolveCommandSession(TpmSimulatorState, TpmiShAuthSession, int, TpmaSession, out HmacSessionState?, out TpmRcConstants)"/> rather than a bare <c>HmacSessions</c> lookup so a loaded policy
     /// session at the slot answers <c>TPM_RC_AUTH_TYPE</c> rather than the generic reference-miss code.
     /// </summary>
     /// <remarks>
@@ -17285,7 +17515,7 @@ public static class TpmLifecycleTransitions
     /// <para>
     /// The pending record is marked dictionary-attack protected for the lockout entity, and marked as the
     /// lockout entity besides, so a command-HMAC mismatch takes the one-strike branch of
-    /// <see cref="RejectSessionAuthFailure"/> — the identical discipline the password arm applies — instead of
+    /// <see cref="RejectSessionAuthFailure(TpmSimulatorState, TpmCcConstants, int, bool, bool)"/> — the identical discipline the password arm applies — instead of
     /// feeding the ordinary failure counter that the three dictionary-attack-exempt hierarchies never touch.
     /// </para>
     /// <para>
@@ -19252,7 +19482,7 @@ public static class TpmLifecycleTransitions
     /// Dictionary-attack behaviour is mechanism-blind (Part 1, clause 16.8.1: "All uses of a DA protected
     /// authValue receive DA protection") and routed through the shared helpers rather than reimplemented: the
     /// pre-authorization Lockout-mode refusal is <see cref="IsNvIndexLockedOut"/>, and a mismatch is registered
-    /// by <see cref="RejectSessionAuthFailure"/> — via <see cref="RejectNvSessionAuthFailure"/>, which first
+    /// by <see cref="RejectSessionAuthFailure(TpmSimulatorState, TpmCcConstants, int, bool, bool)"/> — via <see cref="RejectNvSessionAuthFailure"/>, which first
     /// applies a PIN Index's own throttle — carrying the identical AUTH_FAIL-versus-BAD_AUTH and
     /// <c>FailedTries</c> rules the password arm's <see cref="RejectNvAuthFailure"/> applies. The owner arm keeps
     /// the permanent-entity DA exemption (clause 16.8.1), so no lockout gate binds it and no failure of it moves
@@ -20180,6 +20410,108 @@ public static class TpmLifecycleTransitions
         TpmCcConstants.TPM_CC_VerifyDigestSignature => "VerifyDigestSignature",
         TpmCcConstants.TPM_CC_Encapsulate => "Encapsulate",
         TpmCcConstants.TPM_CC_MakeCredential => "MakeCredential",
+        TpmCcConstants.TPM_CC_EvictControl or
+        TpmCcConstants.TPM_CC_HierarchyControl or
+        TpmCcConstants.TPM_CC_NV_UndefineSpace or
+        TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial or
+        TpmCcConstants.TPM_CC_ChangeEPS or
+        TpmCcConstants.TPM_CC_ChangePPS or
+        TpmCcConstants.TPM_CC_Clear or
+        TpmCcConstants.TPM_CC_ClearControl or
+        TpmCcConstants.TPM_CC_ClockSet or
+        TpmCcConstants.TPM_CC_HierarchyChangeAuth or
+        TpmCcConstants.TPM_CC_NV_DefineSpace or
+        TpmCcConstants.TPM_CC_PCR_Allocate or
+        TpmCcConstants.TPM_CC_PCR_SetAuthPolicy or
+        TpmCcConstants.TPM_CC_PP_Commands or
+        TpmCcConstants.TPM_CC_SetPrimaryPolicy or
+        TpmCcConstants.TPM_CC_FieldUpgradeStart or
+        TpmCcConstants.TPM_CC_ClockRateAdjust or
+        TpmCcConstants.TPM_CC_CreatePrimary or
+        TpmCcConstants.TPM_CC_NV_GlobalWriteLock or
+        TpmCcConstants.TPM_CC_GetCommandAuditDigest or
+        TpmCcConstants.TPM_CC_NV_Increment or
+        TpmCcConstants.TPM_CC_NV_SetBits or
+        TpmCcConstants.TPM_CC_NV_Extend or
+        TpmCcConstants.TPM_CC_NV_Write or
+        TpmCcConstants.TPM_CC_NV_WriteLock or
+        TpmCcConstants.TPM_CC_DictionaryAttackLockReset or
+        TpmCcConstants.TPM_CC_DictionaryAttackParameters or
+        TpmCcConstants.TPM_CC_NV_ChangeAuth or
+        TpmCcConstants.TPM_CC_PCR_Event or
+        TpmCcConstants.TPM_CC_PCR_Reset or
+        TpmCcConstants.TPM_CC_SequenceComplete or
+        TpmCcConstants.TPM_CC_SetAlgorithmSet or
+        TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus or
+        TpmCcConstants.TPM_CC_FieldUpgradeData or
+        TpmCcConstants.TPM_CC_IncrementalSelfTest or
+        TpmCcConstants.TPM_CC_Startup or
+        TpmCcConstants.TPM_CC_ActivateCredential or
+        TpmCcConstants.TPM_CC_PolicyNV or
+        TpmCcConstants.TPM_CC_Duplicate or
+        TpmCcConstants.TPM_CC_NV_Read or
+        TpmCcConstants.TPM_CC_NV_ReadLock or
+        TpmCcConstants.TPM_CC_PolicySecret or
+        TpmCcConstants.TPM_CC_Rewrap or
+        TpmCcConstants.TPM_CC_Create or
+        TpmCcConstants.TPM_CC_ECDH_ZGen or
+        TpmCcConstants.TPM_CC_HMAC or
+        TpmCcConstants.TPM_CC_Import or
+        TpmCcConstants.TPM_CC_Load or
+        TpmCcConstants.TPM_CC_HMAC_Start or
+        TpmCcConstants.TPM_CC_Unseal or
+        TpmCcConstants.TPM_CC_PolicySigned or
+        TpmCcConstants.TPM_CC_ContextLoad or
+        TpmCcConstants.TPM_CC_ContextSave or
+        TpmCcConstants.TPM_CC_ECDH_KeyGen or
+        TpmCcConstants.TPM_CC_EncryptDecrypt or
+        TpmCcConstants.TPM_CC_FlushContext or
+        TpmCcConstants.TPM_CC_PolicyAuthorize or
+        TpmCcConstants.TPM_CC_PolicyAuthValue or
+        TpmCcConstants.TPM_CC_PolicyCommandCode or
+        TpmCcConstants.TPM_CC_PolicyCounterTimer or
+        TpmCcConstants.TPM_CC_PolicyCpHash or
+        TpmCcConstants.TPM_CC_PolicyLocality or
+        TpmCcConstants.TPM_CC_PolicyNameHash or
+        TpmCcConstants.TPM_CC_PolicyOR or
+        TpmCcConstants.TPM_CC_PolicyTicket or
+        TpmCcConstants.TPM_CC_StartAuthSession or
+        TpmCcConstants.TPM_CC_ECC_Parameters or
+        TpmCcConstants.TPM_CC_FirmwareRead or
+        TpmCcConstants.TPM_CC_PolicyPCR or
+        TpmCcConstants.TPM_CC_PolicyRestart or
+        TpmCcConstants.TPM_CC_PCR_Extend or
+        TpmCcConstants.TPM_CC_PCR_SetAuthValue or
+        TpmCcConstants.TPM_CC_EventSequenceComplete or
+        TpmCcConstants.TPM_CC_PolicyPhysicalPresence or
+        TpmCcConstants.TPM_CC_PolicyDuplicationSelect or
+        TpmCcConstants.TPM_CC_PolicyGetDigest or
+        TpmCcConstants.TPM_CC_Commit or
+        TpmCcConstants.TPM_CC_PolicyPassword or
+        TpmCcConstants.TPM_CC_ZGen_2Phase or
+        TpmCcConstants.TPM_CC_EC_Ephemeral or
+        TpmCcConstants.TPM_CC_PolicyNvWritten or
+        TpmCcConstants.TPM_CC_PolicyTemplate or
+        TpmCcConstants.TPM_CC_CreateLoaded or
+        TpmCcConstants.TPM_CC_PolicyAuthorizeNV or
+        TpmCcConstants.TPM_CC_EncryptDecrypt2 or
+        TpmCcConstants.TPM_CC_AC_GetCapability or
+        TpmCcConstants.TPM_CC_AC_Send or
+        TpmCcConstants.TPM_CC_Policy_AC_SendSelect or
+        TpmCcConstants.TPM_CC_CertifyX509 or
+        TpmCcConstants.TPM_CC_ACT_SetTimeout or
+        TpmCcConstants.TPM_CC_ECC_Encrypt or
+        TpmCcConstants.TPM_CC_ECC_Decrypt or
+        TpmCcConstants.TPM_CC_PolicyCapability or
+        TpmCcConstants.TPM_CC_PolicyParameters or
+        TpmCcConstants.TPM_CC_NV_DefineSpace2 or
+        TpmCcConstants.TPM_CC_NV_ReadPublic2 or
+        TpmCcConstants.TPM_CC_SetCapability or
+        TpmCcConstants.TPM_CC_ReadOnlyControl or
+        TpmCcConstants.TPM_CC_PolicyTransportSPDM or
+        TpmCcConstants.TPM_CC_Decapsulate or
+        TpmCcConstants.CC_VEND =>
+            throw new System.ArgumentOutOfRangeException(nameof(commandCode), commandCode, "The command frames no session-authorized response through the shared arm."),
         _ => throw new System.ArgumentOutOfRangeException(nameof(commandCode), commandCode, "The command frames no session-authorized response through the shared arm.")
     };
 
@@ -20191,7 +20523,7 @@ public static class TpmLifecycleTransitions
     /// blamed on its own index, Part 2, clause 6.6.2 — while the same policy session at a companion slot claiming
     /// <c>decrypt</c> and/or <c>encrypt</c> is admitted exactly like an HMAC companion, Part 1, clause 15.6.1,
     /// Table 12, footnote [2]), validates the area's structural attribute rules (<see cref="ValidateSessionArea"/>),
-    /// resolves equation 17's folded-nonce terms for the first slot (<see cref="FoldedSessionNonces"/>), and then
+    /// resolves equation 17's folded-nonce terms for the first slot (<see cref="FoldedSessionNonces(ReadOnlySpan{IAuthSessionState}, int, int)"/>), and then
     /// builds ONE verification entry per slot in wire order — a <c>TPM_RS_PW</c> slot's password compare, a real
     /// slot's command HMAC keyed on <c>sessionKey ‖ authValue</c> with equation 22's bind omission resolved once
     /// and threaded onward, a companion's on its session key alone (Part 1, clauses 16.6.5 and 16.6.10) — each
@@ -22706,21 +23038,32 @@ public static class TpmLifecycleTransitions
     }
 
     /// <summary>
-    /// Binds a policy to the authorization of a permanent entity via TPM2_PolicySecret() (Part 3, clause 23.4).
+    /// Binds a policy to the authorization of any <c>TPMI_DH_ENTITY</c> via TPM2_PolicySecret() (Part 3, clause
+    /// 23.4): a permanent hierarchy, a defined NV Index, or a loaded object.
     /// </summary>
     /// <remarks>
-    /// Only permanent hierarchies are modelled as PolicySecret's authHandle (empty auth by default), whose Name is the 4-byte handle value
-    /// (Part 1, clause 13, Table 9); PolicySecret(TPM_RH_ENDORSEMENT) with an empty policyRef yields the well-known EK
-    /// authorization policy. The supplied authValue is genuinely, constant-time verified against the hierarchy's
-    /// own authValue — checked BEFORE the trial/real split and before any other check, even for a trial session
-    /// (clause 23.4.1: "The authorization is checked even for a trial policy session" — the one carve-out from
-    /// the general "trial sessions skip real checks" default). Owner/Endorsement/Platform/Null are never
-    /// dictionary-attack gated (clause 16.8.1), mirroring the existing owner-auth posture (<c>OnNvDefineSpace</c>'s
-    /// own OwnerAuth check); <c>TPM_RH_LOCKOUT</c> is the sole exception (clause 16.8's own carve-out) and is
-    /// checked with the same LockoutAuthEnabled gate and disable-on-mismatch shape as
+    /// A permanent hierarchy's Name is the 4-byte handle value (Part 1, clause 13, Table 9);
+    /// PolicySecret(TPM_RH_ENDORSEMENT) with an empty policyRef yields the well-known EK authorization policy. The
+    /// supplied authValue is genuinely, constant-time verified against the hierarchy's own authValue — checked
+    /// BEFORE the trial/real split and before any other check, even for a trial session (clause 23.4.1: "The
+    /// authorization is checked even for a trial policy session" — the one carve-out from the general "trial
+    /// sessions skip real checks" default). Owner/Endorsement/Platform/Null are never dictionary-attack gated
+    /// (clause 16.8.1), mirroring the existing owner-auth posture (<c>OnNvDefineSpace</c>'s own OwnerAuth check);
+    /// <c>TPM_RH_LOCKOUT</c> is the sole exception (clause 16.8's own carve-out) and is checked with the same
+    /// LockoutAuthEnabled gate and disable-on-mismatch shape as
     /// TPM2_DictionaryAttackLockReset()/TPM2_DictionaryAttackParameters(). <c>TPM_RH_NULL</c> is a permanent handle
     /// with structurally empty auth, so it is accepted here like every other modelled non-Lockout hierarchy; its
-    /// ticket binds to the null-hierarchy proof. Authorization proven, this hands off to
+    /// ticket binds to the null-hierarchy proof.
+    ///
+    /// An NV Index authHandle (defined in this simulator's NV store) delegates to
+    /// <see cref="OnPolicySecretAgainstNvIndex"/>, which runs the SAME PIN-aware authorization the NV read/write
+    /// handlers share (<see cref="IsNvIndexLockedOut"/>/<see cref="IsPinAuthUnavailable"/>/
+    /// <see cref="ApplyPinAuthOutcome"/>/<see cref="RejectNvAuthFailure"/>), so a PIN Fail Index's pinCount moves
+    /// exactly as it would for an authValue-authorized NV_Read (clause 23.4: "If authEntity references a NV PIN
+    /// Fail index, a failing authorization check increments pinCount"). A loaded object authHandle (transient or
+    /// persistent) delegates to <see cref="OnPolicySecretAgainstObject"/>, which authorizes against the object's
+    /// own authValue and applies the normal dictionary-attack logic on a mismatch, exactly as the permanent-handle
+    /// arm above does for its own entities. Either way, authorization proven, this hands off to
     /// <c>ContinuePolicySecretAuthorized</c> — the same post-auth ladder (trial fold / nonceTPM / expiration /
     /// cpHashA / ticket-mint dispatch) an HMAC- or POLICY-session-authorized call
     /// (<c>OnPolicySecretOverSession</c>/<c>ContinuePolicySecretOverSession</c>) shares, since none of it depends
@@ -22732,10 +23075,8 @@ public static class TpmLifecycleTransitions
     /// policySession warns <see cref="HandleIndexedReferenceRc"/>(1) unconditionally (clause 5.4, step 2.4 — a
     /// session in the handle area). An authHandle in the TRANSIENT range that resolves to no loaded object warns
     /// <see cref="HandleIndexedReferenceRc"/>(0) (clause 5.4, step 2.1; see
-    /// <see cref="IsUnresolvedTransientAuthHandle"/>); every other unsupported authHandle — a persistent-range or
-    /// NV-range value, or a TRANSIENT-range value that DOES resolve to a real object — keeps the bare code, the
-    /// standing modelling simplification that <c>TPMI_DH_ENTITY+</c> beyond the four hierarchies is unresolved
-    /// here.
+    /// <see cref="IsUnresolvedTransientAuthHandle"/>); an undefined NV Index answers bare
+    /// <see cref="TpmRcConstants.TPM_RC_HANDLE"/>, the code every other unsupported handle keeps too.
     /// </remarks>
     /// <param name="state">The state to transition from.</param>
     /// <param name="request">The parsed TPM2_PolicySecret() password-arm request.</param>
@@ -22747,17 +23088,27 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, HandleIndexedReferenceRc(1), request);
         }
 
-        //PolicySecret is modelled only for permanent hierarchies, whose Name is the 4-byte handle value
-        //(Part 1, clause 13, Table 9). A non-permanent authHandle (an NV Index or object) has a computed Name and its
-        //own authValue; folding the raw handle bytes for such an entity would both diverge from the TPM Name
-        //formula and skip the authorization it requires, so an unsupported authorization entity is rejected
-        //rather than silently advancing the policyDigest as if its secret had been proven. authHandle is this
-        //command's first handle (index 0, Table 146): a TRANSIENT-range value that resolves to NO loaded object
-        //warns TPM_RC_REFERENCE_H0 (clause 5.4, step 2.1); a persistent-range or NV-range value, and a
-        //TRANSIENT-range value that DOES resolve to a loaded object, both keep the bare code (see
+        //authHandle is this command's first handle (index 0, Table 146): a permanent hierarchy is handled
+        //below; a defined NV Index or a loaded object (transient or persistent) is any TPM entity with a
+        //handle and an associated authValue (Part 3, clause 23.4.1), so each gets its own authorization body. A
+        //TRANSIENT-range value that resolves to NO loaded object warns TPM_RC_REFERENCE_H0 (clause 5.4, step
+        //2.1); an undefined NV Index or an unloaded persistent object keeps the bare code (see
         //IsUnresolvedTransientAuthHandle).
         if(!IsPermanentHandle(request.AuthHandle.Value))
         {
+            if(TryResolvePolicySecretNvIndex(state, request.AuthHandle.Value, out NvIndexState? nvIndex))
+            {
+                return OnPolicySecretAgainstNvIndex(state, session, request, nvIndex!);
+            }
+
+            if(TryResolveSigningKey(state, TpmiDhObject.FromValue(request.AuthHandle.Value), out TransientKeyState? key, out KeyedHashObjectState? keyedHashKey, out SequenceObjectState? sequence, out TpmAuthorizedEntity objectEntity)
+                && sequence is null)
+            {
+                bool isPublicOnly = key?.IsPublicOnly ?? keyedHashKey!.IsPublicOnly;
+
+                return OnPolicySecretAgainstObject(state, session, request, objectEntity, isPublicOnly);
+            }
+
             return Reject(
                 state, TpmCcConstants.TPM_CC_PolicySecret,
                 IsUnresolvedTransientAuthHandle(state, request.AuthHandle.Value) ? HandleIndexedReferenceRc(0) : HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0),
@@ -22822,6 +23173,200 @@ public static class TpmLifecycleTransitions
 
         return ContinuePolicySecretAuthorized(
             state, session, request.AuthHandle.Value, authName, isNonceTpmEmpty, request.CpHashA, request.PolicyRef, request.Expiration,
+            authorizingSession: null);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="handle"/> addresses a defined NV Index (TPM 2.0 Library Part 2, clause 7.2: the
+    /// most-significant octet is <see cref="TpmHt.TPM_HT_NV_INDEX"/>) that this simulator's NV store holds — the
+    /// entity-resolution test <c>TPM2_PolicySecret()</c>'s widened authHandle needs ahead of the loaded-object
+    /// resolution, since an NV-range handle and a transient/persistent object handle occupy disjoint ranges.
+    /// </summary>
+    /// <param name="state">The state the handle is resolved against.</param>
+    /// <param name="handle">The raw <c>authHandle</c> value.</param>
+    /// <param name="index">The resolved Index, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the handle names a defined NV Index.</returns>
+    private static bool TryResolvePolicySecretNvIndex(TpmSimulatorState state, uint handle, out NvIndexState? index)
+    {
+        if((handle >> 24) != (uint)TpmHt.TPM_HT_NV_INDEX)
+        {
+            index = null;
+
+            return false;
+        }
+
+        return state.NvIndexes.TryGetValue(TpmiRhNvIndex.FromValue(handle), out index);
+    }
+
+    /// <summary>
+    /// Whether an NV Index's own authValue is currently unusable for <c>TPM2_PolicySecret()</c> (TPM 2.0 Library
+    /// Part 3, clause 23.4.1): a PIN Index gates on <see cref="IsPinAuthUnavailable"/>, the SAME pinCount/pinLimit/
+    /// TPMA_NV_WRITTEN test the NV read/write handlers apply ("If authEntity references an NV PIN index,
+    /// TPMA_NV_WRITTEN is required to be SET and pinCount must be less than pinLimit"); an ordinary (non-PIN)
+    /// Index instead gates on <c>TPMA_NV_AUTHREAD</c> ("If authEntity references a non-PIN Index, TPMA_NV_AUTHREAD
+    /// is required to be SET in the Index") — both answer <see cref="TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE"/>,
+    /// so the caller applies one response code regardless of which gate fired.
+    /// </summary>
+    /// <param name="index">The NV Index being authorized.</param>
+    /// <returns><see langword="true"/> when the Index's own authValue is currently unusable for this command.</returns>
+    private static bool IsNvIndexAuthUnavailableForPolicySecret(NvIndexState index) =>
+        index.IsPinIndex ? !index.IsPinAuthAvailable : !index.IsAuthReadAllowed;
+
+    /// <summary>
+    /// The password arm of <c>TPM2_PolicySecret()</c> against a defined NV Index authHandle (TPM 2.0 Library Part
+    /// 3, clause 23.4.1): the SAME PIN-aware authorization the NV read/write handlers share, so a PIN Fail
+    /// Index's pinCount increments on a failing compare and resets to zero on a successful one, a PIN Pass
+    /// Index's increments only on success, and a mismatch against a non-PIN Index invokes the normal
+    /// dictionary-attack logic exactly as an Index-authorized NV_Read's does.
+    /// </summary>
+    /// <remarks>
+    /// The gates run strictly before the credential compare, in the same order <c>OnNvRead</c>'s Index arm
+    /// applies them: already-locked-out (<see cref="IsNvIndexLockedOut"/>) then PIN-unavailable-or-AUTHREAD-clear
+    /// (<see cref="IsNvIndexAuthUnavailableForPolicySecret"/>). Once authorization succeeds, the Index's real
+    /// Name — <c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c> — is needed for <c>PolicyUpdate(TPM_CC_PolicySecret,
+    /// authEntity→Name, policyRef)</c> (clause 23.4), which the digest seam a pure transition cannot reach must
+    /// compute; the still-live fields the fold needs are carried across that async hop in a
+    /// <see cref="TpmPolicySecretPasswordArmNvNameResume"/>, and <c>ContinuePolicySecretPasswordArmNvNameComputed</c>
+    /// resumes once the Name arrives.
+    /// </remarks>
+    /// <param name="state">The state to transition from.</param>
+    /// <param name="session">The policy session being extended.</param>
+    /// <param name="request">The parsed TPM2_PolicySecret() password-arm request.</param>
+    /// <param name="index">The resolved NV Index authHandle names.</param>
+    /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> for the authorization outcome.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the declared resume record transfers into the TpmComputeNvIndexNameAction, whose effect threads it onward; ContinuePolicySecretPasswordArmNvNameComputed or its own unrecognized-resume fallback is its terminal owner.")]
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnPolicySecretAgainstNvIndex(
+        TpmSimulatorState state, PolicySessionState session, TpmPolicySecretRequested request, NvIndexState index)
+    {
+        if(IsNvIndexLockedOut(state, index))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_LOCKOUT, request);
+        }
+
+        if(IsNvIndexAuthUnavailableForPolicySecret(index))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, request);
+        }
+
+        bool authMatched = CryptographicOperations.FixedTimeEquals(
+            StripTrailingZeros(request.AuthValueSupplied.AsReadOnlySpan()), StripTrailingZeros(index.AuthValue.AsReadOnlySpan()));
+
+        if(index.IsPinIndex)
+        {
+            index = ApplyPinAuthOutcome(index, authMatched);
+            state = state with { NvIndexes = state.NvIndexes.SetItem(index.NvIndex, index) };
+        }
+
+        if(!authMatched)
+        {
+            request.Dispose();
+
+            return RejectNvAuthFailure(state, index, TpmCcConstants.TPM_CC_PolicySecret, sessionIndex: 0);
+        }
+
+        if(!TryConsumePolicySecretNonceTpm(session, request.NonceTpm, out bool isNonceTpmEmpty))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), request);
+        }
+
+        //The compare above was this credential's only use, so this transition is its terminal owner; every arm
+        //that refuses before this point releases it through the request's own Dispose.
+        request.AuthValueSupplied.Dispose();
+
+        return Transition(
+            state with
+            {
+                NextAction = new TpmComputeNvIndexNameAction(
+                    index.NvIndex, index.NameAlg, index.Attributes, index.AuthPolicy, index.DataSize,
+                    new TpmPolicySecretPasswordArmNvNameResume(index.NvIndex, request.PolicySession, isNonceTpmEmpty, request.CpHashA, request.PolicyRef, request.Expiration)),
+                ResponseIntent = null
+            },
+            "PolicySecret:NvIndexNameRequested");
+    }
+
+    /// <summary>
+    /// Resumes the password arm of <c>TPM2_PolicySecret()</c> against an NV Index authHandle once its Name has
+    /// been computed, folding it into <c>ContinuePolicySecretAuthorized</c>'s shared post-authorization ladder
+    /// (TPM 2.0 Library Part 3, clause 23.4).
+    /// </summary>
+    /// <param name="state">The state to transition from.</param>
+    /// <param name="name">The Index's computed Name, in an owned carrier this call hands onward as the fold's
+    /// <c>authName</c> term and its sole disposal owner (<see cref="ContinuePolicySecretAuthorized"/>'s
+    /// <c>ownedAuthName</c>).</param>
+    /// <param name="resume">The suspended password-arm state carrying the fields the fold still needs.</param>
+    /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> for the authorization outcome.</returns>
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> ContinuePolicySecretPasswordArmNvNameComputed(
+        TpmSimulatorState state, Tpm2bName name, TpmPolicySecretPasswordArmNvNameResume resume)
+    {
+        PolicySessionState session = state.PolicySessions[resume.PolicySession];
+
+        return ContinuePolicySecretAuthorized(
+            state, session, authHandle: resume.NvIndex.Value, TpmHandleName.FromName(name),
+            resume.IsNonceTpmEmpty, resume.CpHashA, resume.PolicyRef, resume.Expiration,
+            authorizingSession: null, ownedAuthName: name);
+    }
+
+    /// <summary>
+    /// The password arm of <c>TPM2_PolicySecret()</c> against a loaded object authHandle — transient or
+    /// persistent (TPM 2.0 Library Part 3, clause 23.4.1: "authEntity ... may be any TPM entity with a handle and
+    /// an associated authValue ... This includes ... loaded objects. ... If authEntity references an Ordinary
+    /// object, it must have userWithAuth SET").
+    /// </summary>
+    /// <remarks>
+    /// A public-only object — no sensitive area, hence no authValue at all — has no authorization available at
+    /// all (Part 3, clause 5.6, check 1), refused ahead of the userWithAuth gate exactly as
+    /// <c>TPM2_Unseal()</c>'s own <c>IsPublicOnly</c> check is. A mismatch against a real object invokes the
+    /// normal dictionary-attack logic through the SAME <see cref="RejectSessionAuthFailure(TpmSimulatorState, TpmCcConstants, int, bool, IDisposable, bool)"/>
+    /// helper the permanent-handle arm's own DA-protected entities would use, mirroring how
+    /// <c>TPM2_Unseal()</c>'s password arm authorizes the identical kind of object. The object's Name is a
+    /// durable field the object's own state already owns (computed at <c>TPM2_Load()</c>/<c>TPM2_CreatePrimary()</c>),
+    /// so — unlike the NV Index arm — no digest seam is needed and this stays a single, synchronous step straight
+    /// into <c>ContinuePolicySecretAuthorized</c>.
+    /// </remarks>
+    /// <param name="state">The state to transition from.</param>
+    /// <param name="session">The policy session being extended.</param>
+    /// <param name="request">The parsed TPM2_PolicySecret() password-arm request.</param>
+    /// <param name="entity">The resolved loaded-object authHandle, described as an authorized entity.</param>
+    /// <param name="isPublicOnly">Whether the resolved object carries no sensitive area at all.</param>
+    /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> for the authorization outcome.</returns>
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnPolicySecretAgainstObject(
+        TpmSimulatorState state, PolicySessionState session, TpmPolicySecretRequested request, TpmAuthorizedEntity entity, bool isPublicOnly)
+    {
+        if(isPublicOnly)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, request);
+        }
+
+        if(entity.IsUserWithAuthGated && !entity.IsUserWithAuthSet)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, SessionEncodedRc(TpmRcConstants.TPM_RC_POLICY_FAIL, 0), request);
+        }
+
+        if(entity.IsDaProtected && state.IsInLockout)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_LOCKOUT, request);
+        }
+
+        bool authMatched = CryptographicOperations.FixedTimeEquals(
+            StripTrailingZeros(request.AuthValueSupplied.AsReadOnlySpan()), StripTrailingZeros(entity.AuthValue.AsReadOnlySpan()));
+
+        if(!authMatched)
+        {
+            return RejectSessionAuthFailure(state, TpmCcConstants.TPM_CC_PolicySecret, sessionIndex: 0, entity.IsDaProtected, request);
+        }
+
+        if(!TryConsumePolicySecretNonceTpm(session, request.NonceTpm, out bool isNonceTpmEmpty))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), request);
+        }
+
+        //The compare above was this credential's only use, so this transition is its terminal owner; every arm
+        //that refuses before this point releases it through the request's own Dispose.
+        request.AuthValueSupplied.Dispose();
+
+        return ContinuePolicySecretAuthorized(
+            state, session, request.AuthHandle.Value, entity.Name, isNonceTpmEmpty, request.CpHashA, request.PolicyRef, request.Expiration,
             authorizingSession: null);
     }
 
@@ -22924,12 +23469,23 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, HandleIndexedReferenceRc(1), request);
         }
 
-        //authHandle is this command's first handle (index 0). A TRANSIENT-range value that resolves to NO loaded
-        //object warns TPM_RC_REFERENCE_H0 (clause 5.4, step 2.1); a persistent-range or NV-range value, and a
-        //TRANSIENT-range value that DOES resolve to a loaded object, both keep the bare code (see
-        //IsUnresolvedTransientAuthHandle) — the standing modelling simplification that
-        //TPMI_DH_ENTITY+ beyond the four hierarchies is unresolved here.
-        if(!IsPermanentHandle(request.AuthHandle.Value))
+        //authHandle is this command's first handle (index 0): a permanent hierarchy, a defined NV Index, or a
+        //loaded object (transient or persistent) — any TPM entity with a handle and an associated authValue
+        //(Part 3, clause 23.4.1). A TRANSIENT-range value that resolves to NO loaded object warns
+        //TPM_RC_REFERENCE_H0 (clause 5.4, step 2.1); an undefined NV Index or an unloaded persistent object
+        //keeps the bare code (see IsUnresolvedTransientAuthHandle).
+        bool isPermanentAuthHandle = IsPermanentHandle(request.AuthHandle.Value);
+
+        //Both resolutions run unconditionally (never short-circuited by &&) so their out parameters are always
+        //definitely assigned below, regardless of which entity kind authHandle turns out to be.
+        bool nvIndexResolved = TryResolvePolicySecretNvIndex(state, request.AuthHandle.Value, out NvIndexState? nvIndexEntity);
+        bool objectResolved = TryResolveSigningKey(
+            state, TpmiDhObject.FromValue(request.AuthHandle.Value), out TransientKeyState? objectKey, out KeyedHashObjectState? objectKeyedHashKey, out SequenceObjectState? sequenceEntity, out TpmAuthorizedEntity objectEntity);
+
+        bool isNvIndexAuthHandle = !isPermanentAuthHandle && nvIndexResolved;
+        bool isObjectAuthHandle = !isPermanentAuthHandle && !isNvIndexAuthHandle && objectResolved && sequenceEntity is null;
+
+        if(!isPermanentAuthHandle && !isNvIndexAuthHandle && !isObjectAuthHandle)
         {
             return Reject(
                 state, TpmCcConstants.TPM_CC_PolicySecret,
@@ -22977,10 +23533,105 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_LOCKOUT, request);
         }
 
+        //An NV Index's real Name — nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC) — needs the digest seam a pure transition
+        //cannot reach, so the same PIN-aware gates OnPolicySecretAgainstNvIndex applies run here first and, on
+        //success, a TpmComputeNvIndexNameAction is declared; ContinuePolicySecretOverSessionNvNameComputed
+        //resumes once the Name arrives and shares the tail below through DeclarePolicySecretHmacVerification.
+        if(isNvIndexAuthHandle)
+        {
+            NvIndexState index = nvIndexEntity!;
+            if(IsNvIndexLockedOut(state, index))
+            {
+                return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_LOCKOUT, request);
+            }
+
+            if(IsNvIndexAuthUnavailableForPolicySecret(index))
+            {
+                return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, request);
+            }
+
+            return Transition(
+                state with
+                {
+                    NextAction = new TpmComputeNvIndexNameAction(index.NvIndex, index.NameAlg, index.Attributes, index.AuthPolicy, index.DataSize, request),
+                    ResponseIntent = null
+                },
+                "PolicySecret:OverSession:NvIndexNameRequested");
+        }
+
+        //A loaded object's Name is a durable field the object's own state already owns, so — unlike the NV Index
+        //arm — the tail below runs directly, with no digest-seam hop (Part 3, clause 23.4.1's userWithAuth
+        //requirement for an Ordinary object). A public-only object has no authorization available at all
+        //(clause 5.6, check 1), refused ahead of that gate exactly as the password arm's own check is.
+        if(isObjectAuthHandle)
+        {
+            bool isPublicOnly = objectKey?.IsPublicOnly ?? objectKeyedHashKey!.IsPublicOnly;
+            if(isPublicOnly)
+            {
+                return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, request);
+            }
+
+            if(objectEntity.IsUserWithAuthGated && !objectEntity.IsUserWithAuthSet)
+            {
+                return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, SessionEncodedRc(TpmRcConstants.TPM_RC_POLICY_FAIL, 0), request);
+            }
+
+            return DeclarePolicySecretHmacVerification(
+                state, request, isHmacSession, hmacSession, isPolicySession, policySession,
+                objectEntity.AuthValue, Tpm2bDigest.Empty, objectEntity.IsDaProtected, objectEntity.Name);
+        }
+
         //Resolved from the one field the handle names, so ENDORSEMENT and PLATFORM authorize against their own
         //secrets rather than the Empty Buffer once TPM2_HierarchyChangeAuth() has given them one.
         _ = state.TryGetHierarchyAuthValue(request.AuthHandle.Value, out Tpm2bAuth hierarchyAuthValue);
+        _ = state.TryGetHierarchyAuthPolicy(request.AuthHandle.Value, out Tpm2bDigest hierarchyAuthPolicy, out _);
 
+        return DeclarePolicySecretHmacVerification(
+            state, request, isHmacSession, hmacSession, isPolicySession, policySession,
+            hierarchyAuthValue, hierarchyAuthPolicy, entityOwnIsDaProtected: false, TpmHandleName.FromHandle(request.AuthHandle.Value));
+    }
+
+    /// <summary>
+    /// The shared tail of <c>TPM2_PolicySecret()</c>'s HMAC/POLICY-session arm, once authHandle's entity kind has
+    /// been resolved and its own PIN/DA/availability gates (if any) have already passed: decides the eq. 26/27
+    /// (Part 1, clause 16.6.12) or equation 22 (clause 16.6.10) authValue-inclusion key, builds cpHash's Name1/
+    /// Name2 terms, and declares the command-HMAC verification action.
+    /// </summary>
+    /// <remarks>
+    /// A POLICY authorizer is measured against <paramref name="entityAuthPolicy"/> — the Empty Buffer disables
+    /// policy authorization of that entity outright (Part 1, clause 10.2, Table 8:
+    /// <see cref="TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE"/>), and a non-empty one must be reproduced exactly by the
+    /// session's accumulated digest (<see cref="TpmRcConstants.TPM_RC_POLICY_FAIL"/> otherwise), then
+    /// isAuthValueNeeded/isPasswordNeeded must be SET (clause 23.4.1 verbatim: <see cref="TpmRcConstants.TPM_RC_MODE"/>
+    /// otherwise). An HMAC authorizer instead applies the ordinary bind-omission optimization when it is bound to
+    /// authHandle's raw handle form; a session legitimately bound to an NV Index's or a loaded object's COMPUTED
+    /// Name is a documented gap this simulator does not model (the permanent-handle arm's own bind form is the
+    /// only one folded here), unlike the fuller dual-form recomputation <c>OnNvIndexNameComputed</c>'s own generic
+    /// NV body applies for the NV command family.
+    /// </remarks>
+    /// <param name="state">The state to transition from.</param>
+    /// <param name="request">The parsed TPM2_PolicySecret() HMAC/POLICY-session-arm request, carrying its Name in <see cref="TpmPolicySecretOverSessionRequested.ResolvedIndexName"/> when the entity is an NV Index.</param>
+    /// <param name="isHmacSession">Whether the authorizing session is an HMAC session.</param>
+    /// <param name="hmacSession">The resolved HMAC session, when <paramref name="isHmacSession"/>.</param>
+    /// <param name="isPolicySession">Whether the authorizing session is a POLICY session.</param>
+    /// <param name="policySession">The resolved POLICY session, when <paramref name="isPolicySession"/>.</param>
+    /// <param name="entityAuthValue">authHandle's own authValue, folded into the HMAC key when the bind does not omit it.</param>
+    /// <param name="entityAuthPolicy">authHandle's own installed authorization policy digest, or the Empty Buffer when it has none; meaningful only for a POLICY authorizer.</param>
+    /// <param name="entityOwnIsDaProtected">Whether authHandle's OWN entity is dictionary-attack protected (an NV Index's or a loaded object's; always <see langword="false"/> for a permanent handle, whose own DA exemption is folded through <paramref name="request"/>'s <c>TPM_RH_LOCKOUT</c> special case instead).</param>
+    /// <param name="firstNameTerm">cpHash's Name1 term: authHandle's raw handle for a permanent entity, or its computed Name otherwise.</param>
+    /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> declaring the command-HMAC verification action, or a rejection.</returns>
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> DeclarePolicySecretHmacVerification(
+        TpmSimulatorState state,
+        TpmPolicySecretOverSessionRequested request,
+        bool isHmacSession,
+        HmacSessionState? hmacSession,
+        bool isPolicySession,
+        PolicySessionState? policySession,
+        Tpm2bAuth entityAuthValue,
+        Tpm2bDigest entityAuthPolicy,
+        bool entityOwnIsDaProtected,
+        TpmHandleName firstNameTerm)
+    {
         TpmiAlgHash sessionAlg;
         SymmetricKeyMemory sessionKey;
         Tpm2bNonce sessionNonceTpm;
@@ -22991,16 +23642,14 @@ public static class TpmLifecycleTransitions
             //Whether authHandle can be authorized by a policy at all is entity state, so it is settled before the
             //command's own rule below: an Empty authPolicy disables policy authorization of that entity outright
             //(Part 1, clause 10.2, Table 8), which is TPM_RC_AUTH_UNAVAILABLE rather than a failed match, while a
-            //policy installed by TPM2_SetPrimaryPolicy() must be reproduced exactly by the session's accumulated
-            //digest. Both directions are reachable only because the hierarchy authPolicy slots are real state.
-            _ = state.TryGetHierarchyAuthPolicy(request.AuthHandle.Value, out Tpm2bDigest hierarchyAuthPolicy, out _);
-            if(hierarchyAuthPolicy.IsEmpty)
+            //policy installed for the entity must be reproduced exactly by the session's accumulated digest.
+            if(entityAuthPolicy.IsEmpty)
             {
                 return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, request);
             }
 
             //CheckAuthSession's outcome wrap: the authorizing session, slot 0.
-            if(!policySession.PolicyDigest.AsReadOnlySpan().SequenceEqual(hierarchyAuthPolicy.AsReadOnlySpan()))
+            if(!policySession.PolicyDigest.AsReadOnlySpan().SequenceEqual(entityAuthPolicy.AsReadOnlySpan()))
             {
                 return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, SessionEncodedRc(TpmRcConstants.TPM_RC_POLICY_FAIL, 0), request);
             }
@@ -23023,9 +23672,9 @@ public static class TpmLifecycleTransitions
             //Eq. 26 (isAuthValueNeeded SET: HMAC(sessionKey ‖ authValue, ...)) vs. eq. 27 (CLEAR: HMAC(sessionKey,
             //...)) — Part 1, clause 16.6.12. The authValue term enters stripped of trailing zero octets
             //(clause 16.6.4.3) at the HMAC primitive, matching the host session's own SetAuthValue discipline —
-            //the two sides must agree byte for byte once TPM2_HierarchyChangeAuth() installs a real hierarchy secret.
+            //the two sides must agree byte for byte once the entity's authValue is rotated.
             authValueForHmac = policySession.IsAuthValueNeeded
-                ? hierarchyAuthValue
+                ? entityAuthValue
                 : Tpm2bAuth.Empty;
         }
         else
@@ -23036,10 +23685,10 @@ public static class TpmLifecycleTransitions
 
             //Equation 22 (Part 1, clause 16.6.10) bind-omission: the authValue term drops when this HMAC session is bound to authHandle
             //itself — binding already proved knowledge of the authValue once via the session-key KDFa. The
-            //recomputation folds the hierarchy's LIVE authValue (Part 4, IsSessionBindEntity), so a rotation
+            //recomputation folds the entity's LIVE authValue (Part 4, IsSessionBindEntity), so a rotation
             //since the bind ends the omission.
-            bool bindOmits = MatchesHandleFormBoundEntity(hmacSession.BoundEntity, request.AuthHandle.Value, StripTrailingZeros(hierarchyAuthValue.AsReadOnlySpan()));
-            authValueForHmac = bindOmits ? Tpm2bAuth.Empty : hierarchyAuthValue;
+            bool bindOmits = MatchesHandleFormBoundEntity(hmacSession.BoundEntity, request.AuthHandle.Value, StripTrailingZeros(entityAuthValue.AsReadOnlySpan()));
+            authValueForHmac = bindOmits ? Tpm2bAuth.Empty : entityAuthValue;
         }
 
         bool isLockoutEntity = request.AuthHandle.Value == (uint)TpmRh.TPM_RH_LOCKOUT;
@@ -23048,21 +23697,18 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_LOCKOUT, request);
         }
 
-        //cpHash's Name1/Name2 (Part 1, clause 15.7 equation 15; Table 9): authHandle's own raw handle, then the
+        //cpHash's Name1/Name2 (Part 1, clause 15.7 equation 15; Table 9): authHandle's Name, then the
         //policySession PARAMETER's raw handle — NEVER the authorizing session's handle, even when the two differ.
-        TpmCommandHandleNames handleNames = TpmCommandHandleNames.Of(
-            TpmHandleName.FromHandle(request.AuthHandle.Value), TpmHandleName.FromHandle(request.PolicySession.Value));
+        TpmCommandHandleNames handleNames = TpmCommandHandleNames.Of(firstNameTerm, TpmHandleName.FromHandle(request.PolicySession.Value));
 
-        //Clause 16.8.7's OR on both axes: the authorized entity (lockoutAuth alone among the permanent entities is
-        //protected) and the session's own bind. A session whose key folded lockoutAuth takes the one-strike branch
-        //even when it authorizes one of the exempt hierarchies, since the failed HMAC is evidence against
-        //lockoutAuth itself (clause 16.8.5).
+        //Clause 16.8.7's OR across every axis: the authorized entity itself (lockoutAuth among the permanent
+        //entities, or the NV Index's/loaded object's own DA standing), and the session's own bind.
         bool isBoundEntityDaProtected = isHmacSession ? hmacSession!.IsBoundEntityDaProtected : policySession!.IsBoundEntityDaProtected;
         bool isBoundToLockout = isHmacSession ? hmacSession!.IsBoundToLockout : policySession!.IsBoundToLockout;
 
         var pending = new TpmPendingSessionVerification(
             SessionHandle: request.AuthorizingSessionHandle, SessionIndex: 0, SessionAlg: sessionAlg, SessionKey: sessionKey,
-            AuthValue: authValueForHmac, IsDaProtected: isLockoutEntity || isBoundEntityDaProtected,
+            AuthValue: authValueForHmac, IsDaProtected: isLockoutEntity || isBoundEntityDaProtected || entityOwnIsDaProtected,
             NonceCaller: request.NonceCaller, NonceTpm: sessionNonceTpm,
             FoldedNonceDecrypt: Tpm2bNonce.Empty, FoldedNonceEncrypt: Tpm2bNonce.Empty, SessionAttributes: request.SessionAttributes, SuppliedHmac: request.Hmac,
             IsLockoutEntity: isLockoutEntity || isBoundToLockout);
@@ -23079,6 +23725,82 @@ public static class TpmLifecycleTransitions
     }
 
     /// <summary>
+    /// Resumes the HMAC/POLICY-session arm of <c>TPM2_PolicySecret()</c> against an NV Index authHandle once its
+    /// Name has been computed, re-resolving the authorizing session exactly as <c>ContinuePolicySecretOverSession</c>
+    /// does before declaring the command-HMAC verification through <see cref="DeclarePolicySecretHmacVerification"/>
+    /// (TPM 2.0 Library Part 3, clause 23.4.1).
+    /// </summary>
+    /// <param name="state">The state to transition from.</param>
+    /// <param name="name">The Index's computed Name, transferred onto <paramref name="request"/> as <see cref="TpmPolicySecretOverSessionRequested.ResolvedIndexName"/> so its later terminal owner (a refusal here, or <c>ContinuePolicySecretOverSession</c> on success) releases it exactly once.</param>
+    /// <param name="request">The original session-authorized request, its Name now resolved.</param>
+    /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> declaring the command-HMAC verification action, or a rejection.</returns>
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> ContinuePolicySecretOverSessionNvNameComputed(
+        TpmSimulatorState state, Tpm2bName name, TpmPolicySecretOverSessionRequested request)
+    {
+        NvIndexState index = state.NvIndexes[TpmiRhNvIndex.FromValue(request.AuthHandle.Value)];
+        bool isHmacSession = state.HmacSessions.TryGetValue(TpmiShHmac.FromValue(request.AuthorizingSessionHandle.Value), out HmacSessionState? hmacSession);
+        PolicySessionState? policySession = null;
+        bool isPolicySession = !isHmacSession && state.PolicySessions.TryGetValue(TpmiShPolicy.FromValue(request.AuthorizingSessionHandle.Value), out policySession);
+
+        return DeclarePolicySecretHmacVerification(
+            state, request with { ResolvedIndexName = name }, isHmacSession, hmacSession, isPolicySession, policySession,
+            index.AuthValue, index.AuthPolicy, index.IsDaProtected, TpmHandleName.FromName(name));
+    }
+
+    /// <summary>
+    /// Resolves <c>TPM2_PolicySecret()</c>'s authHandle to the authValue its authorizing session's response HMAC
+    /// must be keyed on (TPM 2.0 Library Part 1, clause 16.6.5) — the permanent-hierarchy, NV Index, or loaded-
+    /// object reading, in that order, matching <c>OnPolicySecretAgainstNvIndex</c>/<c>OnPolicySecretAgainstObject</c>'s
+    /// own entity resolution.
+    /// </summary>
+    /// <param name="state">The state the handle is resolved against.</param>
+    /// <param name="authHandle">The raw <c>authHandle</c> value.</param>
+    /// <returns>The entity's own authValue, or the Empty Buffer when none of the three kinds resolves.</returns>
+    private static Tpm2bAuth ResolvePolicySecretEntityAuthValue(TpmSimulatorState state, uint authHandle)
+    {
+        if(state.TryGetHierarchyAuthValue(authHandle, out Tpm2bAuth hierarchyAuthValue))
+        {
+            return hierarchyAuthValue;
+        }
+
+        if(TryResolvePolicySecretNvIndex(state, authHandle, out NvIndexState? index))
+        {
+            return index!.AuthValue;
+        }
+
+        return TryResolveSigningKey(state, TpmiDhObject.FromValue(authHandle), out _, out _, out _, out TpmAuthorizedEntity entity)
+            ? entity.AuthValue
+            : Tpm2bAuth.Empty;
+    }
+
+    /// <summary>
+    /// Recovers <c>TPM2_PolicySecret()</c>'s authHandle Name term for <c>ContinuePolicySecretOverSession</c>'s
+    /// fold: the resolved NV Index Name the entry transition already computed
+    /// (<see cref="TpmPolicySecretOverSessionRequested.ResolvedIndexName"/>) when present, a permanent handle's
+    /// raw bytes, or a re-resolved loaded object's own durable Name — the object needs no threading through the
+    /// verify queue, since it was already available synchronously at entry.
+    /// </summary>
+    /// <param name="state">The state the handle is resolved against.</param>
+    /// <param name="request">The request, its command HMAC now verified.</param>
+    /// <returns>The Name term to fold.</returns>
+    private static TpmHandleName ResolvePolicySecretAuthNameForContinuation(TpmSimulatorState state, TpmPolicySecretOverSessionRequested request)
+    {
+        if(request.ResolvedIndexName is Tpm2bName resolvedName)
+        {
+            return TpmHandleName.FromName(resolvedName);
+        }
+
+        if(IsPermanentHandle(request.AuthHandle.Value))
+        {
+            return TpmHandleName.FromHandle(request.AuthHandle.Value);
+        }
+
+        return TryResolveSigningKey(state, TpmiDhObject.FromValue(request.AuthHandle.Value), out _, out _, out _, out TpmAuthorizedEntity entity)
+            ? entity.Name
+            : TpmHandleName.FromHandle(request.AuthHandle.Value);
+    }
+
+    /// <summary>
     /// Resumes TPM2_PolicySecret() once its authHandle-authorizing session's command HMAC has verified
     /// (<see cref="TpmVerifyCommandHmacAction"/>'s continuation).
     /// </summary>
@@ -23092,13 +23814,21 @@ public static class TpmLifecycleTransitions
     /// (nonceTPM/expiration/cpHashA) must leave the authorizer untouched, so the reset is deferred all the way to
     /// <c>OnPolicySecretSessionResponseFramed</c>, the same success-only point where nonceTPM rolls. This function
     /// only reads the authorizer's PRE-reset isAuthValueNeeded to reproduce the eq. 26/27 (Part 1, clause 16.6.12) key decision the command
-    /// HMAC already used.
+    /// HMAC already used. A PIN Index authHandle's pinCount is reset (PIN Fail) or incremented (PIN Pass) here for
+    /// this SUCCESSFUL command HMAC (Part 3, clause 23.4; Part 1, clause 34.2.6.6) — the mismatch update runs
+    /// earlier, in <c>RejectNvSessionAuthFailure</c>, since a mismatch never reaches this continuation at all.
     /// </remarks>
     /// <param name="state">The state to transition from.</param>
     /// <param name="request">The parsed TPM2_PolicySecret() HMAC/POLICY-session-arm request, its command HMAC now verified.</param>
     /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> from <c>ContinuePolicySecretAuthorized</c>.</returns>
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> ContinuePolicySecretOverSession(TpmSimulatorState state, TpmPolicySecretOverSessionRequested request)
     {
+        if(TryResolvePolicySecretNvIndex(state, request.AuthHandle.Value, out NvIndexState? provenIndex) && provenIndex!.IsPinIndex)
+        {
+            NvIndexState updated = ApplyPinAuthOutcome(provenIndex, authMatched: true);
+            state = state with { NvIndexes = state.NvIndexes.SetItem(updated.NvIndex, updated) };
+        }
+
         PolicySessionState session = state.PolicySessions[request.PolicySession];
 
         //The caller-supplied nonceTPM is compared and released HERE, ahead of the transfer below, so the shared
@@ -23117,12 +23847,14 @@ public static class TpmLifecycleTransitions
         request.RawParameterArea.Dispose();
         request.Hmac.Dispose();
 
-        //The same resolution the entry transition used, so the response HMAC reproduces the command HMAC's key.
-        _ = state.TryGetHierarchyAuthValue(request.AuthHandle.Value, out Tpm2bAuth hierarchyAuthValue);
+        //The same resolution the entry transition used (permanent hierarchy, NV Index, or loaded object), so the
+        //response HMAC reproduces the command HMAC's key.
+        Tpm2bAuth entityAuthValue = ResolvePolicySecretEntityAuthValue(state, request.AuthHandle.Value);
 
-        //The Name of a permanent handle is its 4-byte handle value (Part 1, clause 13, Table 9); the octets are
-        //materialized by the effect that hashes them, which is the frame that holds a memory pool.
-        TpmHandleName authName = TpmHandleName.FromHandle(request.AuthHandle.Value);
+        //The resolved NV Index Name the entry transition already computed, a permanent handle's raw bytes, or a
+        //re-resolved loaded object's own durable Name — see ResolvePolicySecretAuthNameForContinuation. The NV
+        //form's underlying carrier has no other owner and is handed to the fold as its terminal owner below.
+        TpmHandleName authName = ResolvePolicySecretAuthNameForContinuation(state, request);
 
         TpmiAlgHash sessionAlg;
         SymmetricKeyMemory sessionKey;
@@ -23133,7 +23865,7 @@ public static class TpmLifecycleTransitions
         {
             sessionAlg = authorizingPolicySession!.PolicyHash;
             sessionKey = authorizingPolicySession.SessionKey;
-            authValueUsed = authorizingPolicySession.IsAuthValueNeeded ? hierarchyAuthValue : Tpm2bAuth.Empty;
+            authValueUsed = authorizingPolicySession.IsAuthValueNeeded ? entityAuthValue : Tpm2bAuth.Empty;
         }
         else
         {
@@ -23144,8 +23876,8 @@ public static class TpmLifecycleTransitions
             //Recomputed exactly as the command-side decision was — TPM2_PolicySecret() rotates no authValue, so
             //this recomputation and the recorded command-time decision are the same value (Part 1, clause
             //16.6.10's response rule: the response omits precisely when the command did).
-            bool bindOmits = MatchesHandleFormBoundEntity(authorizingHmacSession.BoundEntity, request.AuthHandle.Value, StripTrailingZeros(hierarchyAuthValue.AsReadOnlySpan()));
-            authValueUsed = bindOmits ? Tpm2bAuth.Empty : hierarchyAuthValue;
+            bool bindOmits = MatchesHandleFormBoundEntity(authorizingHmacSession.BoundEntity, request.AuthHandle.Value, StripTrailingZeros(entityAuthValue.AsReadOnlySpan()));
+            authValueUsed = bindOmits ? Tpm2bAuth.Empty : entityAuthValue;
         }
 
         //The slot's caller nonce TRANSFERS into the authorizing-session entry here; from there it rides the fold
@@ -23156,7 +23888,7 @@ public static class TpmLifecycleTransitions
 
         return ContinuePolicySecretAuthorized(
             state, session, request.AuthHandle.Value, authName, isNonceTpmEmpty, request.CpHashA, request.PolicyRef, request.Expiration,
-            authorizingSession);
+            authorizingSession, ownedAuthName: request.ResolvedIndexName);
     }
 
     /// <summary>
@@ -23185,13 +23917,20 @@ public static class TpmLifecycleTransitions
     /// <param name="policyRef">The policy reference, folded into the policyDigest, in an owned carrier; ownership TRANSFERS here from the request, and this function releases it on every refusing arm and transfers it onward otherwise.</param>
     /// <param name="expiration">The requested ticket expiration; negative mints a ticket, zero requests none.</param>
     /// <param name="authorizingSession">The HMAC/POLICY session context authorizing this call, or <see langword="null"/> for the password arm. Its caller nonce is owned there, so every refusing arm below releases it alongside the two parameter carriers.</param>
+    /// <param name="ownedAuthName">
+    /// The freshly computed Name <paramref name="authName"/> borrows, when that Name has no other owner — an NV
+    /// Index's Name, resolved through the digest seam just for this call. <see langword="null"/> for a permanent
+    /// handle (raw bytes, nothing to release) or a loaded object (a durable field the object's own state already
+    /// owns). Released on every early-refusal arm below and handed onward to the fold as its own terminal owner
+    /// otherwise (<see cref="TpmFoldPolicyDigestAction.OwnedNameTerm"/>).
+    /// </param>
     /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> for the authorization outcome.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of cpHashA transfers either onto the session's first-writer-wins latch or into this function's own release; policyRef transfers into the declared fold or mint action, whose effect is its terminal owner, and is released here on every refusing arm, as is the authorizing session entry's caller nonce.")]
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> ContinuePolicySecretAuthorized(
         TpmSimulatorState state, PolicySessionState session, uint authHandle, TpmHandleName authName,
         bool isNonceTpmEmpty, Tpm2bDigest cpHashA, Tpm2bNonce policyRef, int expiration,
-        PolicySecretAuthorizingSession? authorizingSession)
+        PolicySecretAuthorizingSession? authorizingSession, Tpm2bName? ownedAuthName = null)
     {
         if(session.IsTrial)
         {
@@ -23199,7 +23938,7 @@ public static class TpmLifecycleTransitions
             //no later owner and is released here.
             cpHashA.Dispose();
 
-            return DeclarePolicySecretFold(state, session, authName, policyRef, 0ul, authorizingSession);
+            return DeclarePolicySecretFold(state, session, authName, policyRef, 0ul, authorizingSession, ownedAuthName);
         }
 
         TpmSimulatorState checkedState = state;
@@ -23222,6 +23961,7 @@ public static class TpmLifecycleTransitions
                 cpHashA.Dispose();
                 policyRef.Dispose();
                 authorizingSession?.NonceCaller.Dispose();
+                ownedAuthName?.Dispose();
 
                 //Policy_spt.c's PolicyParameterChecks(): blameExpiration = RC_PolicySecret_expiration — expiration, parameter 4.
                 return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, ParameterEncodedRc(TpmRcConstants.TPM_RC_EXPIRED, 3));
@@ -23241,6 +23981,7 @@ public static class TpmLifecycleTransitions
                 cpHashA.Dispose();
                 policyRef.Dispose();
                 authorizingSession?.NonceCaller.Dispose();
+                ownedAuthName?.Dispose();
 
                 //Policy_spt.c's PolicyParameterChecks(): blameCpHash = RC_PolicySecret_cpHashA — cpHashA, parameter 2.
                 return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 1));
@@ -23251,6 +23992,7 @@ public static class TpmLifecycleTransitions
                 cpHashA.Dispose();
                 policyRef.Dispose();
                 authorizingSession?.NonceCaller.Dispose();
+                ownedAuthName?.Dispose();
 
                 return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_CPHASH);
             }
@@ -23269,8 +24011,11 @@ public static class TpmLifecycleTransitions
         //expiration folds immediately with a NULL ticket (Part 3, clause 23.2.5). Either way the ticket's own
         //hierarchy field is authHandle's OWNING hierarchy (EntityGetHierarchyForPermanentHandle), never the raw
         //authHandle — TPM_RH_LOCKOUT, the one non-hierarchy permanent handle PolicySecret admits as authHandle,
-        //is not itself a legal TPMI_RH_HIERARCHY+ value.
-        if(expiration < 0)
+        //is not itself a legal TPMI_RH_HIERARCHY+ value. A ticket is minted only for a permanent-handle authHandle:
+        //an NV Index's or a loaded object's Name has no owning hierarchy for the ticket to name, and Part 1, clause
+        //34.2.8.3 states the same outcome for a PIN Pass Index by name ("the command may succeed, but a NULL
+        //ticket will be returned"), which this generalizes to every non-permanent entity.
+        if(expiration < 0 && IsPermanentHandle(authHandle))
         {
             //The ticket HMAC's cpHash term is the session's own latched carrier, borrowed: the latch above has
             //already made the session its single owner, and an unrestricted call folds the empty sentinel — the
@@ -23292,7 +24037,7 @@ public static class TpmLifecycleTransitions
         //No ticket requested, but the deadline (when the caller supplied a non-zero expiration) still
         //participates in the session's timeout tracking (Part 3, clause 23.2.4) — only the response's
         //TPM2B_TIMEOUT/TPMT_TK_AUTH fields are NULL, per clause 23.2.5.
-        return DeclarePolicySecretFold(checkedState, session, authName, policyRef, timeout, authorizingSession);
+        return DeclarePolicySecretFold(checkedState, session, authName, policyRef, timeout, authorizingSession, ownedAuthName);
     }
 
     /// <summary>
@@ -23306,13 +24051,15 @@ public static class TpmLifecycleTransitions
     /// <param name="policyRef">The policy reference in an owned carrier; ownership transfers into the fold action, whose effect is its terminal owner.</param>
     /// <param name="timeout">The session's own tracked deadline magnitude, ranked at the resume under clause 23.2.4's min-with-existing rule.</param>
     /// <param name="authorizingSession">The HMAC/POLICY session context to frame a session-authorized response for, or <see langword="null"/> for the password arm's direct response.</param>
+    /// <param name="ownedNameTerm">The freshly computed Name <paramref name="authName"/> borrows, when it has no other owner (an NV Index's Name); <see langword="null"/> otherwise. The fold effect is its terminal owner.</param>
     /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> declaring the fold.</returns>
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> DeclarePolicySecretFold(
         TpmSimulatorState state, PolicySessionState session, TpmHandleName authName, Tpm2bNonce policyRef,
-        ulong timeout, PolicySecretAuthorizingSession? authorizingSession) =>
+        ulong timeout, PolicySecretAuthorizingSession? authorizingSession, Tpm2bName? ownedNameTerm = null) =>
         DeclarePolicyDigestFold(
             state, session, TpmPolicyDigestFold.Secret, PolicySecretFoldLabel(authorizingSession),
-            nameTerm: authName, policyRef: policyRef, timeoutMagnitude: timeout, authorizingSession: authorizingSession);
+            nameTerm: authName, policyRef: policyRef, timeoutMagnitude: timeout, authorizingSession: authorizingSession,
+            ownedNameTerm: ownedNameTerm);
 
     /// <summary>
     /// The transition label <c>TPM2_PolicySecret()</c>'s fold emits, which differs by whether the response is
@@ -25304,7 +26051,7 @@ public static class TpmLifecycleTransitions
     /// is always either an unloaded transient object or an unloaded session, and answers
     /// <c>TPM_RC_REFERENCE_H0</c> (TPM 2.0 Library Part 3, clause 5.4, steps 2.1 and 2.4: both a transient
     /// object and a session in the handle area at index 0 warn the same way); an out-of-range handle never
-    /// reaches here — <see cref="TryParseContextSave"/>'s own <c>TPM_RC_VALUE</c> catches it first. A sequence
+    /// reaches here — <see cref="TpmSimulator.TryParseContextSave"/>'s own <c>TPM_RC_VALUE</c> catches it first. A sequence
     /// object whose retained segments' total exceeds <see cref="Tpm2bContextData.MaxSize"/> is refused
     /// <c>TPM_RC_MEMORY</c> here, before any effect runs (Part 2, clause 6.6.3, Table 18: "need space for
     /// internal operations").
@@ -26213,6 +26960,133 @@ public static class TpmLifecycleTransitions
             TpmCcConstants.TPM_CC_Encapsulate => ResolveNoAuthEncapsulateHandleName(state, wrapper),
             TpmCcConstants.TPM_CC_MakeCredential => ResolveNoAuthMakeCredentialHandleName(state, wrapper),
             TpmCcConstants.TPM_CC_RSA_Encrypt => ResolveNoAuthRsaEncryptHandleName(state, wrapper),
+            TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial or
+            TpmCcConstants.TPM_CC_EvictControl or
+            TpmCcConstants.TPM_CC_HierarchyControl or
+            TpmCcConstants.TPM_CC_NV_UndefineSpace or
+            TpmCcConstants.TPM_CC_ChangeEPS or
+            TpmCcConstants.TPM_CC_ChangePPS or
+            TpmCcConstants.TPM_CC_Clear or
+            TpmCcConstants.TPM_CC_ClearControl or
+            TpmCcConstants.TPM_CC_ClockSet or
+            TpmCcConstants.TPM_CC_HierarchyChangeAuth or
+            TpmCcConstants.TPM_CC_NV_DefineSpace or
+            TpmCcConstants.TPM_CC_PCR_Allocate or
+            TpmCcConstants.TPM_CC_PCR_SetAuthPolicy or
+            TpmCcConstants.TPM_CC_PP_Commands or
+            TpmCcConstants.TPM_CC_SetPrimaryPolicy or
+            TpmCcConstants.TPM_CC_FieldUpgradeStart or
+            TpmCcConstants.TPM_CC_ClockRateAdjust or
+            TpmCcConstants.TPM_CC_CreatePrimary or
+            TpmCcConstants.TPM_CC_NV_GlobalWriteLock or
+            TpmCcConstants.TPM_CC_GetCommandAuditDigest or
+            TpmCcConstants.TPM_CC_NV_Increment or
+            TpmCcConstants.TPM_CC_NV_SetBits or
+            TpmCcConstants.TPM_CC_NV_Extend or
+            TpmCcConstants.TPM_CC_NV_Write or
+            TpmCcConstants.TPM_CC_NV_WriteLock or
+            TpmCcConstants.TPM_CC_DictionaryAttackLockReset or
+            TpmCcConstants.TPM_CC_DictionaryAttackParameters or
+            TpmCcConstants.TPM_CC_NV_ChangeAuth or
+            TpmCcConstants.TPM_CC_PCR_Event or
+            TpmCcConstants.TPM_CC_PCR_Reset or
+            TpmCcConstants.TPM_CC_SequenceComplete or
+            TpmCcConstants.TPM_CC_SetAlgorithmSet or
+            TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus or
+            TpmCcConstants.TPM_CC_FieldUpgradeData or
+            TpmCcConstants.TPM_CC_IncrementalSelfTest or
+            TpmCcConstants.TPM_CC_SelfTest or
+            TpmCcConstants.TPM_CC_Startup or
+            TpmCcConstants.TPM_CC_Shutdown or
+            TpmCcConstants.TPM_CC_StirRandom or
+            TpmCcConstants.TPM_CC_ActivateCredential or
+            TpmCcConstants.TPM_CC_Certify or
+            TpmCcConstants.TPM_CC_PolicyNV or
+            TpmCcConstants.TPM_CC_CertifyCreation or
+            TpmCcConstants.TPM_CC_Duplicate or
+            TpmCcConstants.TPM_CC_GetTime or
+            TpmCcConstants.TPM_CC_GetSessionAuditDigest or
+            TpmCcConstants.TPM_CC_NV_Read or
+            TpmCcConstants.TPM_CC_NV_ReadLock or
+            TpmCcConstants.TPM_CC_ObjectChangeAuth or
+            TpmCcConstants.TPM_CC_PolicySecret or
+            TpmCcConstants.TPM_CC_Rewrap or
+            TpmCcConstants.TPM_CC_Create or
+            TpmCcConstants.TPM_CC_ECDH_ZGen or
+            TpmCcConstants.TPM_CC_HMAC or
+            TpmCcConstants.TPM_CC_Import or
+            TpmCcConstants.TPM_CC_Load or
+            TpmCcConstants.TPM_CC_Quote or
+            TpmCcConstants.TPM_CC_RSA_Decrypt or
+            TpmCcConstants.TPM_CC_HMAC_Start or
+            TpmCcConstants.TPM_CC_SequenceUpdate or
+            TpmCcConstants.TPM_CC_Sign or
+            TpmCcConstants.TPM_CC_Unseal or
+            TpmCcConstants.TPM_CC_PolicySigned or
+            TpmCcConstants.TPM_CC_ContextLoad or
+            TpmCcConstants.TPM_CC_ContextSave or
+            TpmCcConstants.TPM_CC_ECDH_KeyGen or
+            TpmCcConstants.TPM_CC_EncryptDecrypt or
+            TpmCcConstants.TPM_CC_FlushContext or
+            TpmCcConstants.TPM_CC_LoadExternal or
+            TpmCcConstants.TPM_CC_PolicyAuthorize or
+            TpmCcConstants.TPM_CC_PolicyAuthValue or
+            TpmCcConstants.TPM_CC_PolicyCommandCode or
+            TpmCcConstants.TPM_CC_PolicyCounterTimer or
+            TpmCcConstants.TPM_CC_PolicyCpHash or
+            TpmCcConstants.TPM_CC_PolicyLocality or
+            TpmCcConstants.TPM_CC_PolicyNameHash or
+            TpmCcConstants.TPM_CC_PolicyOR or
+            TpmCcConstants.TPM_CC_PolicyTicket or
+            TpmCcConstants.TPM_CC_StartAuthSession or
+            TpmCcConstants.TPM_CC_ECC_Parameters or
+            TpmCcConstants.TPM_CC_FirmwareRead or
+            TpmCcConstants.TPM_CC_GetCapability or
+            TpmCcConstants.TPM_CC_GetRandom or
+            TpmCcConstants.TPM_CC_GetTestResult or
+            TpmCcConstants.TPM_CC_Hash or
+            TpmCcConstants.TPM_CC_PCR_Read or
+            TpmCcConstants.TPM_CC_PolicyPCR or
+            TpmCcConstants.TPM_CC_PolicyRestart or
+            TpmCcConstants.TPM_CC_ReadClock or
+            TpmCcConstants.TPM_CC_PCR_Extend or
+            TpmCcConstants.TPM_CC_PCR_SetAuthValue or
+            TpmCcConstants.TPM_CC_NV_Certify or
+            TpmCcConstants.TPM_CC_EventSequenceComplete or
+            TpmCcConstants.TPM_CC_HashSequenceStart or
+            TpmCcConstants.TPM_CC_PolicyPhysicalPresence or
+            TpmCcConstants.TPM_CC_PolicyDuplicationSelect or
+            TpmCcConstants.TPM_CC_PolicyGetDigest or
+            TpmCcConstants.TPM_CC_TestParms or
+            TpmCcConstants.TPM_CC_Commit or
+            TpmCcConstants.TPM_CC_PolicyPassword or
+            TpmCcConstants.TPM_CC_ZGen_2Phase or
+            TpmCcConstants.TPM_CC_EC_Ephemeral or
+            TpmCcConstants.TPM_CC_PolicyNvWritten or
+            TpmCcConstants.TPM_CC_PolicyTemplate or
+            TpmCcConstants.TPM_CC_CreateLoaded or
+            TpmCcConstants.TPM_CC_PolicyAuthorizeNV or
+            TpmCcConstants.TPM_CC_EncryptDecrypt2 or
+            TpmCcConstants.TPM_CC_AC_GetCapability or
+            TpmCcConstants.TPM_CC_AC_Send or
+            TpmCcConstants.TPM_CC_Policy_AC_SendSelect or
+            TpmCcConstants.TPM_CC_CertifyX509 or
+            TpmCcConstants.TPM_CC_ACT_SetTimeout or
+            TpmCcConstants.TPM_CC_ECC_Encrypt or
+            TpmCcConstants.TPM_CC_ECC_Decrypt or
+            TpmCcConstants.TPM_CC_PolicyCapability or
+            TpmCcConstants.TPM_CC_PolicyParameters or
+            TpmCcConstants.TPM_CC_NV_DefineSpace2 or
+            TpmCcConstants.TPM_CC_NV_ReadPublic2 or
+            TpmCcConstants.TPM_CC_SetCapability or
+            TpmCcConstants.TPM_CC_ReadOnlyControl or
+            TpmCcConstants.TPM_CC_PolicyTransportSPDM or
+            TpmCcConstants.TPM_CC_VerifySequenceComplete or
+            TpmCcConstants.TPM_CC_SignSequenceComplete or
+            TpmCcConstants.TPM_CC_SignDigest or
+            TpmCcConstants.TPM_CC_Decapsulate or
+            TpmCcConstants.CC_VEND =>
+                throw new InvalidOperationException($"No no-authorization handle-Name resolution is defined for '{wrapper.CommandCode}'."),
             _ => throw new InvalidOperationException($"No no-authorization handle-Name resolution is defined for '{wrapper.CommandCode}'.")
         };
 
@@ -26523,7 +27397,7 @@ public static class TpmLifecycleTransitions
     /// miss discriminates by Part 3, clause 5.4's own steps: step 2.1, a transient-range handle that is not loaded,
     /// answers <see cref="HandleIndexedReferenceRc"/>; step 2.2, a persistent-range handle whose object is not
     /// in NV, keeps bare <c>TPM_RC_HANDLE</c>. <c>TPMI_DH_OBJECT</c>'s own range check (<c>TPM_RC_VALUE</c>)
-    /// runs at parse time (<see cref="TryParseNoAuthHandles"/>'s shared seven-command case block), so a
+    /// runs at parse time (<see cref="TpmSimulator.TryParseNoAuthHandles"/>'s shared seven-command case block), so a
     /// mistyped handle never reaches this resolver at all; <c>OnRsaEncrypt</c>'s own <see cref="IsObjectHandleRange"/>
     /// check is the plain form's own defense, redundant behind the parse-time gate but not incorrect.
     /// </summary>
@@ -26813,7 +27687,8 @@ public static class TpmLifecycleTransitions
             if(verified.NextRequest is TpmNvReadOverSessionRequested or TpmNvWriteOverSessionRequested
                 or TpmNvDefineSpaceOverSessionRequested or TpmNvUndefineSpaceOverSessionRequested
                 or TpmNvCertifyOverSessionRequested or TpmNvChangeAuthOverSessionRequested
-                or TpmNvReadLockOverSessionRequested or TpmNvUndefineSpaceSpecialRequested)
+                or TpmNvReadLockOverSessionRequested or TpmNvUndefineSpaceSpecialRequested
+                or TpmPolicySecretOverSessionRequested)
             {
                 return RejectNvSessionAuthFailure(state, verified);
             }
@@ -27221,6 +28096,7 @@ public static class TpmLifecycleTransitions
     /// <param name="objectName">The Name of the object to be duplicated (<c>PolicyDuplicationSelect</c>) in an owned carrier; ownership transfers into the action.</param>
     /// <param name="newParentName">The Name of the new parent (<c>PolicyDuplicationSelect</c>) in an owned carrier; ownership transfers into the action.</param>
     /// <param name="isObjectIncluded">The <c>includeObject</c> value the fold hashes as one octet and that selects whether <paramref name="objectName"/> is folded (<c>PolicyDuplicationSelect</c>).</param>
+    /// <param name="ownedNameTerm">A freshly computed Name <paramref name="nameTerm"/> borrows and that has no other owner (<c>PolicySecret</c> against an NV Index); <see langword="null"/> for every other caller. The fold effect is its terminal owner.</param>
     /// <returns>The <see cref="TransitionResult{TState, TStackSymbol}"/> declaring the fold.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of every owned term carrier transfers into the declared TpmFoldPolicyDigestAction, whose effect is their terminal owner on every path.")]
@@ -27247,7 +28123,8 @@ public static class TpmLifecycleTransitions
         bool isNvWrittenRequired = false,
         Tpm2bName? objectName = null,
         Tpm2bName? newParentName = null,
-        bool isObjectIncluded = false) =>
+        bool isObjectIncluded = false,
+        Tpm2bName? ownedNameTerm = null) =>
         Transition(
             state with
             {
@@ -27258,7 +28135,7 @@ public static class TpmLifecycleTransitions
                     pcrValues.IsDefault ? ImmutableArray<ReadOnlyMemory<byte>>.Empty : pcrValues,
                     session.IsTrial, operandB ?? Tpm2bOperand.Empty, offset, operation, timeoutMagnitude, authorizingSession,
                     boundDigest ?? Tpm2bDigest.Empty, locality, isNvWrittenRequired,
-                    objectName ?? Tpm2bName.Empty, newParentName ?? Tpm2bName.Empty, isObjectIncluded),
+                    objectName ?? Tpm2bName.Empty, newParentName ?? Tpm2bName.Empty, isObjectIncluded, ownedNameTerm),
                 ResponseIntent = null
             },
             "Policy:FoldRequested");
@@ -27302,6 +28179,21 @@ public static class TpmLifecycleTransitions
             TpmPolicyDigestFold.Signed => CompletePolicySignedFold(
                 cleared, session, folded.FoldedDigest, folded.TimeoutMagnitude, Tpm2bTimeout.Empty, (uint)TpmRh.TPM_RH_NULL,
                 ticketDigest: null),
+            TpmPolicyDigestFold.CommandCode or
+            TpmPolicyDigestFold.AuthValue or
+            TpmPolicyDigestFold.Pcr or
+            TpmPolicyDigestFold.Or or
+            TpmPolicyDigestFold.CounterTimer or
+            TpmPolicyDigestFold.Authorize or
+            TpmPolicyDigestFold.Nv or
+            TpmPolicyDigestFold.CpHash or
+            TpmPolicyDigestFold.NameHash or
+            TpmPolicyDigestFold.Template or
+            TpmPolicyDigestFold.Parameters or
+            TpmPolicyDigestFold.Locality or
+            TpmPolicyDigestFold.NvWritten or
+            TpmPolicyDigestFold.AuthorizeNv =>
+                StorePolicyDigest(cleared, session, folded.FoldedDigest, new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS), folded.Label),
             _ => StorePolicyDigest(cleared, session, folded.FoldedDigest, new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS), folded.Label)
         };
     }
@@ -27316,6 +28208,23 @@ public static class TpmLifecycleTransitions
     private static TpmCcConstants PolicyFoldCommandCode(TpmPolicyDigestFold fold) => fold switch
     {
         TpmPolicyDigestFold.Pcr => TpmCcConstants.TPM_CC_PolicyPCR,
+        TpmPolicyDigestFold.CommandCode or
+        TpmPolicyDigestFold.AuthValue or
+        TpmPolicyDigestFold.Or or
+        TpmPolicyDigestFold.CounterTimer or
+        TpmPolicyDigestFold.Secret or
+        TpmPolicyDigestFold.Signed or
+        TpmPolicyDigestFold.Authorize or
+        TpmPolicyDigestFold.Nv or
+        TpmPolicyDigestFold.CpHash or
+        TpmPolicyDigestFold.NameHash or
+        TpmPolicyDigestFold.Template or
+        TpmPolicyDigestFold.DuplicationSelect or
+        TpmPolicyDigestFold.Parameters or
+        TpmPolicyDigestFold.Locality or
+        TpmPolicyDigestFold.NvWritten or
+        TpmPolicyDigestFold.AuthorizeNv =>
+            throw new InvalidOperationException($"The '{fold}' policyDigest fold has no refusing arm to frame."),
         _ => throw new InvalidOperationException($"The '{fold}' policyDigest fold has no refusing arm to frame.")
     };
 
@@ -27458,6 +28367,67 @@ public static class TpmLifecycleTransitions
         TpmAlgIdConstants.TPM_ALG_SHA256 => 64,
         TpmAlgIdConstants.TPM_ALG_SHA384 => 128,
         TpmAlgIdConstants.TPM_ALG_SHA512 => 128,
+        TpmAlgIdConstants.TPM_ALG_ERROR or
+        TpmAlgIdConstants.TPM_ALG_RSA or
+        TpmAlgIdConstants.TPM_ALG_TDES or
+        TpmAlgIdConstants.TPM_ALG_HMAC or
+        TpmAlgIdConstants.TPM_ALG_AES or
+        TpmAlgIdConstants.TPM_ALG_MGF1 or
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+        TpmAlgIdConstants.TPM_ALG_XOR or
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+        TpmAlgIdConstants.TPM_ALG_NULL or
+        TpmAlgIdConstants.TPM_ALG_SM3_256 or
+        TpmAlgIdConstants.TPM_ALG_SM4 or
+        TpmAlgIdConstants.TPM_ALG_RSASSA or
+        TpmAlgIdConstants.TPM_ALG_RSAES or
+        TpmAlgIdConstants.TPM_ALG_RSAPSS or
+        TpmAlgIdConstants.TPM_ALG_OAEP or
+        TpmAlgIdConstants.TPM_ALG_ECDSA or
+        TpmAlgIdConstants.TPM_ALG_ECDH or
+        TpmAlgIdConstants.TPM_ALG_ECDAA or
+        TpmAlgIdConstants.TPM_ALG_SM2 or
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+        TpmAlgIdConstants.TPM_ALG_ECMQV or
+        TpmAlgIdConstants.TPM_ALG_HKDF or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+        TpmAlgIdConstants.TPM_ALG_KDF2 or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+        TpmAlgIdConstants.TPM_ALG_ECC or
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+        TpmAlgIdConstants.TPM_ALG_CMAC or
+        TpmAlgIdConstants.TPM_ALG_CTR or
+        TpmAlgIdConstants.TPM_ALG_OFB or
+        TpmAlgIdConstants.TPM_ALG_CBC or
+        TpmAlgIdConstants.TPM_ALG_CFB or
+        TpmAlgIdConstants.TPM_ALG_ECB or
+        TpmAlgIdConstants.TPM_ALG_CCM or
+        TpmAlgIdConstants.TPM_ALG_GCM or
+        TpmAlgIdConstants.TPM_ALG_KW or
+        TpmAlgIdConstants.TPM_ALG_KWP or
+        TpmAlgIdConstants.TPM_ALG_EAX or
+        TpmAlgIdConstants.TPM_ALG_EDDSA or
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+        TpmAlgIdConstants.TPM_ALG_LMS or
+        TpmAlgIdConstants.TPM_ALG_XMSS or
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+        TpmAlgIdConstants.TPM_ALG_KMAC128 or
+        TpmAlgIdConstants.TPM_ALG_KMAC256 or
+        TpmAlgIdConstants.TPM_ALG_MLKEM or
+        TpmAlgIdConstants.TPM_ALG_MLDSA or
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+            throw new ArgumentOutOfRangeException(nameof(hashAlg), hashAlg.Value, "The hash algorithm is not an implemented hash."),
         _ => throw new ArgumentOutOfRangeException(nameof(hashAlg), hashAlg.Value, "The hash algorithm is not an implemented hash.")
     };
 
@@ -27764,7 +28734,7 @@ public static class TpmLifecycleTransitions
     /// which is where <see cref="ApplyAuditCompletion"/> (running after this hook, on the SAME turn) actually
     /// folds the audit digest for a no-authorization command; nulling <c>PendingAudit</c> here would be
     /// premature. On any other response code the inner command's own bare, <c>TPM_ST_NO_SESSIONS</c> answer
-    /// stands unchanged and only <see cref="Dispose"/>s the frame (TPM 2.0 Library Part 3, clause 5.9: "If that
+    /// stands unchanged and only <c>Dispose</c>s the frame (TPM 2.0 Library Part 3, clause 5.9: "If that
     /// code is not TPM_RC_SUCCESS, the post processing code will not update any session or audit data and will
     /// return a 10-octet response packet.").
     /// </remarks>

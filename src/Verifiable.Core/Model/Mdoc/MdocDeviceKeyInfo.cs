@@ -16,7 +16,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// from the credential's intended holder.
 /// </para>
 /// <para>
-/// <see cref="KeyAuthorizations"/> and <see cref="KeyInfo"/> are kept as
+/// <see cref="EncodedKeyAuthorizations"/> and <see cref="EncodedKeyInfo"/> are kept as
 /// opaque encoded bytes in M.2; structured parsing lands when a consumer
 /// needs it. The authorization shape (namespaces / data elements the device
 /// key may release) is part of the M.4 / M.6 validator path; the keyInfo map

@@ -41,7 +41,6 @@ public static class PolicyProfiles
         context.SetJarAudienceValidation(JarAudienceMode.IssuerOnly);
         context.SetRequiredJarTimingClaims(TimingClaimSet.All);
         context.SetJarLifetimeCeiling(TimeSpan.FromSeconds(60));
-        context.SetAllowedPkceMethods(PkceMethodSet.S256Only);
         context.SetAuthorizationCodeLifetime(TimeSpan.FromSeconds(600));
         context.SetAccessTokenLifetime(TimeSpan.FromHours(1));
         context.SetIdTokenLifetime(TimeSpan.FromHours(1));
@@ -51,7 +50,7 @@ public static class PolicyProfiles
         //reads directly), falling back to the RFC 7519 §4.1.4 leeway default
         //when no server is on the context (out-of-dispatch / unit-test use).
         context.SetClockSkewTolerance(
-            context.Server?.OAuth().Timings.ClockSkewTolerance ?? TimeSpan.FromSeconds(60));
+            context.RequestServer?.OAuth().Timings.ClockSkewTolerance ?? TimeSpan.FromSeconds(60));
         context.SetEmitIssOnRedirect(true);
         context.SetScopeRequiredOnRequest(true);
         context.SetDiscoveryIssuerShape(IssuerShape.FullUrl);
@@ -84,30 +83,22 @@ public static class PolicyProfiles
 
 
     /// <summary>
-    /// Populates the RFC 6749 with PKCE baseline. Permissive relative to
-    /// <see cref="ApplyFapi20"/> — supports PKCE methods beyond S256, relaxes
-    /// the <c>iss</c>-on-redirect requirement, and relaxes the
-    /// scope-required-on-request requirement. Useful for interoperating with
-    /// pre-FAPI-2 OAuth deployments that still want PKCE protection.
+    /// Populates the RFC 6749 with PKCE profile, relaxing the redirect issuer, scope,
+    /// audience, replay-store and pushed-authorization requirements of <see cref="ApplyFapi20"/>.
+    /// PKCE accepts S256 under every profile.
     /// </summary>
     /// <remarks>
-    /// This is the ONLY built-in profile that sets
-    /// <see cref="PkceMethodSet.S256AndPlain"/>. <see cref="ApplyFapi20"/> and
-    /// <see cref="ApplyHaip10"/> stay on <see cref="PkceMethodSet.S256Only"/> because
-    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
-    /// draft-16 §7.5.2</see>: "The plain code challenge method, defined in [RFC7636], is
-    /// explicitly forbidden in OAuth 2.1." and
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.1.1">RFC 9700 §2.1.1</see> adds
-    /// that a client SHOULD use a method that does not expose the verifier on the front channel —
-    /// "Currently, S256 is the only such method." Pre-OAuth-2.1 RFC 6749 + RFC 7636 deployments are
-    /// this profile's sole reason to accept <c>plain</c>.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>:
+    /// "The plain code challenge method, defined in [RFC7636], is explicitly forbidden in OAuth 2.1."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">RFC 7636 §4.4.1</see>:
+    /// "If the server supporting PKCE does not support the requested transformation, the authorization
+    /// endpoint MUST return the authorization error response with "error" value set to "invalid_request"."
     /// </remarks>
     public static void ApplyRfc6749WithPkce(ExchangeContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         ApplyFapi20(context);
-        context.SetAllowedPkceMethods(PkceMethodSet.S256AndPlain);
         context.SetEmitIssOnRedirect(false);
         context.SetScopeRequiredOnRequest(false);
         context.SetAccessTokenAudPolicy(AccessTokenAudPolicy.Optional);
@@ -155,7 +146,7 @@ public static class PolicyProfiles
         //Single source of truth: derive both presentation timing axes from the
         //deployment's TimingPolicy, falling back to the 60s defaults when no
         //server is on the context (out-of-dispatch / unit-test use).
-        TimingPolicy? timings = context.Server?.OAuth().Timings;
+        TimingPolicy? timings = context.RequestServer?.OAuth().Timings;
         context.SetClockSkewTolerance(timings?.ClockSkewTolerance ?? TimeSpan.FromSeconds(60));
         context.SetKbJwtMaxAgeWindow(timings?.KbJwtIatMaxAge ?? TimeSpan.FromSeconds(60));
 

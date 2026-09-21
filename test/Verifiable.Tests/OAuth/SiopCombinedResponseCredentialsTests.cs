@@ -132,8 +132,8 @@ internal sealed class SiopCombinedResponseCredentialsTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         const string Nonce = "n-siop-credentials-id-token-only";
@@ -195,8 +195,8 @@ internal sealed class SiopCombinedResponseCredentialsTests
                 SiopCombinedResponseFixture.PayloadSerializer,
                 Pool,
                 TimeProvider,
-                resolveIssuerKey: issuerId =>
-                    string.Equals(issuerId, SiopCombinedResponseFixture.IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null,
+                resolveIssuerKey: (issuerId, _, _, _, _) => ValueTask.FromResult(
+                    string.Equals(issuerId, SiopCombinedResponseFixture.IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null),
                 parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
                     s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder,
                     BaseMemoryPool.Shared, TestSalts.TestSaltTag),

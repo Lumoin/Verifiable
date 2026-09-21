@@ -4,7 +4,7 @@ namespace Verifiable.Json;
 
 /// <summary>
 /// The decoded pieces of a W3C WebAuthn Level 3 <c>RegistrationResponseJSON</c> document, ready for
-/// <see cref="Fido2RegistrationVerifier.VerifyAsync"/> to consume.
+/// <see cref="Fido2RegistrationVerifier.VerifyAsync(string, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, RegistrationCeremonyInput, Verifiable.Core.Assessment.ClaimIssuer{RegistrationCeremonyInput}, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, System.Collections.Generic.IReadOnlyList{Verifiable.Cryptography.Pki.PkiCertificateMemory}, System.DateTimeOffset, string, BaseMemoryPool, System.Collections.Generic.IReadOnlyList{string}?, string?, bool, System.Threading.CancellationToken)"/> to consume.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,9 +18,9 @@ namespace Verifiable.Json;
 /// (<see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">section 7.1,
 /// step 27</see>'s credential record <c>id</c>); <see cref="ClientDataJson"/> and
 /// <see cref="AttestationObject"/> are the exact bytes
-/// <see cref="Verifiable.Cbor.Fido2.AttestationObjectCborReader.Parse"/> and the verifier's
+/// <c>Verifiable.Cbor.Fido2.AttestationObjectCborReader.Parse</c> and the verifier's
 /// <c>clientDataHash</c> computation consume. <see cref="AuthenticatorAttachment"/> is carried
-/// verbatim for <see cref="Fido2RegistrationVerifier.VerifyAsync"/>'s own parameter of the same
+/// verbatim for <see cref="Fido2RegistrationVerifier.VerifyAsync(string, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, RegistrationCeremonyInput, Verifiable.Core.Assessment.ClaimIssuer{RegistrationCeremonyInput}, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, System.Collections.Generic.IReadOnlyList{Verifiable.Cryptography.Pki.PkiCertificateMemory}, System.DateTimeOffset, string, BaseMemoryPool, System.Collections.Generic.IReadOnlyList{string}?, string?, bool, System.Threading.CancellationToken)"/>'s own parameter of the same
 /// name.
 /// </para>
 /// </remarks>
@@ -43,7 +43,7 @@ public sealed class WebAuthnRegistrationResponseEnvelope: IDisposable
     /// <summary>
     /// The raw <c>response.attestationObject</c> bytes, decoded from base64url — split into its
     /// <c>fmt</c>/<c>attStmt</c>/<c>authData</c> parts by
-    /// <see cref="Verifiable.Cbor.Fido2.AttestationObjectCborReader.Parse"/>. Owned by this envelope.
+    /// <c>Verifiable.Cbor.Fido2.AttestationObjectCborReader.Parse</c>. Owned by this envelope.
     /// </summary>
     public PooledMemory AttestationObject { get; }
 

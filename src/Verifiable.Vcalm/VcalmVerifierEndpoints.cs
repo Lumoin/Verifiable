@@ -41,7 +41,7 @@ public static class VcalmVerifierEndpoints
     {
         List<EndpointCandidate> candidates = [];
 
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmVerifier))
         {
             //§3.3.1 / §3.3.2 are the §1.3 REQUIRED verifier interfaces; they materialize only when
@@ -66,7 +66,11 @@ public static class VcalmVerifierEndpoints
     };
 
 
-    //§3.3.1 POST /credentials/verify.
+    /// <summary>
+    /// Builds the endpoint for §3.3.1 POST /credentials/verify.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildCredentialsVerify() =>
         new()
         {
@@ -80,7 +84,7 @@ public static class VcalmVerifierEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -138,7 +142,11 @@ public static class VcalmVerifierEndpoints
         };
 
 
-    //§3.3.2 POST /presentations/verify.
+    /// <summary>
+    /// Builds the endpoint for §3.3.2 POST /presentations/verify.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildPresentationsVerify() =>
         new()
         {
@@ -152,7 +160,7 @@ public static class VcalmVerifierEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -181,7 +189,11 @@ public static class VcalmVerifierEndpoints
         };
 
 
-    //§3.3.3 POST /challenges.
+    /// <summary>
+    /// Builds the endpoint for §3.3.3 POST /challenges.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildCreateChallenge() =>
         new()
         {
@@ -195,7 +207,7 @@ public static class VcalmVerifierEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.Vcalm();
 
                 //§3.3.3 takes an empty body. A body that is PRESENT MUST still be within the configured

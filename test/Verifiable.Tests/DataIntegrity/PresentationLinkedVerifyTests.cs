@@ -75,6 +75,7 @@ internal sealed class PresentationLinkedVerifyTests
             holderDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            signed.Context!,
             ProofValueDecoder,
             SerializePresentation,
             SerializeProofOptions,
@@ -112,6 +113,7 @@ internal sealed class PresentationLinkedVerifyTests
             holderDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            signed.Context!,
             ProofValueDecoder,
             SerializePresentation,
             SerializeProofOptions,
@@ -150,6 +152,7 @@ internal sealed class PresentationLinkedVerifyTests
             holderDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            signed.Context!,
             ProofValueDecoder,
             SerializePresentation,
             SerializeProofOptions,
@@ -296,6 +299,7 @@ internal sealed class PresentationLinkedVerifyTests
             holderDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            presentation.Context!,
             ProofValueDecoder,
             SerializePresentation,
             SerializeProofOptions,
@@ -310,7 +314,8 @@ internal sealed class PresentationLinkedVerifyTests
     private static void HashCanonical(string json, Span<byte> destination)
     {
         var canonical = new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(json), BufferTags.Json);
-        _ = System.Security.Cryptography.SHA256.HashData(canonical.Span, destination);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(canonical.Span, destination.Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+        digest.AsReadOnlySpan().CopyTo(destination);
     }
 
 

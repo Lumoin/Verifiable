@@ -500,11 +500,11 @@ internal sealed class EntityStatementValidatorTests
         //RFC 7518 §3.6 / RFC 8725: an unsigned ("alg":"none") federation JWT must be
         //rejected. Only the header is adversarial; the parsed statement stays valid so
         //AlgPresent is the lone failure.
-        UnverifiedJwtHeader noneHeader = new(new Dictionary<string, object>
+        UnverifiedJwtHeader noneHeader = new()
         {
             [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None,
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt
-        });
+        };
 
         EntityStatementValidationContext context = new()
         {
@@ -536,10 +536,10 @@ internal sealed class EntityStatementValidatorTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //A header that omits alg entirely is as invalid as alg=none.
-        UnverifiedJwtHeader noAlgHeader = new(new Dictionary<string, object>
+        UnverifiedJwtHeader noAlgHeader = new()
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt
-        });
+        };
 
         EntityStatementValidationContext context = new()
         {
@@ -572,11 +572,11 @@ internal sealed class EntityStatementValidatorTests
 
         //Cross-JWT confusion (RFC 8725 §3.11): a trust-mark+jwt presented where an
         //entity-statement+jwt is expected must be rejected on the typ check alone.
-        UnverifiedJwtHeader wrongTypHeader = new(new Dictionary<string, object>
+        UnverifiedJwtHeader wrongTypHeader = new()
         {
             [WellKnownJwkMemberNames.Alg] = "ES256",
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkJwt
-        });
+        };
 
         EntityStatementValidationContext context = new()
         {
@@ -649,12 +649,12 @@ internal sealed class EntityStatementValidatorTests
         //that binds no key for the subject and validation would not flag it. The shape-aware check fails it.
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
-        UnverifiedJwtHeader header = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        UnverifiedJwtHeader header = new()
         {
             [WellKnownJwkMemberNames.Alg] = "ES256",
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
             [WellKnownJwkMemberNames.Kid] = "superior-kid"
-        });
+        };
 
         //A Subordinate Statement (iss != sub) carrying no jwks at all.
         SubordinateStatement statement = new()
@@ -663,13 +663,13 @@ internal sealed class EntityStatementValidatorTests
             Subject = new EntityIdentifier("https://subordinate.example.test"),
             IssuedAt = now,
             ExpiresAt = now.AddHours(1),
-            Payload = new(new Dictionary<string, object>(StringComparer.Ordinal)
+            Payload = new()
             {
                 [WellKnownJwtClaimNames.Iss] = "https://superior.example.test",
                 [WellKnownJwtClaimNames.Sub] = "https://subordinate.example.test",
                 [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
                 [WellKnownJwtClaimNames.Exp] = now.AddHours(1).ToUnixTimeSeconds(),
-            })
+            }
         };
 
         EntityStatementValidationContext context = new()
@@ -698,12 +698,12 @@ internal sealed class EntityStatementValidatorTests
         //Entity Configuration (iss == sub) with no jwks binds no signing key and must fail.
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
-        UnverifiedJwtHeader header = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        UnverifiedJwtHeader header = new()
         {
             [WellKnownJwkMemberNames.Alg] = "ES256",
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
             [WellKnownJwkMemberNames.Kid] = "anchor-kid"
-        });
+        };
 
         EntityConfiguration statement = new()
         {
@@ -711,13 +711,13 @@ internal sealed class EntityStatementValidatorTests
             Subject = new EntityIdentifier("https://anchor.example.test"),
             IssuedAt = now,
             ExpiresAt = now.AddHours(1),
-            Payload = new(new Dictionary<string, object>(StringComparer.Ordinal)
+            Payload = new()
             {
                 [WellKnownJwtClaimNames.Iss] = "https://anchor.example.test",
                 [WellKnownJwtClaimNames.Sub] = "https://anchor.example.test",
                 [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
                 [WellKnownJwtClaimNames.Exp] = now.AddHours(1).ToUnixTimeSeconds(),
-            })
+            }
         };
 
         EntityStatementValidationContext context = new()
@@ -747,12 +747,12 @@ internal sealed class EntityStatementValidatorTests
         //there — NOT a failure — so the OP's registration response is not wrongly rejected.
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
-        UnverifiedJwtHeader header = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        UnverifiedJwtHeader header = new()
         {
             [WellKnownJwkMemberNames.Alg] = "ES256",
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt,
             [WellKnownJwkMemberNames.Kid] = "op-kid"
-        });
+        };
 
         //The response is issued by the OP about the RP (iss != sub) and legitimately omits jwks.
         SubordinateStatement statement = new()
@@ -761,13 +761,13 @@ internal sealed class EntityStatementValidatorTests
             Subject = new EntityIdentifier("https://rp.example.test"),
             IssuedAt = now,
             ExpiresAt = now.AddHours(1),
-            Payload = new(new Dictionary<string, object>(StringComparer.Ordinal)
+            Payload = new()
             {
                 [WellKnownJwtClaimNames.Iss] = "https://op.example.test",
                 [WellKnownJwtClaimNames.Sub] = "https://rp.example.test",
                 [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
                 [WellKnownJwtClaimNames.Exp] = now.AddHours(1).ToUnixTimeSeconds(),
-            })
+            }
         };
 
         EntityStatementValidationContext context = new()
@@ -803,11 +803,11 @@ internal sealed class EntityStatementValidatorTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //A header that carries alg and typ but omits kid entirely.
-        UnverifiedJwtHeader noKidHeader = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        UnverifiedJwtHeader noKidHeader = new()
         {
             [WellKnownJwkMemberNames.Alg] = "ES256",
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt
-        });
+        };
 
         EntityStatementValidationContext context = new()
         {
@@ -1409,12 +1409,12 @@ internal sealed class EntityStatementValidatorTests
 
         //An Entity Configuration is itself a component of a Trust Chain and MUST NOT embed a
         //trust_chain header per Federation §4.3. Build a header that carries one to exercise the guard.
-        UnverifiedJwtHeader headerWithChain = new(new Dictionary<string, object>
+        UnverifiedJwtHeader headerWithChain = new()
         {
             [WellKnownJwkMemberNames.Alg] = "ES256",
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
             [WellKnownFederationClaimNames.TrustChain] = new List<object> { "eyJ...", "eyJ..." }
-        });
+        };
 
         EntityStatementValidationContext context = new()
         {

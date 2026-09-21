@@ -53,10 +53,10 @@ internal sealed class RecursiveTenancyTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial operatorKeys = host.RegisterClient(
-            "https://operator.test", new Uri("https://operator.test"), OperatorCapabilities);
-        using VerifierKeyMaterial customerKeys = host.RegisterClient(
-            "https://customer.test", new Uri("https://customer.test"), CustomerCapabilities);
+        using VerifierKeyMaterial operatorKeys = await host.RegisterClientAsync(
+            "https://operator.test", new Uri("https://operator.test"), OperatorCapabilities).ConfigureAwait(false);
+        using VerifierKeyMaterial customerKeys = await host.RegisterClientAsync(
+            "https://customer.test", new Uri("https://customer.test"), CustomerCapabilities).ConfigureAwait(false);
 
         ServerHttpResponse operatorRegisterResponse = await host.DispatchAtEndpointAsync(
             operatorKeys.Registration.TenantId,
@@ -96,6 +96,10 @@ internal sealed class RecursiveTenancyTests
     }
 
 
+    /// <summary>
+    /// Capability attenuation for one tenant leaves the other tenant's endpoint chain intact.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Pipeline §2.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task PerRequestCapabilityAttenuationIsTenantScoped()
     {
@@ -104,35 +108,43 @@ internal sealed class RecursiveTenancyTests
         //Wire a per-request capability resolver that vetoes the JWKS
         //endpoint, but only for the customer tenant. The operator's chain
         //must keep JWKS; the customer's chain must drop it.
-        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
-            if(registration.TenantId.Value.StartsWith("cust-", StringComparison.Ordinal))
+            candidateIntegration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
             {
-                _ = active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
-            }
-            return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
-        };
+                HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
+                if(registration.TenantId.Value.StartsWith("cust-", StringComparison.Ordinal))
+                {
+                    _ = active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+                }
 
-        using VerifierKeyMaterial operatorKeys = host.RegisterClient(
-            "https://operator-2.test", new Uri("https://operator-2.test"), OperatorCapabilities);
-        using VerifierKeyMaterial customerKeys = host.RegisterClient(
-            "https://customer-2.test", new Uri("https://customer-2.test"), CustomerCapabilities);
+                return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial operatorKeys = await host.RegisterClientAsync(
+            "https://operator-2.test", new Uri("https://operator-2.test"), OperatorCapabilities).ConfigureAwait(false);
+        using VerifierKeyMaterial customerKeys = await host.RegisterClientAsync(
+            "https://customer-2.test", new Uri("https://customer-2.test"), CustomerCapabilities).ConfigureAwait(false);
 
         //Force the customer tenant's segment to start with "cust-" so the
         //veto lambda fires for it. RegisterClient generates a random
         //segment; override by re-registering after a rename is hard, so
         //instead select the predicate by something controllable: the
         //ClientId starts with "https://customer-...". Recheck the predicate.
-        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
-            if(registration.ClientId.StartsWith("https://customer-", StringComparison.Ordinal))
+            candidateIntegration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
             {
-                _ = active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
-            }
-            return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
-        };
+                HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
+                if(registration.ClientId.StartsWith("https://customer-", StringComparison.Ordinal))
+                {
+                    _ = active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+                }
+
+                return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
+            };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse operatorJwks = await host.DispatchAtEndpointAsync(
             operatorKeys.Registration.TenantId,

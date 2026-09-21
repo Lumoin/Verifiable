@@ -1742,6 +1742,8 @@ public static class JAdESSignatureAugmentation
     /// does, and that is <paramref name="finalValue"/>'s concern, disposed exactly once when the REAL working
     /// container is eventually disposed).
     /// </summary>
+    /// <param name="targetMode">The incorporation mode selecting whether the header element carries its value as clear JSON or base64url-encoded text.</param>
+    /// <param name="constructElement">Builds the final <see cref="JAdESUnsignedHeaderElement"/> from the carriage wrapping the resolved value.</param>
     /// <param name="probeValue">
     /// The value used ONLY to satisfy <see cref="JAdESUnsignedHeaders"/>'s own clear-mode JA-5.3.1-14 canonAlg
     /// gate when the throwaway probe container is built under <see cref="JAdESEtsiUIncorporationMode.Base64Url"/>
@@ -1751,6 +1753,10 @@ public static class JAdESSignatureAugmentation
     /// arm (never probed), this is the SAME reference as <paramref name="finalValue"/>.
     /// </param>
     /// <param name="finalValue">The value the returned element's carriage actually carries as its decoded view.</param>
+    /// <param name="encodeUnprotectedHeader">Encodes an <c>etsiU</c> unsigned-headers container (here, the throwaway probe container) to its wire dictionary form so the base64url arm can canonicalize and gate on it.</param>
+    /// <param name="base64UrlEncoder">The Base64Url encoding delegate.</param>
+    /// <param name="jsonSerializer">Serializes a value to its UTF-8 JSON bytes for the base64url-incorporated wire text.</param>
+    /// <param name="pool">The memory pool backing any rented buffers.</param>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The ClearJson arm's returned element becomes reachable through whatever workingUnsignedHeaders " +
             "the caller appends it into, disposed there eventually -- Roslyn cannot trace that far. Under Base64Url, " +
@@ -1938,6 +1944,24 @@ public static class JAdESSignatureAugmentation
                         certificateValues = validationData?.CertificateValues;
                         revocationValues = validationData?.RevocationValues;
                         break;
+
+                    case JAdESUnsignedHeaderElementSignaturePolicyStore:
+                    case JAdESUnsignedHeaderElementCounterSignature:
+                    case JAdESUnsignedHeaderElementSignatureTimestamp:
+                    case JAdESUnsignedHeaderElementAttributeCertificateValues:
+                    case JAdESUnsignedHeaderElementAttributeRevocationValues:
+                    case JAdESUnsignedHeaderElementTimestampValidationData:
+                    case JAdESUnsignedHeaderElementArchiveTimestamp:
+                    case JAdESUnsignedHeaderElementCertificateReferences:
+                    case JAdESUnsignedHeaderElementRevocationReferences:
+                    case JAdESUnsignedHeaderElementAttributeCertificateReferences:
+                    case JAdESUnsignedHeaderElementAttributeRevocationReferences:
+                    case JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                    case JAdESUnsignedHeaderElementReferencesTimestamp:
+                    case JAdESUnsignedHeaderElementUnknown:
+                        //Carries no certificate or revocation values this collection gathers; an explicit
+                        //no-op arm preserving this switch's original silent fall-through for every other kind.
+                        break;
                 }
 
                 CollectCertificateValues(certificateValues, certificates);
@@ -2056,6 +2080,23 @@ public static class JAdESSignatureAugmentation
                 case JAdESUnsignedHeaderElementAttributeCertificateReferences:
                 case JAdESUnsignedHeaderElementAttributeRevocationReferences:
                     return true;
+
+                case JAdESUnsignedHeaderElementSignaturePolicyStore:
+                case JAdESUnsignedHeaderElementCounterSignature:
+                case JAdESUnsignedHeaderElementSignatureTimestamp:
+                case JAdESUnsignedHeaderElementCertificateValues:
+                case JAdESUnsignedHeaderElementRevocationValues:
+                case JAdESUnsignedHeaderElementAttributeCertificateValues:
+                case JAdESUnsignedHeaderElementAttributeRevocationValues:
+                case JAdESUnsignedHeaderElementAnyValidationData:
+                case JAdESUnsignedHeaderElementTimestampValidationData:
+                case JAdESUnsignedHeaderElementArchiveTimestamp:
+                case JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                case JAdESUnsignedHeaderElementReferencesTimestamp:
+                case JAdESUnsignedHeaderElementUnknown:
+                    //Not a references-family element this scan looks for; an explicit no-op arm preserving
+                    //this switch's original silent fall-through for every other kind.
+                    break;
             }
         }
 
@@ -2082,6 +2123,21 @@ public static class JAdESSignatureAugmentation
                 case JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
                 case JAdESUnsignedHeaderElementReferencesTimestamp:
                     return true;
+
+                case JAdESUnsignedHeaderElementSignaturePolicyStore:
+                case JAdESUnsignedHeaderElementCounterSignature:
+                case JAdESUnsignedHeaderElementSignatureTimestamp:
+                case JAdESUnsignedHeaderElementCertificateValues:
+                case JAdESUnsignedHeaderElementRevocationValues:
+                case JAdESUnsignedHeaderElementAttributeCertificateValues:
+                case JAdESUnsignedHeaderElementAttributeRevocationValues:
+                case JAdESUnsignedHeaderElementAnyValidationData:
+                case JAdESUnsignedHeaderElementTimestampValidationData:
+                case JAdESUnsignedHeaderElementArchiveTimestamp:
+                case JAdESUnsignedHeaderElementUnknown:
+                    //Not one of the six refs-family kinds this gate forbids from B-LT onward; an explicit
+                    //no-op arm preserving this switch's original silent fall-through for every other kind.
+                    break;
             }
         }
 

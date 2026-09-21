@@ -377,10 +377,16 @@ internal static class EArkCapstoneSource
             BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
 
-        byte[] signatureValueP1363 = context.Signer.SigningKey.SignData(
-            preparation.SignaturePreparation.SigningInput.AsReadOnlySpan().ToArray(), HashAlgorithmName.SHA256);
+        byte[] exportedSignerPrivateKey = context.Signer.SigningKey.ExportParameters(true).D!;
+        using IMemoryOwner<byte> signerPrivateKeyOwner = BaseMemoryPool.Shared.Rent(exportedSignerPrivateKey.Length, AllocationKind.Pinned);
+        exportedSignerPrivateKey.CopyTo(signerPrivateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedSignerPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
+        using Signature signatureValueP1363 = (await sign(
+            signerPrivateKeyOwner.Memory, preparation.SignaturePreparation.SigningInput.AsReadOnlyMemory(), BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> signatureValueDer = EcdsaSignatureEncoding.ConvertP1363ToDer(
-            signatureValueP1363, BaseMemoryPool.Shared, out int derLength);
+            signatureValueP1363.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
         using AsicContainerCreationResult created = AsicContainerCreation.CompleteSignature(
             preparation, context.SignerCertificate, CryptoAlgorithm.P256, signatureValueDer.Memory[..derLength],
             additionalCertificates: null, BaseMemoryPool.Shared);
@@ -588,7 +594,7 @@ internal static class EArkCapstoneSource
     /// <param name="cancellationToken">Token to observe for cancellation requests.</param>
     /// <returns>The manifest. The caller owns and disposes it.</returns>
     /// <remarks>
-    /// Every checksum here goes through <see cref="CryptographicKeyEvents.ComputeDigestAsync"/> — the registered
+    /// Every checksum here goes through <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlySequence{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/> — the registered
     /// digest seam — so the package a validator recomputes agrees with the package a producer wrote, which is what
     /// makes the fixity rule a real assertion rather than a restatement of a placeholder.
     /// </remarks>

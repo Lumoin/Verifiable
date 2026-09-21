@@ -15,7 +15,7 @@ namespace Verifiable.Json.Sd;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Wired into <see cref="SdJwtIssuance.IssueAsync"/> automatically. Not visible to callers.
+/// Wired into <see cref="SdJwtIssuance.IssueAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/> automatically. Not visible to callers.
 /// Custom format libraries implement their own pipeline classes following the same pattern.
 /// </para>
 /// </remarks>
@@ -57,11 +57,20 @@ internal static class SdJwtPipeline
     /// forwards here); this keeps the pipeline a pure parameter-taking body. Matches
     /// <see cref="SignPayloadDelegate"/> exactly — that delegate type (and its method-group
     /// wiring throughout <c>Verifiable.Core</c>'s <c>SdJwtIssuanceExtensions</c> and every
-    /// caller of <see cref="SdJwtIssuance.IssueVerboseAsync"/>) has no <c>CryptoEventSink</c>
+    /// caller of <see cref="SdJwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/>) has no <c>CryptoEventSink</c>
     /// slot, so unlike the sink-threaded JOSE/COSE sites this one routes unconditionally to
     /// <see cref="CryptographicKeyEvents.DefaultSink"/> rather than accepting a per-call
     /// override — see <see cref="CryptoEventSink"/> for the two-route rationale.
     /// </summary>
+    /// <param name="signingDelegate">The signing function to use.</param>
+    /// <param name="redactedPayload">The redacted JWT payload bytes to sign.</param>
+    /// <param name="hashAlgorithm">The disclosure digest hash algorithm, echoed into the <c>_sd_alg</c> claim.</param>
+    /// <param name="mediaType">The <c>typ</c> header value; the SD-JWT default when empty.</param>
+    /// <param name="privateKey">The signing key.</param>
+    /// <param name="keyId">The <c>kid</c> header value.</param>
+    /// <param name="memoryPool">Memory pool for the signing-input and signature buffers.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The compact JWS serialization bytes.</returns>
     internal static async ValueTask<ReadOnlyMemory<byte>> Sign(
         SigningDelegate signingDelegate,
         ReadOnlyMemory<byte> redactedPayload,

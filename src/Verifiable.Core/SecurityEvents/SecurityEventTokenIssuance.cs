@@ -19,7 +19,7 @@ namespace Verifiable.Core.SecurityEvents;
 /// </para>
 /// <para>
 /// Signing flows through the standard JCose composition
-/// (<see cref="UnsignedJwt"/> → <see cref="JwtSigningExtensions.SignAsync"/>),
+/// (<see cref="UnsignedJwt"/> → <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>),
 /// which resolves the per-algorithm signing function from the key's
 /// <see cref="Tag"/> via the crypto function registry — the same path used by
 /// token issuance, KB-JWT issuance, and JAR signing.

@@ -156,8 +156,8 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
     /// preserve the exact format from the source document.
     /// </para>
     /// <para>
-    /// Use <see cref="DateTimeStampFormat.TryParse"/> to convert to <see cref="DateTimeOffset"/>
-    /// and <see cref="DateTimeStampFormat.Format(DateTimeOffset, string)"/> to create valid values.
+    /// Use <see cref="Verifiable.Core.Model.Common.DateTimeStampFormat.TryParse"/> to convert to <see cref="DateTimeOffset"/>
+    /// and <see cref="Verifiable.Core.Model.Common.DateTimeStampFormat.Format(System.DateTimeOffset, string)"/> to create valid values.
     /// </para>
     /// <para>
     /// See <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 1.0 §2.1 Proofs</see>.
@@ -175,8 +175,8 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
     /// string to preserve the exact format from the source document.
     /// </para>
     /// <para>
-    /// Use <see cref="DateTimeStampFormat.TryParse"/> to convert to <see cref="DateTimeOffset"/>
-    /// and <see cref="DateTimeStampFormat.Format(DateTimeOffset, string)"/> to create valid values.
+    /// Use <see cref="Verifiable.Core.Model.Common.DateTimeStampFormat.TryParse"/> to convert to <see cref="DateTimeOffset"/>
+    /// and <see cref="Verifiable.Core.Model.Common.DateTimeStampFormat.Format(System.DateTimeOffset, string)"/> to create valid values.
     /// </para>
     /// <para>
     /// See <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 1.0 §2.1 Proofs</see>.

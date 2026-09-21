@@ -7,6 +7,8 @@ using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Extensions.Hierarchy;
+using Verifiable.Tpm.Extensions.Nv;
+using Verifiable.Tpm.Extensions.Pin;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
@@ -17,7 +19,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Drives the TPM policy (enhanced authorization) command family against the in-house behavioural
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same production command
-/// path the production code uses (the <see cref="TpmDeviceExtensions"/> policy commands over
+/// path the production code uses (the <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions"/> policy commands over
 /// <see cref="TpmCommandExecutor"/> and the real command/response codecs). Each test starts a trial or policy
 /// session, issues policy assertions, reads the accumulated policyDigest back via <c>TPM2_PolicyGetDigest()</c>,
 /// and asserts it equals the host prediction the shipped <see cref="TpmPolicyDigest"/> computes for the same
@@ -1856,6 +1858,415 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         finally
         {
             _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies <c>TPM2_PolicySecret()</c> against a PIN Fail Index applies the SAME pinCount outcome
+    /// <see cref="PolicyNvAgainstAPinIndexAppliesThePinOutcome"/> proves for <c>TPM2_PolicyNV()</c>: a wrong PIN
+    /// fails and increments pinCount without touching the TPM's global dictionary-attack counter
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 1,
+    /// clause 34.2.6.6: "pinCount is incremented for a PIN Fail Index"</see>); the correct PIN then succeeds and
+    /// resets pinCount to zero; driving pinCount to <c>pinLimit</c> refuses even the correct PIN with the bare
+    /// <c>TPM_RC_AUTH_UNAVAILABLE</c> <c>TPM2_NV_Read()</c>'s own Index arm answers for the identical state
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">Part 3, clause 23.4:
+    /// "If authEntity references an NV PIN index, TPMA_NV_WRITTEN is required to be SET and pinCount must be less
+    /// than pinLimit"</see>); an owner-authorized reset restores access.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySecretOverAPinFailIndexAppliesTheSameStrongPinOutcomeNvReadDoes()
+    {
+        const uint PinIndexHandle = 0x0100_00C1;
+        const uint PinLimit = 3;
+        byte[] correctPin = "0000"u8.ToArray();
+        byte[] wrongPin = "9999"u8.ToArray();
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicySecret, TpmResponseCodec.PolicySecret);
+
+        TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexAsync(
+            ReadOnlyMemory<byte>.Empty, PinIndexHandle, correctPin, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"DefinePinFailIndexAsync failed: '{defineResult.ResponseCode}'.");
+
+        try
+        {
+            async Task<TpmResult<PolicySecretResponse>> RunAsync(ReadOnlyMemory<byte> pin)
+            {
+                TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                    TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+                using StartAuthSessionResponse session = startResult.Value;
+                uint sessionHandle = session.SessionHandle.Value;
+                try
+                {
+                    using TpmPasswordSession authSession = TpmPasswordSession.Create(pin.Span, pool);
+                    using PolicySecretInput input = PolicySecretInput.CreateImmediate(PinIndexHandle, sessionHandle, pool);
+
+                    return await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
+                        tpm, input, [authSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            TpmResult<TpmDictionaryAttackParameters> beforeDa = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(beforeDa.IsSuccess, $"GetDictionaryAttackParametersAsync failed: '{beforeDa.ResponseCode}'.");
+
+            TpmResult<PolicySecretResponse> wrongResult = await RunAsync(wrongPin).ConfigureAwait(false);
+            Assert.IsFalse(wrongResult.IsSuccess, "A wrong PIN against a PIN Fail Index must be refused.");
+            Assert.AreEqual(
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), wrongResult.ResponseCode,
+                "A PIN Fail Index is TPMA_NV_NO_DA-mandated, so a wrong PIN is a plain bad-authorization, never TPM_RC_AUTH_FAIL.");
+
+            TpmResult<TpmPinCounterParameters> afterWrongCounters = await tpm.ReadPinCountersAsync(
+                ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(afterWrongCounters.IsSuccess, $"ReadPinCountersAsync failed: '{afterWrongCounters.ResponseCode}'.");
+            Assert.AreEqual(1u, afterWrongCounters.Value.PinCount, "A single wrong PIN must increment pinCount to one.");
+
+            TpmResult<TpmDictionaryAttackParameters> afterWrongDa = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(afterWrongDa.IsSuccess, $"GetDictionaryAttackParametersAsync failed: '{afterWrongDa.ResponseCode}'.");
+            Assert.AreEqual(
+                beforeDa.Value.LockoutCounter, afterWrongDa.Value.LockoutCounter,
+                "The TPM's global dictionary-attack counter must be UNCHANGED by a wrong PIN against a PIN Fail Index.");
+
+            TpmResult<PolicySecretResponse> correctResult = await RunAsync(correctPin).ConfigureAwait(false);
+            Assert.IsTrue(correctResult.IsSuccess, $"PolicySecret with the correct PIN failed: '{correctResult.ResponseCode}'.");
+            correctResult.Value.Dispose();
+
+            TpmResult<TpmPinCounterParameters> afterCorrectCounters = await tpm.ReadPinCountersAsync(
+                ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(afterCorrectCounters.IsSuccess, $"ReadPinCountersAsync failed: '{afterCorrectCounters.ResponseCode}'.");
+            Assert.AreEqual(0u, afterCorrectCounters.Value.PinCount, "The correct PIN must reset pinCount to zero.");
+
+            for(uint attempt = 1; attempt <= PinLimit; attempt++)
+            {
+                TpmResult<PolicySecretResponse> throttleResult = await RunAsync(wrongPin).ConfigureAwait(false);
+                Assert.IsFalse(throttleResult.IsSuccess, $"Wrong-PIN attempt {attempt} of {PinLimit} must be refused.");
+            }
+
+            TpmResult<PolicySecretResponse> atLimitResult = await RunAsync(correctPin).ConfigureAwait(false);
+            Assert.IsFalse(atLimitResult.IsSuccess, "Once pinCount reaches pinLimit, even the CORRECT PIN must be refused.");
+            Assert.AreEqual(
+                TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, atLimitResult.ResponseCode,
+                "At pinLimit, PolicySecret must refuse with the SAME bare code TPM2_NV_Read()'s own Index arm answers for the identical state.");
+
+            TpmResult<NvWriteResponse> resetResult = await tpm.ResetPinCountAsync(
+                ReadOnlyMemory<byte>.Empty, PinIndexHandle, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(resetResult.IsSuccess, $"ResetPinCountAsync failed: '{resetResult.ResponseCode}'.");
+
+            TpmResult<PolicySecretResponse> recoveredResult = await RunAsync(correctPin).ConfigureAwait(false);
+            Assert.IsTrue(recoveredResult.IsSuccess, $"The correct PIN must succeed again once reset: '{recoveredResult.ResponseCode}'.");
+            recoveredResult.Value.Dispose();
+        }
+        finally
+        {
+            _ = await tpm.UndefinePinIndexAsync(ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies <c>TPM2_PolicySecret()</c> against a PIN Pass Index increments pinCount on a successful
+    /// authorization, through the SAME shared helper the PIN Fail arm above uses
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 1,
+    /// clause 34.2.6.6: "the pinCount field is set to zero if the Index is PIN Fail and incremented if the Index
+    /// is PIN Pass"</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySecretOverAPinPassIndexIncrementsPinCountOnSuccess()
+    {
+        const uint PinIndexHandle = 0x0100_00C2;
+        const uint PinLimit = 3;
+        const ushort PinCounterParametersSize = 8;
+        const ushort Offset = 0;
+        byte[] correctPin = "1234"u8.ToArray();
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+        TpmaNv attributes = TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_OWNERREAD | TpmaNv.TPMA_NV_OWNERWRITE | TpmaNv.TPMA_NV_NO_DA
+            | (TpmaNv)((uint)TpmNt.TPM_NT_PIN_PASS << TpmaNvFields.TPM_NT_SHIFT);
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicySecret, TpmResponseCodec.PolicySecret);
+
+        _ = await UndefineNvAsync(tpm, registry, pool, PinIndexHandle).ConfigureAwait(false);
+        TpmResult<NvDefineSpaceResponse> defineResult = await DefineNvAsync(
+            tpm, registry, pool, PinIndexHandle, attributes, PinCounterParametersSize, authPolicy: default, indexAuth: correctPin).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"NV_DefineSpace (PIN Pass Index) failed: '{defineResult.ResponseCode}'.");
+
+        try
+        {
+            using(TpmPasswordSession ownerWriteAuth = TpmPasswordSession.CreateEmpty(pool))
+            {
+                using IMemoryOwner<byte> blobOwner = pool.Rent(PinCounterParametersSize);
+                Memory<byte> blob = blobOwner.Memory[..PinCounterParametersSize];
+                BinaryPrimitives.WriteUInt32BigEndian(blob.Span, 0u);
+                BinaryPrimitives.WriteUInt32BigEndian(blob.Span[sizeof(uint)..], PinLimit);
+                using Tpm2bMaxNvBuffer seedInputBuffer = Tpm2bMaxNvBuffer.Create(blob.Span, pool);
+                var seedInput = new NvWriteInput((uint)TpmRh.TPM_RH_OWNER, PinIndexHandle, seedInputBuffer, Offset);
+
+                TpmResult<NvWriteResponse> seedResult = await TpmCommandExecutor.ExecuteAsync<NvWriteResponse>(
+                    tpm, seedInput, [ownerWriteAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(seedResult.IsSuccess, $"Seeding pinCount/pinLimit failed: '{seedResult.ResponseCode}'.");
+            }
+
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+            using StartAuthSessionResponse session = startResult.Value;
+            uint sessionHandle = session.SessionHandle.Value;
+            try
+            {
+                using TpmPasswordSession authSession = TpmPasswordSession.Create(correctPin, pool);
+                using PolicySecretInput input = PolicySecretInput.CreateImmediate(PinIndexHandle, sessionHandle, pool);
+
+                TpmResult<PolicySecretResponse> secretResult = await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
+                    tpm, input, [authSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret over a PIN Pass Index failed: '{secretResult.ResponseCode}'.");
+                secretResult.Value.Dispose();
+            }
+            finally
+            {
+                _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+
+            TpmResult<TpmPinCounterParameters> countersResult = await tpm.ReadPinCountersAsync(
+                ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(countersResult.IsSuccess, $"ReadPinCountersAsync failed: '{countersResult.ResponseCode}'.");
+            Assert.AreEqual(1u, countersResult.Value.PinCount, "A successful PolicySecret against a PIN Pass Index must increment pinCount.");
+        }
+        finally
+        {
+            _ = await UndefineNvAsync(tpm, registry, pool, PinIndexHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies <c>TPM2_PolicySecret()</c> against an unwritten PIN Fail Index refuses before any credential
+    /// compare, through the SAME <c>IsPinAuthUnavailable</c> gate the pinLimit-exhausted state above shares
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 1,
+    /// clause 34.2.8.3: "If a policy points to an unwritten PIN Pass or PIN Fail Index, the Index's authorization
+    /// check must fail because pinLimit is not written"</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySecretOverAnUnwrittenPinFailIndexRefusesWithAuthUnavailable()
+    {
+        const uint PinIndexHandle = 0x0100_00C3;
+        const ushort PinCounterParametersSize = 8;
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+        TpmaNv attributes = TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_OWNERWRITE | TpmaNv.TPMA_NV_NO_DA
+            | (TpmaNv)((uint)TpmNt.TPM_NT_PIN_FAIL << TpmaNvFields.TPM_NT_SHIFT);
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicySecret, TpmResponseCodec.PolicySecret);
+
+        _ = await UndefineNvAsync(tpm, registry, pool, PinIndexHandle).ConfigureAwait(false);
+
+        //Defined but never written: TPMA_NV_WRITTEN is CLEAR, so the Index's authValue is unavailable regardless
+        //of what candidate is presented.
+        TpmResult<NvDefineSpaceResponse> defineResult = await DefineNvAsync(
+            tpm, registry, pool, PinIndexHandle, attributes, PinCounterParametersSize, authPolicy: default, indexAuth: "0000"u8.ToArray()).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"NV_DefineSpace (unwritten PIN Fail Index) failed: '{defineResult.ResponseCode}'.");
+
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+            using StartAuthSessionResponse session = startResult.Value;
+            uint sessionHandle = session.SessionHandle.Value;
+            try
+            {
+                using TpmPasswordSession authSession = TpmPasswordSession.Create("0000"u8.ToArray(), pool);
+                using PolicySecretInput input = PolicySecretInput.CreateImmediate(PinIndexHandle, sessionHandle, pool);
+
+                TpmResult<PolicySecretResponse> secretResult = await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
+                    tpm, input, [authSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.IsFalse(secretResult.IsSuccess, "PolicySecret against an unwritten PIN Fail Index must be refused.");
+                Assert.AreEqual(
+                    TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, secretResult.ResponseCode,
+                    "An unwritten PIN Index answers the SAME bare code the pinLimit-exhausted state does — both flow through IsPinAuthUnavailable.");
+            }
+            finally
+            {
+                _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ = await UndefineNvAsync(tpm, registry, pool, PinIndexHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies <c>TPM2_PolicySecret()</c> against a loaded transient object authorizes with the object's own
+    /// authValue and, on a mismatch, invokes the normal dictionary-attack logic exactly as it does for the
+    /// permanent handles today
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3,
+    /// clause 23.4.1: "authEntity ... may be any TPM entity with a handle and an associated authValue ... This
+    /// includes ... loaded objects"; clause 23.4: "If the authorization check fails, then the normal dictionary
+    /// attack logic is invoked"</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySecretOverALoadedTransientObjectAuthorizesWithItsOwnAuthValueAndAdvancesTheGlobalCounterOnFailure()
+    {
+        const string CorrectPassword = "correct-object-password";
+        const string WrongPassword = "wrong-object-password";
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicySecret, TpmResponseCodec.PolicySecret);
+
+        using CreatePrimaryInput createInput = CreatePrimaryInput.ForEccSigningKey(
+            TpmRh.TPM_RH_OWNER, CorrectPassword, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool, noDa: false);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, createInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary failed: '{primaryResult.ResponseCode}'.");
+        using CreatePrimaryResponse primary = primaryResult.Value;
+        uint keyHandle = primary.ObjectHandle.Value;
+
+        try
+        {
+            async Task<TpmResult<PolicySecretResponse>> RunAsync(string password)
+            {
+                TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                    TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+                using StartAuthSessionResponse session = startResult.Value;
+                uint sessionHandle = session.SessionHandle.Value;
+                try
+                {
+                    using TpmPasswordSession authSession = TpmPasswordSession.Create(System.Text.Encoding.UTF8.GetBytes(password), pool);
+                    using PolicySecretInput input = PolicySecretInput.CreateImmediate(keyHandle, sessionHandle, pool);
+
+                    return await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
+                        tpm, input, [authSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            TpmResult<PolicySecretResponse> correctResult = await RunAsync(CorrectPassword).ConfigureAwait(false);
+            Assert.IsTrue(correctResult.IsSuccess, $"PolicySecret against the loaded object's own authValue failed: '{correctResult.ResponseCode}'.");
+            correctResult.Value.Dispose();
+
+            TpmResult<TpmDictionaryAttackParameters> beforeDa = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(beforeDa.IsSuccess, $"GetDictionaryAttackParametersAsync failed: '{beforeDa.ResponseCode}'.");
+
+            TpmResult<PolicySecretResponse> wrongResult = await RunAsync(WrongPassword).ConfigureAwait(false);
+            Assert.IsFalse(wrongResult.IsSuccess, "A wrong authValue against the loaded object must be refused.");
+
+            TpmResult<TpmDictionaryAttackParameters> afterDa = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(afterDa.IsSuccess, $"GetDictionaryAttackParametersAsync failed: '{afterDa.ResponseCode}'.");
+            Assert.IsGreaterThan(
+                beforeDa.Value.LockoutCounter, afterDa.Value.LockoutCounter,
+                $"A wrong authValue against a DA-protected loaded object must advance the TPM's GLOBAL dictionary-attack counter: before={beforeDa.Value.LockoutCounter}, after={afterDa.Value.LockoutCounter}.");
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(keyHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies <c>TPM2_PolicySecret()</c>'s policyDigest binds the authorizing NV Index's own real Name, agreeing
+    /// with the host-side <see cref="TpmPolicyDigest.ExtendForSecret"/> prediction computed over the SAME Name
+    /// <c>TPM2_NV_ReadPublic()</c> reports
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3,
+    /// clause 23.4: "policySession->policyDigest is updated by PolicyUpdate(TPM_CC_PolicySecret, authEntity->Name,
+    /// policyRef)"</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySecretsPolicyDigestAgreesWithTheHostPredictedNvIndexNameBinding()
+    {
+        const uint PinIndexHandle = 0x0100_00C4;
+        const uint PinLimit = 3;
+        byte[] correctPin = "4242"u8.ToArray();
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicySecret, TpmResponseCodec.PolicySecret);
+
+        TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexAsync(
+            ReadOnlyMemory<byte>.Empty, PinIndexHandle, correctPin, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"DefinePinFailIndexAsync failed: '{defineResult.ResponseCode}'.");
+
+        try
+        {
+            TpmResult<NvReadPublicResponse> readPublicResult = await tpm.NvReadPublicAsync(PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(readPublicResult.IsSuccess, $"NvReadPublicAsync failed: '{readPublicResult.ResponseCode}'.");
+            byte[] indexName;
+            using(NvReadPublicResponse readPublic = readPublicResult.Value)
+            {
+                indexName = readPublic.NvName.Span.ToArray();
+            }
+
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+            using StartAuthSessionResponse session = startResult.Value;
+            uint sessionHandle = session.SessionHandle.Value;
+            try
+            {
+                using TpmPasswordSession authSession = TpmPasswordSession.Create(correctPin, pool);
+                using PolicySecretInput input = PolicySecretInput.CreateImmediate(PinIndexHandle, sessionHandle, pool);
+
+                TpmResult<PolicySecretResponse> secretResult = await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
+                    tpm, input, [authSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
+                secretResult.Value.Dispose();
+
+                TpmResult<PolicyGetDigestResponse> digestResult = await tpm.PolicyGetDigestAsync(
+                    sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(digestResult.IsSuccess, $"PolicyGetDigest failed: '{digestResult.ResponseCode}'.");
+                using PolicyGetDigestResponse digest = digestResult.Value;
+
+                int digestSize = TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256);
+                using IMemoryOwner<byte> predictedOwner = pool.Rent(digestSize);
+                Span<byte> predicted = predictedOwner.Memory.Span[..digestSize];
+                predicted.Clear();
+                _ = TpmPolicyDigest.ExtendForSecret(predicted, indexName, ReadOnlySpan<byte>.Empty, TpmAlgIdConstants.TPM_ALG_SHA256, predicted, pool);
+
+                Assert.IsTrue(
+                    predicted.SequenceEqual(digest.PolicyDigest.AsReadOnlySpan()),
+                    "The session's accumulated policyDigest must equal the host prediction folded over the Index's OWN real Name.");
+            }
+            finally
+            {
+                _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ = await tpm.UndefinePinIndexAsync(ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
         }
     }
 

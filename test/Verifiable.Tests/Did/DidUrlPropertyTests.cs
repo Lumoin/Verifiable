@@ -93,7 +93,7 @@ namespace Verifiable.Tests.Did
             select $"{name}={value}";
 
         /// <summary>
-        /// Generates complete query strings with multiple parameters separated by "&".
+        /// Generates complete query strings with multiple parameters separated by <c>&amp;</c>.
         /// </summary>
         private static Gen<string> GenQuery { get; } = GenQueryParam.Array[1, 5].Select(params_ => string.Join("&", params_));
 

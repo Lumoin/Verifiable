@@ -47,7 +47,7 @@ namespace Verifiable.Server;
 /// <item><description>
 /// <see cref="RouteValues"/> — framework-extracted template parameters,
 /// optional. Skins that did template parsing populate this; skins that
-/// pass the raw path use <see cref="OAuth.Server.RouteValues.Empty"/>.
+/// pass the raw path use <see cref="Verifiable.Server.RouteValues.Empty"/>.
 /// </description></item>
 /// </list>
 /// <para>

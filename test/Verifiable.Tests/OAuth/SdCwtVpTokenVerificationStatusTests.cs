@@ -615,8 +615,8 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
                 credentialStatusPolicy: credentialStatusPolicy,
                 unsupportedStatusMechanisms: unsupportedStatusMechanisms);
 
-            using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-                VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+            using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+                VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
             using SdToken<ReadOnlyMemory<byte>> issued = await SdCwtVpFixture.IssueSdCwtTokenAsync(
                 TimeProvider,

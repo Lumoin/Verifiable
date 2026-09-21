@@ -38,6 +38,15 @@ public static class OAuthErrors
     /// <summary>The client is not authorized to request an authorization code.</summary>
     public static string UnauthorizedClient { get; } = Utf8Constants.ToInternedString(UnauthorizedClientUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="UnsupportedGrantType"/>.</summary>
+    public static ReadOnlySpan<byte> UnsupportedGrantTypeUtf8 => "unsupported_grant_type"u8;
+
+    /// <summary>
+    /// The authorization grant type is not supported by the authorization server, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
+    /// </summary>
+    public static string UnsupportedGrantType { get; } = Utf8Constants.ToInternedString(UnsupportedGrantTypeUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="ServerError"/>.</summary>
     public static ReadOnlySpan<byte> ServerErrorUtf8 => "server_error"u8;
 
@@ -250,6 +259,46 @@ public static class OAuthErrors
     /// invalid or in conflict with policy.
     /// </summary>
     public static string InvalidMetadata { get; } = Utf8Constants.ToInternedString(InvalidMetadataUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="LoginRequired"/>.</summary>
+    public static ReadOnlySpan<byte> LoginRequiredUtf8 => "login_required"u8;
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>:
+    /// "The Authorization Server requires End-User authentication." Returned from the
+    /// authorization endpoint (RFC 6749 §4.1.2.1 redirect) when no subject is established, or
+    /// when <c>prompt=login</c> cannot be satisfied.
+    /// </summary>
+    public static string LoginRequired { get; } = Utf8Constants.ToInternedString(LoginRequiredUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InteractionRequired"/>.</summary>
+    public static ReadOnlySpan<byte> InteractionRequiredUtf8 => "interaction_required"u8;
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>:
+    /// "The Authorization Server requires End-User interaction of some form to proceed."
+    /// </summary>
+    public static string InteractionRequired { get; } = Utf8Constants.ToInternedString(InteractionRequiredUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ConsentRequired"/>.</summary>
+    public static ReadOnlySpan<byte> ConsentRequiredUtf8 => "consent_required"u8;
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>:
+    /// "The Authorization Server requires End-User consent." Returned when <c>prompt=consent</c>
+    /// cannot be satisfied.
+    /// </summary>
+    public static string ConsentRequired { get; } = Utf8Constants.ToInternedString(ConsentRequiredUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AccountSelectionRequired"/>.</summary>
+    public static ReadOnlySpan<byte> AccountSelectionRequiredUtf8 => "account_selection_required"u8;
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>:
+    /// "The End-User is REQUIRED to select a session at the Authorization Server." Returned
+    /// when <c>prompt=select_account</c> cannot be satisfied.
+    /// </summary>
+    public static string AccountSelectionRequired { get; } = Utf8Constants.ToInternedString(AccountSelectionRequiredUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="NotFound"/>.</summary>
     public static ReadOnlySpan<byte> NotFoundUtf8 => "not_found"u8;

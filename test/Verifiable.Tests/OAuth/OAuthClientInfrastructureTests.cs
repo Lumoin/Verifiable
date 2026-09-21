@@ -26,7 +26,6 @@ internal sealed class OAuthClientInfrastructureTests
             loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) => throw new NotImplementedException(),
             parseRegistrationResponseAsync: (body, ct) => throw new NotImplementedException(),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) => throw new NotImplementedException(),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,

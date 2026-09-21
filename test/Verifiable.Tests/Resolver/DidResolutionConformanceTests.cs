@@ -200,6 +200,105 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
     }
 
+    /// <summary>
+    /// DID Resolution requires a conforming method to GUARANTEE an <c>equivalentId</c> equivalence before it
+    /// counts; a differing document <c>id</c> with no <c>equivalentId</c> at all carries no such guarantee, so
+    /// the refusal stands, and its detail names both identifiers so the caller can see what mismatched without
+    /// an exception.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveRejectsDifferingIdWithNoEquivalentIdAndNamesBothIdentifiers()
+    {
+        var document = new DidDocument { Id = new GenericDidMethod("did:example:999") };
+        var stub = new DocumentStub(document);
+        var resolver = new DidResolver(DidMethodSelectors.FromResolvers((ExampleDidPrefix, stub.ResolveAsync)));
+
+        var result = await resolver.ResolveAsync(
+            ExampleDid, Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+        Assert.Contains(ExampleDid, result.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal);
+        Assert.Contains("did:example:999", result.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A differing document <c>id</c> is accepted when the method's own result states the requested DID as an
+    /// <c>equivalentId</c> of the SAME method — the guarantee DID Resolution requires of a conforming method.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveAcceptsDifferingIdWhenEquivalentIdNamesTheRequestedDidOfTheSameMethod()
+    {
+        var document = new DidDocument { Id = new GenericDidMethod("did:example:999") };
+        var metadata = new DidDocumentMetadata { EquivalentId = [ExampleDid] };
+        var stub = new DocumentStub(document, metadata);
+        var resolver = new DidResolver(DidMethodSelectors.FromResolvers((ExampleDidPrefix, stub.ResolveAsync)));
+
+        var result = await resolver.ResolveAsync(
+            ExampleDid, Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful);
+        Assert.AreEqual("did:example:999", result.Document!.Id?.ToString());
+    }
+
+    /// <summary>
+    /// An <c>equivalentId</c> value MUST be produced by, and a form of, the same DID method as the <c>id</c>
+    /// property value; a resolved document of a DIFFERENT method than the requested DID is refused even when
+    /// <c>equivalentId</c> names the requested DID, because that guarantee does not reach across methods.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveRejectsEquivalentIdWhenTheDocumentIdIsOfAnotherMethod()
+    {
+        var document = new DidDocument { Id = new GenericDidMethod("did:other:999") };
+        var metadata = new DidDocumentMetadata { EquivalentId = [ExampleDid] };
+        var stub = new DocumentStub(document, metadata);
+        var resolver = new DidResolver(DidMethodSelectors.FromResolvers((ExampleDidPrefix, stub.ResolveAsync)));
+
+        var result = await resolver.ResolveAsync(
+            ExampleDid, Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+    }
+
+    /// <summary>
+    /// A present but non-matching <c>equivalentId</c> set (one that does not list the requested DID at all)
+    /// carries no guarantee about the requested DID, so the differing document <c>id</c> is refused.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveRejectsEquivalentIdThatDoesNotNameTheRequestedDid()
+    {
+        var document = new DidDocument { Id = new GenericDidMethod("did:example:999") };
+        var metadata = new DidDocumentMetadata { EquivalentId = ["did:example:other"] };
+        var stub = new DocumentStub(document, metadata);
+        var resolver = new DidResolver(DidMethodSelectors.FromResolvers((ExampleDidPrefix, stub.ResolveAsync)));
+
+        var result = await resolver.ResolveAsync(
+            ExampleDid, Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+    }
+
+    /// <summary>
+    /// The <c>equivalentId</c> membership test is ordinal: a value differing from the requested DID only by
+    /// letter case does not satisfy the method's guarantee, so the differing document <c>id</c> is refused.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveRejectsEquivalentIdDifferingOnlyByCase()
+    {
+        var document = new DidDocument { Id = new GenericDidMethod("did:example:999") };
+        var metadata = new DidDocumentMetadata { EquivalentId = ["DID:EXAMPLE:123"] };
+        var stub = new DocumentStub(document, metadata);
+        var resolver = new DidResolver(DidMethodSelectors.FromResolvers((ExampleDidPrefix, stub.ResolveAsync)));
+
+        var result = await resolver.ResolveAsync(
+            ExampleDid, Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+    }
+
     [TestMethod]
     public async Task DereferenceRejectsServiceEndpointThatAlreadyContainsFragment()
     {
@@ -257,18 +356,20 @@ internal sealed class DidResolutionConformanceTests
     /// The document is injected at construction and flows to <see cref="ResolveAsync"/> through the
     /// instance rather than a captured variable.
     /// </summary>
-    private sealed class DocumentStub(DidDocument document)
+    private sealed class DocumentStub(DidDocument document, DidDocumentMetadata? metadata = null)
     {
         private DidDocument Document { get; } = document;
 
-        /// <summary>Resolves any DID to the fixed document supplied at construction.</summary>
+        private DidDocumentMetadata Metadata { get; } = metadata ?? DidDocumentMetadata.Empty;
+
+        /// <summary>Resolves any DID to the fixed document (and metadata) supplied at construction.</summary>
         public ValueTask<DidResolutionResult> ResolveAsync(
             string did,
             DidResolutionOptions options,
             ExchangeContext context,
             CancellationToken cancellationToken)
         {
-            return ValueTask.FromResult(DidResolutionResult.Success(Document, DidDocumentMetadata.Empty));
+            return ValueTask.FromResult(DidResolutionResult.Success(Document, Metadata));
         }
     }
 }

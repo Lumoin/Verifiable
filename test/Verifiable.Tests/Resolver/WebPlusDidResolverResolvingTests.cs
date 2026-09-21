@@ -7,7 +7,7 @@ using Verifiable.Core.Resolvers;
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// End-to-end tests for <see cref="WebPlusDidResolver.Build"/> — the full did:webplus resolver that fetches the
+/// End-to-end tests for <see cref="WebPlusDidResolver.Build(OutboundTransportDelegate, WebPlusDidDocumentParser, WebPlusUpdateRuleParser, WebPlusProofExtractor, WebPlusJcsCanonicalizer, WebPlusDocumentDeserializer, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.DecodeDelegate, Verifiable.Cryptography.DecodeDelegate, BaseMemoryPool, TimeProvider)"/> — the full did:webplus resolver that fetches the
 /// <c>did-documents.jsonl</c> through the guarded <see cref="OutboundFetch"/> chokepoint, replays and verifies
 /// every document through the <see cref="Verifiable.Cryptography.EventLogs.LogReplayer{TState,TOperation,TProof,TContext}"/>,
 /// selects the requested version, and returns the resolved <see cref="Verifiable.Core.Model.Did.DidDocument"/>.
@@ -35,6 +35,56 @@ internal sealed class WebPlusDidResolverResolvingTests
         Assert.AreEqual(WebPlusWorkedExamples.Example1Did, result.Document!.Id?.ToString());
         Assert.AreEqual("1", result.DocumentMetadata.VersionId);
         Assert.IsFalse(result.DocumentMetadata.Deactivated);
+    }
+
+
+    /// <summary>
+    /// A microledger response carrying <c>Cache-Control: max-age</c> reports that many seconds of storable
+    /// freshness on the resolution metadata, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
+    {
+        string microledger = WebPlusWorkedExamples.ToMicroledger(WebPlusWorkedExamples.Example1Root, WebPlusWorkedExamples.Example1NonRoot);
+        string did = WebPlusWorkedExamples.Example1Did;
+        string url = WebPlusDidResolver.Resolve(did);
+
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [url] = (200, microledger)
+        });
+        transport.ResponseHeaders[url] = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.CacheControl, "max-age=60"));
+
+        DidResolutionResult result = await WebPlusTestResolver.ResolveAsync(did, transport, options: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful, $"A two-document did:webplus microledger MUST resolve. Error: {result.ResolutionMetadata.Error?.Detail}.");
+        Assert.IsTrue(result.ResolutionMetadata.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(60), result.ResolutionMetadata.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
+    }
+
+
+    /// <summary>
+    /// A non-200 microledger fetch reports non-storable freshness — there is no document a cache could keep,
+    /// per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ANon200ResponseReportsNonStorableFreshness()
+    {
+        string did = WebPlusWorkedExamples.Example1Did;
+        string url = WebPlusDidResolver.Resolve(did);
+
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [url] = (404, null)
+        });
+
+        DidResolutionResult result = await WebPlusTestResolver.ResolveAsync(did, transport, options: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "did:webplus resolution against a not-found microledger MUST fail.");
+        Assert.IsFalse(result.ResolutionMetadata.Freshness.IsStorable,
+            "A resolution that never reached a document reports no storable freshness.");
     }
 
 

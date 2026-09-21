@@ -3344,6 +3344,21 @@ public static class CBAdESSerialization
         {
             CborReaderState.TextString => new CBAdESCertificateReferenceKeyIdentifierText(reader.ReadTextString()),
             CborReaderState.ByteString => new CBAdESCertificateReferenceKeyIdentifierBytes(reader.ReadByteString()),
+            CborReaderState.UnsignedInteger => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.NegativeInteger => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.StartArray => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.StartMap => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.Tag => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.Boolean => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.Null => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.Undefined => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.SimpleValue => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.HalfPrecisionFloat => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.SinglePrecisionFloat => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.DoublePrecisionFloat => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.EndArray => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.EndMap => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
+            CborReaderState.Finished => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32()),
             _ => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32())
         };
     }

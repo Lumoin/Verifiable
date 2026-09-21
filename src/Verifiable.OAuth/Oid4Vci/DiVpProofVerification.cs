@@ -1,3 +1,4 @@
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
@@ -35,8 +36,8 @@ public delegate DataIntegritySecuredPresentation? DeserializeDiVpPresentationDel
 /// <para>
 /// The library does not re-roll Data Integrity verification: <see cref="CredentialProofValidator"/>
 /// composes the same tested <see cref="PresentationDataIntegrityExtensions.VerifyAsync"/> surface
-/// the W3C presentation-verification flow uses, mapping <see cref="VerifierChallenge"/> to the
-/// expected <c>c_nonce</c> and <see cref="VerifierDomain"/> to the Credential Issuer Identifier per
+/// the W3C presentation-verification flow uses, mapping the caller's <c>VerifierChallenge</c> to the
+/// expected <c>c_nonce</c> and its <c>VerifierDomain</c> to the Credential Issuer Identifier per
 /// Appendix F.2.
 /// </para>
 /// <para>
@@ -80,6 +81,15 @@ public sealed record DiVpProofVerification
     /// JCS-based cryptosuites that need no external resolution.
     /// </summary>
     public ContextResolverDelegate? ContextResolver { get; init; }
+
+    /// <summary>
+    /// The deployment's known <c>@context</c> for a <c>di_vp</c> presentation's own <c>@context</c>,
+    /// checked after the proof verifies per
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data Integrity
+    /// 1.0 §2.4.1 Validating Contexts</see> and threaded to
+    /// <see cref="PresentationDataIntegrityExtensions.VerifyAsync"/> unchanged.
+    /// </summary>
+    public required Context KnownContext { get; init; }
 
     /// <summary>Decodes a proof value string (e.g. base58btc multibase) into the signature bytes.</summary>
     public required ProofValueDecoderDelegate DecodeProofValue { get; init; }

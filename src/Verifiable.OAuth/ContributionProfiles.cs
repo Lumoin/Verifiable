@@ -39,7 +39,7 @@ public static class ContributionProfiles
     /// </summary>
     /// <remarks>
     /// Eight rules: the OIDC Core §2 / §5.3 <c>sub</c> claim (via
-    /// <see cref="AuthorizationServerIntegration.ResolveSubjectIdentifierAsync"/>),
+    /// <see cref="Verifiable.OAuth.Server.AuthorizationServerIntegration.ResolveSubjectIdentifierAsync"/>),
     /// profile / email / address / phone (OIDC Core §5.4), the
     /// RFC 7800 / RFC 9449 §6.1 <c>cnf</c> confirmation claim, and the
     /// OIDC Core §2 authentication-context family (<c>acr</c>, <c>amr</c>,
@@ -88,7 +88,7 @@ public static class ContributionProfiles
     /// <param name="timeProvider">
     /// Time source for the issuer's claim timestamps. Required by
     /// <see cref="ClaimIssuer{T}"/>; library code never reads
-    /// <see cref="DateTime.UtcNow"/> directly.
+    /// <see cref="TimeProvider.GetUtcNow"/> directly.
     /// </param>
     /// <param name="extraRules">
     /// Optional additional contribution rules merged after the standard

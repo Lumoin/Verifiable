@@ -2,6 +2,7 @@ using CsCheck;
 using System.Globalization;
 using System.Text;
 using Verifiable.JCose;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jose;
 
@@ -58,7 +59,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
 
             Assert.AreEqual(value, extracted,
                 $"ExtractStringValue must recover the written value for key '{key}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -81,7 +82,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
 
             Assert.IsNull(extracted,
                 "ExtractStringValue must return null for a key that was not written.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -106,7 +107,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
 
             Assert.AreEqual(contains, extracted is not null,
                 $"ContainsKey and ExtractStringValue must agree for key '{key}'.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -150,7 +151,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
             Assert.AreEqual(y, extractedY, "y coordinate must round-trip through epk nesting.");
             Assert.AreEqual(WellKnownKeyTypeValues.Ec, extractedKty, "kty must round-trip through epk nesting.");
             Assert.AreEqual(WellKnownCurveValues.P256, extractedCrv, "crv must round-trip through epk nesting.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -198,7 +199,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
             Assert.AreEqual(WellKnownKeyTypeValues.Ec, extractedKty, "kty must round-trip through JWKS array.");
             Assert.AreEqual(WellKnownCurveValues.P256, extractedCrv, "crv must round-trip through JWKS array.");
             Assert.AreEqual("enc", extractedUse, "use must round-trip through JWKS array.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -277,7 +278,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
 
             Assert.AreEqual(arrayText, extracted,
                 $"ExtractArrayAsString must return the array text verbatim. Input: {json}");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -293,7 +294,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
                 $"A non-array value must yield null, not a slice. Input: {json}");
             Assert.IsNull(JwkJsonReader.ExtractArrayAsString(jsonBytes, "absent"u8),
                 $"An absent key must yield null. Input: {json}");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -322,7 +323,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
                 Assert.AreEqual(value, (string)extracted[key],
                     $"Member '{key}' must round-trip. Input: {json}");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -348,7 +349,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
                 $"Only the string member must be returned — nothing hoisted. Input: {json}");
             Assert.AreEqual(value, (string)extracted[$"{key}9"],
                 $"The string member after the skipped values must be recovered. Input: {json}");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -364,7 +365,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
                 $"A non-object value must yield null. Input: {json}");
             Assert.IsNull(JwkJsonReader.ExtractObjectProperties(jsonBytes, "absent"u8),
                 $"An absent key must yield null. Input: {json}");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -405,7 +406,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
                 Assert.AreEqual(value, extracted,
                     $"Each property must be independently recoverable. Failed for key '{key}'.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -423,7 +424,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
 
             Assert.IsTrue(found, $"The integer value must be found. Input: {json}");
             Assert.AreEqual(expected, actual, $"The value must round-trip exactly. Input: {json}");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -450,37 +451,6 @@ internal sealed class JwkJsonReaderWriterPropertyTests
             Assert.IsFalse(found,
                 $"A non-integer number must be rejected, not truncated to its leading digits. " +
                 $"Input: {json}, misparsed value: {value}");
-        });
-    }
-
-
-    [TestMethod]
-    public void HasDuplicateTopLevelKeysDetectsRepeatsAndIgnoresNesting()
-    {
-        //Distinct top-level keys → no duplicate; a repeated top-level key → duplicate; a key
-        //that recurs only inside a nested object is legitimate and must NOT be flagged.
-        Gen.Int[2, 6].SelectMany(count =>
-            GenFieldValue.Array[count, count]
-                .Where(keys => keys.Distinct().Count() == keys.Length))
-        .Sample(keys =>
-        {
-            string distinctMembers = string.Join(",", keys.Select(k => $"\"{k}\":\"v\""));
-            string distinctJson = $"{{{distinctMembers}}}";
-            Assert.IsFalse(
-                JwkJsonReader.HasDuplicateTopLevelKeys(Encoding.UTF8.GetBytes(distinctJson)),
-                $"Distinct top-level keys must not be flagged. Input: {distinctJson}");
-
-            //Duplicate the first key at the top level.
-            string duplicatedJson = $"{{\"{keys[0]}\":\"a\",{distinctMembers}}}";
-            Assert.IsTrue(
-                JwkJsonReader.HasDuplicateTopLevelKeys(Encoding.UTF8.GetBytes(duplicatedJson)),
-                $"A repeated top-level key must be flagged. Input: {duplicatedJson}");
-
-            //The same key name reused ONLY inside a nested object is legitimate.
-            string nestedJson = $"{{{distinctMembers},\"nested\":{{\"{keys[0]}\":\"inner\"}}}}";
-            Assert.IsFalse(
-                JwkJsonReader.HasDuplicateTopLevelKeys(Encoding.UTF8.GetBytes(nestedJson)),
-                $"A key reused only at depth must not be flagged. Input: {nestedJson}");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

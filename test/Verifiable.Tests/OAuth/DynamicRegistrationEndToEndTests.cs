@@ -16,13 +16,23 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class DynamicRegistrationEndToEndTests
 {
+    /// <summary>The test-owned cancellation and execution context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+
+    /// <summary>The deterministic clock used by the fixture.</summary>
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
+
+    /// <summary>The registered callback URI used by the client.</summary>
     private static Uri DefaultRedirectUri { get; } = new("https://client.example.com/callback");
 
 
+    /// <summary>
+    /// Proves <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591 section 3.2.1</see>.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
+    /// "Registration creation, conditional replacement and deletion commit through the required registration store before optional observers run."
+    /// </summary>
     [TestMethod]
     public async Task RegisterAsyncIssuesClientIdAndDrivesAuthCodeFlow()
     {
@@ -77,6 +87,11 @@ internal sealed class DynamicRegistrationEndToEndTests
     }
 
 
+    /// <summary>
+    /// Proves <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.1">RFC 7592 section 2.1</see>.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
+    /// "Management requests for absent clients or with invalid registration access tokens return HTTP 401."
+    /// </summary>
     [TestMethod]
     public async Task RegistrationLifecycleRegistersReadsUpdatesAndDeregisters()
     {
@@ -157,16 +172,17 @@ internal sealed class DynamicRegistrationEndToEndTests
             .DeregisterAsync(registered.Registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
-        //Subsequent read must fail — the registration no longer exists.
+        //The deleted registration must refuse subsequent reads.
         InvalidOperationException postDeleteRead = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             async () => await client.DynamicRegistration
                 .ReadAsync(registered.Registration, TestContext.CancellationToken)
                 .ConfigureAwait(false)).ConfigureAwait(false);
 
-        Assert.Contains("RFC 7592 read failed", postDeleteRead.Message, StringComparison.Ordinal);
+        Assert.Contains("RFC 7592 read failed with status 401", postDeleteRead.Message, StringComparison.Ordinal);
     }
 
 
+    /// <summary>The unordered scope set used to compare RFC 6749 section 3.3 responses.</summary>
     private static HashSet<string> SplitScope(string? scope) =>
         [.. (scope ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries)];
 }

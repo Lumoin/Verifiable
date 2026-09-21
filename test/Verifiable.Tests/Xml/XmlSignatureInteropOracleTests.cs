@@ -12,11 +12,11 @@ namespace Verifiable.Tests.Xml;
 
 /// <summary>
 /// The interop oracle: every document <see cref="XmlSignatureInteropCorpusGenerator"/> mints is read, digested and cryptographically verified through this library's own stack — <see cref="XmlNodeTable.TryParse"/>,
-/// <see cref="XmlSignatureLocator.FindSignatures"/>, <see cref="XmlSignature.TryRead"/>, <see cref="XmlReferenceProcessing.TryComputeDigestInput"/>, <see cref="XmlReferenceProcessing.TryComputeSignedInfoOctets"/>,
+/// <see cref="XmlSignatureLocator.FindSignatures"/>, <see cref="XmlSignature.TryRead"/>, <see cref="XmlReferenceProcessing.TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out XmlSignatureProcessingError)"/>, <see cref="XmlReferenceProcessing.TryComputeSignedInfoOctets"/>,
 /// the house digest seam (<see
 /// cref="CryptographicKeyEvents.ComputeDigestAsync(System.ReadOnlyMemory{byte},int,Tag,BaseMemoryPool,System.Collections.Frozen.FrozenDictionary{string,object}?,string?,System.Threading.CancellationToken)"/>) and
 /// the house verification seam (<see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>) — against documents six of whose seven cases a REAL, independent platform signer (<see
-/// cref="SignedXml.ComputeSignature"/>) produced, never this library's own writer: verification dispatches from each <see cref="XmlSignatureInteropCase.KeyTag"/> — the corpus generator's own record of
+/// cref="SignedXml.ComputeSignature()"/>) produced, never this library's own writer: verification dispatches from each <see cref="XmlSignatureInteropCase.KeyTag"/> — the corpus generator's own record of
 /// which algorithm signed — never from the document's <c>SignatureMethod</c> URI, and <see cref="XmlSignatureWellKnown.IsConsistentWithKey"/> is asserted to pass for every case before that dispatch.
 /// </summary>
 [TestClass]
@@ -70,7 +70,7 @@ internal sealed class XmlSignatureInteropOracleTests
     /// cref="XmlSignatureInteropCase.IsPlatformVerifiable"/> — every case except the hand-assembled
     /// Canonical XML 1.1 one), a document THIS library's own engine independently digested, canonicalized
     /// and verified above is ALSO accepted by the platform's own, independent <see
-    /// cref="SignedXml.LoadXml(System.Xml.XmlElement)"/>/<see cref="SignedXml.CheckSignature"/> — exercising
+    /// cref="SignedXml.LoadXml(System.Xml.XmlElement)"/>/<see cref="SignedXml.CheckSignature()"/> — exercising
     /// <see href="https://www.w3.org/TR/2008/REC-xmldsig-core-20080610/">XML Signature Syntax and Processing
     /// (Second Edition)</see> section 6.6.4's enveloped-signature transform, among the platform's own
     /// reference-processing pipeline, over the enveloped-shape cases.

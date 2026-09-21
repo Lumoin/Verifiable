@@ -18,7 +18,7 @@ namespace Verifiable.Cryptography
         /// <remarks>
         /// The definitions are at <see href="https://w3c-ccg.github.io/did-method-key/#x2048-bit-modulus-public-exponent-65537">
         /// did:key 2048 bit modulus public exponent</see>. This the same as 0x10001 or 65537 or
-        /// ReadOnlySpan<byte> RsaExponent65537 = new byte[] { 0x01, 0x00, 0x01 };
+        /// <c>ReadOnlySpan&lt;byte&gt; RsaExponent65537 = new byte[] { 0x01, 0x00, 0x01 };</c>
         /// This translates to "AQAB" in Base64.
         /// </remarks>
         public static string DefaultExponent { get; } = Utf8Constants.ToInternedString(DefaultExponentUtf8);

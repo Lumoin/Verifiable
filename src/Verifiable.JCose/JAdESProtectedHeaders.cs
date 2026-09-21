@@ -14,7 +14,7 @@ namespace Verifiable.JCose;
 /// <para>
 /// <strong>Placement.</strong> Layer
 /// placement and header-set composition are JWS-structure semantics, not PKI semantics, so this aggregate lives
-/// in <c>Verifiable.JCose</c> beside <see cref="Jose"/>/<see cref="JwsMessage"/> rather than in
+/// in <c>Verifiable.JCose</c> beside <see cref="Jws"/>/<see cref="JwsMessage"/> rather than in
 /// <c>Verifiable.Cryptography.Pki</c> beside the component models it holds — mirroring
 /// <see cref="CBAdESProtectedHeaders"/>'s identical split. Every clause-5.2 member below is one of the
 /// existing Pki models (<see cref="AdESCertificateThumbprint"/>, <see cref="AdESCertificateThumbprints"/>,

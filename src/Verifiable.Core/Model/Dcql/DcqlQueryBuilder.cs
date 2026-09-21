@@ -4,7 +4,7 @@ namespace Verifiable.Core.Model.Dcql;
 
 /// <summary>
 /// Builds <see cref="DcqlQuery"/> instances using the fold/aggregate pattern.
-/// Transformation functions are registered via <see cref="Builder{TResult, TState, TBuilder}.With"/>
+/// Transformation functions are registered via <see cref="Builder{TResult, TState, TBuilder}.With(Func{TResult, TBuilder, TState, CancellationToken, ValueTask{TResult}})"/>
 /// and applied sequentially during <see cref="BuildAsync"/>.
 /// </summary>
 /// <remarks>

@@ -14,7 +14,7 @@ namespace Verifiable.Server;
 /// Same "dynamic value type" extensibility shape as
 /// <see cref="Verifiable.Cryptography.Context.CryptoAlgorithm"/>: predefined
 /// values for every protocol the library ships live on
-/// <see cref="WellKnownCapabilityIdentifiers"/>; applications register
+/// <c>WellKnownCapabilityIdentifiers</c>; applications register
 /// custom identifiers via <see cref="Create(string)"/>. Federation
 /// sub-capabilities, OID4VCI roles, AuthZEN profiles, and any future
 /// downstream-track capabilities land as additional well-known instances
@@ -48,7 +48,7 @@ public readonly struct CapabilityIdentifier: IEquatable<CapabilityIdentifier>
     /// <summary>
     /// Registers a capability identifier from an arbitrary URN-shaped string.
     /// Use for application-defined capabilities that aren't covered by the
-    /// library's <see cref="WellKnownCapabilityIdentifiers"/> set.
+    /// library's <c>WellKnownCapabilityIdentifiers</c> set.
     /// </summary>
     /// <param name="urn">
     /// The URN-shaped identifier, e.g.

@@ -28,10 +28,10 @@ namespace Verifiable.Tests.FlowTests;
 /// <list type="number">
 /// <item><description>
 /// <strong>Issuer</strong> creates disclosures and calls
-/// <see cref="SdJwtIssuance.IssueAsync"/> which serializes each disclosure via
+/// <see cref="Verifiable.Json.Sd.SdJwtIssuance.IssueAsync(System.ReadOnlyMemory{byte}, System.Collections.Generic.IReadOnlySet{Verifiable.Core.Model.SelectiveDisclosure.CredentialPath}, Verifiable.Cryptography.GenerateDisclosureSaltDelegate, Verifiable.Cryptography.PrivateKeyMemory, string, Lumoin.Base.BaseMemoryPool, string?, string?, Verifiable.Core.Model.SelectiveDisclosure.DecoyDigestOptions, System.Threading.CancellationToken)"/> which serializes each disclosure via
 /// <see cref="SerializeDisclosureDelegate{TDisclosure}"/>, computes digests via
 /// <see cref="ComputeDisclosureDigestDelegate"/>, assembles the payload, signs via
-/// <see cref="JwtSigningExtensions.SignAsync"/>, and returns an <see cref="SdToken{TEnvelope}"/> (where TEnvelope is <see cref="string"/>).
+/// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>, and returns an <see cref="SdToken{TEnvelope}"/> (where TEnvelope is <see cref="string"/>).
 /// </description></item>
 /// <item><description>
 /// <strong>Verifier</strong> constructs a DCQL query specifying required credentials
@@ -750,7 +750,7 @@ internal sealed class DcqlPresentationFlowTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Builds the typed <see cref="SignedPidClaims"/> set and issues via the token-shaped
+    /// Builds the typed <c>SignedPidClaims</c> set and issues via the token-shaped
     /// convenience API, which serializes the claims (with source-generated metadata) and
     /// returns an <see cref="SdToken{TEnvelope}"/> (envelope <see cref="string"/>) that owns
     /// its disclosures. The caller's <c>using Verifiable.Json.Sd</c> determines the format.

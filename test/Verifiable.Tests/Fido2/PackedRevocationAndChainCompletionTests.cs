@@ -44,7 +44,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task RevokedLeafCrlFromIntermediateIsRejectedWithChainValidationFailed()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
         using PkiCertificateMemory revokingLeafCrl = SyntheticPassportFactory.MintCrl(
             fixture.IntermediateCertificate, fixture.LeafCertificate, CrlThisUpdate, CrlNextUpdate, crlNumber: 1);
 
@@ -65,7 +65,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task RevokedIntermediateCrlFromRootIsRejectedWithChainValidationFailed()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
         using PkiCertificateMemory cleanLeafCrl = SyntheticPassportFactory.MintCrl(
             fixture.IntermediateCertificate, revokedCertificate: null, CrlThisUpdate, CrlNextUpdate, crlNumber: 1);
         using PkiCertificateMemory revokingIntermediateCrl = SyntheticPassportFactory.MintCrl(
@@ -84,7 +84,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task AllGoodCrlsAcrossLeafAndIntermediateReturnsCertifiedResult()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
         using PkiCertificateMemory cleanLeafCrl = SyntheticPassportFactory.MintCrl(
             fixture.IntermediateCertificate, revokedCertificate: null, CrlThisUpdate, CrlNextUpdate, crlNumber: 1);
         using PkiCertificateMemory cleanIntermediateCrl = SyntheticPassportFactory.MintCrl(
@@ -106,7 +106,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task NoAuthoritativeCrlForTheChainIsRejectedWithChainValidationFailed()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
         var checker = new CrlRevocationChecker([]);
 
         Fido2AttestationError? error = await VerifyAndGetRejectionErrorAsync(
@@ -121,7 +121,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task NoRevocationCheckerConfiguredIsUnchangedAndReturnsCertifiedResult()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
 
         AttestationResult result = await VerifyAsync(
             fixture, x5c: [fixture.LeafPki, fixture.IntermediatePki], checkRevocation: null, completeChain: null);
@@ -137,7 +137,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task LeafOnlyX5cWithChainCompleterHoldingIntermediateSucceeds()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
         var completer = new CertificateChainCompleter([fixture.IntermediatePki]);
 
         AttestationResult result = await VerifyAsync(
@@ -151,7 +151,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task LeafOnlyX5cWithEmptyCompleterStoreIsRejectedWithChainValidationFailed()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
         var completer = new CertificateChainCompleter([]);
 
         Fido2AttestationError? error = await VerifyAndGetRejectionErrorAsync(
@@ -166,7 +166,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task LeafOnlyX5cWithNoCompleterIsRejectedWithChainValidationFailed()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
 
         Fido2AttestationError? error = await VerifyAndGetRejectionErrorAsync(
             fixture, x5c: [fixture.LeafPki], checkRevocation: null, completeChain: null);
@@ -184,7 +184,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     [TestMethod]
     public async Task CompletedChainWithRevokedIntermediateIsRejectedWithChainValidationFailed()
     {
-        using ChainFixture fixture = CreateChainFixture();
+        using ChainFixture fixture = await CreateChainFixture().ConfigureAwait(false);
         using PkiCertificateMemory cleanLeafCrl = SyntheticPassportFactory.MintCrl(
             fixture.IntermediateCertificate, revokedCertificate: null, CrlThisUpdate, CrlNextUpdate, crlNumber: 1);
         using PkiCertificateMemory revokingIntermediateCrl = SyntheticPassportFactory.MintCrl(
@@ -204,7 +204,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
     /// <summary>Mints the shared root CA → intermediate CA → leaf fixture every test method verifies against.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the root, intermediate, and leaf certificates transfers to the returned ChainFixture, which the caller disposes.")]
-    private static ChainFixture CreateChainFixture()
+    private static async Task<ChainFixture> CreateChainFixture()
     {
         //X.509 certificate factory carve-out: CertificateRequest signs the self-signed root CA with this key.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -253,7 +253,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
         CoseKey credentialPublicKey = Fido2AttestationTestVectors.CreateP256CoseKey(leafKey, WellKnownCoseAlgorithms.Es256);
         AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         return new ChainFixture(rootCert, intermediateCert, leafCert, rootPki, intermediatePki, leafPki, clientDataHash, authenticatorData, authDataBytes, signature);
     }

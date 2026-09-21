@@ -167,6 +167,19 @@ public sealed class TpmuAttest: IDisposable
             TpmStConstants.TPM_ST_ATTEST_TIME => TpmsTimeAttestInfo.SerializedSize,
             TpmStConstants.TPM_ST_ATTEST_NV => Nv!.SerializedSize,
             TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT => SessionAudit!.SerializedSize,
+            TpmStConstants.TPM_ST_RSP_COMMAND => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_NO_SESSIONS => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_SESSIONS => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_ATTEST_COMMAND_AUDIT => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_ATTEST_NV_DIGEST => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_CREATION => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_VERIFIED => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_AUTH_SECRET => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_HASHCHECK => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_AUTH_SIGNED => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_MESSAGE_VERIFIED => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_DIGEST_VERIFIED => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
+            TpmStConstants.TPM_ST_FU_MANIFEST => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization."),
             _ => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization.")
         };
     }
@@ -214,6 +227,19 @@ public sealed class TpmuAttest: IDisposable
                 SessionAudit!.WriteTo(ref writer);
                 break;
             }
+            case TpmStConstants.TPM_ST_RSP_COMMAND:
+            case TpmStConstants.TPM_ST_NO_SESSIONS:
+            case TpmStConstants.TPM_ST_SESSIONS:
+            case TpmStConstants.TPM_ST_ATTEST_COMMAND_AUDIT:
+            case TpmStConstants.TPM_ST_ATTEST_NV_DIGEST:
+            case TpmStConstants.TPM_ST_CREATION:
+            case TpmStConstants.TPM_ST_VERIFIED:
+            case TpmStConstants.TPM_ST_AUTH_SECRET:
+            case TpmStConstants.TPM_ST_HASHCHECK:
+            case TpmStConstants.TPM_ST_AUTH_SIGNED:
+            case TpmStConstants.TPM_ST_MESSAGE_VERIFIED:
+            case TpmStConstants.TPM_ST_DIGEST_VERIFIED:
+            case TpmStConstants.TPM_ST_FU_MANIFEST:
             default:
             {
                 throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization.");
@@ -241,6 +267,19 @@ public sealed class TpmuAttest: IDisposable
             TpmStConstants.TPM_ST_ATTEST_TIME => new TpmuAttest(type, null, null, null, TpmsTimeAttestInfo.Parse(ref reader), null, null),
             TpmStConstants.TPM_ST_ATTEST_NV => new TpmuAttest(type, null, null, null, null, TpmsNvCertifyInfo.Parse(ref reader, pool), null),
             TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT => new TpmuAttest(type, null, null, null, null, null, TpmsSessionAuditInfo.Parse(ref reader, pool)),
+            TpmStConstants.TPM_ST_RSP_COMMAND => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_NO_SESSIONS => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_SESSIONS => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_ATTEST_COMMAND_AUDIT => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_ATTEST_NV_DIGEST => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_CREATION => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_VERIFIED => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_AUTH_SECRET => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_HASHCHECK => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_AUTH_SIGNED => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_MESSAGE_VERIFIED => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_DIGEST_VERIFIED => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
+            TpmStConstants.TPM_ST_FU_MANIFEST => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing."),
             _ => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing.")
         };
     }
@@ -269,6 +308,19 @@ public sealed class TpmuAttest: IDisposable
         TpmStConstants.TPM_ST_ATTEST_TIME => $"TPMU_ATTEST(TIME, {Time})",
         TpmStConstants.TPM_ST_ATTEST_NV => $"TPMU_ATTEST(NV, {Nv})",
         TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT => $"TPMU_ATTEST(SESSION_AUDIT, {SessionAudit})",
+        TpmStConstants.TPM_ST_RSP_COMMAND => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_NO_SESSIONS => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_SESSIONS => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_ATTEST_COMMAND_AUDIT => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_ATTEST_NV_DIGEST => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_CREATION => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_VERIFIED => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_AUTH_SECRET => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_HASHCHECK => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_AUTH_SIGNED => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_MESSAGE_VERIFIED => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_DIGEST_VERIFIED => $"TPMU_ATTEST({Type})",
+        TpmStConstants.TPM_ST_FU_MANIFEST => $"TPMU_ATTEST({Type})",
         _ => $"TPMU_ATTEST({Type})"
     };
 }

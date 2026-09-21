@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Server;
 /// <remarks>
 /// <para>
 /// Policy values are resolved at dispatch entry by
-/// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/>; their
+/// <see cref="Verifiable.Server.ServerIntegration.ResolvePolicyAsync"/>; their
 /// lifetime is per-request, their consumers span every downstream context
 /// (<see cref="ExchangeContext"/>, <see cref="Verifiable.OAuth.IssuanceContext"/>,
 /// <see cref="Verifiable.OAuth.Validation.ValidationContext"/>). Pattern fit:
@@ -31,6 +31,11 @@ namespace Verifiable.OAuth.Server;
 /// strict (FAPI 2.0 / HAIP-aligned) reading. Tests that construct
 /// <see cref="ExchangeContext"/> directly without invoking
 /// <c>ResolvePolicyAsync</c> read defaults; that is the safe behaviour.
+/// </para>
+/// <para>
+/// A stable resolver may read application state that changes between requests. The application
+/// provides a coherent source snapshot and keeps each mutable context exclusive to its request.
+/// Wiring validation does not validate the policy values supplied by the application.
 /// </para>
 /// </remarks>
 public static class PolicyContextKeys
@@ -64,15 +69,6 @@ public static class PolicyContextKeys
     /// lifetime ceiling".
     /// </summary>
     public static string JarLifetimeCeiling { get; } = Utf8Constants.ToInternedString(JarLifetimeCeilingUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="AllowedPkceMethods"/>.</summary>
-    public static ReadOnlySpan<byte> AllowedPkceMethodsUtf8 => "policy.allowedPkceMethods"u8;
-
-    /// <summary>
-    /// The set of accepted PKCE <c>code_challenge_method</c> values. Value
-    /// type: <see cref="PkceMethodSet"/>. Audit row: "PKCE method enforcement".
-    /// </summary>
-    public static string AllowedPkceMethods { get; } = Utf8Constants.ToInternedString(AllowedPkceMethodsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationCodeLifetime"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationCodeLifetimeUtf8 => "policy.authorizationCodeLifetime"u8;

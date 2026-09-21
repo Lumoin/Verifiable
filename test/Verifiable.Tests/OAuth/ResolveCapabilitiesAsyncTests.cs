@@ -9,10 +9,10 @@ namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Tests for the per-request capability gate. The chain build calls
-/// <see cref="AuthorizationServerIntegration.ResolveCapabilitiesAsync"/>
+/// <c>AuthorizationServerIntegration.ResolveCapabilitiesAsync</c>
 /// once per request to obtain the active capability set and filters
 /// builder-produced candidates by membership in that set before
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+/// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
 /// runs per survivor.
 /// </summary>
 /// <remarks>
@@ -40,6 +40,10 @@ internal sealed class ResolveCapabilitiesAsyncTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
 
 
+    /// <summary>
+    /// Checks that the request's resolved capability set determines endpoint-chain membership.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveCapabilitiesAsyncAttenuatesChainMembership()
     {
@@ -47,15 +51,19 @@ internal sealed class ResolveCapabilitiesAsyncTests
 
         //Veto JwksEndpoint via the per-call delegate while the static
         //AllowedCapabilities set still includes it.
-        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            HashSet<CapabilityIdentifier> attenuated =
-                [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
-            return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
-        };
+            candidateIntegration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+            {
+                HashSet<CapabilityIdentifier> attenuated =
+                    [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         ExchangeContext context = [];
         context.SetServer(host.Server);
@@ -78,6 +86,10 @@ internal sealed class ResolveCapabilitiesAsyncTests
     }
 
 
+    /// <summary>
+    /// Checks that separate requests for one registration can resolve different active endpoint sets.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveCapabilitiesAsyncIsConsultedPerRequest()
     {
@@ -87,18 +99,22 @@ internal sealed class ResolveCapabilitiesAsyncTests
         //whether to veto JwksEndpoint. The same registration produces
         //different chains across the two calls because the lambda observes
         //request-scoped state.
-        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            bool vetoJwks =
-                ctx.TryGetValue("test.vetoJwks", out object? v) && v is bool b && b;
-            HashSet<CapabilityIdentifier> active = vetoJwks
-                ? [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)]
-                : [.. registration.AllowedCapabilities];
-            return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
-        };
+            candidateIntegration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+            {
+                bool vetoJwks =
+                    ctx.TryGetValue("test.vetoJwks", out object? v) && v is bool b && b;
+                HashSet<CapabilityIdentifier> active = vetoJwks
+                    ? [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)]
+                    : [.. registration.AllowedCapabilities];
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         ExchangeContext contextWithoutVeto = [];
         contextWithoutVeto.SetServer(host.Server);
@@ -132,6 +148,10 @@ internal sealed class ResolveCapabilitiesAsyncTests
     }
 
 
+    /// <summary>
+    /// Checks that excluded endpoint candidates never reach the application's URI resolver.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task ChainFiltersByCapabilityBeforeUriResolution()
     {
@@ -141,29 +161,37 @@ internal sealed class ResolveCapabilitiesAsyncTests
         //ResolveEndpointUriAsync to throw if called for the JWKS endpoint name —
         //the throw proves the filter happens BEFORE URI resolution; if the
         //filter happened after, the throw would fire.
-        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            HashSet<CapabilityIdentifier> attenuated =
-                [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
-            return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
-        };
+            candidateIntegration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+            {
+                HashSet<CapabilityIdentifier> attenuated =
+                    [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
+
+                return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
+            };
+        }).ConfigureAwait(false);
 
         ResolveEndpointUriDelegate originalResolver =
             host.Server.OAuth().ResolveEndpointUriAsync!;
-        host.Server.OAuth().ResolveEndpointUriAsync =
-            (endpointName, registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(endpointName == WellKnownEndpointNames.MetadataJwks)
+            candidateIntegration.ResolveEndpointUriAsync =
+                (endpointName, registration, ctx, ct) =>
             {
-                throw new InvalidOperationException(
-                    "ResolveEndpointUriAsync must not be called for a capability "
-                    + "the chain build already filtered out.");
-            }
-            return originalResolver(endpointName, registration, ctx, ct);
-        };
+                if(endpointName == WellKnownEndpointNames.MetadataJwks)
+                {
+                    throw new InvalidOperationException(
+                        "ResolveEndpointUriAsync must not be called for a capability "
+                        + "the chain build already filtered out.");
+                }
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return originalResolver(endpointName, registration, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         ExchangeContext context = [];
         context.SetServer(host.Server);

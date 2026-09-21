@@ -23,7 +23,7 @@ namespace Verifiable.Server;
 /// identifiable tenant. The dispatcher responds with <c>400 invalid_request</c>
 /// without invoking any further delegates. Returning a non-null
 /// <see cref="TenantId"/> that does not map to a known registration is a
-/// separate failure mode — <see cref="LoadClientRegistrationDelegate"/>
+/// separate failure mode — <c>LoadClientRegistrationDelegate</c>
 /// returns <see langword="null"/> in that case and the dispatcher responds
 /// with <c>invalid_client</c>.
 /// </para>

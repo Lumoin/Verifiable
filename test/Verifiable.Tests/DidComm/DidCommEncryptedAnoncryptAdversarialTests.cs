@@ -16,7 +16,7 @@ namespace Verifiable.Tests.DidComm;
 
 /// <summary>
 /// Adversarial, fail-closed tests for the DIDComm v2.1 anoncrypt unpack
-/// (<see cref="DidCommEncryptedExtensions.UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>).
+/// (<see cref="DidCommEncryptedExtensions.UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, JwtClaimsDeserializer?, System.Func{System.ReadOnlySpan{byte}, System.Collections.Generic.IReadOnlyDictionary{string, object}}?, DidCommEncryptedHeaderPolicy, System.Threading.CancellationToken)"/>).
 /// Each test packs a valid P-256 / A256GCM anoncrypt message, tampers or rebuilds the wire envelope,
 /// and asserts that unpack returns <see cref="DidCommEncryptedUnpackResult.IsUnpacked"/> = <see langword="false"/>
 /// with the specific <see cref="DidCommDecryptionError"/> — and that a tampered ciphertext/tag never

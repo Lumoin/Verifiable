@@ -17,7 +17,7 @@ namespace Verifiable.Core.Model.Dcql;
 /// </para>
 /// <para>
 /// Declared <see langword="static readonly"/> (not <see langword="const"/>) — matching
-/// <see cref="Oid4VpAuthorizationRequestParameterNames"/> and
+/// <c>Oid4VpAuthorizationRequestParameterNames</c> and
 /// <c>Oid4VpClientMetadataParameterNames</c>, and avoiding cross-assembly const
 /// inlining. The converters match them with the <c>Is*</c> ordinal helpers in a guarded
 /// <c>switch</c> rather than <c>case</c> labels.

@@ -73,28 +73,34 @@ internal sealed class JarRarAndJarmTests
     public async Task JarByValueAuthorizationDetailsReachTheTokenGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarClient(host);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        using VerifierKeyMaterial material = await RegisterJarClientAsync(host).ConfigureAwait(false);
+
+        //Both authorization-details seams are coupled changes and are published together in ONE
+        //alteration (EndpointServer.RequestAlterationAsync's own doc): a candidate wiring only the
+        //parser is itself a half-wired server the composition-time pairing check now refuses.
+        IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) =>
+                {
+                    seenDetails = details;
+
+                    return ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
+                    [
+                        new GrantedCredentialAuthorization
+                        {
+                            CredentialConfigurationId = details[0].CredentialConfigurationId!,
+                            CredentialIdentifiers = ["CivilEngineeringDegree-2026"]
+                        }
+                    ]));
+                };
+        }).ConfigureAwait(false);
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-
-        IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            (details, subject, registration, context, ct) =>
-            {
-                seenDetails = details;
-
-                return ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
-                [
-                    new GrantedCredentialAuthorization
-                    {
-                        CredentialConfigurationId = details[0].CredentialConfigurationId!,
-                        CredentialIdentifiers = ["CivilEngineeringDegree-2026"]
-                    }
-                ]));
-            };
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);
@@ -135,22 +141,29 @@ internal sealed class JarRarAndJarmTests
     public async Task JarParCarriesDetailsAndJarmResponseModeThroughTheFlow()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarClient(host);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        using VerifierKeyMaterial material = await RegisterJarClientAsync(host).ConfigureAwait(false);
+
+        //Both authorization-details seams are coupled changes and are published together in ONE
+        //alteration (EndpointServer.RequestAlterationAsync's own doc): a candidate wiring only the
+        //parser is itself a half-wired server the composition-time pairing check now refuses.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                    ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
+                    [
+                        new GrantedCredentialAuthorization
+                        {
+                            CredentialConfigurationId = details[0].CredentialConfigurationId!,
+                            CredentialIdentifiers = [$"{details[0].CredentialConfigurationId}-dataset-1"]
+                        }
+                    ]));
+        }).ConfigureAwait(false);
         //OID4VCI 1.0 §13.10: keep the plain-bearer credential token within the long-lived
         //threshold ("Long-lived Access Tokens giving access to Credentials MUST not be issued
         //unless sender-constrained"; lifetimes longer than 5 minutes are considered long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
-            static (details, subject, registration, context, ct) =>
-                ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
-                [
-                    new GrantedCredentialAuthorization
-                    {
-                        CredentialConfigurationId = details[0].CredentialConfigurationId!,
-                        CredentialIdentifiers = [$"{details[0].CredentialConfigurationId}-dataset-1"]
-                    }
-                ]));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);
@@ -227,8 +240,25 @@ internal sealed class JarRarAndJarmTests
     public async Task MalformedJarAuthorizationDetailsAreRejected()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarClient(host);
-        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        using VerifierKeyMaterial material = await RegisterJarClientAsync(host).ConfigureAwait(false);
+
+        //The composition-time pairing check requires ResolveCredentialAuthorizationAsync alongside
+        //the parser (no further authorization details type is registered here), so this fixture
+        //wires one too — but it must never be REACHED: an unsupported authorization details type
+        //is refused by shape enforcement before any resolver is consulted, so invoking this delegate
+        //fails the test rather than merely going unobserved.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                {
+                    Assert.Fail("A malformed authorization_details request must be refused before the resolver is consulted.");
+
+                    return ValueTask.FromResult(
+                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
+                };
+        }).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);
@@ -260,8 +290,8 @@ internal sealed class JarRarAndJarmTests
     {
         await using TestHostShell host = new(TimeProvider);
         //A JAR-capable client WITHOUT an AuthorizationResponseSigning key.
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, JarCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);
@@ -288,7 +318,7 @@ internal sealed class JarRarAndJarmTests
     public async Task ReplayedJarJtiIsRejectedByTheCorrelationStore()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarClient(host);
+        using VerifierKeyMaterial material = await RegisterJarClientAsync(host).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);
@@ -331,8 +361,8 @@ internal sealed class JarRarAndJarmTests
     public async Task JarByValueFailsClosedWhenStoreCannotProveItself()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJarClient(host);
-        HalfWireJtiReplayStore(host.Server);
+        using VerifierKeyMaterial material = await RegisterJarClientAsync(host).ConfigureAwait(false);
+        await HalfWireJtiReplayStoreAsync(host.Server).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);
@@ -353,13 +383,16 @@ internal sealed class JarRarAndJarmTests
     /// real resolver. This is the half-wired store the guard's post-save self-check must catch.
     /// </summary>
     /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
-    private static void HalfWireJtiReplayStore(EndpointServer server)
+    private static async Task HalfWireJtiReplayStoreAsync(EndpointServer server)
     {
         ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
-        server.OAuth().ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
-            flowKind == FlowKind.JtiReplay
-                ? ValueTask.FromResult<string?>(null)
-                : original(tenantId, flowKind, externalHandle, ctx, ct);
+        await TestHostShell.AlterAsync(server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
+                flowKind == FlowKind.JtiReplay
+                    ? ValueTask.FromResult<string?>(null)
+                    : original(tenantId, flowKind, externalHandle, ctx, ct);
+        }).ConfigureAwait(false);
     }
 
 
@@ -367,18 +400,18 @@ internal sealed class JarRarAndJarmTests
     /// Registers a JAR-capable client whose single key serves JAR signing, token issuance, and
     /// JARM response signing — the host resolvers find it by id for every usage.
     /// </summary>
-    private static VerifierKeyMaterial RegisterJarClient(TestHostShell host)
+    private static async Task<VerifierKeyMaterial> RegisterJarClientAsync(TestHostShell host)
     {
-        VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, JarCapabilities);
+        VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, JarCapabilities).ConfigureAwait(false);
 
-        host.UpdateSigningKeys(
+        await host.UpdateSigningKeysAsync(
             material.Registration.TenantId.Value,
             material.Registration.SigningKeys.ToImmutableDictionary()
                 .Add(KeyUsageContext.JarSigning,
                     new SigningKeySet { Current = [material.SigningKeyId] })
                 .Add(KeyUsageContext.AuthorizationResponseSigning,
-                    new SigningKeySet { Current = [material.SigningKeyId] }));
+                    new SigningKeySet { Current = [material.SigningKeyId] })).ConfigureAwait(false);
 
         return material;
     }

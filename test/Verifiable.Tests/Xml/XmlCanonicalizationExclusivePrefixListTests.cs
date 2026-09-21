@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Xml;
 /// <summary>
 /// Proofs of the <c>InclusiveNamespaces PrefixList</c> parameter of
 /// <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML Canonicalization
-/// 1.0</see> section 4 as <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/> takes it: the
+/// 1.0</see> section 4 as <see cref="XmlCanonicalization.TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out XmlCanonicalizationError)"/> takes it: the
 /// NMTOKENS white-space split, the Canonical XML handling of listed prefixes, the <c>#default</c> token,
 /// the visibly-utilizes boundary the list relaxes, and the refusal of tokens that are neither a namespace
 /// prefix nor <c>#default</c>.

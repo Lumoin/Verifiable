@@ -119,6 +119,63 @@ internal sealed class StatusListTokenResolversTests
 
 
     /// <summary>
+    /// A Status List Token response carrying <c>Cache-Control: max-age</c> reports that many seconds of
+    /// storable freshness on the fetch result — the library's one attempt at this seam,
+    /// <see cref="StatusListTokenFetch.FetchAsync"/> — per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
+        using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
+
+        using StatusListType published = PublishedList();
+        var token = new StatusListToken(ListUrl, TestClock.CanonicalEpoch, published);
+        string compactJws = await StatusListTokenJwtFixtures.IssueJwtAsync(
+            token, issuerPrivate, KeyId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        ScriptedOutboundTransport transport = new(new()
+        {
+            [ListUrl] = ScriptedOutboundResponse.WithBody(
+                200,
+                HttpHeaderSet.FromPairs(
+                    (WellKnownHttpHeaderNames.ContentType, StatusListJwtMediaType),
+                    (WellKnownHttpHeaderNames.CacheControl, "max-age=45")),
+                new TaggedMemory<byte>(Encoding.ASCII.GetBytes(compactJws), Tag.Empty))
+        });
+
+        StatusListTokenFetchResult fetch = await StatusListTokenFetch.FetchAsync(
+            new Uri(ListUrl), StatusListTokenFormat.Jwt, TestHostShell.ExchangeContextWith(OutboundFetchPolicy.SecureDefault),
+            transport.Delegate, Jws.DefaultMaxJwsLength, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(fetch.IsFetched, "A conforming Status List Token response MUST be fetched.");
+        Assert.IsTrue(fetch.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(45), fetch.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
+    }
+
+
+    /// <summary>
+    /// A non-200 Status List Token fetch reports non-storable freshness — there is no token a cache could
+    /// keep, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ANon200ResponseReportsNonStorableFreshness()
+    {
+        ScriptedOutboundTransport transport = new(new() { [ListUrl] = ScriptedOutboundResponse.WithStatus(404) });
+
+        StatusListTokenFetchResult fetch = await StatusListTokenFetch.FetchAsync(
+            new Uri(ListUrl), StatusListTokenFormat.Jwt, TestHostShell.ExchangeContextWith(OutboundFetchPolicy.SecureDefault),
+            transport.Delegate, Jws.DefaultMaxJwsLength, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(fetch.IsFetched, "A 404 response MUST NOT be fetched.");
+        Assert.IsFalse(fetch.Freshness.IsStorable, "A fetch that never reached a token reports no storable freshness.");
+    }
+
+
+    /// <summary>
     /// Which key verifies a Status List Token is the Relying Party's own trust decision, and Section 5.1's
     /// example header shows what it has to decide from: <c>{"alg":"ES256","kid":"12","typ":"statuslist+jwt"}</c>
     /// beside the uri the token was fetched for — "The sub (subject) claim MUST specify the URI of the Status
@@ -529,7 +586,7 @@ internal sealed class StatusListTokenResolversTests
 
 
     /// <summary>
-    /// <see cref="Core.OutboundFetch.OutboundRequest.MaxResponseBytes"/>'s own doc: the transport MAY ignore
+    /// <see cref="Verifiable.Core.OutboundFetch.OutboundRequest.MaxResponseBytes"/>'s own doc: the transport MAY ignore
     /// the hint, so a response body over the bound is re-checked once the fetch returns rather than trusted to
     /// have been enforced upstream.
     /// </summary>

@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 ///     JOSE header into <see cref="PkiCertificateMemory"/> instances.
 ///   </description></item>
 ///   <item><description>
-///     <see cref="ValidateCertificateChainDelegate"/> — validates the chain to a
+///     <see cref="ValidateCertificateChainAsyncDelegate"/> — validates the chain to a
 ///     trusted root and extracts the leaf certificate's public key.
 ///   </description></item>
 ///   <item><description>

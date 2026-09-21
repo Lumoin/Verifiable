@@ -15,8 +15,8 @@ namespace Verifiable.OAuth.StatusList;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Mirrors <c>ClientIdMetadataDocuments.BuildResolving</c>'s composition idiom: the returned
-/// delegate closes over the injected transport, context, and codecs, and every caller-visible
+/// Mirrors the composition idiom of <see cref="Verifiable.Core.Did.Methods.Web.WebDidResolver.BuildResolving"/>:
+/// the returned delegate closes over the injected transport, context, and codecs, and every caller-visible
 /// failure surfaces as a typed <see cref="StatusListResolutionException"/> — never a raw fetch or
 /// verification fault — so <see cref="Oid4Vp.Server.VpTokenCredentialStatus.CheckAsync"/> answers
 /// <c>StatusUndeterminable</c> rather than faulting the request. <see cref="OperationCanceledException"/>

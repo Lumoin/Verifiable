@@ -246,12 +246,12 @@ internal sealed class StatusListIssuerKeysTests
         new()
         {
             StatusListUri = ListUrl,
-            Header = new(new Dictionary<string, object>(StringComparer.Ordinal)
+            Header = new()
             {
                 [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256,
                 [WellKnownJoseHeaderNames.Typ] = StatusListJwtType,
                 [WellKnownJwkMemberNames.Kid] = KeyId
-            }),
+            },
             ReferencedTokenIssuer = ReferencedTokenIssuer,
             ReferencedTokenIssuerKey = referencedTokenIssuerKey
         };

@@ -48,7 +48,7 @@ namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// An in-memory test host that mirrors what a production ASP.NET application does
-/// at startup: creates an <see cref="AuthorizationServer"/> instance, wires all I/O
+/// at startup: creates an <c>AuthorizationServer</c> instance, wires all I/O
 /// delegates to in-memory stores, subscribes to events, and registers clients.
 /// </summary>
 /// <remarks>
@@ -57,7 +57,7 @@ namespace Verifiable.Tests.OAuth;
 /// ASP.NET with Kestrel, a database, and whatever other infrastructure
 /// the deployment requires. Here the host is a plain class with
 /// <see cref="ConcurrentDictionary{TKey,TValue}"/> stores. The
-/// <see cref="AuthorizationServer"/> underneath is identical in both cases.
+/// <c>AuthorizationServer</c> underneath is identical in both cases.
 /// </para>
 /// <para>
 /// The host is responsible for infrastructure concerns only: key material storage,
@@ -97,6 +97,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     private HostedAuthorizationServer Default { get; }
 
+
     /// <summary>The <see cref="Default"/> host's client registrations, keyed by both tenant segment and client id.</summary>
     private ConcurrentDictionary<string, ClientRecord> Registrations => Default.Registrations;
 
@@ -126,15 +127,17 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Disposable transport resources (pinned <see cref="System.Net.Http.HttpClient"/> instances)
-    /// <see cref="WireCimdMaterialization"/> owns, released on <see cref="DisposeAsync"/>.
+    /// <see cref="WireCimdMaterializationAsync"/> owns, released on <see cref="DisposeAsync"/>.
     /// </summary>
     private List<IDisposable> TransportOwnedDisposables { get; } = [];
 
     /// <summary>The DPoP HMAC confirmation key set shared by tests that need symmetric DPoP proofs.</summary>
     private InProcessKeySet? DpopHmacKeySet { get; set; }
 
+
     /// <summary>Guards <see cref="DisposeAsync"/> against running its teardown more than once.</summary>
     private bool Disposed { get; set; }
+
 
     /// <summary>The <see cref="Default"/> host's loopback base address once it is serving HTTPS.</summary>
     private Uri? HttpBaseAddress
@@ -143,12 +146,14 @@ internal sealed class TestHostShell: IAsyncDisposable
         set => Default.HttpBaseAddress = value;
     }
 
+
     /// <summary>The <see cref="Default"/> host's shared <see cref="System.Net.Http.HttpClient"/> for real-wire tests.</summary>
     private System.Net.Http.HttpClient? SharedHttpClient
     {
         get => Default.SharedHttpClient;
         set => Default.SharedHttpClient = value;
     }
+
 
     /// <summary>
     /// The shared self-signed leaf certificate an HTTPS host this shell starts presents unless the
@@ -157,7 +162,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// cached on this instance thereafter, since its SAN covers both <c>127.0.0.1</c> and <c>localhost</c>
     /// and every host binds loopback. Wire-level tests that build their own
     /// <see cref="System.Net.Http.HttpClient"/> pin to this exact certificate via
-    /// <see cref="LoopbackTls.CreatePinnedHandler"/> rather than trusting a CA. <see cref="HostCertificate"/>
+    /// <see cref="LoopbackTls.CreatePinnedHandler(System.Security.Cryptography.X509Certificates.X509Certificate2)"/> rather than trusting a CA. <see cref="HostCertificate"/>
     /// answers which certificate a NAMED host actually presents, covering both the shared and the
     /// distinct-certificate cases.
     /// </summary>
@@ -171,8 +176,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// the shared <see cref="ServerCertificate"/>; <see cref="HostCertificate"/> is the one
     /// selection authority both listener bootstrap and client pinning read.
     /// </summary>
-    private Dictionary<string, X509Certificate2> DistinctHostCertificates { get; } =
-        new(StringComparer.Ordinal);
+    private Dictionary<string, X509Certificate2> DistinctHostCertificates { get; } = new(StringComparer.Ordinal);
 
 
     /// <summary>
@@ -196,6 +200,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             ? certificate
             : ServerCertificate;
     }
+
 
     /// <summary>Base64Url encoder shared by tests with the host's own wiring.</summary>
     public static EncodeDelegate Base64UrlEncoder => TestSetup.Base64UrlEncoder;
@@ -251,6 +256,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>The time provider injected at construction.</summary>
     public TimeProvider Time { get; }
 
+
     /// <summary>
     /// Issuer trust store mapping issuer identifiers to their public keys.
     /// The verifier uses this to verify credential issuer signatures.
@@ -264,8 +270,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <see cref="Verifiable.OAuth.Siop.ResolveDidVerificationKeyDelegate"/> reads from this map,
     /// the DID-subject parallel of <see cref="IssuerTrustStore"/>.
     /// </summary>
-    private Dictionary<string, PublicKeyMemory> SiopDidTrustStore { get; } =
-        new(StringComparer.Ordinal);
+    private Dictionary<string, PublicKeyMemory> SiopDidTrustStore { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Per-subject OIDC claim store. The fixture's
@@ -273,8 +278,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// lambda reads from this dictionary so tests can seed claim sets and
     /// drive flows that consume them.
     /// </summary>
-    public Dictionary<string, OidcClaims> SubjectClaims { get; } =
-        new(StringComparer.Ordinal);
+    public Dictionary<string, OidcClaims> SubjectClaims { get; } = new(StringComparer.Ordinal);
 
 
     /// <summary>
@@ -417,6 +421,13 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="vpValidator">
     /// VP token validator. When <see langword="null"/>, HAIP 1.0 SD-JWT rules are used.
     /// </param>
+    /// <param name="mdocSeams">Optional mdoc VP verification seams; <see langword="null"/> uses the shipped defaults.</param>
+    /// <param name="sdCwtSeams">Optional SD-CWT VP verification seams; <see langword="null"/> uses the shipped defaults.</param>
+    /// <param name="saltReuseSeam">Optional commitment/salt reuse detector shared across presentations; <see langword="null"/> disables the check.</param>
+    /// <param name="resolveVerifiedStatusListToken">
+    /// Optional resolver that returns an already-verified status list token for a credential's
+    /// <c>status</c> claim. <see langword="null"/> uses the shipped default resolution.
+    /// </param>
     /// <param name="parseX5c">Optional <c>dc+sd-jwt</c> issuer JWS <c>x5c</c> header parser, feeding <paramref name="resolveTrustedAuthorityEvidence"/>'s <c>aki</c> arm.</param>
     /// <param name="resolveTrustedAuthorityEvidence">
     /// Optional OID4VP 1.0 §6.1.1 trust-evidence resolver for <c>dc+sd-jwt</c> credentials.
@@ -515,26 +526,34 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     private ResolveIssuerKeyDelegate ResolveIssuerKeyShared { get; }
 
+
     /// <summary>Shell-level VP-token validator, kept for <see cref="AddHost"/> alongside <see cref="ResolveIssuerKeyShared"/>.</summary>
     private ClaimIssuer<ValidationContext> VpValidatorShared { get; }
+
 
     /// <summary>Shell-level mdoc VP verification seams, or <see langword="null"/> when the shell was not built with mdoc support.</summary>
     private MdocVpVerificationSeams? MdocSeamsShared { get; }
 
+
     /// <summary>Shell-level SD-CWT VP verification seams, or <see langword="null"/> when the shell was not built with SD-CWT support.</summary>
     private SdCwtVpVerificationSeams? SdCwtSeamsShared { get; }
+
 
     /// <summary>Shell-level commitment-reuse detection seam, or <see langword="null"/> when the shell was not built with one.</summary>
     private CommitmentReuseDetectionSeam? SaltReuseSeamShared { get; }
 
+
     /// <summary>Shell-level status-list token resolver, or <see langword="null"/> when status-list resolution is not wired.</summary>
     private Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? StatusListResolverShared { get; }
+
 
     /// <summary>Shell-level <c>dc+sd-jwt</c> issuer JWS <c>x5c</c> header parser, or <see langword="null"/> when not wired.</summary>
     private Verifiable.Cryptography.Pki.ParseX5cDelegate? ParseX5cShared { get; }
 
+
     /// <summary>Shell-level OID4VP 1.0 §6.1.1 trust-evidence resolver, or <see langword="null"/> when not wired.</summary>
     private ResolveTrustedAuthorityEvidenceDelegate? ResolveTrustedAuthorityEvidenceShared { get; }
+
 
     /// <summary>
     /// Shell-level credential-status policy, or <see langword="null"/> when the shell uses the shipped
@@ -542,17 +561,21 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     private Verifiable.Core.StatusList.CredentialStatusPolicy? CredentialStatusPolicyShared { get; }
 
+
     /// <summary>Shell-level Section 8.3 step 4.b freshness policy, or <see langword="null"/> when the check is skipped.</summary>
     private Verifiable.Core.StatusList.StatusListFreshnessPolicy? StatusListFreshnessPolicyShared { get; }
 
+
     /// <summary>Shell-level Section 11.5 refresh-interval bounds, or <see langword="null"/> when unclamped.</summary>
     private Verifiable.Core.StatusList.StatusListCachingBounds? StatusListCachingBoundsShared { get; }
+
 
     /// <summary>
     /// Shell-level disposition for a status claim naming only mechanisms the library does not evaluate,
     /// threaded to every host the shell builds.
     /// </summary>
     private Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition UnsupportedStatusMechanismsShared { get; }
+
 
     /// <summary>
     /// Shell-level <see cref="CredentialQueryId"/> the SIOPv2 §12 combined-response seat publishes its
@@ -561,13 +584,13 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     private CredentialQueryId? VpTokenCredentialQueryIdShared { get; }
 
+
     /// <summary>
     /// Multi-host orchestration store, keyed by role name. The <c>"default"</c> entry is added by the
     /// constructor; <see cref="AddHost"/> creates further independent hosts (different roles in a
     /// multi-party flow — Verifier + Federation Anchor, etc.).
     /// </summary>
-    private Dictionary<string, HostedAuthorizationServer> HostsByName { get; } =
-        new(StringComparer.Ordinal);
+    private Dictionary<string, HostedAuthorizationServer> HostsByName { get; } = new(StringComparer.Ordinal);
 
 
     /// <summary>All hosts owned by this shell, keyed by role name.</summary>
@@ -589,6 +612,118 @@ internal sealed class TestHostShell: IAsyncDisposable
         }
 
         return host;
+    }
+
+
+    /// <summary>Commits <paramref name="registration"/> on the named host and returns the committed record.</summary>
+    public async Task<ClientRecord> RegisterAsync(
+        ClientRecord registration,
+        RegistrationAccessToken? accessToken = null,
+        string hostName = "default",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+        await host.RegisterClientAsync(
+            registration,
+            accessToken ?? new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
+            [],
+            cancellationToken).ConfigureAwait(false);
+
+        return registration;
+    }
+
+
+    /// <summary>Loads, mutates, commits and reassigns <paramref name="material"/>'s registration.</summary>
+    public async Task<ClientRecord> UpdateAsync(
+        VerifierKeyMaterial material,
+        Func<ClientRecord, ClientRecord> mutate,
+        string hostName = "default",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ArgumentNullException.ThrowIfNull(mutate);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+        string segment = material.Registration.TenantId.Value;
+        if(!host.Registrations.TryGetValue(segment, out ClientRecord? previous))
+        {
+            throw new InvalidOperationException($"No registration found for segment '{segment}'.");
+        }
+
+        ClientRecord updated = await host.UpdateClientAsync(previous, mutate(previous), [], cancellationToken).ConfigureAwait(false);
+        material.Registration = updated;
+
+        return updated;
+    }
+
+
+    /// <summary>Deregisters the client at <paramref name="segment"/> on the named host.</summary>
+    public async Task DeregisterAsync(
+        string segment,
+        string reason,
+        string hostName = "default",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+        if(!host.Registrations.TryGetValue(segment, out ClientRecord? registration))
+        {
+            return;
+        }
+
+        await host.DeregisterClientAsync(registration, reason, [], cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>Sets the declared client authentication method and JWKS through <see cref="UpdateAsync"/>.</summary>
+    public Task<ClientRecord> SetTokenEndpointAuthMethodAsync(
+        VerifierKeyMaterial material,
+        ClientAuthenticationMethod? method,
+        string? clientJwks = null,
+        string hostName = "default",
+        CancellationToken cancellationToken = default) =>
+        UpdateAsync(material, previous => previous with
+        {
+            TokenEndpointAuthMethod = method,
+            ClientJwks = clientJwks
+        }, hostName, cancellationToken);
+
+
+    /// <summary>Adds a scope, and optionally an audience mapping, through <see cref="UpdateAsync"/>.</summary>
+    public Task<ClientRecord> AddScopeWithAudienceAsync(
+        VerifierKeyMaterial material,
+        string scope,
+        string? audience = null,
+        string hostName = "default",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+
+        return UpdateAsync(material, previous =>
+        {
+            if(audience is null)
+            {
+                return previous with { AllowedScopes = previous.AllowedScopes.Add(scope) };
+            }
+
+            Dictionary<string, IReadOnlyList<string>> scopeToAudience = previous.ScopeToAudience is null
+                ? new(StringComparer.Ordinal)
+                : new Dictionary<string, IReadOnlyList<string>>(previous.ScopeToAudience, StringComparer.Ordinal);
+            scopeToAudience[scope] = [audience];
+
+            return previous with
+            {
+                AllowedScopes = previous.AllowedScopes.Add(scope),
+                ScopeToAudience = scopeToAudience
+            };
+        }, hostName, cancellationToken);
     }
 
 
@@ -654,12 +789,13 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// The capabilities this client is allowed to use. Determines which endpoints
     /// are active.
     /// </param>
-    public VerifierKeyMaterial RegisterClient(
+    /// <param name="profile">Optional policy profile constraining this client's registration; <see langword="null"/> uses the shipped default.</param>
+    public async Task<VerifierKeyMaterial> RegisterClientAsync(
         string clientId,
         Uri baseUri,
         ImmutableHashSet<CapabilityIdentifier> capabilities,
         PolicyProfile? profile = null) =>
-        RegisterClientOnHost("default", clientId, baseUri, capabilities, profile);
+        await RegisterClientOnHostAsync("default", clientId, baseUri, capabilities, profile).ConfigureAwait(false);
 
 
     /// <summary>
@@ -667,7 +803,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// verifier + federation anchor) call this overload to put each
     /// registration on the right host's per-host dictionaries.
     /// </summary>
-    public VerifierKeyMaterial RegisterClientOnHost(
+    public async Task<VerifierKeyMaterial> RegisterClientOnHostAsync(
         string hostName,
         string clientId,
         Uri baseUri,
@@ -682,6 +818,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         HostedAuthorizationServer host = Host(hostName);
 
         string segment = Guid.NewGuid().ToString("N")[..8];
+        string handle = $"handle-{Guid.NewGuid().ToString("N")[..8]}";
         KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
         KeyId encryptionKeyId = new($"urn:uuid:{Guid.NewGuid()}");
 
@@ -716,6 +853,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             ClientId = clientId,
             TenantId = segment,
+            TenantHandle = handle,
             IssuerUri = new Uri($"https://issuer.test/{segment}"),
             Profile = policyProfile,
             AllowedCapabilities = capabilities,
@@ -729,15 +867,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             ClientMetadata = clientMetadata
         };
 
-        //Index by both segment and clientId for lookup.
-        host.Registrations[segment] = registration;
-        host.Registrations[clientId] = registration;
-
-        //Emit event so observers (routing table, caches) are notified.
-        host.Server.RegisterClient(
+        //Commit both segment and client identifier indexes before optional cache observers.
+        await host.RegisterClientAsync(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            []);
+            []).ConfigureAwait(false);
 
         //Dispose the exchange public key — only the private key is retained.
         //The signing public key is retained in VerificationKeys for JAR verification.
@@ -758,7 +892,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <see cref="KeyUsageContext.JarSigning"/> slot, so JAR-bearing AuthCode
     /// or OID4VP flows can be parameterised across signature algorithms.
     /// </summary>
-    public VerifierKeyMaterial RegisterJarSigningClient(
+    public async Task<VerifierKeyMaterial> RegisterJarSigningClientAsync(
         string clientId,
         Uri baseUri,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair,
@@ -770,6 +904,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(capabilities);
 
         string segment = Guid.NewGuid().ToString("N")[..8];
+        string handle = $"handle-{Guid.NewGuid().ToString("N")[..8]}";
         KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
 
         SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
@@ -799,6 +934,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             ClientId = clientId,
             TenantId = segment,
+            TenantHandle = handle,
             IssuerUri = new Uri($"https://issuer.test/{segment}"),
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = ImmutableHashSet.Create(
@@ -811,13 +947,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             ClientMetadata = clientMetadata
         };
 
-        Registrations[segment] = registration;
-        Registrations[clientId] = registration;
 
-        Server.RegisterClient(
+        await Default.RegisterClientAsync(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            []);
+            []).ConfigureAwait(false);
 
         return new VerifierKeyMaterial(
             registration,
@@ -843,7 +977,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// The capabilities this client is allowed to use.
     /// </param>
     /// <returns>The registered <see cref="ClientRecord"/>.</returns>
-    public ClientRecord RegisterSigningClient(
+    public async Task<ClientRecord> RegisterSigningClientAsync(
         string clientId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair,
         ImmutableHashSet<CapabilityIdentifier> capabilities)
@@ -853,6 +987,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(capabilities);
 
         string segment = Guid.NewGuid().ToString("N")[..8];
+        string handle = $"handle-{Guid.NewGuid().ToString("N")[..8]}";
         KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
 
         SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
@@ -862,6 +997,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             ClientId = clientId,
             TenantId = segment,
+            TenantHandle = handle,
             IssuerUri = new Uri($"https://issuer.test/{segment}"),
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = ImmutableHashSet.Create(
@@ -872,13 +1008,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty
         };
 
-        Registrations[segment] = registration;
-        Registrations[clientId] = registration;
 
-        Server.RegisterClient(
+        await Default.RegisterClientAsync(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            []);
+            []).ConfigureAwait(false);
 
         return registration;
     }
@@ -895,23 +1029,25 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <paramref name="capabilities"/> (added when the caller omits it) and an EMPTY
     /// <see cref="ClientRecord.AllowedRedirectUris"/> — the fetched document supplies redirect URIs
     /// at materialization time (§4.2), never the stub. AS-owned facets (capabilities, scopes,
-    /// signing keys, profile) mirror <see cref="RegisterSigningClient"/>; client-data-dependent
+    /// signing keys, profile) mirror <see cref="RegisterSigningClientAsync"/>; client-data-dependent
     /// facets (redirect URIs, auth method, JWKS, display) are left for
     /// <see cref="ClientIdMetadataMaterialization"/> to overlay from the fetched document.
     /// </summary>
-    public ClientRecord RegisterCimdStubClient(
+    public async Task<ClientRecord> RegisterCimdStubClientAsync(
         Uri documentUri,
         ImmutableHashSet<CapabilityIdentifier> capabilities,
         PolicyProfile? profile = null) =>
-        RegisterCimdStubClientOnHost("default", documentUri, capabilities, profile);
+        await RegisterCimdStubClientOnHostAsync("default", documentUri, capabilities, profile).ConfigureAwait(false);
 
 
     /// <summary>
-    /// Host-aware variant of <see cref="RegisterCimdStubClient"/>, for multi-host CIMD topologies
+    /// Host-aware variant of <see cref="RegisterCimdStubClientAsync"/>, for multi-host CIMD topologies
     /// (a document host distinct from the AS host is the common case; a multi-AS-host topology also
-    /// reaches this overload directly).
+    /// reaches this overload directly). An existing identifier is replaced conditionally at its
+    /// loaded revision, preserving its tenant, issuer and credential; a new identifier is created.
+    /// Persistence advances the revision before optional notification.
     /// </summary>
-    public ClientRecord RegisterCimdStubClientOnHost(
+    public async Task<ClientRecord> RegisterCimdStubClientOnHostAsync(
         string hostName,
         Uri documentUri,
         ImmutableHashSet<CapabilityIdentifier> capabilities,
@@ -928,7 +1064,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             capabilities = capabilities.Add(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
         }
 
-        string segment = Guid.NewGuid().ToString("N")[..8];
+        _ = host.Registrations.TryGetValue(documentUri.OriginalString, out ClientRecord? existing);
+        string segment = existing?.TenantId.Value ?? Guid.NewGuid().ToString("N")[..8];
+        string handle = existing?.TenantHandle?.Value ?? $"handle-{Guid.NewGuid().ToString("N")[..8]}";
         KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair =
@@ -941,7 +1079,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             ClientId = documentUri.OriginalString,
             TenantId = segment,
-            IssuerUri = new Uri($"https://issuer.test/{segment}"),
+            TenantHandle = handle,
+            IssuerUri = existing?.IssuerUri ?? new Uri($"https://issuer.test/{segment}"),
             Profile = profile,
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = ImmutableHashSet<Uri>.Empty,
@@ -952,13 +1091,16 @@ internal sealed class TestHostShell: IAsyncDisposable
             ClientMetadataUri = documentUri
         };
 
-        host.Registrations[segment] = registration;
-        host.Registrations[registration.ClientId] = registration;
 
-        host.Server.RegisterClient(
-            registration,
-            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            []);
+        if(existing is null)
+        {
+            await host.RegisterClientAsync(registration, new RegistrationAccessToken(Guid.NewGuid().ToString("N")), []).ConfigureAwait(false);
+        }
+        else
+        {
+            registration = await host.UpdateClientAsync(existing, registration, []).ConfigureAwait(false);
+        }
+
 
         return registration;
     }
@@ -966,10 +1108,11 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Wires CIMD materialization onto the named host:
-    /// <see cref="AuthorizationServerIntegration.MaterializeRegistrationAsync"/> to
+    /// <c>AuthorizationServerIntegration.MaterializeRegistrationAsync</c> to
     /// <see cref="ClientIdMetadataMaterialization.Build"/>'s factory output, and
-    /// <see cref="AuthorizationServerIntegration.ResolveClientMetadataAsync"/> to
-    /// <see cref="ClientIdMetadataDocuments.BuildResolving"/> over a transport built from
+    /// <see cref="AuthorizationServerIntegration.ResolveClientMetadataAsync"/> to a
+    /// <see cref="ClientMetadataResolutionCache"/> — the reference application-layer cache over
+    /// <see cref="ClientIdMetadataDocuments.ResolveAsync"/> — built over a transport from
     /// <see cref="LoopbackTls.CreateSingleHopPinnedHttpClient(X509Certificate2)"/> (auto-redirect
     /// disabled per the <see cref="Verifiable.Core.OutboundFetch.OutboundTransportDelegate"/>
     /// contract) and <see cref="GuardedHttpClientTransport.BuildSingleHopTransport"/>, pinned to
@@ -979,17 +1122,24 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// The resolved delegate sets <see cref="LoopbackOutboundFetchPolicy"/> on the live per-request
-    /// <see cref="ExchangeContext"/> immediately before delegating to the built resolver — the same
+    /// <see cref="ExchangeContext"/> immediately before delegating to the cache — the same
     /// context <see cref="AuthorizationServerHttpApplication.ProcessRequestAsync"/> constructs fresh
-    /// per inbound request, so the guarded fetch the resolver drives is permitted to dial another
+    /// per inbound request, so the guarded fetch the cache drives is permitted to dial another
     /// loopback listener exactly as <see cref="LoopbackOutboundFetchPolicy"/>'s own remarks describe
     /// (the test deployment's document host genuinely is another loopback listener). Owns the pinned
     /// <see cref="System.Net.Http.HttpClient"/>, released on <see cref="DisposeAsync"/>.
     /// </remarks>
-    public void WireCimdMaterialization(
+    /// <param name="hostName">The named host to wire CIMD materialization onto.</param>
+    /// <param name="documentHostCertificate">The CIMD document host's own pinned certificate.</param>
+    /// <param name="options">The document attempt's byte caps and validation hooks.</param>
+    /// <param name="documentMinimumCacheLifetime">The lower bound the cache clamps a document's header-derived lifetime to.</param>
+    /// <param name="documentMaximumCacheLifetime">The upper bound the cache clamps a document's header-derived lifetime to.</param>
+    public async Task WireCimdMaterializationAsync(
         string hostName,
         X509Certificate2 documentHostCertificate,
-        ClientIdMetadataDocumentResolverOptions? options = null)
+        ClientIdMetadataDocumentResolverOptions? options = null,
+        TimeSpan? documentMinimumCacheLifetime = null,
+        TimeSpan? documentMaximumCacheLifetime = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
         ArgumentNullException.ThrowIfNull(documentHostCertificate);
@@ -1002,23 +1152,31 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         Verifiable.Core.OutboundFetch.OutboundTransportDelegate transport =
             GuardedHttpClientTransport.BuildSingleHopTransport(documentHttpClient);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport, options ?? new ClientIdMetadataDocumentResolverOptions(), Time);
+        ClientMetadataResolutionCache cache = new(
+            transport, options ?? new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), Time,
+            documentMinimumCacheLifetime: documentMinimumCacheLifetime,
+            documentMaximumCacheLifetime: documentMaximumCacheLifetime);
+        ResolveClientMetadataDelegate resolve = cache.ResolveDocumentAsync;
 
         AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-        oauth.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            context.SetOutboundFetchPolicy(LoopbackOutboundFetchPolicy);
+            candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
 
-            return resolve(clientMetadataUri, context, cancellationToken);
-        };
+
+            candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+            {
+                context.SetOutboundFetchPolicy(LoopbackOutboundFetchPolicy);
+
+                return resolve(clientMetadataUri, context, cancellationToken);
+            };
+        }).ConfigureAwait(false);
     }
 
 
     /// <summary>
     /// Registers a federation-participating client. Builds the baseline
-    /// OID4VP / OAuth registration via <see cref="RegisterClient"/>, then
+    /// OID4VP / OAuth registration via <see cref="RegisterClientAsync"/>, then
     /// upgrades the resulting <see cref="ClientRecord"/> to also publish an
     /// OpenID Federation 1.0 Entity Configuration at
     /// <c>/.well-known/openid-federation</c>: adds
@@ -1031,21 +1189,21 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// The federation signing key is independent of the OID4VP JAR-signing
-    /// key generated by <see cref="RegisterClient"/> — different artifacts
+    /// key generated by <see cref="RegisterClientAsync"/> — different artifacts
     /// (Entity Configuration vs JAR), different purposes, different rotation
     /// lifecycles. Federation chain validation reads the federation key
     /// from <c>chain[N].jwks</c>; JAR signature verification reads the JAR
     /// signing key from the verifier's <c>metadata.openid_relying_party.jwks</c>
     /// effective metadata claim.
     /// </remarks>
-    public VerifierKeyMaterial RegisterFederationCapableClient(
+    public async Task<VerifierKeyMaterial> RegisterFederationCapableClientAsync(
         string clientId,
         Uri baseUri,
         Uri federationEntityId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationSigningKeyPair,
         ImmutableHashSet<CapabilityIdentifier> baseCapabilities) =>
-        RegisterFederationCapableClientOnHost(
-            "default", clientId, baseUri, federationEntityId, federationSigningKeyPair, baseCapabilities);
+        await RegisterFederationCapableClientOnHostAsync(
+            "default", clientId, baseUri, federationEntityId, federationSigningKeyPair, baseCapabilities).ConfigureAwait(false);
 
 
     /// <summary>
@@ -1053,7 +1211,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// multi-host federation topologies (Verifier + Anchor) where each
     /// federation entity lives on its own Kestrel.
     /// </summary>
-    public VerifierKeyMaterial RegisterFederationCapableClientOnHost(
+    public async Task<VerifierKeyMaterial> RegisterFederationCapableClientOnHostAsync(
         string hostName,
         string clientId,
         Uri baseUri,
@@ -1072,7 +1230,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         //Build the baseline registration (OID4VP / OAuth capabilities,
         //JAR signing key, encryption keys, optional client_metadata).
-        VerifierKeyMaterial baseKeys = RegisterClientOnHost(hostName, clientId, baseUri, baseCapabilities);
+        VerifierKeyMaterial baseKeys = await RegisterClientOnHostAsync(hostName, clientId, baseUri, baseCapabilities).ConfigureAwait(false);
 
         //Store the federation signing key material on the host so the
         //federation endpoint's SigningKeyResolver / VerificationKeyResolver
@@ -1093,16 +1251,8 @@ internal sealed class TestHostShell: IAsyncDisposable
                     new SigningKeySet { Current = [federationSigningKeyId] })
         };
 
-        string segment = baseline.TenantId.Value;
-        host.Registrations[segment] = federated;
-        host.Registrations[baseline.ClientId] = federated;
-
-        //Emit the update event so registration-observers re-sync against
-        //the federation-bearing record.
-        host.Server.RegisterClient(
-            federated,
-            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            []);
+        //Commit the federation-bearing record before notifying optional observers.
+        federated = await host.UpdateClientAsync(baseKeys.Registration, federated, []).ConfigureAwait(false);
 
         //Re-point baseKeys' Registration to the federation-bearing record so
         //test code that reaches through baseKeys.Registration sees the same
@@ -1193,12 +1343,14 @@ internal sealed class TestHostShell: IAsyncDisposable
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("Phase 2 does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             memoryPool: BaseMemoryPool.Shared,
@@ -1293,18 +1445,21 @@ internal sealed class TestHostShell: IAsyncDisposable
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("HTTP-backed factory does not exercise dynamic registration parse."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             memoryPool: BaseMemoryPool.Shared,
             timeProvider: Time,
             fillEntropy: ClientEntropy,
-            generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared));
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared),
+            outboundFetchPolicy: LoopbackOutboundFetchPolicy);
 
         ClientRegistration registration = new()
         {
@@ -1355,7 +1510,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             {
                 SendFormPost = (endpoint, fields, headers, _, ct) =>
                     HttpClientTransport.SendFormPostAsync(
-                        walletHttpClient, endpoint, fields, headers, ct)
+                        walletHttpClient, endpoint, fields, headers, ct),
+                OutboundFetchPolicy = LoopbackOutboundFetchPolicy
             };
 
         return new Oid4VpWalletClient(infrastructure, config);
@@ -1390,7 +1546,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             {
                 SendFormPost = (endpoint, fields, headers, _, ct) =>
                     HttpClientTransport.SendFormPostAsync(
-                        walletHttpClient, endpoint, fields, headers, ct)
+                        walletHttpClient, endpoint, fields, headers, ct),
+                OutboundFetchPolicy = LoopbackOutboundFetchPolicy
             };
 
         return new Oid4VpWalletClient(infrastructure, config);
@@ -1422,7 +1579,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         Oid4VpWalletConfiguration config =
             BuildSlimOid4VpWalletConfiguration(produceVpTokenPresentations, verifierSigningKeyResolver) with
             {
-                SendFormPost = GuardedHttpClientTransport.BuildGuardedFormPost(walletHttpClient)
+                SendFormPost = GuardedHttpClientTransport.BuildGuardedFormPost(walletHttpClient),
+                OutboundFetchPolicy = LoopbackOutboundFetchPolicy
             };
 
         return new Oid4VpWalletClient(infrastructure, config);
@@ -1742,7 +1900,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// The registration's issuer authority now equals the wire authority — both are the same
     /// <c>https://127.0.0.1:{port}</c> host — so <see cref="DefaultIssuerResolver"/>'s RFC 9207 §2 /
     /// RFC 8414 §2 https-shape gate and the RFC 9449 §4.2 <c>htu</c> comparison are satisfied by
-    /// construction, with no application-supplied <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+    /// construction, with no application-supplied <c>AuthorizationServerIntegration.ResolveIssuerAsync</c>
     /// override needed.
     /// </remarks>
     internal ClientRecord AlignRegistrationToHostHttpBase(string hostName, ClientRecord record)
@@ -1854,11 +2012,13 @@ internal sealed class TestHostShell: IAsyncDisposable
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) => ParseRegistrationResponseJson(body),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             memoryPool: BaseMemoryPool.Shared,
@@ -1877,11 +2037,15 @@ internal sealed class TestHostShell: IAsyncDisposable
                     WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
                     WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration);
 
+                await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
+                ExchangeContext createContext = [];
+                createContext.SetIssuer(IssuerUri);
                 ServerHttpResponse response = await RegistrationEndpoints.HandleCreateAsync(
                     tenantId,
                     jsonBody,
                     capabilities,
-                    [],
+                    createContext,
                     Server,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -1908,7 +2072,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Resolves the registration by tenant segment from the URL path, builds
     /// an <see cref="IncomingRequest"/> carrying the Authorization header
     /// (and the request body for PUT), then dispatches via
-    /// <see cref="AuthorizationServer.DispatchAsync"/>.
+    /// <c>AuthorizationServer.DispatchAsync</c>.
     /// </summary>
     private async ValueTask<HttpResponseData> DispatchManagementAsync(
         Uri endpoint,
@@ -1920,15 +2084,6 @@ internal sealed class TestHostShell: IAsyncDisposable
         string path = endpoint.IsAbsoluteUri ? endpoint.AbsolutePath : endpoint.OriginalString;
 
         string segment = LookupTransport.ExtractTenantSegmentForTests(path);
-        if(!Registrations.TryGetValue(segment, out ClientRecord? registration))
-        {
-            return new HttpResponseData
-            {
-                StatusCode = 404,
-                Body = $"No registration found for segment '{segment}'."
-            };
-        }
-
         Dictionary<string, string[]> headerDict = new(StringComparer.OrdinalIgnoreCase);
         foreach(KeyValuePair<string, string> pair in headers.Values)
         {
@@ -1957,7 +2112,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(IssuerUri);
-        context.SetRegistration(registration);
+
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await Server.DispatchAsync(
             request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -2232,6 +2388,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
 
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         ServerHttpResponse response = await Server.DispatchAsync(
             request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -2256,7 +2414,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// SIOPv2 request preparation — creates a new Relying-Party flow. Sets the transaction
     /// inputs (nonce, client_id, accepted algorithms) on the context bag and dispatches the
-    /// preparation endpoint, mirroring <see cref="HandleParAsync"/>. Returns the per-flow request
+    /// preparation endpoint, mirroring <see cref="HandleParAsync(VerifierKeyMaterial, TransactionNonce, PreparedDcqlQuery, CancellationToken)"/>. Returns the per-flow request
     /// handle the Wallet echoes as <c>state</c> on its Self-Issued ID Token response. The internal
     /// flow identifier never leaves this method.
     /// </summary>
@@ -2361,7 +2519,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         //The preparation endpoint is invoked internally by the RP app — not from a wire HTTP
         //request. The matcher reads context (the siop.nonce slot) and ignores path and fields.
         //IncomingRequest is constructed for protocol-uniformity; its Path is the canonical
-        ///siop_request template substituted with the segment.
+        // /siop_request template substituted with the segment.
         string segment = keyMaterial.Registration.TenantId.Value;
         string preparationPath = TestHostShell.ComposeEndpointPath(
             WellKnownEndpointNames.SiopRequestObject, segment);
@@ -2372,6 +2530,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
+
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await Server.DispatchAsync(
             request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -2426,6 +2586,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
 
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         ServerHttpResponse response = await Server.DispatchAsync(
             request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -2444,7 +2606,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// OID4VP JAR request — fetches the signed JAR for a continuing flow.
     /// The <paramref name="externalToken"/> is the opaque token from
-    /// <see cref="HandleParAsync"/>, not the internal flow identifier.
+    /// <see cref="HandleParAsync(VerifierKeyMaterial, TransactionNonce, PreparedDcqlQuery, CancellationToken)"/>, not the internal flow identifier.
     /// </summary>
     public async Task<string> HandleJarRequestAsync(
         VerifierKeyMaterial keyMaterial,
@@ -2470,6 +2632,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
+
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await Server.DispatchAsync(
             request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -2525,6 +2689,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
 
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         ServerHttpResponse response = await Server.DispatchAsync(
             request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -2542,7 +2708,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// OID4VP direct_post — posts the encrypted VP token response.
     /// The <paramref name="externalToken"/> is the opaque token from
-    /// <see cref="HandleParAsync"/>, not the internal flow identifier.
+    /// <see cref="HandleParAsync(VerifierKeyMaterial, TransactionNonce, PreparedDcqlQuery, CancellationToken)"/>, not the internal flow identifier.
     /// </summary>
     public async Task<PresentationVerifiedState> HandleDirectPostAsync(
         VerifierKeyMaterial keyMaterial,
@@ -2574,6 +2740,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             Fields: fields,
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
+
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await Server.DispatchAsync(
             request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -2651,6 +2819,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         CancellationToken cancellationToken)
     {
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2659,7 +2829,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// Test-side convenience: dispatches a request at the URL the
     /// application's
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// resolves for <paramref name="endpointName"/> and
     /// <paramref name="segment"/>, builds the <see cref="IncomingRequest"/>
     /// from that URL's <see cref="Uri.AbsolutePath"/> plus the supplied HTTP
@@ -2669,7 +2839,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <remarks>
     /// Routing through <c>ResolveEndpointUriAsync</c> means tests exercise
     /// the same URL-resolution path the production AS uses. The
-    /// <see cref="ResolveEndpointUriAsync"/> lambda wired in this fixture is
+    /// <c>ResolveEndpointUriAsync</c> lambda wired in this fixture is
     /// the single test-side source of URL shape; changes to URL shape happen
     /// there, not in every test.
     /// </remarks>
@@ -2727,6 +2897,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2776,6 +2948,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2823,6 +2997,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2860,6 +3036,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2893,6 +3071,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2928,6 +3108,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2976,6 +3158,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -3008,6 +3192,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -3040,6 +3226,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -3084,6 +3272,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -3127,6 +3317,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -3172,6 +3364,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -3221,6 +3415,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         context.SetTenantId(segment);
+        await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
+
         return await Server.DispatchAsync(request, context, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -3228,20 +3424,10 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Deregisters a client by endpoint segment and emits a
-    /// <see cref="ClientDeregistered"/> event.
+    /// <see cref="ClientDeregistered"/> event, through <see cref="DeregisterAsync"/>.
     /// </summary>
-    public void DeregisterClient(string segment, string reason)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
-        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
-
-        if(!Registrations.TryGetValue(segment, out ClientRecord? registration))
-        {
-            return;
-        }
-
-        Server.DeregisterClient(registration, reason, []);
-    }
+    public Task DeregisterClientAsync(string segment, string reason, CancellationToken cancellationToken = default) =>
+        DeregisterAsync(segment, reason, "default", cancellationToken);
 
 
     /// <summary>
@@ -3252,7 +3438,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// The old signing key remains in the key store so in-flight flows that were
     /// signed with it can still be verified.
     /// </remarks>
-    public VerifierKeyMaterial RotateSigningKey(string segment)
+    public async Task<VerifierKeyMaterial> RotateSigningKeyAsync(string segment)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segment);
 
@@ -3300,11 +3486,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             ClientMetadata = newMetadata
         };
 
-        //Update the routing table directly — the observer also handles this
-        //via the ClientUpdated event, but explicit update ensures consistency.
-        Registrations[segment] = updated;
-
-        Server.UpdateClient(previous, updated, []);
+        updated = await Default.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
 
         return new VerifierKeyMaterial(
             updated,
@@ -3320,12 +3502,12 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Generates a fresh P-256 signing key pair, stores it under a new <see cref="KeyId"/>,
     /// and returns that identifier. Does not modify any registration — the caller
     /// decides which rotation slot the new key enters and calls
-    /// <see cref="UpdateSigningKeys"/> to apply the change.
+    /// <see cref="UpdateSigningKeysAsync"/> to apply the change.
     /// </summary>
     /// <remarks>
     /// Used by rotation tests that need fine-grained control over which slot a new
     /// key lands in (Incoming, Current, Retiring, Historical). The more coarse
-    /// <see cref="RotateSigningKey"/> allocates and installs in a single step.
+    /// <see cref="RotateSigningKeyAsync"/> allocates and installs in a single step.
     /// </remarks>
     public KeyId AllocateSigningKey()
     {
@@ -3343,14 +3525,14 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// Replaces the <see cref="ClientRecord.SigningKeys"/> map for the given
     /// segment, then re-publishes the updated registration through the server's
-    /// <see cref="AuthorizationServer.UpdateClient"/> so a <c>ClientUpdated</c>
+    /// <see cref="HostedAuthorizationServer.UpdateClientAsync"/> so a <c>ClientUpdated</c>
     /// event is emitted. Used by rotation tests to inject Incoming, Retiring,
     /// and Historical slot configurations without going through the full
-    /// <see cref="RotateSigningKey"/> path.
+    /// <see cref="RotateSigningKeyAsync"/> path.
     /// </summary>
     /// <param name="segment">The endpoint segment identifying the registration to update.</param>
     /// <param name="signingKeys">The complete <see cref="SigningKeySet"/> map replacing the current one.</param>
-    public void UpdateSigningKeys(
+    public async Task UpdateSigningKeysAsync(
         string segment,
         IReadOnlyDictionary<KeyUsageContext, SigningKeySet> signingKeys)
     {
@@ -3368,8 +3550,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             SigningKeys = signingKeys.ToImmutableDictionary()
         };
 
-        Registrations[segment] = updated;
-        Server.UpdateClient(previous, updated, []);
+        _ = await Default.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
     }
 
 
@@ -3378,12 +3559,12 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// default. Allows AuthorizationCode + PushedAuthorization capabilities so
     /// the canonical token-endpoint DPoP enforcement path is reachable.
     /// </summary>
-    public VerifierKeyMaterial RegisterDpopClient(
+    public async Task<VerifierKeyMaterial> RegisterDpopClientAsync(
         string clientId,
         Uri baseUri,
         PolicyProfile? profile = null,
         ImmutableHashSet<CapabilityIdentifier>? capabilities = null) =>
-        RegisterDpopClientOnHost("default", clientId, baseUri, profile, capabilities);
+        await RegisterDpopClientOnHostAsync("default", clientId, baseUri, profile, capabilities).ConfigureAwait(false);
 
 
     /// <summary>
@@ -3392,7 +3573,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// this overload to put the registration and its key material on the right
     /// host's per-host dictionaries.
     /// </summary>
-    public VerifierKeyMaterial RegisterDpopClientOnHost(
+    public async Task<VerifierKeyMaterial> RegisterDpopClientOnHostAsync(
         string hostName,
         string clientId,
         Uri baseUri,
@@ -3414,6 +3595,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
 
         string segment = Guid.NewGuid().ToString("N")[..8];
+        string handle = $"handle-{Guid.NewGuid().ToString("N")[..8]}";
         KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair =
@@ -3432,6 +3614,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             ClientId = clientId,
             TenantId = segment,
+            TenantHandle = handle,
             IssuerUri = new Uri($"https://issuer.test/{segment}"),
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = ImmutableHashSet.Create(
@@ -3460,13 +3643,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             Profile = profile ?? PolicyProfile.Haip10
         };
 
-        host.Registrations[segment] = registration;
-        host.Registrations[clientId] = registration;
 
-        host.Server.RegisterClient(
+        await host.RegisterClientAsync(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            []);
+            []).ConfigureAwait(false);
 
         return new VerifierKeyMaterial(
             registration,
@@ -3484,10 +3665,10 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <see cref="ClientRecord.TokenLifetimes"/>. Credential-issuing flows that mint a plain
     /// bearer Access Token use this to stay within the OID4VCI 1.0 §13.10 long-lived threshold:
     /// "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
-    /// sender-constrained." Updates the per-host registration table and re-emits the registration
-    /// event so the routing table re-syncs against the lifetime-bearing record.
+    /// sender-constrained." The required store conditionally replaces both routing indexes and
+    /// advances the loaded revision before emitting the immutable update notification.
     /// </summary>
-    public void SetAccessTokenLifetime(VerifierKeyMaterial material, TimeSpan lifetime, string hostName = "default")
+    public async Task SetAccessTokenLifetimeAsync(VerifierKeyMaterial material, TimeSpan lifetime, string hostName = "default")
     {
         ArgumentNullException.ThrowIfNull(material);
         ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
@@ -3513,10 +3694,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             TokenLifetimes = lifetimes
         };
 
-        host.Registrations[segment] = updated;
-        host.Registrations[updated.ClientId] = updated;
 
-        host.Server.UpdateClient(previous, updated, []);
+
+        updated = await host.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
 
         material.Registration = updated;
     }
@@ -3528,9 +3708,9 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <paramref name="allowedTypes"/> on <see cref="ClientRecord.AllowedAuthorizationDetailsTypes"/>.
     /// Drives the per-client gate that refuses an authorization details object whose <c>type</c>
     /// is outside the registered set. Uses the same register-then-upgrade pattern as
-    /// <see cref="SetAccessTokenLifetime"/>, because the routing dictionaries are host-internal.
+    /// <see cref="SetAccessTokenLifetimeAsync"/>, because the routing dictionaries are host-internal.
     /// </summary>
-    public void SetAllowedAuthorizationDetailsTypes(
+    public async Task SetAllowedAuthorizationDetailsTypesAsync(
         VerifierKeyMaterial material,
         ImmutableHashSet<string> allowedTypes,
         string hostName = "default")
@@ -3553,10 +3733,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             AllowedAuthorizationDetailsTypes = allowedTypes
         };
 
-        host.Registrations[segment] = updated;
-        host.Registrations[updated.ClientId] = updated;
 
-        host.Server.UpdateClient(previous, updated, []);
+
+        updated = await host.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
 
         material.Registration = updated;
     }
@@ -3570,9 +3749,9 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// redirect fallback's public-client gate: <see langword="null"/> exercises the public-client
     /// path (no declared <c>token_endpoint_auth_method</c>), and any other value proves the
     /// fallback stays off for a confidential client. Uses the same register-then-upgrade pattern
-    /// as <see cref="SetAccessTokenLifetime"/>, because the routing dictionaries are host-internal.
+    /// as <see cref="SetAccessTokenLifetimeAsync"/>, because the routing dictionaries are host-internal.
     /// </summary>
-    public void SetRedirectUrisAndAuthMethod(
+    public async Task SetRedirectUrisAndAuthMethodAsync(
         VerifierKeyMaterial material,
         ImmutableHashSet<Uri> redirectUris,
         ClientAuthenticationMethod? tokenEndpointAuthMethod,
@@ -3597,10 +3776,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             TokenEndpointAuthMethod = tokenEndpointAuthMethod
         };
 
-        host.Registrations[segment] = updated;
-        host.Registrations[updated.ClientId] = updated;
 
-        host.Server.UpdateClient(previous, updated, []);
+
+        updated = await host.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
 
         material.Registration = updated;
     }
@@ -3615,9 +3793,9 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCRegistration">OIDC Back-Channel Logout 1.0 §2.2</see>).
     /// </summary>
     /// <remarks>
-    /// Builds the baseline registration via <see cref="RegisterDpopClient"/>, then
+    /// Builds the baseline registration via <see cref="RegisterDpopClientAsync"/>, then
     /// re-stores it with <see cref="ClientRecord.BackchannelLogoutUri"/> populated — the
-    /// same register-then-upgrade pattern <see cref="RegisterFederationCapableClient"/>
+    /// same register-then-upgrade pattern <see cref="RegisterFederationCapableClientAsync"/>
     /// uses, because the routing dictionaries are host-internal.
     /// </remarks>
     /// <param name="clientId">The OAuth client identifier.</param>
@@ -3625,7 +3803,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="backchannelLogoutUri">The RP's back-channel logout receiver URI.</param>
     /// <param name="capabilities">The capabilities this RP is allowed to use.</param>
     /// <returns>The RP's key material, with <see cref="VerifierKeyMaterial.Registration"/> pointing at the upgraded record.</returns>
-    public VerifierKeyMaterial RegisterBackChannelLogoutClient(
+    public async Task<VerifierKeyMaterial> RegisterBackChannelLogoutClientAsync(
         string clientId,
         Uri baseUri,
         Uri backchannelLogoutUri,
@@ -3636,21 +3814,15 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(backchannelLogoutUri);
         ArgumentNullException.ThrowIfNull(capabilities);
 
-        VerifierKeyMaterial material = RegisterDpopClient(
-            clientId, baseUri, PolicyProfile.Rfc6749WithPkce, capabilities);
+        VerifierKeyMaterial material = await RegisterDpopClientAsync(
+            clientId, baseUri, PolicyProfile.Rfc6749WithPkce, capabilities).ConfigureAwait(false);
 
         ClientRecord updated = material.Registration with
         {
             BackchannelLogoutUri = backchannelLogoutUri
         };
 
-        string segment = updated.TenantId.Value;
-        Registrations[segment] = updated;
-        Registrations[clientId] = updated;
-        Server.RegisterClient(
-            updated,
-            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            []);
+        updated = await Default.UpdateClientAsync(material.Registration, updated, []).ConfigureAwait(false);
         material.Registration = updated;
 
         return material;
@@ -3664,7 +3836,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// keyset so tests can drive slot transitions. Idempotent — repeat
     /// calls reuse the existing keyset.
     /// </summary>
-    public InProcessKeySet EnableDpop(string initialKid = "test-hmac-1")
+    public async Task<InProcessKeySet> EnableDpopAsync(string initialKid = "test-hmac-1")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(initialKid);
 
@@ -3678,47 +3850,58 @@ internal sealed class TestHostShell: IAsyncDisposable
         DpopHmacKeySet = new InProcessKeySet();
         DpopHmacKeySet.AddCurrent(initialKidValue, hmacMaterial);
 
-        Server.OAuth().ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
-            ValueTask.FromResult(DpopHmacKeySet!.ResolveMaterial(kid));
-        Server.OAuth().GetHmacKeySetAsync = (tenantId, ctx, ct) =>
-            ValueTask.FromResult(DpopHmacKeySet!.Snapshot());
-        Server.OAuth().ValidateDpopProofAsync = (request, ct) =>
-            DpopProofValidator.ValidateAsync(
-                request,
-                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
-                DpopTestSupport.Parser,
-                Base64UrlEncoder,
-                Base64UrlDecoder,
-                Time,
-                MemoryPool,
-                iatSkew: WellKnownDpopValues.DefaultIatSkew,
-                cancellationToken: ct);
-        Server.OAuth().IssueDpopNonceAsync = (audience, tenantId, ctx, ct) =>
-            DefaultDpopNonceIssuance.IssueAsync(
-                audience,
-                tenantId,
-                ctx,
-                Server.OAuth().GetHmacKeySetAsync!,
-                Server.OAuth().SelectHmacKeyAsync,
-                Server.OAuth().ResolveServerHmacKeyAsync!,
-                Time,
-                Base64UrlEncoder,
-                System.Security.Cryptography.RandomNumberGenerator.Fill,
-                MemoryPool,
-                ct);
-        Server.OAuth().ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) =>
-            DefaultDpopNonceValidation.ValidateAsync(
-                presented,
-                audience,
-                tenantId,
-                ctx,
-                Server.OAuth().GetHmacKeySetAsync!,
-                Server.OAuth().ResolveServerHmacKeyAsync!,
-                Time,
-                WellKnownDpopValues.DefaultNonceValidityWindow,
-                Base64UrlDecoder,
-                MemoryPool,
-                ct);
+        await AlterAsync(Server, integration =>
+        {
+            integration.ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
+                ValueTask.FromResult(DpopHmacKeySet!.ResolveMaterial(kid));
+            integration.GetHmacKeySetAsync = (tenantId, ctx, ct) =>
+                ValueTask.FromResult(DpopHmacKeySet!.Snapshot());
+            integration.ValidateDpopProofAsync = (request, ct) =>
+                DpopProofValidator.ValidateAsync(
+                    request,
+                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+                    DpopTestSupport.Parser,
+                    Base64UrlEncoder,
+                    Base64UrlDecoder,
+                    Time,
+                    MemoryPool,
+                    iatSkew: WellKnownDpopValues.DefaultIatSkew,
+                    cancellationToken: ct);
+            integration.IssueDpopNonceAsync = (audience, tenantId, ctx, ct) =>
+                DefaultDpopNonceIssuance.IssueAsync(
+                    audience,
+                    tenantId,
+                    ctx,
+                    ctx.RequestServer!.OAuth().GetHmacKeySetAsync!,
+                    ctx.RequestServer!.OAuth().SelectHmacKeyAsync,
+                    ctx.RequestServer!.OAuth().ResolveServerHmacKeyAsync!,
+                    Time,
+                    Base64UrlEncoder,
+                    destination =>
+                    {
+                        (Nonce nonce, _) = MicrosoftEntropyFunctionsAdapter.GenerateNonce(
+                            destination.Length, Tag.Create(Purpose.Nonce).With(EntropySource.Csprng), MemoryPool);
+                        using(nonce)
+                        {
+                            nonce.UseNonce().CopyTo(destination);
+                        }
+                    },
+                    MemoryPool,
+                    ct);
+            integration.ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) =>
+                DefaultDpopNonceValidation.ValidateAsync(
+                    presented,
+                    audience,
+                    tenantId,
+                    ctx,
+                    ctx.RequestServer!.OAuth().GetHmacKeySetAsync!,
+                    ctx.RequestServer!.OAuth().ResolveServerHmacKeyAsync!,
+                    Time,
+                    WellKnownDpopValues.DefaultNonceValidityWindow,
+                    Base64UrlDecoder,
+                    MemoryPool,
+                    ct);
+        }).ConfigureAwait(false);
 
         return DpopHmacKeySet;
     }
@@ -3727,7 +3910,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// Convenience for tests: rotate the DPoP HMAC key by adding a new
     /// Incoming key, promoting it to Current, and retiring the previous
-    /// Current keys. Returns the new key's kid. <see cref="EnableDpop"/>
+    /// Current keys. Returns the new key's kid. <see cref="EnableDpopAsync"/>
     /// must have been called first.
     /// </summary>
     public KeyId RotateDpopHmacKey(string newKid)
@@ -3805,7 +3988,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         SymmetricKeyMemory material;
         try
         {
-            RandomNumberGenerator.Fill(owner.Memory.Span[..32]);
+            FillEntropyDelegate fillEntropy = RandomNumberGenerator.Fill;
+            fillEntropy(owner.Memory.Span[..32]);
             material = new SymmetricKeyMemory(owner, CryptoTags.HmacSha256Key);
         }
         catch
@@ -3893,12 +4077,14 @@ internal sealed class TestHostShell: IAsyncDisposable
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("DPoP gate test does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: Base64UrlEncoder,
             memoryPool: BaseMemoryPool.Shared,
@@ -4007,18 +4193,21 @@ internal sealed class TestHostShell: IAsyncDisposable
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("HTTP-backed DPoP factory does not exercise dynamic registration parse."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: Base64UrlEncoder,
             memoryPool: BaseMemoryPool.Shared,
             timeProvider: Time,
             fillEntropy: ClientEntropy,
             generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared),
+            outboundFetchPolicy: LoopbackOutboundFetchPolicy,
             constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
                 claims,
                 key,
@@ -4077,7 +4266,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// Starts an in-process HTTPS listener bound to loopback on an
     /// OS-assigned ephemeral port and maps inbound requests to
-    /// <see cref="AuthorizationServer.DispatchAsync"/> via
+    /// <c>AuthorizationServer.DispatchAsync</c> via
     /// <see cref="AuthorizationServerHttpApplication"/>.
     /// Idempotent — repeat calls return without re-binding.
     /// </summary>
@@ -4090,6 +4279,239 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </remarks>
     public Task StartHttpHostAsync(CancellationToken cancellationToken = default) =>
         StartHttpHostAsync("default", cancellationToken);
+
+
+    /// <summary>Validates construction wiring through the same operation that changes a serving host.</summary>
+    /// <param name="server">The host being prepared for requests.</param>
+    /// <param name="cancellationToken">Cancellation before publication.</param>
+    public static async Task PrepareServingAsync(EndpointServer server, CancellationToken cancellationToken)
+    {
+        if(!server.IsValidated)
+        {
+            await server.RequestAlterationAsync(_ => { }, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+
+    /// <summary>Builds an unattached authorization family with a fresh event stream and the host's required operations.</summary>
+    /// <param name="source">The host wiring supplying delegate values and application resources.</param>
+    public static AuthorizationServerIntegration CreateFreshAuthorizationIntegration(AuthorizationServerIntegration source)
+    {
+
+        return new AuthorizationServerIntegration
+        {
+            MemoryPool = source.MemoryPool,
+            Cryptography = (AuthorizationServerCryptography)source.Cryptography.CreateCandidateCopy(),
+            Codecs = (AuthorizationServerCodecs)source.Codecs.CreateCandidateCopy(),
+            ExtractTenantIdAsync = source.ExtractTenantIdAsync,
+            LoadRegistrationAsync = source.LoadRegistrationAsync,
+            SaveFlowStateAsync = source.SaveFlowStateAsync,
+            LoadFlowStateAsync = source.LoadFlowStateAsync,
+            LoadGrantFlowStatesAsync = source.LoadGrantFlowStatesAsync,
+            ClaimFlowStateAsync = source.ClaimFlowStateAsync,
+            DeleteFlowStateAsync = source.DeleteFlowStateAsync,
+            ResolvePolicyAsync = source.ResolvePolicyAsync,
+            ResolveCapabilitiesAsync = source.ResolveCapabilitiesAsync,
+            InspectAsync = source.InspectAsync,
+            GenerateIdentifierAsync = source.GenerateIdentifierAsync,
+            ResolveEndpointUriAsync = source.ResolveEndpointUriAsync,
+            ResolveSubjectIdentifierAsync = source.ResolveSubjectIdentifierAsync,
+            ResolveIssuerAsync = source.ResolveIssuerAsync,
+            ParseClientMetadataAsync = source.ParseClientMetadataAsync,
+            ClientRegistrationStore = source.ClientRegistrationStore,
+            ContributeDiscoveryFieldsAsync = source.ContributeDiscoveryFieldsAsync
+        };
+    }
+
+
+    /// <summary>Creates a structural verification record carrying the selected schema registry.</summary>
+    /// <param name="schemas">The registry whose candidate adoption is exercised.</param>
+    public static VcalmCredentialVerification CreateSchemaVerification(VcalmSchemaValidatorRegistry schemas)
+    {
+
+        return new VcalmCredentialVerification
+        {
+            Resolver = null!,
+            Canonicalize = null!,
+            KnownContext = null!,
+            DecodeProofValue = null!,
+            SerializeCredential = null!,
+            SerializePresentation = null!,
+            SerializeProofOptions = null!,
+            Decoder = null!,
+            ComputeDigest = null!,
+            MemoryPool = BaseMemoryPool.Shared,
+            SchemaValidators = schemas
+        };
+    }
+
+
+    /// <summary>Creates ordinary host seams whose wire requests deliberately have no tenant.</summary>
+    /// <param name="source">The valid storage and routing delegates supplying structural wiring.</param>
+    public static ServerIntegration CreateNeutralIntegration(ServerIntegration source)
+    {
+
+        return new ServerIntegration
+        {
+            ExtractTenantIdAsync = (_, _) => ValueTask.FromResult<TenantId?>(null),
+            LoadRegistrationAsync = source.LoadRegistrationAsync,
+            SaveFlowStateAsync = source.SaveFlowStateAsync,
+            LoadFlowStateAsync = source.LoadFlowStateAsync,
+            ClaimFlowStateAsync = source.ClaimFlowStateAsync,
+            DeleteFlowStateAsync = source.DeleteFlowStateAsync,
+            ResolvePolicyAsync = source.ResolvePolicyAsync,
+            ResolveCapabilitiesAsync = source.ResolveCapabilitiesAsync,
+            InspectAsync = (_, _, _) => ValueTask.CompletedTask,
+            GenerateIdentifierAsync = source.GenerateIdentifierAsync,
+            ResolveEndpointUriAsync = source.ResolveEndpointUriAsync
+        };
+    }
+
+
+    /// <summary>Supplies an unexpected state to the actual JAR response builder during listener dispatch.</summary>
+    /// <param name="candidate">The candidate receiving the response-state stimulus.</param>
+    /// <param name="unexpected">The state whose type must stay off the wire.</param>
+    public static void UseUnexpectedJarResponseState(AlterationCandidate candidate, FlowState unexpected)
+    {
+        candidate.Configuration = candidate.Configuration with
+        {
+            EndpointBuilders = new EndpointBuilderSet([async (registration, context, ct) =>
+            {
+                IReadOnlyList<EndpointCandidate> endpoints = await Oid4VpEndpoints.Builder(registration, context, ct).ConfigureAwait(false);
+
+                return endpoints.Select(endpoint => endpoint.Name == WellKnownEndpointNames.Oid4VpJarRequest
+                    ? endpoint with { BuildResponse = (_, kind, ctx) => endpoint.BuildResponse(unexpected, kind, ctx) }
+                    : endpoint).ToArray();
+            }])
+        };
+    }
+
+
+    /// <summary>A host-owned resource whose disposal can be observed after a teardown fault.</summary>
+    internal sealed class DisposalProbe: IDisposable
+    {
+        /// <summary>Whether the owning host has released this resource.</summary>
+        public bool IsDisposed { get; private set; }
+
+
+        /// <summary>Marks the host-owned resource as released.</summary>
+        public void Dispose()
+        {
+            IsDisposed = true;
+        }
+    }
+
+
+    /// <summary>Adds a disposal probe to the host's transport-resource ownership.</summary>
+    public DisposalProbe ObserveTransportDisposal()
+    {
+        DisposalProbe probe = new();
+        TransportOwnedDisposables.Add(probe);
+
+        return probe;
+    }
+
+
+    /// <summary>A worker observation that waits until the actual drain continuation has been registered.</summary>
+    internal sealed class DrainCheckpoint
+    {
+        /// <summary>The task carrying the worker's actual wait, independent of callback scheduling.</summary>
+        private TaskCompletionSource<Task> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+
+        /// <summary>Observes the next drain on the supplied serving owner.</summary>
+        /// <param name="server">The serving owner whose worker is observed.</param>
+        public DrainCheckpoint(EndpointServer server)
+        {
+            server.DrainWaitStarted = wait => Entered.TrySetResult(wait);
+        }
+
+
+        /// <summary>Whether the observed continuation is parked before request release.</summary>
+        public bool IsParked { get; private set; }
+
+
+        /// <summary>Waits for the checkpoint or completed publication before the request can continue.</summary>
+        /// <param name="alteration">The publication task whose completed wait must finish before continuation.</param>
+        /// <param name="cancellationToken">The bounded test lifetime.</param>
+        public async Task ReachAsync(Task alteration, CancellationToken cancellationToken)
+        {
+            Task wait = await Entered.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            IsParked = !wait.IsCompleted;
+            if(wait.IsCompleted)
+            {
+                await alteration.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+
+    /// <summary>Reads key identifiers from the actual pinned JWKS response.</summary>
+    /// <param name="segment">The registration's tenant segment.</param>
+    /// <param name="cancellationToken">The bounded request lifetime.</param>
+    public async Task<string[]> FetchJwksKidsOverWireAsync(string segment, CancellationToken cancellationToken)
+    {
+        await StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        Uri uri = new(Host("default").HttpBaseAddress!, ComposeEndpointPath(WellKnownEndpointNames.MetadataJwks, segment));
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(this, uri, "key-subject", cancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+
+        return [.. document.RootElement.GetProperty("keys").EnumerateArray().Select(key => key.GetProperty("kid").GetString()!)];
+    }
+
+
+    /// <summary>A secondary fixture family whose bounded traversal faults exercise worker containment.</summary>
+    internal sealed class TraversalFaultIntegration: ServerIntegration
+    {
+        /// <summary>The remaining traversal faults, an Interlocked target shared with the worker thread.</summary>
+        private int remainingFaults;
+
+
+        /// <summary>Arms two traversal failures so publication and final freezing both fail.</summary>
+        public void RefuseTwoTraversals()
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                _ = Interlocked.Exchange(ref remainingFaults, 2);
+            }
+        }
+
+
+        /// <summary>Throws the armed faults, then exposes an empty child graph for disposal.</summary>
+        protected override IEnumerable<WiringComponent> Children
+        {
+            get
+            {
+                if(Interlocked.Decrement(ref remainingFaults) >= 0)
+                {
+                    throw new InvalidOperationException("Deliberate component traversal failure.");
+                }
+
+                return [];
+            }
+        }
+    }
+
+
+    /// <summary>Applies fixture construction edits or requests one coherent serving alteration.</summary>
+    /// <param name="server">The fixture server.</param>
+    /// <param name="alter">The coupled authorization wiring edits.</param>
+    public static async Task AlterAsync(EndpointServer server, Action<AuthorizationServerIntegration> alter)
+    {
+        await server.RequestAlterationAsync(candidate => alter(candidate.Family<AuthorizationServerIntegration>())).ConfigureAwait(false);
+    }
+
+
+    /// <summary>Publishes a coherent family alteration and completes when it is applied.</summary>
+    /// <param name="server">The host whose family wiring changes.</param>
+    /// <param name="alter">The edits applied to the independent family candidate.</param>
+    public static async Task AlterVcalmAsync(EndpointServer server, Action<VcalmIntegration> alter)
+    {
+        await server.RequestAlterationAsync(candidate => alter(candidate.Family<VcalmIntegration>())).ConfigureAwait(false);
+    }
 
 
     /// <summary>
@@ -4108,6 +4530,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             return;
         }
 
+        if(!host.IsUnvalidatedListenerAllowed)
+        {
+            await PrepareServingAsync(host.Server, cancellationToken).ConfigureAwait(false);
+        }
+
         X509Certificate2 hostCertificate = HostCertificate(hostName);
 
         global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder =
@@ -4121,11 +4548,12 @@ internal sealed class TestHostShell: IAsyncDisposable
         //127.0.0.1 explicitly. A single explicit HTTPS Listen call — no UseUrls — so there is no
         //plaintext fallback on this host at all.
         _ = builder.WebHost.ConfigureKestrel(options =>
-            LoopbackKestrel.ConfigureLoopbackListener(options, hostCertificate));
+            LoopbackKestrel.ConfigureLoopbackListener(options, hostCertificate, host.ConnectionMiddleware));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
-        AuthorizationServerHttpApplication application = new(host.Server);
+        AuthorizationServerHttpApplication application = new(
+            host.Server, host.HttpFaults, requestArriving: () => host.RequestArriving?.Invoke() ?? Task.CompletedTask, host: host);
         app.Run(application.ProcessRequestAsync);
 
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -4168,6 +4596,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             return;
         }
 
+        if(!host.IsUnvalidatedListenerAllowed)
+        {
+            await PrepareServingAsync(host.Server, cancellationToken).ConfigureAwait(false);
+        }
+
         X509Certificate2 hostCertificate = HostCertificate(hostName);
 
         global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder =
@@ -4208,6 +4641,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         }
 
         Disposed = true;
+        List<Exception> faults = [];
 
         //Iterate every host so multi-host topologies (Verifier + Federation
         //Anchor + ...) tear down their Kestrel listeners, HttpClients, and
@@ -4225,6 +4659,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                 host.HttpHost = null;
             }
 
+            faults.AddRange(host.HttpFaults);
             host.EventSubscription?.Dispose();
             host.EventSubscription = null;
 
@@ -4262,6 +4697,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         }
 
         serverCertificate?.Dispose();
+
+        Assert.IsEmpty(faults, "Every captured HTTP fault must be consumed by its owning test.");
     }
 
 
@@ -4269,7 +4706,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Composes the absolute path for a
     /// <see cref="WellKnownEndpointNames"/> role at a given tenant segment,
     /// using the same path scheme the
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// lambda this fixture wires produces. Use this from synchronous test
     /// code (registration construction, expected-URL builders) that needs
     /// the path without going through the async resolver.
@@ -4419,7 +4856,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         if(endpointName == WellKnownVcalmEndpointNames.VcalmCreateStatusList) { return "vcalm/status-lists"; }
         if(endpointName == WellKnownVcalmEndpointNames.VcalmGetStatusList) { return "vcalm/status-lists"; }
         //VCALM 1.0 §3.5 holder presentation paths. The §3.5.2 POST and §3.5.3 GET share the
-        ///presentations collection path (the matchers split by method); the §3.5.4 / §3.5.5 endpoints
+        // /presentations collection path (the matchers split by method); the §3.5.4 / §3.5.5 endpoints
         //resolve to the same collection path and the matcher extracts the trailing id segment.
         if(endpointName == WellKnownVcalmEndpointNames.VcalmCredentialsDerive) { return "vcalm/credentials/derive"; }
         if(endpointName == WellKnownVcalmEndpointNames.VcalmCreatePresentation) { return "vcalm/presentations"; }
@@ -4599,11 +5036,15 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
-    /// Resolves an issuer's public key from the trust store.
+    /// Resolves an issuer's public key from the pinned in-memory trust store, ignoring the header's
+    /// <c>kid</c>/<c>x5c</c> and the per-call context — every SD-JWT VC test registers its issuer's
+    /// key directly via <see cref="RegisterIssuerTrust"/> rather than serving JWT VC Issuer Metadata
+    /// or an <c>x5c</c> chain.
     /// </summary>
-    private PublicKeyMemory? ResolveIssuerKey(string issuerId)
+    private ValueTask<PublicKeyMemory?> ResolveIssuerKey(
+        string issuerId, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken cancellationToken)
     {
-        return IssuerTrustStore.GetValueOrDefault(issuerId);
+        return ValueTask.FromResult(IssuerTrustStore.GetValueOrDefault(issuerId));
     }
 
 

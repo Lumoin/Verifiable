@@ -1,11 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Resolvers;
+using Verifiable.Cryptography;
 using Verifiable.Cryptography.EventLogs;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -425,7 +425,8 @@ internal sealed class WebDidResolverTests
         {
             var documentUrl = resolution.DocumentUrl ?? resolution.ResolutionMetadata.Error?.Detail ?? string.Empty;
             var canonical = Encoding.UTF8.GetBytes(documentUrl);
-            var digest = (ReadOnlyMemory<byte>)SHA256.HashData(canonical);
+            using DigestValue digestValue = CryptographicKeyEvents.ComputeDigest(canonical, 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+            var digest = (ReadOnlyMemory<byte>)digestValue.AsReadOnlySpan().ToArray();
 
             var entry = new LogEntry<WebResolutionOperation, WebResolutionProof>
             {

@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -11,10 +12,16 @@ namespace Verifiable.Json.Converters
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For values whose types are not handled by an explicit case in the write switch — such as domain model
-    /// types placed directly into the dictionary — the converter delegates to <paramref name="resolver"/>.
-    /// This keeps the fallback path AOT-safe: no runtime reflection is used, and any unregistered type
-    /// produces a clear <see cref="NotSupportedException"/> pointing at the missing
+    /// A value whose runtime type is a non-string <see cref="IEnumerable"/> — an array, a
+    /// <see cref="List{T}"/>, or any other sequence, whatever its element type — writes as a JSON array
+    /// of its elements, each through the same write rules, whether or not that concrete sequence type
+    /// has a dedicated case in the write switch.
+    /// </para>
+    /// <para>
+    /// For values whose types are not handled by an explicit case or by that sequence rule — such as
+    /// domain model types placed directly into the dictionary — the converter delegates to the
+    /// <c>resolver</c>. This keeps the fallback path AOT-safe: no runtime reflection is used, and any
+    /// unregistered type produces a clear <see cref="NotSupportedException"/> pointing at the missing
     /// <c>[JsonSerializable]</c> annotation.
     /// </para>
     /// <para>
@@ -42,6 +49,22 @@ namespace Verifiable.Json.Converters
         }
 
 
+        /// <summary>
+        /// Reads a JSON object into a <see cref="Dictionary{TKey, TValue}"/>, recursing into nested
+        /// objects and arrays and preserving primitive value shapes (string, number, boolean, null).
+        /// </summary>
+        /// <param name="reader">The reader positioned at the JSON object's <c>StartObject</c> token.</param>
+        /// <param name="typeToConvert">The type being converted; unused, since this converter always
+        /// produces a <see cref="Dictionary{TKey, TValue}"/>.</param>
+        /// <param name="options">The active <see cref="JsonSerializerOptions"/>, passed through to
+        /// nested value extraction.</param>
+        /// <returns>The decoded dictionary.</returns>
+        /// <exception cref="JsonException">
+        /// The object is not well-formed, or repeats a member name at this or any nested depth
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>: "the behavior
+        /// of software that receives such an object is unpredictable") — a producer showing one reader
+        /// one value under a name and a differently-behaving reader another value under its repeat.
+        /// </exception>
         public override Dictionary<string, object> Read(ref Utf8JsonReader reader, Type? typeToConvert, JsonSerializerOptions options)
         {
             if(reader.TokenType != JsonTokenType.StartObject)
@@ -69,13 +92,25 @@ namespace Verifiable.Json.Converters
                 }
 
                 _ = reader.Read();
-                dic.Add(propertyName, ExtractValue(ref reader, options)!);
+                object? value = ExtractValue(ref reader, options);
+                if(!dic.TryAdd(propertyName, value!))
+                {
+                    throw new JsonException($"The JSON object repeats the member name '{propertyName}'.");
+                }
             }
 
             return dic;
         }
 
 
+        /// <summary>
+        /// Writes a <see cref="Dictionary{TKey, TValue}"/> as a JSON object, recursing into nested
+        /// values and falling back to the <c>resolver</c> for any value type without an explicit case.
+        /// </summary>
+        /// <param name="writer">The writer to emit the JSON object to.</param>
+        /// <param name="value">The dictionary to write.</param>
+        /// <param name="options">The active <see cref="JsonSerializerOptions"/>, passed through to
+        /// nested value writes.</param>
         public override void Write(Utf8JsonWriter writer, Dictionary<string, object> value, JsonSerializerOptions options)
         {
             ArgumentNullException.ThrowIfNull(writer);
@@ -91,6 +126,16 @@ namespace Verifiable.Json.Converters
         }
 
 
+        /// <summary>
+        /// Writes one dictionary value by its runtime shape: a primitive, one of the two dictionary
+        /// shapes, an <see cref="IList{T}"/> of <see cref="object"/>, a <see cref="JsonElement"/>, any
+        /// other non-string <see cref="IEnumerable"/> written as a JSON array of its own elements (each
+        /// through this same method), or, failing all of those, the <c>resolver</c>.
+        /// </summary>
+        /// <param name="writer">The writer to emit the value to.</param>
+        /// <param name="value">The value to write.</param>
+        /// <param name="options">The active <see cref="JsonSerializerOptions"/>, passed through to nested writes and the fallback.</param>
+        /// <exception cref="NotSupportedException"><paramref name="value"/>'s runtime type matches no explicit shape and the <c>resolver</c> has no <see cref="JsonTypeInfo"/> for it.</exception>
         private void WriteValue(Utf8JsonWriter writer, object? value, JsonSerializerOptions options)
         {
             _ = value switch
@@ -108,6 +153,7 @@ namespace Verifiable.Json.Converters
                 Dictionary<string, object> dict => WriteNestedDictionary(this, writer, dict, options),
                 IList<object> list => WriteList(this, writer, list, options),
                 JsonElement jsonElement => WriteElement(writer, jsonElement, options),
+                IEnumerable enumerable => WriteEnumerable(this, writer, enumerable, options),
                 _ => WriteFallback(Resolver, writer, value, options)
             };
 
@@ -206,6 +252,18 @@ namespace Verifiable.Json.Converters
                 return null;
             }
 
+            static object? WriteEnumerable(DictionaryStringObjectJsonConverter converter, Utf8JsonWriter writer, IEnumerable enumerable, JsonSerializerOptions options)
+            {
+                writer.WriteStartArray();
+                foreach(object? item in enumerable)
+                {
+                    converter.WriteValue(writer, item, options);
+                }
+                writer.WriteEndArray();
+
+                return null;
+            }
+
             static object? WriteElement(Utf8JsonWriter writer, JsonElement jsonElement, JsonSerializerOptions options)
             {
                 WriteJsonElement(writer, jsonElement, options);
@@ -236,13 +294,18 @@ namespace Verifiable.Json.Converters
         {
             return reader.TokenType switch
             {
-                JsonTokenType.String => reader.TryGetDateTime(out DateTime date) ? date : reader.GetString(),
-                JsonTokenType.False => false,
-                JsonTokenType.True => true,
-                JsonTokenType.Null => null,
-                JsonTokenType.Number => reader.TryGetInt64(out long result) ? (object)result : reader.GetDecimal(),
+                JsonTokenType.None => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
                 JsonTokenType.StartObject => Read(ref reader, null, options),
+                JsonTokenType.EndObject => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
                 JsonTokenType.StartArray => ExtractArray(ref reader, options),
+                JsonTokenType.EndArray => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
+                JsonTokenType.PropertyName => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
+                JsonTokenType.Comment => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
+                JsonTokenType.String => reader.TryGetDateTime(out DateTime date) ? date : reader.GetString(),
+                JsonTokenType.Number => reader.TryGetInt64(out long result) ? (object)result : reader.GetDecimal(),
+                JsonTokenType.True => true,
+                JsonTokenType.False => false,
+                JsonTokenType.Null => null,
                 _ => throw new JsonException($"Token '{reader.TokenType}' is not supported.")
             };
         }
@@ -264,6 +327,7 @@ namespace Verifiable.Json.Converters
         {
             _ = element.ValueKind switch
             {
+                JsonValueKind.Undefined => throw new JsonException($"Unsupported JsonValueKind: {element.ValueKind}."),
                 JsonValueKind.Object => WriteObject(writer, element, options),
                 JsonValueKind.Array => WriteArray(writer, element, options),
                 JsonValueKind.String => WriteString(writer, element),

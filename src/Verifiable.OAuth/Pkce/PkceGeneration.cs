@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Text;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 
 namespace Verifiable.OAuth.Pkce;
 
@@ -54,11 +53,9 @@ public static class PkceGeneration
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(pool);
 
-        Tag verifierTag = Tag.Create(Purpose.Nonce).With(EntropySource.Csprng);
-
         string encodedVerifier;
         using(Nonce verifier = CryptographicKeyEvents.GenerateNonce(
-            VerifierByteLength, verifierTag, pool))
+            VerifierByteLength, CryptoTags.ProtocolFreshnessValue, pool))
         {
             encodedVerifier = base64UrlEncoder(verifier.UseNonce());
         }

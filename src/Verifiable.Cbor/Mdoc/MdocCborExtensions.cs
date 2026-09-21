@@ -25,7 +25,7 @@ namespace Verifiable.Cbor.Mdoc;
 /// (it crosses ParseCoseSign1/BuildSigStructure seams rather than calling the CBOR helpers
 /// directly). The remaining static helpers remain available for callers that prefer them; the
 /// extension surface is additive. It includes <see cref="DeviceSignAsync"/>,
-/// <c>VerifyDeviceSignedAsync</c>, <see cref="VerifyDigestBinding"/>,
+/// <c>VerifyDeviceSignedAsync</c>, <c>VerifyDigestBinding</c>,
 /// <c>Derive</c>, and the corresponding <c>*Verbose</c> siblings that mirror
 /// <see cref="Verifiable.Core.Model.DataIntegrity.CredentialEcdsaSd2023Extensions"/>'s
 /// production/verbose pairing convention.

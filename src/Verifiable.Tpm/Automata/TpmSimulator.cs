@@ -834,6 +834,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmEccCurveConstants.TPM_ECC_NIST_P256 => CryptoTags.P256PrivateKey,
         TpmEccCurveConstants.TPM_ECC_NIST_P384 => CryptoTags.P384PrivateKey,
         TpmEccCurveConstants.TPM_ECC_NIST_P521 => CryptoTags.P521PrivateKey,
+        TpmEccCurveConstants.TPM_ECC_NONE or
+        TpmEccCurveConstants.TPM_ECC_NIST_P192 or
+        TpmEccCurveConstants.TPM_ECC_NIST_P224 or
+        TpmEccCurveConstants.TPM_ECC_BN_P256 or
+        TpmEccCurveConstants.TPM_ECC_BN_P638 or
+        TpmEccCurveConstants.TPM_ECC_SM2_P256 or
+        TpmEccCurveConstants.TPM_ECC_BP_P256_R1 or
+        TpmEccCurveConstants.TPM_ECC_BP_P384_R1 or
+        TpmEccCurveConstants.TPM_ECC_BP_P512_R1 or
+        TpmEccCurveConstants.TPM_ECC_CURVE_25519 or
+        TpmEccCurveConstants.TPM_ECC_CURVE_448 => throw new InvalidOperationException($"No private-key tag is defined for curve '{curve}'."),
         _ => throw new InvalidOperationException($"No private-key tag is defined for curve '{curve}'.")
     };
 
@@ -971,6 +982,68 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS =>
                 (TpmiAlgSigScheme.FromValue(scheme.Scheme), TpmiAlgHash.FromValue(scheme.HashAlg)),
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_RSA or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA1 or
+            TpmAlgIdConstants.TPM_ALG_HMAC or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_NULL or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDSA or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_ECC or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => (null, null),
             _ => (null, null)
         };
 
@@ -2674,7 +2747,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TPM_RC_TYPE</c> (TPM 2.0 Library Part 2, clause 12.2.2, Table 225), and
     /// <see cref="TryBuildCreatePrimaryRequest"/> creates objects of no other type. <c>TPM_ALG_SYMCIPHER</c>,
     /// <c>TPM_ALG_MLDSA</c>, <c>TPM_ALG_HASH_MLDSA</c> and <c>TPM_ALG_MLKEM</c> are TCG-registered object
-    /// types <see cref="Structures.TpmuPublicParms"/> can represent on the wire but no creatable type in this
+    /// types <see cref="TpmuPublicParms"/> can represent on the wire but no creatable type in this
     /// simulator implements.
     /// </summary>
     private static ImmutableArray<TpmAlgIdConstants> ImplementedPublicTypes { get; } =
@@ -2882,9 +2955,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// The keyed-hash schemes this simulator implements (TPM 2.0 Library Part 2, clause 11.1.19, Table 175's
     /// <c>TPMI_ALG_KEYEDHASH_SCHEME</c>): HMAC and XOR are the two non-NULL keyed-hash object shapes
-    /// <see cref="Structures.TpmsKeyedHashParms"/> builds; Table 175's own registry has no member beyond these
+    /// <see cref="TpmsKeyedHashParms"/> builds; Table 175's own registry has no member beyond these
     /// two plus <c>TPM_ALG_NULL</c>, so this set already equals the interface type's admitted range and
-    /// <see cref="Structures.TpmsKeyedHashParms.Parse"/> itself refuses any other selector.
+    /// <see cref="TpmsKeyedHashParms.Parse"/> itself refuses any other selector.
     /// </summary>
     private static ImmutableArray<TpmAlgIdConstants> ImplementedKeyedHashSchemes { get; } =
     [
@@ -2933,8 +3006,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// valid"): reads the <c>TPMI_ALG_PUBLIC</c> selector, then — for RSA, ECC and KEYEDHASH, the object types
     /// this simulator implements (<see cref="ImplementedPublicTypes"/>) — every field in Part 4's own unmarshal
     /// order, judging each against this simulator's implemented subset rather than the wider TCG registry the
-    /// Spec-layer parsers (<see cref="Structures.TpmtSymDefObject.Parse"/>, <see cref="Structures.TpmtRsaScheme.Parse"/>,
-    /// <see cref="Structures.TpmtEccScheme.Parse"/>, <see cref="Structures.TpmtKdfScheme.Parse"/>) admit on their
+    /// Spec-layer parsers (<see cref="TpmtSymDefObject.Parse"/>, <see cref="TpmtRsaScheme.Parse"/>,
+    /// <see cref="TpmtEccScheme.Parse"/>, <see cref="TpmtKdfScheme.Parse"/>) admit on their
     /// own. Every refusal code is bare (TPM 2.0 Library Part 3, clause 5.8.2's "In the Reference Code, a
     /// parameter number is added to the response code so that the offending parameter can be isolated. This is
     /// optional."); a frame too short for any field is <c>TPM_RC_INSUFFICIENT</c>.
@@ -2983,6 +3056,69 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 TpmAlgIdConstants.TPM_ALG_RSA => TryReadRsaPublicParms(ref reader, type, out parms, out malformedResponseCode),
                 TpmAlgIdConstants.TPM_ALG_ECC => TryReadEccPublicParms(ref reader, type, out parms, out malformedResponseCode),
+                TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+                TpmAlgIdConstants.TPM_ALG_ERROR or
+                TpmAlgIdConstants.TPM_ALG_TDES or
+                TpmAlgIdConstants.TPM_ALG_SHA1 or
+                TpmAlgIdConstants.TPM_ALG_HMAC or
+                TpmAlgIdConstants.TPM_ALG_AES or
+                TpmAlgIdConstants.TPM_ALG_MGF1 or
+                TpmAlgIdConstants.TPM_ALG_XOR or
+                TpmAlgIdConstants.TPM_ALG_SHA256 or
+                TpmAlgIdConstants.TPM_ALG_SHA384 or
+                TpmAlgIdConstants.TPM_ALG_SHA512 or
+                TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+                TpmAlgIdConstants.TPM_ALG_NULL or
+                TpmAlgIdConstants.TPM_ALG_SM3_256 or
+                TpmAlgIdConstants.TPM_ALG_SM4 or
+                TpmAlgIdConstants.TPM_ALG_RSASSA or
+                TpmAlgIdConstants.TPM_ALG_RSAES or
+                TpmAlgIdConstants.TPM_ALG_RSAPSS or
+                TpmAlgIdConstants.TPM_ALG_OAEP or
+                TpmAlgIdConstants.TPM_ALG_ECDSA or
+                TpmAlgIdConstants.TPM_ALG_ECDH or
+                TpmAlgIdConstants.TPM_ALG_ECDAA or
+                TpmAlgIdConstants.TPM_ALG_SM2 or
+                TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+                TpmAlgIdConstants.TPM_ALG_ECMQV or
+                TpmAlgIdConstants.TPM_ALG_HKDF or
+                TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+                TpmAlgIdConstants.TPM_ALG_KDF2 or
+                TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+                TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+                TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+                TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+                TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+                TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+                TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+                TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+                TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+                TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+                TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+                TpmAlgIdConstants.TPM_ALG_CMAC or
+                TpmAlgIdConstants.TPM_ALG_CTR or
+                TpmAlgIdConstants.TPM_ALG_OFB or
+                TpmAlgIdConstants.TPM_ALG_CBC or
+                TpmAlgIdConstants.TPM_ALG_CFB or
+                TpmAlgIdConstants.TPM_ALG_ECB or
+                TpmAlgIdConstants.TPM_ALG_CCM or
+                TpmAlgIdConstants.TPM_ALG_GCM or
+                TpmAlgIdConstants.TPM_ALG_KW or
+                TpmAlgIdConstants.TPM_ALG_KWP or
+                TpmAlgIdConstants.TPM_ALG_EAX or
+                TpmAlgIdConstants.TPM_ALG_EDDSA or
+                TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+                TpmAlgIdConstants.TPM_ALG_LMS or
+                TpmAlgIdConstants.TPM_ALG_XMSS or
+                TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+                TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+                TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+                TpmAlgIdConstants.TPM_ALG_KMAC128 or
+                TpmAlgIdConstants.TPM_ALG_KMAC256 or
+                TpmAlgIdConstants.TPM_ALG_MLKEM or
+                TpmAlgIdConstants.TPM_ALG_MLDSA or
+                TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+                    TryReadKeyedHashPublicParms(ref reader, type, out parms, out malformedResponseCode),
                 _ => TryReadKeyedHashPublicParms(ref reader, type, out parms, out malformedResponseCode)
             };
         }
@@ -3189,8 +3325,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// The KEYEDHASH arm of <see cref="TryReadPublicParms"/>'s ladder (TPMT_KEYEDHASH_SCHEME, TPM 2.0 Library
     /// Part 2, Table 179 over Table 227): the scheme selector (<c>TPM_ALG_NULL</c> is a sealed data object with
     /// no further field; outside <see cref="ImplementedKeyedHashSchemes"/> and not NULL is <c>TPM_RC_VALUE</c> —
-    /// Table 175's own registry already equals this set, so <see cref="Structures.TpmiAlgKdf"/>'s sibling
-    /// <see cref="Structures.TpmsKeyedHashParms.Parse"/> would refuse the same values, but this ladder reads the
+    /// Table 175's own registry already equals this set, so <see cref="TpmiAlgKdf"/>'s sibling
+    /// <see cref="TpmsKeyedHashParms.Parse"/> would refuse the same values, but this ladder reads the
     /// selector itself so it can judge <c>hashAlg</c>/<c>kdf</c> per field rather than through one shared
     /// exception), then <c>hashAlg</c> (Table 173's <c>TPMI_ALG_HASH</c> carries no leading <c>+</c>, so a value
     /// outside <see cref="ImplementedHashAlgorithms"/> — including <c>TPM_ALG_NULL</c> — is <c>TPM_RC_HASH</c>
@@ -3255,7 +3391,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Judges an already-unmarshalled <c>TPMT_KEYEDHASH_SCHEME</c> against the implemented profile, mirroring
     /// <see cref="TryReadKeyedHashPublicParms"/>'s ladder over a structure the general Spec-layer parser already
-    /// produced rather than raw wire octets — <see cref="Structures.TpmsKeyedHashParms.Parse"/> itself admits the
+    /// produced rather than raw wire octets — <see cref="TpmsKeyedHashParms.Parse"/> itself admits the
     /// NULL hash structurally (its own doc comment), so <c>hashAlg</c> is judged here exactly as the wire ladder
     /// judges it, never skipped.
     /// </summary>
@@ -3290,7 +3426,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Judges an already-unmarshalled <c>TPMT_PUBLIC</c>'s <c>type</c> and parameters against the implemented
     /// profile — the post-hoc counterpart of <see cref="TryReadPublicParms"/>'s wire-reading ladder, for
     /// <c>TPM2_LoadExternal()</c>, whose <c>inPublic</c> parameter is unmarshalled by the general Spec-layer
-    /// parser (<see cref="Structures.Tpm2bPublic.Parse"/>, admitting the wider TCG registry) before this
+    /// parser (<see cref="Tpm2bPublic.Parse"/>, admitting the wider TCG registry) before this
     /// simulator's implemented subset is ever consulted — unlike <c>TPM2_TestParms()</c> and
     /// <c>TPM2_CreatePrimary()</c>, whose own parsers read the profile's narrower set directly off the wire.
     /// </summary>
@@ -3308,6 +3444,69 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             TpmAlgIdConstants.TPM_ALG_RSA => ValidateImplementedRsaParms(parameters.RsaDetail ?? default),
             TpmAlgIdConstants.TPM_ALG_ECC => ValidateImplementedEccParms(parameters.EccDetail ?? default),
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA1 or
+            TpmAlgIdConstants.TPM_ALG_HMAC or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_NULL or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSASSA or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_RSAPSS or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDSA or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+                ValidateImplementedKeyedHashParms(parameters.KeyedHashDetail ?? TpmsKeyedHashParms.SealedData),
             _ => ValidateImplementedKeyedHashParms(parameters.KeyedHashDetail ?? TpmsKeyedHashParms.SealedData)
         };
     }
@@ -3473,7 +3672,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// On a successful verification the minted ticket's <c>digestOrMessage</c> term is the RAW accumulated
     /// message rather than its digest (Part 2, clause 10.6.5's "the signed digest or message"; Part 3, clause
     /// 20.3.1: "takes a message ... rather than a digest") — the <c>ReadOnlySequence{byte}</c> core of
-    /// <see cref="ComputeVerifiedTicketDigestAsync"/> folds the chained message straight into the HMAC input
+    /// <see cref="ComputeVerifiedTicketDigestAsync(ReadOnlyMemory{byte}, TpmStConstants, ReadOnlySequence{byte}, ReadOnlyMemory{byte}, TpmiAlgHash?, BaseMemoryPool, CancellationToken)"/>
+    /// folds the chained message straight into the HMAC input
     /// with no concatenation buffer. A NULL-hierarchy key short-circuits to the NULL ticket tuple, exactly as
     /// <see cref="VerifyDigestSignatureEccAsync"/> does. A failed verification needs no ticket at all, so the
     /// rejection is decided here rather than the pure transition.
@@ -3899,7 +4099,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Deep-copies a protection seed into its own owned, PINNED carrier — the persistence counterpart of
-    /// <see cref="GenerateProtectionSeed"/>, so a persisted storage parent's seed rests only in pinned pool
+    /// <see cref="DeriveProtectionSeedAsync"/>, so a persisted storage parent's seed rests only in pinned pool
     /// memory exactly as the transient original does. The empty sentinel copies to itself (dispose-immune).
     /// </summary>
     /// <param name="seed">The seed octets to copy.</param>
@@ -4421,6 +4621,135 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmCcConstants.TPM_CC_GetCommandAuditDigest => 0, //Table 105: TPM2_GetCommandAuditDigest Command.
                 TpmCcConstants.TPM_CC_GetTime => 0, //Table 107: TPM2_GetTime Command.
                 TpmCcConstants.TPM_CC_NV_Certify => 0, //Table 271: TPM2_NV_Certify Command.
+                TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial or
+                TpmCcConstants.TPM_CC_EvictControl or
+                TpmCcConstants.TPM_CC_HierarchyControl or
+                TpmCcConstants.TPM_CC_NV_UndefineSpace or
+                TpmCcConstants.TPM_CC_ChangeEPS or
+                TpmCcConstants.TPM_CC_ChangePPS or
+                TpmCcConstants.TPM_CC_Clear or
+                TpmCcConstants.TPM_CC_ClearControl or
+                TpmCcConstants.TPM_CC_ClockSet or
+                TpmCcConstants.TPM_CC_HierarchyChangeAuth or
+                TpmCcConstants.TPM_CC_NV_DefineSpace or
+                TpmCcConstants.TPM_CC_PCR_Allocate or
+                TpmCcConstants.TPM_CC_PCR_SetAuthPolicy or
+                TpmCcConstants.TPM_CC_PP_Commands or
+                TpmCcConstants.TPM_CC_SetPrimaryPolicy or
+                TpmCcConstants.TPM_CC_FieldUpgradeStart or
+                TpmCcConstants.TPM_CC_ClockRateAdjust or
+                TpmCcConstants.TPM_CC_CreatePrimary or
+                TpmCcConstants.TPM_CC_NV_GlobalWriteLock or
+                TpmCcConstants.TPM_CC_NV_Increment or
+                TpmCcConstants.TPM_CC_NV_SetBits or
+                TpmCcConstants.TPM_CC_NV_Extend or
+                TpmCcConstants.TPM_CC_NV_Write or
+                TpmCcConstants.TPM_CC_NV_WriteLock or
+                TpmCcConstants.TPM_CC_DictionaryAttackLockReset or
+                TpmCcConstants.TPM_CC_DictionaryAttackParameters or
+                TpmCcConstants.TPM_CC_NV_ChangeAuth or
+                TpmCcConstants.TPM_CC_PCR_Event or
+                TpmCcConstants.TPM_CC_PCR_Reset or
+                TpmCcConstants.TPM_CC_SequenceComplete or
+                TpmCcConstants.TPM_CC_SetAlgorithmSet or
+                TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus or
+                TpmCcConstants.TPM_CC_FieldUpgradeData or
+                TpmCcConstants.TPM_CC_IncrementalSelfTest or
+                TpmCcConstants.TPM_CC_SelfTest or
+                TpmCcConstants.TPM_CC_Startup or
+                TpmCcConstants.TPM_CC_Shutdown or
+                TpmCcConstants.TPM_CC_StirRandom or
+                TpmCcConstants.TPM_CC_ActivateCredential or
+                TpmCcConstants.TPM_CC_PolicyNV or
+                TpmCcConstants.TPM_CC_Duplicate or
+                TpmCcConstants.TPM_CC_NV_Read or
+                TpmCcConstants.TPM_CC_NV_ReadLock or
+                TpmCcConstants.TPM_CC_ObjectChangeAuth or
+                TpmCcConstants.TPM_CC_PolicySecret or
+                TpmCcConstants.TPM_CC_Rewrap or
+                TpmCcConstants.TPM_CC_Create or
+                TpmCcConstants.TPM_CC_ECDH_ZGen or
+                TpmCcConstants.TPM_CC_HMAC or
+                TpmCcConstants.TPM_CC_Import or
+                TpmCcConstants.TPM_CC_Load or
+                TpmCcConstants.TPM_CC_RSA_Decrypt or
+                TpmCcConstants.TPM_CC_HMAC_Start or
+                TpmCcConstants.TPM_CC_SequenceUpdate or
+                TpmCcConstants.TPM_CC_Sign or
+                TpmCcConstants.TPM_CC_Unseal or
+                TpmCcConstants.TPM_CC_PolicySigned or
+                TpmCcConstants.TPM_CC_ContextLoad or
+                TpmCcConstants.TPM_CC_ContextSave or
+                TpmCcConstants.TPM_CC_ECDH_KeyGen or
+                TpmCcConstants.TPM_CC_EncryptDecrypt or
+                TpmCcConstants.TPM_CC_FlushContext or
+                TpmCcConstants.TPM_CC_LoadExternal or
+                TpmCcConstants.TPM_CC_MakeCredential or
+                TpmCcConstants.TPM_CC_NV_ReadPublic or
+                TpmCcConstants.TPM_CC_PolicyAuthorize or
+                TpmCcConstants.TPM_CC_PolicyAuthValue or
+                TpmCcConstants.TPM_CC_PolicyCommandCode or
+                TpmCcConstants.TPM_CC_PolicyCounterTimer or
+                TpmCcConstants.TPM_CC_PolicyCpHash or
+                TpmCcConstants.TPM_CC_PolicyLocality or
+                TpmCcConstants.TPM_CC_PolicyNameHash or
+                TpmCcConstants.TPM_CC_PolicyOR or
+                TpmCcConstants.TPM_CC_PolicyTicket or
+                TpmCcConstants.TPM_CC_ReadPublic or
+                TpmCcConstants.TPM_CC_RSA_Encrypt or
+                TpmCcConstants.TPM_CC_StartAuthSession or
+                TpmCcConstants.TPM_CC_VerifySignature or
+                TpmCcConstants.TPM_CC_ECC_Parameters or
+                TpmCcConstants.TPM_CC_FirmwareRead or
+                TpmCcConstants.TPM_CC_GetCapability or
+                TpmCcConstants.TPM_CC_GetRandom or
+                TpmCcConstants.TPM_CC_GetTestResult or
+                TpmCcConstants.TPM_CC_Hash or
+                TpmCcConstants.TPM_CC_PCR_Read or
+                TpmCcConstants.TPM_CC_PolicyPCR or
+                TpmCcConstants.TPM_CC_PolicyRestart or
+                TpmCcConstants.TPM_CC_ReadClock or
+                TpmCcConstants.TPM_CC_PCR_Extend or
+                TpmCcConstants.TPM_CC_PCR_SetAuthValue or
+                TpmCcConstants.TPM_CC_EventSequenceComplete or
+                TpmCcConstants.TPM_CC_HashSequenceStart or
+                TpmCcConstants.TPM_CC_PolicyPhysicalPresence or
+                TpmCcConstants.TPM_CC_PolicyDuplicationSelect or
+                TpmCcConstants.TPM_CC_PolicyGetDigest or
+                TpmCcConstants.TPM_CC_TestParms or
+                TpmCcConstants.TPM_CC_Commit or
+                TpmCcConstants.TPM_CC_PolicyPassword or
+                TpmCcConstants.TPM_CC_ZGen_2Phase or
+                TpmCcConstants.TPM_CC_EC_Ephemeral or
+                TpmCcConstants.TPM_CC_PolicyNvWritten or
+                TpmCcConstants.TPM_CC_PolicyTemplate or
+                TpmCcConstants.TPM_CC_CreateLoaded or
+                TpmCcConstants.TPM_CC_PolicyAuthorizeNV or
+                TpmCcConstants.TPM_CC_EncryptDecrypt2 or
+                TpmCcConstants.TPM_CC_AC_GetCapability or
+                TpmCcConstants.TPM_CC_AC_Send or
+                TpmCcConstants.TPM_CC_Policy_AC_SendSelect or
+                TpmCcConstants.TPM_CC_CertifyX509 or
+                TpmCcConstants.TPM_CC_ACT_SetTimeout or
+                TpmCcConstants.TPM_CC_ECC_Encrypt or
+                TpmCcConstants.TPM_CC_ECC_Decrypt or
+                TpmCcConstants.TPM_CC_PolicyCapability or
+                TpmCcConstants.TPM_CC_PolicyParameters or
+                TpmCcConstants.TPM_CC_NV_DefineSpace2 or
+                TpmCcConstants.TPM_CC_NV_ReadPublic2 or
+                TpmCcConstants.TPM_CC_SetCapability or
+                TpmCcConstants.TPM_CC_ReadOnlyControl or
+                TpmCcConstants.TPM_CC_PolicyTransportSPDM or
+                TpmCcConstants.TPM_CC_VerifySequenceComplete or
+                TpmCcConstants.TPM_CC_SignSequenceComplete or
+                TpmCcConstants.TPM_CC_VerifyDigestSignature or
+                TpmCcConstants.TPM_CC_SignDigest or
+                TpmCcConstants.TPM_CC_Encapsulate or
+                TpmCcConstants.TPM_CC_Decapsulate or
+                TpmCcConstants.TPM_CC_VerifySequenceStart or
+                TpmCcConstants.TPM_CC_SignSequenceStart or
+                TpmCcConstants.CC_VEND =>
+                    throw new InvalidOperationException($"No qualifyingData parameter is defined for command code '{action.CommandCode}'."),
                 _ => throw new InvalidOperationException($"No qualifyingData parameter is defined for command code '{action.CommandCode}'.")
             };
 
@@ -6347,6 +6676,68 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     private static int HashBlockSize(TpmAlgIdConstants hashAlg) => hashAlg switch
     {
         TpmAlgIdConstants.TPM_ALG_SHA384 or TpmAlgIdConstants.TPM_ALG_SHA512 => 128,
+        TpmAlgIdConstants.TPM_ALG_ERROR or
+        TpmAlgIdConstants.TPM_ALG_RSA or
+        TpmAlgIdConstants.TPM_ALG_TDES or
+        TpmAlgIdConstants.TPM_ALG_SHA1 or
+        TpmAlgIdConstants.TPM_ALG_HMAC or
+        TpmAlgIdConstants.TPM_ALG_AES or
+        TpmAlgIdConstants.TPM_ALG_MGF1 or
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+        TpmAlgIdConstants.TPM_ALG_XOR or
+        TpmAlgIdConstants.TPM_ALG_SHA256 or
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+        TpmAlgIdConstants.TPM_ALG_NULL or
+        TpmAlgIdConstants.TPM_ALG_SM3_256 or
+        TpmAlgIdConstants.TPM_ALG_SM4 or
+        TpmAlgIdConstants.TPM_ALG_RSASSA or
+        TpmAlgIdConstants.TPM_ALG_RSAES or
+        TpmAlgIdConstants.TPM_ALG_RSAPSS or
+        TpmAlgIdConstants.TPM_ALG_OAEP or
+        TpmAlgIdConstants.TPM_ALG_ECDSA or
+        TpmAlgIdConstants.TPM_ALG_ECDH or
+        TpmAlgIdConstants.TPM_ALG_ECDAA or
+        TpmAlgIdConstants.TPM_ALG_SM2 or
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+        TpmAlgIdConstants.TPM_ALG_ECMQV or
+        TpmAlgIdConstants.TPM_ALG_HKDF or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+        TpmAlgIdConstants.TPM_ALG_KDF2 or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+        TpmAlgIdConstants.TPM_ALG_ECC or
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+        TpmAlgIdConstants.TPM_ALG_CMAC or
+        TpmAlgIdConstants.TPM_ALG_CTR or
+        TpmAlgIdConstants.TPM_ALG_OFB or
+        TpmAlgIdConstants.TPM_ALG_CBC or
+        TpmAlgIdConstants.TPM_ALG_CFB or
+        TpmAlgIdConstants.TPM_ALG_ECB or
+        TpmAlgIdConstants.TPM_ALG_CCM or
+        TpmAlgIdConstants.TPM_ALG_GCM or
+        TpmAlgIdConstants.TPM_ALG_KW or
+        TpmAlgIdConstants.TPM_ALG_KWP or
+        TpmAlgIdConstants.TPM_ALG_EAX or
+        TpmAlgIdConstants.TPM_ALG_EDDSA or
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+        TpmAlgIdConstants.TPM_ALG_LMS or
+        TpmAlgIdConstants.TPM_ALG_XMSS or
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+        TpmAlgIdConstants.TPM_ALG_KMAC128 or
+        TpmAlgIdConstants.TPM_ALG_KMAC256 or
+        TpmAlgIdConstants.TPM_ALG_MLKEM or
+        TpmAlgIdConstants.TPM_ALG_MLDSA or
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => 64,
         _ => 64
     };
 
@@ -6362,6 +6753,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmEccCurveConstants.TPM_ECC_NIST_P256 => EllipticCurveTypes.P256,
         TpmEccCurveConstants.TPM_ECC_NIST_P384 => EllipticCurveTypes.P384,
         TpmEccCurveConstants.TPM_ECC_NIST_P521 => EllipticCurveTypes.P521,
+        TpmEccCurveConstants.TPM_ECC_NONE or
+        TpmEccCurveConstants.TPM_ECC_NIST_P192 or
+        TpmEccCurveConstants.TPM_ECC_NIST_P224 or
+        TpmEccCurveConstants.TPM_ECC_BN_P256 or
+        TpmEccCurveConstants.TPM_ECC_BN_P638 or
+        TpmEccCurveConstants.TPM_ECC_SM2_P256 or
+        TpmEccCurveConstants.TPM_ECC_BP_P256_R1 or
+        TpmEccCurveConstants.TPM_ECC_BP_P384_R1 or
+        TpmEccCurveConstants.TPM_ECC_BP_P512_R1 or
+        TpmEccCurveConstants.TPM_ECC_CURVE_25519 or
+        TpmEccCurveConstants.TPM_ECC_CURVE_448 => throw new InvalidOperationException($"No elliptic-curve type is defined for curve '{curve}'."),
         _ => throw new InvalidOperationException($"No elliptic-curve type is defined for curve '{curve}'.")
     };
 
@@ -6377,6 +6779,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmEccCurveConstants.TPM_ECC_NIST_P256 => EllipticCurveConstants.P256.PointArrayLength,
         TpmEccCurveConstants.TPM_ECC_NIST_P384 => EllipticCurveConstants.P384.PointArrayLength,
         TpmEccCurveConstants.TPM_ECC_NIST_P521 => EllipticCurveConstants.P521.PointArrayLength,
+        TpmEccCurveConstants.TPM_ECC_NONE or
+        TpmEccCurveConstants.TPM_ECC_NIST_P192 or
+        TpmEccCurveConstants.TPM_ECC_NIST_P224 or
+        TpmEccCurveConstants.TPM_ECC_BN_P256 or
+        TpmEccCurveConstants.TPM_ECC_BN_P638 or
+        TpmEccCurveConstants.TPM_ECC_SM2_P256 or
+        TpmEccCurveConstants.TPM_ECC_BP_P256_R1 or
+        TpmEccCurveConstants.TPM_ECC_BP_P384_R1 or
+        TpmEccCurveConstants.TPM_ECC_BP_P512_R1 or
+        TpmEccCurveConstants.TPM_ECC_CURVE_25519 or
+        TpmEccCurveConstants.TPM_ECC_CURVE_448 => throw new InvalidOperationException($"No field width is defined for curve '{curve}'."),
         _ => throw new InvalidOperationException($"No field width is defined for curve '{curve}'.")
     };
 
@@ -6576,6 +6989,68 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 break;
             }
+            case TpmAlgIdConstants.TPM_ALG_KEYEDHASH:
+            case TpmAlgIdConstants.TPM_ALG_ERROR:
+            case TpmAlgIdConstants.TPM_ALG_TDES:
+            case TpmAlgIdConstants.TPM_ALG_SHA1:
+            case TpmAlgIdConstants.TPM_ALG_HMAC:
+            case TpmAlgIdConstants.TPM_ALG_AES:
+            case TpmAlgIdConstants.TPM_ALG_MGF1:
+            case TpmAlgIdConstants.TPM_ALG_XOR:
+            case TpmAlgIdConstants.TPM_ALG_SHA256:
+            case TpmAlgIdConstants.TPM_ALG_SHA384:
+            case TpmAlgIdConstants.TPM_ALG_SHA512:
+            case TpmAlgIdConstants.TPM_ALG_SHA256_192:
+            case TpmAlgIdConstants.TPM_ALG_NULL:
+            case TpmAlgIdConstants.TPM_ALG_SM3_256:
+            case TpmAlgIdConstants.TPM_ALG_SM4:
+            case TpmAlgIdConstants.TPM_ALG_RSASSA:
+            case TpmAlgIdConstants.TPM_ALG_RSAES:
+            case TpmAlgIdConstants.TPM_ALG_RSAPSS:
+            case TpmAlgIdConstants.TPM_ALG_OAEP:
+            case TpmAlgIdConstants.TPM_ALG_ECDSA:
+            case TpmAlgIdConstants.TPM_ALG_ECDH:
+            case TpmAlgIdConstants.TPM_ALG_ECDAA:
+            case TpmAlgIdConstants.TPM_ALG_SM2:
+            case TpmAlgIdConstants.TPM_ALG_ECSCHNORR:
+            case TpmAlgIdConstants.TPM_ALG_ECMQV:
+            case TpmAlgIdConstants.TPM_ALG_HKDF:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A:
+            case TpmAlgIdConstants.TPM_ALG_KDF2:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108:
+            case TpmAlgIdConstants.TPM_ALG_SYMCIPHER:
+            case TpmAlgIdConstants.TPM_ALG_CAMELLIA:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_256:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_384:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_512:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE128:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_192:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_512:
+            case TpmAlgIdConstants.TPM_ALG_CMAC:
+            case TpmAlgIdConstants.TPM_ALG_CTR:
+            case TpmAlgIdConstants.TPM_ALG_OFB:
+            case TpmAlgIdConstants.TPM_ALG_CBC:
+            case TpmAlgIdConstants.TPM_ALG_CFB:
+            case TpmAlgIdConstants.TPM_ALG_ECB:
+            case TpmAlgIdConstants.TPM_ALG_CCM:
+            case TpmAlgIdConstants.TPM_ALG_GCM:
+            case TpmAlgIdConstants.TPM_ALG_KW:
+            case TpmAlgIdConstants.TPM_ALG_KWP:
+            case TpmAlgIdConstants.TPM_ALG_EAX:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA_PH:
+            case TpmAlgIdConstants.TPM_ALG_LMS:
+            case TpmAlgIdConstants.TPM_ALG_XMSS:
+            case TpmAlgIdConstants.TPM_ALG_KEYEDXOF:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF128:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF256:
+            case TpmAlgIdConstants.TPM_ALG_KMAC128:
+            case TpmAlgIdConstants.TPM_ALG_KMAC256:
+            case TpmAlgIdConstants.TPM_ALG_MLKEM:
+            case TpmAlgIdConstants.TPM_ALG_MLDSA:
+            case TpmAlgIdConstants.TPM_ALG_HASH_MLDSA:
             default:
             {
                 TpmsKeyedHashParms khScheme = publicArea.Parameters.KeyedHashDetail ?? TpmsKeyedHashParms.SealedData;
@@ -6595,6 +7070,67 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 {
                     TpmAlgIdConstants.TPM_ALG_NULL => 128,
                     TpmAlgIdConstants.TPM_ALG_HMAC or TpmAlgIdConstants.TPM_ALG_XOR => HashBlockSize(khScheme.HashAlg),
+                    TpmAlgIdConstants.TPM_ALG_ERROR or
+                    TpmAlgIdConstants.TPM_ALG_RSA or
+                    TpmAlgIdConstants.TPM_ALG_TDES or
+                    TpmAlgIdConstants.TPM_ALG_SHA1 or
+                    TpmAlgIdConstants.TPM_ALG_AES or
+                    TpmAlgIdConstants.TPM_ALG_MGF1 or
+                    TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+                    TpmAlgIdConstants.TPM_ALG_SHA256 or
+                    TpmAlgIdConstants.TPM_ALG_SHA384 or
+                    TpmAlgIdConstants.TPM_ALG_SHA512 or
+                    TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+                    TpmAlgIdConstants.TPM_ALG_SM3_256 or
+                    TpmAlgIdConstants.TPM_ALG_SM4 or
+                    TpmAlgIdConstants.TPM_ALG_RSASSA or
+                    TpmAlgIdConstants.TPM_ALG_RSAES or
+                    TpmAlgIdConstants.TPM_ALG_RSAPSS or
+                    TpmAlgIdConstants.TPM_ALG_OAEP or
+                    TpmAlgIdConstants.TPM_ALG_ECDSA or
+                    TpmAlgIdConstants.TPM_ALG_ECDH or
+                    TpmAlgIdConstants.TPM_ALG_ECDAA or
+                    TpmAlgIdConstants.TPM_ALG_SM2 or
+                    TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+                    TpmAlgIdConstants.TPM_ALG_ECMQV or
+                    TpmAlgIdConstants.TPM_ALG_HKDF or
+                    TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+                    TpmAlgIdConstants.TPM_ALG_KDF2 or
+                    TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+                    TpmAlgIdConstants.TPM_ALG_ECC or
+                    TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+                    TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+                    TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+                    TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+                    TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+                    TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+                    TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+                    TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+                    TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+                    TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+                    TpmAlgIdConstants.TPM_ALG_CMAC or
+                    TpmAlgIdConstants.TPM_ALG_CTR or
+                    TpmAlgIdConstants.TPM_ALG_OFB or
+                    TpmAlgIdConstants.TPM_ALG_CBC or
+                    TpmAlgIdConstants.TPM_ALG_CFB or
+                    TpmAlgIdConstants.TPM_ALG_ECB or
+                    TpmAlgIdConstants.TPM_ALG_CCM or
+                    TpmAlgIdConstants.TPM_ALG_GCM or
+                    TpmAlgIdConstants.TPM_ALG_KW or
+                    TpmAlgIdConstants.TPM_ALG_KWP or
+                    TpmAlgIdConstants.TPM_ALG_EAX or
+                    TpmAlgIdConstants.TPM_ALG_EDDSA or
+                    TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+                    TpmAlgIdConstants.TPM_ALG_LMS or
+                    TpmAlgIdConstants.TPM_ALG_XMSS or
+                    TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+                    TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+                    TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+                    TpmAlgIdConstants.TPM_ALG_KMAC128 or
+                    TpmAlgIdConstants.TPM_ALG_KMAC256 or
+                    TpmAlgIdConstants.TPM_ALG_MLKEM or
+                    TpmAlgIdConstants.TPM_ALG_MLDSA or
+                    TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => -1,
                     _ => -1
                 };
 
@@ -8939,7 +9475,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Computes <c>hashcheckTicket digest = HMAC_contextAlg(proof, TPM_ST_HASHCHECK || digest)</c> — equation 7,
     /// TPM 2.0 Library Part 2, clause 10.6.7 — the same rent-message-then-HMAC shape
-    /// <see cref="ComputeVerifiedTicketDigestAsync"/> and <see cref="ComputeCreationTicketDigestAsync"/> share.
+    /// <see cref="ComputeVerifiedTicketDigestAsync(ReadOnlyMemory{byte}, TpmStConstants, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, TpmiAlgHash?, BaseMemoryPool, CancellationToken)"/>
+    /// and <see cref="ComputeCreationTicketDigestAsync"/> share.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the ticket-digest buffer transfers to the caller, which releases it via a using declaration.")]
@@ -9357,6 +9894,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             action.OperandB.Dispose();
             action.ObjectName.Dispose();
             action.NewParentName.Dispose();
+
+            //A permanent handle's raw bytes and a durable object's own long-lived Name need no release here;
+            //only a freshly computed one — an NV Index's Name resolved just for this PolicySecret fold — has no
+            //other owner, so this is where it is finally freed (TPM 2.0 Library Part 3, clause 23.4).
+            action.OwnedNameTerm?.Dispose();
         }
 
         //Local one-off helper: the uniform feedback shape both the folded and the refused arm return, relaying
@@ -9630,7 +10172,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TPM2_PolicyAuthorize()</c>'s checkTicket re-verification (TPM 2.0 Library Part 3, clause 23.16):
     /// derive the hierarchy proof for the CALLER-SUPPLIED checkTicket.hierarchy (never independently re-derived
     /// from keySign — the caller's claim is exactly what is being checked), recompute the expected ticket via
-    /// the existing <see cref="ComputeVerifiedTicketDigestAsync"/> formula (<c>HMAC(proof, checkTicketTag ||
+    /// the existing <see cref="ComputeVerifiedTicketDigestAsync(ReadOnlyMemory{byte}, TpmStConstants, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, TpmiAlgHash?, BaseMemoryPool, CancellationToken)"/>
+    /// formula (<c>HMAC(proof, checkTicketTag ||
     /// digestOrMessage || keySign || checkTicketMetadata)</c> — Equation (5)), and constant-time compare it to
     /// the caller-supplied digest — architecturally the same stateless recompute-then-FixedTimeEquals shape as
     /// <see cref="VerifyCreationTicketAsync"/>, just against a caller-supplied hierarchy rather than the
@@ -9721,6 +10264,24 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 proof, action.CheckTicketTag, approvedPolicyAndRef, action.KeySign.AsReadOnlyMemory(), action.CheckTicketMetadata, context.Pool, cancellationToken),
             TpmStConstants.TPM_ST_DIGEST_VERIFIED => ComputeHashedPolicyAuthorizeExpectedTicketAsync(
                 action, approvedPolicyAndRef, proof, action.CheckTicketMetadata!.Value, context, cancellationToken),
+            TpmStConstants.TPM_ST_RSP_COMMAND or
+            TpmStConstants.TPM_ST_NO_SESSIONS or
+            TpmStConstants.TPM_ST_SESSIONS or
+            TpmStConstants.TPM_ST_ATTEST_NV or
+            TpmStConstants.TPM_ST_ATTEST_COMMAND_AUDIT or
+            TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT or
+            TpmStConstants.TPM_ST_ATTEST_CERTIFY or
+            TpmStConstants.TPM_ST_ATTEST_QUOTE or
+            TpmStConstants.TPM_ST_ATTEST_TIME or
+            TpmStConstants.TPM_ST_ATTEST_CREATION or
+            TpmStConstants.TPM_ST_ATTEST_NV_DIGEST or
+            TpmStConstants.TPM_ST_CREATION or
+            TpmStConstants.TPM_ST_VERIFIED or
+            TpmStConstants.TPM_ST_AUTH_SECRET or
+            TpmStConstants.TPM_ST_HASHCHECK or
+            TpmStConstants.TPM_ST_AUTH_SIGNED or
+            TpmStConstants.TPM_ST_FU_MANIFEST =>
+                ComputeHashedPolicyAuthorizeExpectedTicketAsync(action, approvedPolicyAndRef, proof, action.HashAlg, context, cancellationToken),
             _ => ComputeHashedPolicyAuthorizeExpectedTicketAsync(action, approvedPolicyAndRef, proof, action.HashAlg, context, cancellationToken)
         };
 
@@ -11420,6 +11981,67 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmAlgIdConstants.TPM_ALG_SHA256 => 32,
         TpmAlgIdConstants.TPM_ALG_SHA384 => 48,
         TpmAlgIdConstants.TPM_ALG_SHA512 => 64,
+        TpmAlgIdConstants.TPM_ALG_ERROR or
+        TpmAlgIdConstants.TPM_ALG_RSA or
+        TpmAlgIdConstants.TPM_ALG_TDES or
+        TpmAlgIdConstants.TPM_ALG_HMAC or
+        TpmAlgIdConstants.TPM_ALG_AES or
+        TpmAlgIdConstants.TPM_ALG_MGF1 or
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+        TpmAlgIdConstants.TPM_ALG_XOR or
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+        TpmAlgIdConstants.TPM_ALG_NULL or
+        TpmAlgIdConstants.TPM_ALG_SM3_256 or
+        TpmAlgIdConstants.TPM_ALG_SM4 or
+        TpmAlgIdConstants.TPM_ALG_RSASSA or
+        TpmAlgIdConstants.TPM_ALG_RSAES or
+        TpmAlgIdConstants.TPM_ALG_RSAPSS or
+        TpmAlgIdConstants.TPM_ALG_OAEP or
+        TpmAlgIdConstants.TPM_ALG_ECDSA or
+        TpmAlgIdConstants.TPM_ALG_ECDH or
+        TpmAlgIdConstants.TPM_ALG_ECDAA or
+        TpmAlgIdConstants.TPM_ALG_SM2 or
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+        TpmAlgIdConstants.TPM_ALG_ECMQV or
+        TpmAlgIdConstants.TPM_ALG_HKDF or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+        TpmAlgIdConstants.TPM_ALG_KDF2 or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+        TpmAlgIdConstants.TPM_ALG_ECC or
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+        TpmAlgIdConstants.TPM_ALG_CMAC or
+        TpmAlgIdConstants.TPM_ALG_CTR or
+        TpmAlgIdConstants.TPM_ALG_OFB or
+        TpmAlgIdConstants.TPM_ALG_CBC or
+        TpmAlgIdConstants.TPM_ALG_CFB or
+        TpmAlgIdConstants.TPM_ALG_ECB or
+        TpmAlgIdConstants.TPM_ALG_CCM or
+        TpmAlgIdConstants.TPM_ALG_GCM or
+        TpmAlgIdConstants.TPM_ALG_KW or
+        TpmAlgIdConstants.TPM_ALG_KWP or
+        TpmAlgIdConstants.TPM_ALG_EAX or
+        TpmAlgIdConstants.TPM_ALG_EDDSA or
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+        TpmAlgIdConstants.TPM_ALG_LMS or
+        TpmAlgIdConstants.TPM_ALG_XMSS or
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+        TpmAlgIdConstants.TPM_ALG_KMAC128 or
+        TpmAlgIdConstants.TPM_ALG_KMAC256 or
+        TpmAlgIdConstants.TPM_ALG_MLKEM or
+        TpmAlgIdConstants.TPM_ALG_MLDSA or
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+            throw new NotSupportedException($"Session hash algorithm '{hashAlg}' is not supported."),
         _ => throw new NotSupportedException($"Session hash algorithm '{hashAlg}' is not supported.")
     };
 
@@ -11430,6 +12052,67 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmAlgIdConstants.TPM_ALG_SHA256 => HashAlgorithmName.SHA256,
         TpmAlgIdConstants.TPM_ALG_SHA384 => HashAlgorithmName.SHA384,
         TpmAlgIdConstants.TPM_ALG_SHA512 => HashAlgorithmName.SHA512,
+        TpmAlgIdConstants.TPM_ALG_ERROR or
+        TpmAlgIdConstants.TPM_ALG_RSA or
+        TpmAlgIdConstants.TPM_ALG_TDES or
+        TpmAlgIdConstants.TPM_ALG_HMAC or
+        TpmAlgIdConstants.TPM_ALG_AES or
+        TpmAlgIdConstants.TPM_ALG_MGF1 or
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+        TpmAlgIdConstants.TPM_ALG_XOR or
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+        TpmAlgIdConstants.TPM_ALG_NULL or
+        TpmAlgIdConstants.TPM_ALG_SM3_256 or
+        TpmAlgIdConstants.TPM_ALG_SM4 or
+        TpmAlgIdConstants.TPM_ALG_RSASSA or
+        TpmAlgIdConstants.TPM_ALG_RSAES or
+        TpmAlgIdConstants.TPM_ALG_RSAPSS or
+        TpmAlgIdConstants.TPM_ALG_OAEP or
+        TpmAlgIdConstants.TPM_ALG_ECDSA or
+        TpmAlgIdConstants.TPM_ALG_ECDH or
+        TpmAlgIdConstants.TPM_ALG_ECDAA or
+        TpmAlgIdConstants.TPM_ALG_SM2 or
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+        TpmAlgIdConstants.TPM_ALG_ECMQV or
+        TpmAlgIdConstants.TPM_ALG_HKDF or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+        TpmAlgIdConstants.TPM_ALG_KDF2 or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+        TpmAlgIdConstants.TPM_ALG_ECC or
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+        TpmAlgIdConstants.TPM_ALG_CMAC or
+        TpmAlgIdConstants.TPM_ALG_CTR or
+        TpmAlgIdConstants.TPM_ALG_OFB or
+        TpmAlgIdConstants.TPM_ALG_CBC or
+        TpmAlgIdConstants.TPM_ALG_CFB or
+        TpmAlgIdConstants.TPM_ALG_ECB or
+        TpmAlgIdConstants.TPM_ALG_CCM or
+        TpmAlgIdConstants.TPM_ALG_GCM or
+        TpmAlgIdConstants.TPM_ALG_KW or
+        TpmAlgIdConstants.TPM_ALG_KWP or
+        TpmAlgIdConstants.TPM_ALG_EAX or
+        TpmAlgIdConstants.TPM_ALG_EDDSA or
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+        TpmAlgIdConstants.TPM_ALG_LMS or
+        TpmAlgIdConstants.TPM_ALG_XMSS or
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+        TpmAlgIdConstants.TPM_ALG_KMAC128 or
+        TpmAlgIdConstants.TPM_ALG_KMAC256 or
+        TpmAlgIdConstants.TPM_ALG_MLKEM or
+        TpmAlgIdConstants.TPM_ALG_MLDSA or
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+            throw new NotSupportedException($"Session hash algorithm '{hashAlg}' is not supported."),
         _ => throw new NotSupportedException($"Session hash algorithm '{hashAlg}' is not supported.")
     };
 
@@ -14386,6 +15069,44 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 return TryParseContextLoad(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
+            case TpmCcConstants.TPM_CC_ChangeEPS:
+            case TpmCcConstants.TPM_CC_ChangePPS:
+            case TpmCcConstants.TPM_CC_PCR_Allocate:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthPolicy:
+            case TpmCcConstants.TPM_CC_PP_Commands:
+            case TpmCcConstants.TPM_CC_FieldUpgradeStart:
+            case TpmCcConstants.TPM_CC_GetCommandAuditDigest:
+            case TpmCcConstants.TPM_CC_SetAlgorithmSet:
+            case TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus:
+            case TpmCcConstants.TPM_CC_FieldUpgradeData:
+            case TpmCcConstants.TPM_CC_IncrementalSelfTest:
+            case TpmCcConstants.TPM_CC_Rewrap:
+            case TpmCcConstants.TPM_CC_ECDH_ZGen:
+            case TpmCcConstants.TPM_CC_ECDH_KeyGen:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt:
+            case TpmCcConstants.TPM_CC_ECC_Parameters:
+            case TpmCcConstants.TPM_CC_FirmwareRead:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthValue:
+            case TpmCcConstants.TPM_CC_PolicyPhysicalPresence:
+            case TpmCcConstants.TPM_CC_Commit:
+            case TpmCcConstants.TPM_CC_ZGen_2Phase:
+            case TpmCcConstants.TPM_CC_EC_Ephemeral:
+            case TpmCcConstants.TPM_CC_CreateLoaded:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt2:
+            case TpmCcConstants.TPM_CC_AC_GetCapability:
+            case TpmCcConstants.TPM_CC_AC_Send:
+            case TpmCcConstants.TPM_CC_Policy_AC_SendSelect:
+            case TpmCcConstants.TPM_CC_CertifyX509:
+            case TpmCcConstants.TPM_CC_ACT_SetTimeout:
+            case TpmCcConstants.TPM_CC_ECC_Encrypt:
+            case TpmCcConstants.TPM_CC_ECC_Decrypt:
+            case TpmCcConstants.TPM_CC_PolicyCapability:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace2:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic2:
+            case TpmCcConstants.TPM_CC_SetCapability:
+            case TpmCcConstants.TPM_CC_ReadOnlyControl:
+            case TpmCcConstants.TPM_CC_PolicyTransportSPDM:
+            case TpmCcConstants.CC_VEND:
             default:
             {
                 input = new TpmUnsupportedCommandReceived(commandCode);
@@ -18985,23 +19706,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Parses <c>TPM2_LoadExternal()</c>'s three parameters (TPM 2.0 Library Part 3, clause 12.3.2, Table 22:
     /// <c>inPrivate</c>, <c>inPublic</c>, <c>hierarchy</c>) from an already-positioned reader, judging each
     /// against this simulator's implemented profile after it unmarshals. Shared by the plain
-    /// (<see cref="TryParseLoadExternal"/>) and session (<see cref="RebuildLoadExternalAfterDecryption"/>) forms
-    /// so the membership tables live once.
+    /// (<see cref="TryParseLoadExternal"/>) form and the session form, which re-parses the same fields from the
+    /// parameter area <see cref="TryParseNoAuthOverSessions"/> decrypts, so the membership tables live once.
     /// </summary>
     /// <remarks>
-    /// <c>inPrivate</c> unmarshals through <see cref="Structures.Tpm2bSensitive.Parse"/>: a declared size the
+    /// <c>inPrivate</c> unmarshals through <see cref="Tpm2bSensitive.Parse"/>: a declared size the
     /// inner <c>TPMT_SENSITIVE</c> does not consume exactly is <c>TPM_RC_SIZE</c>
     /// (<see cref="InvalidOperationException"/>), a size past the frame is <c>TPM_RC_INSUFFICIENT</c>
     /// (<see cref="ArgumentOutOfRangeException"/>), and a sensitive-area type this library does not model at all
     /// (<c>TPM_ALG_SYMCIPHER</c>, the ML types, or an unknown selector) is <c>TPM_RC_TYPE</c>
-    /// (<see cref="NotSupportedException"/>, propagated from <see cref="Structures.TpmtSensitive.Parse"/>) —
+    /// (<see cref="NotSupportedException"/>, propagated from <see cref="TpmtSensitive.Parse"/>) —
     /// Table 2's own catch-all for "The type parameter of a TPMT_PUBLIC or TPMT_SENSITIVE has a value that is
     /// not supported by the TPM." <c>inPublic</c> unmarshals through the general
-    /// <see cref="Structures.Tpm2bPublic.Parse"/> — the same catch channels <c>TPM2_Load()</c>'s parser uses —
+    /// <see cref="Tpm2bPublic.Parse"/> — the same catch channels <c>TPM2_Load()</c>'s parser uses —
     /// and its <c>nameAlg</c> is then judged AFTER the parse: <c>TPM_ALG_NULL</c> is admitted (Table 22's
     /// <c>TPM2B_PUBLIC+</c>; Part 1, clause 26.4's "In the case of TPM2_LoadExternal(), nameAlg is allowed to be
     /// TPM_ALG_NULL"), any other value outside this simulator's implemented hash set is bare <c>TPM_RC_HASH</c>;
-    /// <see cref="Structures.TpmtPublic.Parse"/> itself is untouched and still reads <c>nameAlg</c> raw for every
+    /// <see cref="TpmtPublic.Parse"/> itself is untouched and still reads <c>nameAlg</c> raw for every
     /// other command. A public-area type the union parsers do not model is <c>TPM_RC_TYPE</c> through the same
     /// <see cref="NotSupportedException"/> channel the sensitive area uses. An attribute word carrying any of
     /// Table 37's Reserved bits (<see cref="TpmaObjectExtensions.HasReservedBits"/>) is bare <c>TPM_RC_RESERVED_BITS</c> — the
@@ -22329,7 +23050,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// cell: "TPM_ST_SESSIONS if an audit or decrypt session is present"); on <c>TPM_ST_NO_SESSIONS</c>,
     /// parameters (context as TPM2B_SIGNATURE_CTX, digest as TPM2B_DIGEST, signature as TPMT_SIGNATURE) with no
     /// authorization area at all. A decrypt companion protects <c>context</c> — the first command parameter,
-    /// NOT <c>digest</c> — matching <see cref="VerifyDigestSignatureInput"/>'s own
+    /// NOT <c>digest</c> — matching <see cref="Verifiable.Tpm.Infrastructure.Commands.VerifyDigestSignatureInput"/>'s own
     /// <c>FirstCommandParameterIsEncryptable</c> declaration (<see cref="TpmNoAuthSessionShape"/>'s row for this
     /// command).
     /// </summary>
@@ -23737,6 +24458,69 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             TpmAlgIdConstants.TPM_ALG_NULL => sizeof(ushort),               //algorithm only.
             TpmAlgIdConstants.TPM_ALG_XOR => sizeof(ushort) + sizeof(ushort),//algorithm + keyBits (the KDF hash); XOR has no mode.
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_RSA or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA1 or
+            TpmAlgIdConstants.TPM_ALG_HMAC or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSASSA or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_RSAPSS or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDSA or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_ECC or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+                sizeof(ushort) + sizeof(ushort) + sizeof(ushort),           //algorithm + keyBits + mode (a block cipher).
             _ => sizeof(ushort) + sizeof(ushort) + sizeof(ushort)           //algorithm + keyBits + mode (a block cipher).
         };
         if(reader.Remaining < symmetricSize)
@@ -24963,6 +25747,121 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             TpmCcConstants.TPM_CC_MakeCredential => TryParseMakeCredentialParameters(handles, ref reader, pool, out input, out malformedResponseCode),
             TpmCcConstants.TPM_CC_LoadExternal => TryParseLoadExternal(ref reader, pool, out input, out malformedResponseCode),
             TpmCcConstants.TPM_CC_RSA_Encrypt => TryParseRsaEncryptParametersFromHandle(handles, ref reader, pool, out input, out malformedResponseCode),
+            TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial or
+            TpmCcConstants.TPM_CC_EvictControl or
+            TpmCcConstants.TPM_CC_HierarchyControl or
+            TpmCcConstants.TPM_CC_NV_UndefineSpace or
+            TpmCcConstants.TPM_CC_ChangeEPS or
+            TpmCcConstants.TPM_CC_ChangePPS or
+            TpmCcConstants.TPM_CC_Clear or
+            TpmCcConstants.TPM_CC_ClearControl or
+            TpmCcConstants.TPM_CC_ClockSet or
+            TpmCcConstants.TPM_CC_HierarchyChangeAuth or
+            TpmCcConstants.TPM_CC_NV_DefineSpace or
+            TpmCcConstants.TPM_CC_PCR_Allocate or
+            TpmCcConstants.TPM_CC_PCR_SetAuthPolicy or
+            TpmCcConstants.TPM_CC_PP_Commands or
+            TpmCcConstants.TPM_CC_SetPrimaryPolicy or
+            TpmCcConstants.TPM_CC_FieldUpgradeStart or
+            TpmCcConstants.TPM_CC_ClockRateAdjust or
+            TpmCcConstants.TPM_CC_CreatePrimary or
+            TpmCcConstants.TPM_CC_NV_GlobalWriteLock or
+            TpmCcConstants.TPM_CC_GetCommandAuditDigest or
+            TpmCcConstants.TPM_CC_NV_Increment or
+            TpmCcConstants.TPM_CC_NV_SetBits or
+            TpmCcConstants.TPM_CC_NV_Extend or
+            TpmCcConstants.TPM_CC_NV_Write or
+            TpmCcConstants.TPM_CC_NV_WriteLock or
+            TpmCcConstants.TPM_CC_DictionaryAttackLockReset or
+            TpmCcConstants.TPM_CC_DictionaryAttackParameters or
+            TpmCcConstants.TPM_CC_NV_ChangeAuth or
+            TpmCcConstants.TPM_CC_PCR_Event or
+            TpmCcConstants.TPM_CC_PCR_Reset or
+            TpmCcConstants.TPM_CC_SequenceComplete or
+            TpmCcConstants.TPM_CC_SetAlgorithmSet or
+            TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus or
+            TpmCcConstants.TPM_CC_FieldUpgradeData or
+            TpmCcConstants.TPM_CC_IncrementalSelfTest or
+            TpmCcConstants.TPM_CC_Startup or
+            TpmCcConstants.TPM_CC_ActivateCredential or
+            TpmCcConstants.TPM_CC_Certify or
+            TpmCcConstants.TPM_CC_PolicyNV or
+            TpmCcConstants.TPM_CC_CertifyCreation or
+            TpmCcConstants.TPM_CC_Duplicate or
+            TpmCcConstants.TPM_CC_GetTime or
+            TpmCcConstants.TPM_CC_GetSessionAuditDigest or
+            TpmCcConstants.TPM_CC_NV_Read or
+            TpmCcConstants.TPM_CC_NV_ReadLock or
+            TpmCcConstants.TPM_CC_ObjectChangeAuth or
+            TpmCcConstants.TPM_CC_PolicySecret or
+            TpmCcConstants.TPM_CC_Rewrap or
+            TpmCcConstants.TPM_CC_Create or
+            TpmCcConstants.TPM_CC_ECDH_ZGen or
+            TpmCcConstants.TPM_CC_HMAC or
+            TpmCcConstants.TPM_CC_Import or
+            TpmCcConstants.TPM_CC_Load or
+            TpmCcConstants.TPM_CC_Quote or
+            TpmCcConstants.TPM_CC_RSA_Decrypt or
+            TpmCcConstants.TPM_CC_HMAC_Start or
+            TpmCcConstants.TPM_CC_SequenceUpdate or
+            TpmCcConstants.TPM_CC_Sign or
+            TpmCcConstants.TPM_CC_Unseal or
+            TpmCcConstants.TPM_CC_PolicySigned or
+            TpmCcConstants.TPM_CC_ContextLoad or
+            TpmCcConstants.TPM_CC_ContextSave or
+            TpmCcConstants.TPM_CC_ECDH_KeyGen or
+            TpmCcConstants.TPM_CC_EncryptDecrypt or
+            TpmCcConstants.TPM_CC_FlushContext or
+            TpmCcConstants.TPM_CC_PolicyAuthorize or
+            TpmCcConstants.TPM_CC_PolicyAuthValue or
+            TpmCcConstants.TPM_CC_PolicyCommandCode or
+            TpmCcConstants.TPM_CC_PolicyCounterTimer or
+            TpmCcConstants.TPM_CC_PolicyCpHash or
+            TpmCcConstants.TPM_CC_PolicyLocality or
+            TpmCcConstants.TPM_CC_PolicyNameHash or
+            TpmCcConstants.TPM_CC_PolicyOR or
+            TpmCcConstants.TPM_CC_PolicyTicket or
+            TpmCcConstants.TPM_CC_StartAuthSession or
+            TpmCcConstants.TPM_CC_ECC_Parameters or
+            TpmCcConstants.TPM_CC_FirmwareRead or
+            TpmCcConstants.TPM_CC_PolicyPCR or
+            TpmCcConstants.TPM_CC_PolicyRestart or
+            TpmCcConstants.TPM_CC_PCR_Extend or
+            TpmCcConstants.TPM_CC_PCR_SetAuthValue or
+            TpmCcConstants.TPM_CC_NV_Certify or
+            TpmCcConstants.TPM_CC_EventSequenceComplete or
+            TpmCcConstants.TPM_CC_PolicyPhysicalPresence or
+            TpmCcConstants.TPM_CC_PolicyDuplicationSelect or
+            TpmCcConstants.TPM_CC_PolicyGetDigest or
+            TpmCcConstants.TPM_CC_Commit or
+            TpmCcConstants.TPM_CC_PolicyPassword or
+            TpmCcConstants.TPM_CC_ZGen_2Phase or
+            TpmCcConstants.TPM_CC_EC_Ephemeral or
+            TpmCcConstants.TPM_CC_PolicyNvWritten or
+            TpmCcConstants.TPM_CC_PolicyTemplate or
+            TpmCcConstants.TPM_CC_CreateLoaded or
+            TpmCcConstants.TPM_CC_PolicyAuthorizeNV or
+            TpmCcConstants.TPM_CC_EncryptDecrypt2 or
+            TpmCcConstants.TPM_CC_AC_GetCapability or
+            TpmCcConstants.TPM_CC_AC_Send or
+            TpmCcConstants.TPM_CC_Policy_AC_SendSelect or
+            TpmCcConstants.TPM_CC_CertifyX509 or
+            TpmCcConstants.TPM_CC_ACT_SetTimeout or
+            TpmCcConstants.TPM_CC_ECC_Encrypt or
+            TpmCcConstants.TPM_CC_ECC_Decrypt or
+            TpmCcConstants.TPM_CC_PolicyCapability or
+            TpmCcConstants.TPM_CC_PolicyParameters or
+            TpmCcConstants.TPM_CC_NV_DefineSpace2 or
+            TpmCcConstants.TPM_CC_NV_ReadPublic2 or
+            TpmCcConstants.TPM_CC_SetCapability or
+            TpmCcConstants.TPM_CC_ReadOnlyControl or
+            TpmCcConstants.TPM_CC_PolicyTransportSPDM or
+            TpmCcConstants.TPM_CC_VerifySequenceComplete or
+            TpmCcConstants.TPM_CC_SignSequenceComplete or
+            TpmCcConstants.TPM_CC_SignDigest or
+            TpmCcConstants.TPM_CC_Decapsulate or
+            TpmCcConstants.CC_VEND =>
+                throw new InvalidOperationException($"No no-authorization parameter core is defined for '{commandCode}'."),
             _ => throw new InvalidOperationException($"No no-authorization parameter core is defined for '{commandCode}'.")
         };
 
@@ -25074,6 +25973,132 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return true;
             }
 
+            case TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial:
+            case TpmCcConstants.TPM_CC_EvictControl:
+            case TpmCcConstants.TPM_CC_HierarchyControl:
+            case TpmCcConstants.TPM_CC_NV_UndefineSpace:
+            case TpmCcConstants.TPM_CC_ChangeEPS:
+            case TpmCcConstants.TPM_CC_ChangePPS:
+            case TpmCcConstants.TPM_CC_Clear:
+            case TpmCcConstants.TPM_CC_ClearControl:
+            case TpmCcConstants.TPM_CC_ClockSet:
+            case TpmCcConstants.TPM_CC_HierarchyChangeAuth:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace:
+            case TpmCcConstants.TPM_CC_PCR_Allocate:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthPolicy:
+            case TpmCcConstants.TPM_CC_PP_Commands:
+            case TpmCcConstants.TPM_CC_SetPrimaryPolicy:
+            case TpmCcConstants.TPM_CC_FieldUpgradeStart:
+            case TpmCcConstants.TPM_CC_ClockRateAdjust:
+            case TpmCcConstants.TPM_CC_CreatePrimary:
+            case TpmCcConstants.TPM_CC_NV_GlobalWriteLock:
+            case TpmCcConstants.TPM_CC_GetCommandAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Increment:
+            case TpmCcConstants.TPM_CC_NV_SetBits:
+            case TpmCcConstants.TPM_CC_NV_Extend:
+            case TpmCcConstants.TPM_CC_NV_Write:
+            case TpmCcConstants.TPM_CC_NV_WriteLock:
+            case TpmCcConstants.TPM_CC_DictionaryAttackLockReset:
+            case TpmCcConstants.TPM_CC_DictionaryAttackParameters:
+            case TpmCcConstants.TPM_CC_NV_ChangeAuth:
+            case TpmCcConstants.TPM_CC_PCR_Event:
+            case TpmCcConstants.TPM_CC_PCR_Reset:
+            case TpmCcConstants.TPM_CC_SequenceComplete:
+            case TpmCcConstants.TPM_CC_SetAlgorithmSet:
+            case TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus:
+            case TpmCcConstants.TPM_CC_FieldUpgradeData:
+            case TpmCcConstants.TPM_CC_IncrementalSelfTest:
+            case TpmCcConstants.TPM_CC_SelfTest:
+            case TpmCcConstants.TPM_CC_Startup:
+            case TpmCcConstants.TPM_CC_Shutdown:
+            case TpmCcConstants.TPM_CC_StirRandom:
+            case TpmCcConstants.TPM_CC_ActivateCredential:
+            case TpmCcConstants.TPM_CC_Certify:
+            case TpmCcConstants.TPM_CC_PolicyNV:
+            case TpmCcConstants.TPM_CC_CertifyCreation:
+            case TpmCcConstants.TPM_CC_Duplicate:
+            case TpmCcConstants.TPM_CC_GetTime:
+            case TpmCcConstants.TPM_CC_GetSessionAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Read:
+            case TpmCcConstants.TPM_CC_NV_ReadLock:
+            case TpmCcConstants.TPM_CC_ObjectChangeAuth:
+            case TpmCcConstants.TPM_CC_PolicySecret:
+            case TpmCcConstants.TPM_CC_Rewrap:
+            case TpmCcConstants.TPM_CC_Create:
+            case TpmCcConstants.TPM_CC_ECDH_ZGen:
+            case TpmCcConstants.TPM_CC_HMAC:
+            case TpmCcConstants.TPM_CC_Import:
+            case TpmCcConstants.TPM_CC_Load:
+            case TpmCcConstants.TPM_CC_Quote:
+            case TpmCcConstants.TPM_CC_RSA_Decrypt:
+            case TpmCcConstants.TPM_CC_HMAC_Start:
+            case TpmCcConstants.TPM_CC_SequenceUpdate:
+            case TpmCcConstants.TPM_CC_Sign:
+            case TpmCcConstants.TPM_CC_Unseal:
+            case TpmCcConstants.TPM_CC_PolicySigned:
+            case TpmCcConstants.TPM_CC_ContextLoad:
+            case TpmCcConstants.TPM_CC_ContextSave:
+            case TpmCcConstants.TPM_CC_ECDH_KeyGen:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt:
+            case TpmCcConstants.TPM_CC_FlushContext:
+            case TpmCcConstants.TPM_CC_LoadExternal:
+            case TpmCcConstants.TPM_CC_PolicyAuthorize:
+            case TpmCcConstants.TPM_CC_PolicyAuthValue:
+            case TpmCcConstants.TPM_CC_PolicyCommandCode:
+            case TpmCcConstants.TPM_CC_PolicyCounterTimer:
+            case TpmCcConstants.TPM_CC_PolicyCpHash:
+            case TpmCcConstants.TPM_CC_PolicyLocality:
+            case TpmCcConstants.TPM_CC_PolicyNameHash:
+            case TpmCcConstants.TPM_CC_PolicyOR:
+            case TpmCcConstants.TPM_CC_PolicyTicket:
+            case TpmCcConstants.TPM_CC_StartAuthSession:
+            case TpmCcConstants.TPM_CC_ECC_Parameters:
+            case TpmCcConstants.TPM_CC_FirmwareRead:
+            case TpmCcConstants.TPM_CC_GetCapability:
+            case TpmCcConstants.TPM_CC_GetRandom:
+            case TpmCcConstants.TPM_CC_GetTestResult:
+            case TpmCcConstants.TPM_CC_Hash:
+            case TpmCcConstants.TPM_CC_PCR_Read:
+            case TpmCcConstants.TPM_CC_PolicyPCR:
+            case TpmCcConstants.TPM_CC_PolicyRestart:
+            case TpmCcConstants.TPM_CC_ReadClock:
+            case TpmCcConstants.TPM_CC_PCR_Extend:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthValue:
+            case TpmCcConstants.TPM_CC_NV_Certify:
+            case TpmCcConstants.TPM_CC_EventSequenceComplete:
+            case TpmCcConstants.TPM_CC_HashSequenceStart:
+            case TpmCcConstants.TPM_CC_PolicyPhysicalPresence:
+            case TpmCcConstants.TPM_CC_PolicyDuplicationSelect:
+            case TpmCcConstants.TPM_CC_PolicyGetDigest:
+            case TpmCcConstants.TPM_CC_TestParms:
+            case TpmCcConstants.TPM_CC_Commit:
+            case TpmCcConstants.TPM_CC_PolicyPassword:
+            case TpmCcConstants.TPM_CC_ZGen_2Phase:
+            case TpmCcConstants.TPM_CC_EC_Ephemeral:
+            case TpmCcConstants.TPM_CC_PolicyNvWritten:
+            case TpmCcConstants.TPM_CC_PolicyTemplate:
+            case TpmCcConstants.TPM_CC_CreateLoaded:
+            case TpmCcConstants.TPM_CC_PolicyAuthorizeNV:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt2:
+            case TpmCcConstants.TPM_CC_AC_GetCapability:
+            case TpmCcConstants.TPM_CC_AC_Send:
+            case TpmCcConstants.TPM_CC_Policy_AC_SendSelect:
+            case TpmCcConstants.TPM_CC_CertifyX509:
+            case TpmCcConstants.TPM_CC_ACT_SetTimeout:
+            case TpmCcConstants.TPM_CC_ECC_Encrypt:
+            case TpmCcConstants.TPM_CC_ECC_Decrypt:
+            case TpmCcConstants.TPM_CC_PolicyCapability:
+            case TpmCcConstants.TPM_CC_PolicyParameters:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace2:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic2:
+            case TpmCcConstants.TPM_CC_SetCapability:
+            case TpmCcConstants.TPM_CC_ReadOnlyControl:
+            case TpmCcConstants.TPM_CC_PolicyTransportSPDM:
+            case TpmCcConstants.TPM_CC_VerifySequenceComplete:
+            case TpmCcConstants.TPM_CC_SignSequenceComplete:
+            case TpmCcConstants.TPM_CC_SignDigest:
+            case TpmCcConstants.TPM_CC_Decapsulate:
+            case TpmCcConstants.CC_VEND:
             default:
             {
                 throw new InvalidOperationException($"No no-authorization handle parse is defined for '{commandCode}'.");
@@ -25323,7 +26348,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <remarks>
     /// The handle is <c>TPMI_SH_POLICY</c> (TPM 2.0 Library Part 2, clause 9.10, Table 56), so a value outside
     /// the policy session range is refused here, at unmarshal, by <see cref="TryReadPolicySessionOnly"/> —
-    /// rather than reaching <see cref="OnPolicyRestart"/>'s handle-area lookup, which answers Part 3, clause 5.4 step
+    /// rather than reaching <see cref="TpmLifecycleTransitions"/>'s <c>OnPolicyRestart</c> handle-area lookup, which answers Part 3, clause 5.4 step
     /// 2.4's <c>TPM_RC_REFERENCE_H0</c> for an in-range value that is simply not loaded.
     /// </remarks>
     private static bool TryParsePolicyRestart(ref TpmReader reader, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)

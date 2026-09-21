@@ -23,7 +23,13 @@ public sealed record TrustChainValidationOutcome
     /// <summary>The parsed and validated chain when validation succeeded; otherwise <see langword="null"/>.</summary>
     public TrustChain? Chain { get; init; }
 
-    /// <summary>The underlying claim issue result from <see cref="TrustChainValidator"/> when validation ran.</summary>
+    /// <summary>
+    /// The underlying claim issue result from <see cref="TrustChainValidator"/> when validation ran —
+    /// on success, always; on rejection, only when the rejecting call site had one in hand
+    /// (<see cref="Rejected"/>'s optional <c>validationResult</c> parameter), <see langword="null"/>
+    /// otherwise. A consumer branches on this to see which <see cref="Verifiable.Core.Assessment.Claim"/>
+    /// failed, not just that the chain was rejected.
+    /// </summary>
     public ClaimIssueResult? ValidationResult { get; init; }
 
     /// <summary>The reason validation failed; <see langword="null"/> on success.</summary>
@@ -46,10 +52,23 @@ public sealed record TrustChainValidationOutcome
     }
 
 
-    /// <summary>Builds a failure result.</summary>
-    public static TrustChainValidationOutcome Rejected(string reason)
+    /// <summary>
+    /// Builds a failure result with the given reason. The optional <paramref name="validationResult"/>
+    /// is carried when the rejection came from <see cref="TrustChainValidator"/>'s own claim loop (so the
+    /// caller keeps which <see cref="Verifiable.Core.Assessment.Claim"/> failed, not just the flattened
+    /// reason string).
+    /// </summary>
+    /// <param name="reason">Why the chain was rejected, in words.</param>
+    /// <param name="validationResult">
+    /// The claim issue result the rejection came from, or <see langword="null"/> when the rejection
+    /// happened before the validator produced one (an empty chain, an unreadable statement, a key that
+    /// did not resolve, a signature that did not verify).
+    /// </param>
+    /// <returns>The rejected outcome; <see cref="IsValid"/> is <see langword="false"/>.</returns>
+    public static TrustChainValidationOutcome Rejected(string reason, ClaimIssueResult? validationResult = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
-        return new TrustChainValidationOutcome { FailureReason = reason };
+
+        return new TrustChainValidationOutcome { FailureReason = reason, ValidationResult = validationResult };
     }
 }

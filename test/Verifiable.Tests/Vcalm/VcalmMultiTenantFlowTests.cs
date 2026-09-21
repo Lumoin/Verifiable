@@ -245,17 +245,22 @@ internal sealed class VcalmMultiTenantFlowTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        VerifierKeyMaterial hostMaterial = app.RegisterClient(
-            "https://no-issuance.client.test", new Uri("https://no-issuance.client.test"), IssuerOnly);
+        VerifierKeyMaterial hostMaterial = await app.RegisterClientAsync(
+            "https://no-issuance.client.test", new Uri("https://no-issuance.client.test"), IssuerOnly).ConfigureAwait(false);
         OwnedKeys.Add(hostMaterial);
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         //The resolver is wired — so the §3.2.1 route materializes — but resolves NO issuance for any
         //tenant: the capability-present-but-no-identity misconfiguration.
-        vcalm.ResolveVcalmCredentialIssuanceAsync = (_, _) =>
-            ValueTask.FromResult<VcalmCredentialIssuance?>(null);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmCredentialIssuanceAsync = (_, _) =>
+                ValueTask.FromResult<VcalmCredentialIssuance?>(null);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchIssueAsync(
             app,
@@ -284,7 +289,10 @@ internal sealed class VcalmMultiTenantFlowTests
         FreshIssuance flat = await BuildFreshIssuanceAsync().ConfigureAwait(false);
         Assert.AreNotEqual(t.VmIdA, flat.VerificationMethodId,
             "The flat identity is genuinely distinct from tenant A's, so signing-as-A proves the resolver won.");
-        app.Server.Vcalm().VcalmCredentialIssuance = flat.Issuance;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmCredentialIssuance = flat.Issuance;
+        }).ConfigureAwait(false);
 
         using JsonDocument issuedA = await PostIssueAsync(
             app, t.SegmentA, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:precedence", SerializeCredential), expectedStatus: 201).ConfigureAwait(false);
@@ -327,15 +335,20 @@ internal sealed class VcalmMultiTenantFlowTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        VerifierKeyMaterial hostMaterial = app.RegisterClient(
+        VerifierKeyMaterial hostMaterial = await app.RegisterClientAsync(
             "https://no-status.client.test", new Uri("https://no-status.client.test"),
-            ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmStatus));
+            ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmStatus)).ConfigureAwait(false);
         OwnedKeys.Add(hostMaterial);
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
-        vcalm.ResolveVcalmStatusListIssuanceAsync = (_, _) =>
-            ValueTask.FromResult<VcalmCredentialIssuance?>(null);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListIssuanceAsync = (_, _) =>
+                ValueTask.FromResult<VcalmCredentialIssuance?>(null);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             hostMaterial.Registration.TenantId.Value, WellKnownVcalmEndpointNames.VcalmCreateStatusList, "POST",
@@ -379,15 +392,20 @@ internal sealed class VcalmMultiTenantFlowTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        VerifierKeyMaterial hostMaterial = app.RegisterClient(
+        VerifierKeyMaterial hostMaterial = await app.RegisterClientAsync(
             "https://no-holder.client.test", new Uri("https://no-holder.client.test"),
-            ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmHolder));
+            ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmHolder)).ConfigureAwait(false);
         OwnedKeys.Add(hostMaterial);
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
-        vcalm.ResolveVcalmPresentationSigningAsync = (_, _) =>
-            ValueTask.FromResult<VcalmPresentationSigning?>(null);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmPresentationSigningAsync = (_, _) =>
+                ValueTask.FromResult<VcalmPresentationSigning?>(null);
+        }).ConfigureAwait(false);
 
         string body = "{\"presentation\":" + VcalmWireFixtures.SerializeUnproofedPresentation("did:example:holder", SerializePresentation)
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"d.example\"}}";
@@ -414,15 +432,20 @@ internal sealed class VcalmMultiTenantFlowTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        VerifierKeyMaterial hostMaterial = app.RegisterClient(
+        VerifierKeyMaterial hostMaterial = await app.RegisterClientAsync(
             "https://no-derive.client.test", new Uri("https://no-derive.client.test"),
-            ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmHolder));
+            ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmHolder)).ConfigureAwait(false);
         OwnedKeys.Add(hostMaterial);
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
-        vcalm.ResolveVcalmCredentialDerivationAsync = (_, _) =>
-            ValueTask.FromResult<VcalmCredentialDerivation?>(null);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmCredentialDerivationAsync = (_, _) =>
+                ValueTask.FromResult<VcalmCredentialDerivation?>(null);
+        }).ConfigureAwait(false);
 
         //A parse-able derive request needs a SECURED (proofed) credential; the resolution null-guard
         //fires before the non-derivable check, so an ordinary eddsa-rdfc-2022 proof (not a real
@@ -460,33 +483,38 @@ internal sealed class VcalmMultiTenantFlowTests
             [b.Segment] = b.Issuance
         };
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.ResolveVcalmCredentialIssuanceAsync = (context, _) =>
-            ValueTask.FromResult(issuerBySegment.GetValueOrDefault(TenantSegment(context)));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmCredentialIssuanceAsync = (context, _) =>
+                ValueTask.FromResult(issuerBySegment.GetValueOrDefault(TenantSegment(context)));
+        }).ConfigureAwait(false);
 
         //No exchange-specific resolver/flat → exchange issuance falls back to the per-tenant ISSUER.
         Assert.AreSame(a.Issuance,
-            await vcalm.ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(a.Segment), TestContext.CancellationToken).ConfigureAwait(false),
+            await app.Server.Vcalm().ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(a.Segment), TestContext.CancellationToken).ConfigureAwait(false),
             "With no exchange wiring, tenant A's exchange issuance falls back to tenant A's issuer issuance.");
         Assert.AreSame(b.Issuance,
-            await vcalm.ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(b.Segment), TestContext.CancellationToken).ConfigureAwait(false),
+            await app.Server.Vcalm().ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(b.Segment), TestContext.CancellationToken).ConfigureAwait(false),
             "The fallback is per-tenant — tenant B falls back to tenant B's issuer issuance.");
 
         //A dedicated per-tenant EXCHANGE resolver supersedes the issuer fallback for the tenants it covers.
         FreshIssuance exchangeA = await BuildFreshIssuanceAsync().ConfigureAwait(false);
-        vcalm.ResolveVcalmExchangeIssuanceAsync = (context, _) =>
-            ValueTask.FromResult(string.Equals(TenantSegment(context), a.Segment, StringComparison.Ordinal) ? exchangeA.Issuance : null);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmExchangeIssuanceAsync = (context, _) =>
+                ValueTask.FromResult(string.Equals(TenantSegment(context), a.Segment, StringComparison.Ordinal) ? exchangeA.Issuance : null);
+        }).ConfigureAwait(false);
 
         Assert.AreSame(exchangeA.Issuance,
-            await vcalm.ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(a.Segment), TestContext.CancellationToken).ConfigureAwait(false),
+            await app.Server.Vcalm().ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(a.Segment), TestContext.CancellationToken).ConfigureAwait(false),
             "Tenant A's dedicated exchange issuance supersedes the issuer fallback.");
         Assert.AreSame(b.Issuance,
-            await vcalm.ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(b.Segment), TestContext.CancellationToken).ConfigureAwait(false),
+            await app.Server.Vcalm().ResolveEffectiveExchangeIssuanceAsync(ContextForTenant(b.Segment), TestContext.CancellationToken).ConfigureAwait(false),
             "Tenant B has no exchange entry, so it still falls through to its issuer issuance.");
 
         //A tenant with no issuance anywhere resolves to null — the §3.6 engine's fail-closed signal.
         Assert.IsNull(
-            await vcalm.ResolveEffectiveExchangeIssuanceAsync(ContextForTenant("unknown-tenant"), TestContext.CancellationToken).ConfigureAwait(false),
+            await app.Server.Vcalm().ResolveEffectiveExchangeIssuanceAsync(ContextForTenant("unknown-tenant"), TestContext.CancellationToken).ConfigureAwait(false),
             "A tenant with no issuance anywhere resolves to null; the engine refuses the issuance step.");
     }
 
@@ -527,9 +555,9 @@ internal sealed class VcalmMultiTenantFlowTests
     }
 
 
-    //Registers two tenants on one host, each with its own Ed25519 issuer identity, and wires the
-    //per-tenant issuance resolver, the (shared, identity-based) verification seam, and the tenant-scoped
-    //issued-credential store.
+    /// <summary>
+    /// Starts the listener with two tenant registrations and their isolated lifecycle delegates.
+    /// </summary>
     private async Task<TwoTenants> StartTwoTenantHostAsync(TestHostShell app)
     {
         TenantIssuer a = await RegisterTenantAsync(app, "https://tenant-a.client.test").ConfigureAwait(false);
@@ -541,39 +569,54 @@ internal sealed class VcalmMultiTenantFlowTests
             [b.Segment] = b.Issuance
         };
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         //The productized multi-tenant seam: resolve the §3.2.1 issuance configuration for the tenant the
         //dispatcher stamped on the request, instead of reading one server-global value.
-        vcalm.ResolveVcalmCredentialIssuanceAsync = (context, _) =>
-            ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(TenantSegment(context)));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmCredentialIssuanceAsync = (context, _) =>
+                ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(TenantSegment(context)));
+        }).ConfigureAwait(false);
 
         //Verification is identity-based: one did:key resolver resolves either tenant's issuer DID.
-        vcalm.VcalmCredentialVerification = new VcalmCredentialVerification
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Resolver = KeyDidResolverSeam,
-            Canonicalize = RdfcCanonicalizer,
-            ContextResolver = ContextResolver,
-            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-            SerializeCredential = SerializeCredential,
-            SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
-            SerializeProofOptions = SerializeProofOptions,
-            Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            MemoryPool = Pool
-        };
+            candidateIntegration.VcalmCredentialVerification = new VcalmCredentialVerification
+            {
+                Resolver = KeyDidResolverSeam,
+                Canonicalize = RdfcCanonicalizer,
+                ContextResolver = ContextResolver,
+                KnownContext = VcalmWireFixtures.CredentialKnownContext,
+                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                SerializeCredential = SerializeCredential,
+                SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
+                SerializeProofOptions = SerializeProofOptions,
+                Decoder = TestSetup.Base58Decoder,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
 
         //Tenant-scoped issued-credential store: the key carries the request's tenant segment.
-        vcalm.StoreVcalmIssuedCredentialAsync = (credentialId, json, context, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            CredentialStore[(TenantSegment(context), credentialId)] =
-                new VcalmStoredCredential { VerifiableCredentialJson = json };
+            candidateIntegration.StoreVcalmIssuedCredentialAsync = (credentialId, json, context, _) =>
+            {
+                CredentialStore[(TenantSegment(context), credentialId)] =
+                    new VcalmStoredCredential { VerifiableCredentialJson = json };
 
-            return ValueTask.CompletedTask;
-        };
-        vcalm.LoadVcalmIssuedCredentialAsync = (credentialId, context, _) =>
-            ValueTask.FromResult(CredentialStore.GetValueOrDefault((TenantSegment(context), credentialId)));
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadVcalmIssuedCredentialAsync = (credentialId, context, _) =>
+                ValueTask.FromResult(CredentialStore.GetValueOrDefault((TenantSegment(context), credentialId)));
+        }).ConfigureAwait(false);
 
         return new TwoTenants(a.Segment, a.IssuerDid, a.VerificationMethodId, b.Segment, b.IssuerDid, b.VerificationMethodId);
     }
@@ -584,7 +627,7 @@ internal sealed class VcalmMultiTenantFlowTests
     //material are retained for disposal at cleanup.
     private async Task<TenantIssuer> RegisterTenantAsync(TestHostShell app, string clientId)
     {
-        VerifierKeyMaterial hostMaterial = app.RegisterClient(clientId, new Uri(clientId), IssuerAndVerifier);
+        VerifierKeyMaterial hostMaterial = await app.RegisterClientAsync(clientId, new Uri(clientId), IssuerAndVerifier).ConfigureAwait(false);
         OwnedKeys.Add(hostMaterial);
 
         FreshIssuance fresh = await BuildFreshIssuanceAsync().ConfigureAwait(false);
@@ -764,22 +807,19 @@ internal sealed class VcalmMultiTenantFlowTests
         VcalmCredentialIssuance Issuance, string IssuerDid, string VerificationMethodId);
 
 
-    //Brings up the full showcase host: two tenants each with the issuer, verifier, status, and holder
-    //roles, each securing its credentials and status lists under its own issuer key and signing its
-    //presentations under its own distinct holder key. §C.1 status-list issuance reuses the per-tenant
-    //issuer issuance (§C.1: "the status list credential typically uses the same securing mechanism");
-    //§3.5.2 presentations resolve a separate per-tenant holder key. Verification is identity-based and
-    //is not wired here — the showcase asserts which key SIGNED each artifact, not round-trip verify.
+    /// <summary>
+    /// Starts the listener with the lifecycle capabilities and delegates exercised by the multi-tenant flow.
+    /// </summary>
     private async Task<Showcase> StartShowcaseHostAsync(TestHostShell app)
     {
-        VerifierKeyMaterial materialA = app.RegisterClient(
-            "https://show-a.client.test", new Uri("https://show-a.client.test"), ShowcaseCapabilities);
+        VerifierKeyMaterial materialA = await app.RegisterClientAsync(
+            "https://show-a.client.test", new Uri("https://show-a.client.test"), ShowcaseCapabilities).ConfigureAwait(false);
         OwnedKeys.Add(materialA);
         FreshIssuance issuerA = await BuildFreshIssuanceAsync().ConfigureAwait(false);
         HolderSigning holderA = await BuildPresentationSigningAsync().ConfigureAwait(false);
 
-        VerifierKeyMaterial materialB = app.RegisterClient(
-            "https://show-b.client.test", new Uri("https://show-b.client.test"), ShowcaseCapabilities);
+        VerifierKeyMaterial materialB = await app.RegisterClientAsync(
+            "https://show-b.client.test", new Uri("https://show-b.client.test"), ShowcaseCapabilities).ConfigureAwait(false);
         OwnedKeys.Add(materialB);
         FreshIssuance issuerB = await BuildFreshIssuanceAsync().ConfigureAwait(false);
         HolderSigning holderB = await BuildPresentationSigningAsync().ConfigureAwait(false);
@@ -798,17 +838,28 @@ internal sealed class VcalmMultiTenantFlowTests
             [segmentB] = holderB.Signing
         };
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
-        vcalm.ResolveVcalmCredentialIssuanceAsync = (context, _) =>
-            ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(TenantSegment(context)));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmCredentialIssuanceAsync = (context, _) =>
+                ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(TenantSegment(context)));
+        }).ConfigureAwait(false);
 
         //§C.1 status-list issuance reuses the per-tenant issuer issuance.
-        vcalm.ResolveVcalmStatusListIssuanceAsync = vcalm.ResolveVcalmCredentialIssuanceAsync;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListIssuanceAsync = candidateIntegration.ResolveVcalmCredentialIssuanceAsync;
+        }).ConfigureAwait(false);
 
-        vcalm.ResolveVcalmPresentationSigningAsync = (context, _) =>
-            ValueTask.FromResult(signingBySegment.GetValueOrDefault(TenantSegment(context)));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmPresentationSigningAsync = (context, _) =>
+                ValueTask.FromResult(signingBySegment.GetValueOrDefault(TenantSegment(context)));
+        }).ConfigureAwait(false);
 
         return new Showcase(
             segmentA, issuerA.IssuerDid, issuerA.VerificationMethodId, holderA.HolderDid, holderA.VerificationMethodId,

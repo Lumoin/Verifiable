@@ -38,7 +38,7 @@ namespace Verifiable.Tests.Tpm;
 /// (the registered, sync-by-nature digest seam), never a bare <see cref="SHA256"/> call. The shared inner wrap
 /// mirrors the ECC oracle: KDFa and the outer HMAC (<see cref="BuildCredentialBlobAsync"/>) compose the spec
 /// message by hand but compute it through the project's own <see cref="Kdfa"/> and the registered HMAC seam;
-/// framework <see cref="Aes.EncryptCfb"/> stays independent of the shipped ECB-loop CFB helper
+/// framework <c>Aes.EncryptCfb</c> stays independent of the shipped ECB-loop CFB helper
 /// (<c>TpmParameterEncryption.AesCfb</c>), and the one-AES-block 14-octet credential sizing accommodates
 /// framework CFB's lack of short-final-block handling (see
 /// <see cref="TpmInHouseSimulatorCredentialOracleTests.CredentialSecret"/>'s doc comment for the recorded

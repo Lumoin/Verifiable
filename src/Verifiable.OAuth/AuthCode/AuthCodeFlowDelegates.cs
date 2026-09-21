@@ -98,6 +98,17 @@ public delegate ValueTask<FlowState?> LoadFlowStateByRequestUriDelegate(
 /// request, and may populate <see cref="HttpResponseData.TransportMetadata"/>
 /// with server-side context such as a flow identifier.
 /// </para>
+/// <para>
+/// <paramref name="endpoint"/> is issuer- or authorization-server-named — read out of discovered
+/// metadata, not chosen by this library — and may share an origin with the application's own
+/// backend. A browser host therefore sends every request this implementation builds with
+/// credentials omitted (<c>BrowserRequestCredentials.Omit</c> on the request, in the
+/// application's own transport), because the Fetch Standard's default credentials mode is
+/// <c>same-origin</c>: "A request has an associated credentials mode, which is 'omit',
+/// 'same-origin', or 'include'. Unless stated otherwise, it is 'same-origin'." The library places
+/// no origin restriction on <paramref name="endpoint"/> and evaluates only the caller's
+/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/>.
+/// </para>
 /// </remarks>
 /// <param name="endpoint">The URI to POST to.</param>
 /// <param name="formFields">

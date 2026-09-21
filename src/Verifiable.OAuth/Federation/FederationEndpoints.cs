@@ -29,14 +29,14 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="WellKnownFederationCapabilityIdentifiers.PublishEntityConfiguration"/>
 /// and a non-null <see cref="ClientRecord.FederationEntityId"/> contributes
 /// one EC endpoint at a URL the application chooses via
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>.
+/// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>.
 /// The library never assumes a path shape; tenant separation can be
 /// path-segment, subdomain, header-based, or anything the application's
 /// URL resolver returns.
 /// </para>
 /// <para>
 /// <strong>Signing.</strong> The EC is signed via
-/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>'s
+/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, BaseMemoryPool, System.Threading.CancellationToken)"/>'s
 /// registry-based overload, so the wire <c>alg</c> derives entirely from
 /// the private key's tag through the registered
 /// <see cref="SigningDelegate"/>. No signing algorithm is hardcoded
@@ -151,7 +151,7 @@ public static class FederationEndpoints
     /// <para>
     /// Stateless: <see cref="ServerEndpoint.BuildInputAsync"/> assembles
     /// the EC payload, signs it via the registry-based
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>,
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, BaseMemoryPool, System.Threading.CancellationToken)"/>,
     /// and short-circuits the dispatcher with an early
     /// <see cref="ServerHttpResponse.Ok(string, string)"/>. The
     /// <see cref="ServerEndpoint.BuildResponse"/> hook is never reached.
@@ -190,7 +190,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -336,7 +336,7 @@ public static class FederationEndpoints
     /// When the application returns <see langword="null"/> from the
     /// resolver the endpoint responds HTTP 404 — the queried subject is
     /// not a known subordinate. The URL the matcher binds to is whatever
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// returned for
     /// <see cref="WellKnownEndpointNames.FederationFetch"/>; the
     /// application advertises this URL in its EC metadata
@@ -380,7 +380,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -569,7 +569,7 @@ public static class FederationEndpoints
     /// <em>unsigned</em> — it states only the membership, not any assertion
     /// about a subject — so the endpoint takes no federation signing key.
     /// The URL the matcher binds to is whatever
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// returned for <see cref="WellKnownEndpointNames.FederationList"/>; the
     /// application advertises this URL in its EC metadata
     /// (<c>federation_entity.federation_list_endpoint</c>).
@@ -609,7 +609,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -776,7 +776,7 @@ public static class FederationEndpoints
     /// When the application returns <see langword="null"/> the endpoint
     /// responds HTTP 404 — the subject could not be resolved to the
     /// requested anchor. The URL the matcher binds to is whatever
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// returned for <see cref="WellKnownEndpointNames.FederationResolve"/>;
     /// the application advertises this URL in its EC metadata
     /// (<c>federation_entity.federation_resolve_endpoint</c>).
@@ -816,7 +816,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -930,18 +930,17 @@ public static class FederationEndpoints
                     entityTypeFilter = new EntityTypeIdentifier(typeValue);
                 }
 
-                ResolveResponseContribution? contribution =
+                FederationResolveOutcome? outcome =
                     await oauth.ResolveSubjectTrustChainAsync(
                         subject, trustAnchor, entityTypeFilter, registration, context, ct).ConfigureAwait(false);
 
+                ResolveResponseContribution? contribution = outcome?.Contribution;
                 if(contribution is null)
                 {
-                    //Federation §8.9: the resolver cannot serve the requested
-                    //subject, returned as a 404 with the invalid_subject error
-                    //code in an application/json body.
-                    return (null, ServerHttpResponse.NotFound(
-                        OAuthErrors.InvalidSubject,
-                        $"The trust chain for subject '{subject.Value}' could not be resolved."));
+                    //Federation §8.9: the delegate names which error the resolve endpoint
+                    //answers with; a null delegate return, or an outcome naming no error,
+                    //answers FederationResolveError.InvalidSubject.
+                    return (null, BuildFederationResolveErrorResponse(outcome?.Error, subject));
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
@@ -1003,6 +1002,36 @@ public static class FederationEndpoints
 
 
     /// <summary>
+    /// Maps a <see cref="FederationResolveError"/> to the wire error and HTTP status
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>
+    /// assigns it. <see langword="null"/> — an outcome naming no error — answers
+    /// <see cref="FederationResolveError.InvalidSubject"/>.
+    /// </summary>
+    private static ServerHttpResponse BuildFederationResolveErrorResponse(
+        FederationResolveError? error, EntityIdentifier subject) => error switch
+        {
+            FederationResolveError.InvalidTrustAnchor =>
+                ServerHttpResponse.NotFound(OAuthErrors.InvalidTrustAnchor,
+                    $"The trust anchor for subject '{subject.Value}' could not be found or used."),
+
+            FederationResolveError.InvalidTrustChain =>
+                ServerHttpResponse.BadRequest(OAuthErrors.InvalidTrustChain,
+                    $"The trust chain for subject '{subject.Value}' could not be validated."),
+
+            FederationResolveError.InvalidMetadata =>
+                ServerHttpResponse.BadRequest(OAuthErrors.InvalidMetadata,
+                    $"The metadata or metadata policy for subject '{subject.Value}' is invalid or conflicts."),
+
+            FederationResolveError.NotFound =>
+                ServerHttpResponse.NotFound(OAuthErrors.NotFound,
+                    $"The entity identifier '{subject.Value}' could not be found."),
+
+            _ => ServerHttpResponse.NotFound(OAuthErrors.InvalidSubject,
+                $"The trust chain for subject '{subject.Value}' could not be resolved.")
+        };
+
+
+    /// <summary>
     /// Builds the <c>federation_historical_keys_endpoint</c> per
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.7">Federation §8.7</see>.
     /// Stateless: <c>GET</c> arrives, the application supplies the entity's
@@ -1017,7 +1046,7 @@ public static class FederationEndpoints
     /// responds HTTP 404 — the entity has no historical keys to publish,
     /// mirroring the <c>federation_resolve_endpoint</c> null-contribution
     /// contract. The URL the matcher binds to is whatever
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// returned for <see cref="WellKnownEndpointNames.FederationHistoricalKeys"/>;
     /// the application advertises this URL in its EC metadata
     /// (<c>federation_entity.federation_historical_keys_endpoint</c>).
@@ -1053,7 +1082,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -1218,7 +1247,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -1382,7 +1411,7 @@ public static class FederationEndpoints
     /// application returns <see langword="null"/> the endpoint responds HTTP 404 —
     /// the entity has no Trust Mark of the queried type for the queried subject.
     /// The URL the matcher binds to is whatever
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// returned for <see cref="WellKnownEndpointNames.FederationTrustMark"/>; the
     /// application advertises this URL in its EC metadata
     /// (<c>federation_entity.federation_trust_mark_endpoint</c>).
@@ -1422,7 +1451,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -1525,7 +1554,7 @@ public static class FederationEndpoints
     /// signing key, and reuses the same hand-rolled JSON array serialiser. The
     /// optional <c>sub</c> parameter narrows the answer to a single subject. The
     /// URL the matcher binds to is whatever
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// returned for <see cref="WellKnownEndpointNames.FederationTrustMarkList"/>;
     /// the application advertises this URL in its EC metadata
     /// (<c>federation_entity.federation_trust_mark_list_endpoint</c>).
@@ -1565,7 +1594,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -1660,7 +1689,7 @@ public static class FederationEndpoints
     /// HTTP 404 — the issuer does not know the queried Trust Mark, mirroring the
     /// <c>federation_resolve_endpoint</c> null-contribution contract. The URL the
     /// matcher binds to is whatever
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>
     /// returned for <see cref="WellKnownEndpointNames.FederationTrustMarkStatus"/>;
     /// the application advertises this URL in its EC metadata
     /// (<c>federation_entity.federation_trust_mark_status_endpoint</c>).
@@ -1695,7 +1724,7 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;

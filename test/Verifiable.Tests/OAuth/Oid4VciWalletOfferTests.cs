@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using Verifiable.Core;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vci.Wallet;
 using Verifiable.OAuth.Server;
@@ -51,10 +53,11 @@ internal sealed class Oid4VciWalletOfferTests
         string deepLink = CredentialOfferSerializer.ToByValueDeepLink(original);
 
         Oid4VciWalletClient walletClient = BuildWalletClient(fetchCredentialOffer: null);
-        CredentialOffer parsed = await walletClient.AcceptCredentialOfferAsync(
-            deepLink, TestContext.CancellationToken).ConfigureAwait(false);
+        Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.AcceptCredentialOfferAsync(
+            deepLink, TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy), TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertOfferEquivalent(original, parsed);
+        Assert.IsTrue(outcome.IsSuccess, "A by-value deep link parses inline and never refuses.");
+        AssertOfferEquivalent(original, outcome.Value);
     }
 
 
@@ -76,7 +79,7 @@ internal sealed class Oid4VciWalletOfferTests
 
         ArgumentException error = await Assert.ThrowsExactlyAsync<ArgumentException>(
             async () => await walletClient.AcceptCredentialOfferAsync(
-                both, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                both, TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy), TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.Contains("single query parameter", error.Message,
             "§4.1: a link carrying both credential_offer and credential_offer_uri is rejected.");
@@ -94,13 +97,16 @@ internal sealed class Oid4VciWalletOfferTests
     public async Task ByReferenceFetchGetsAndParsesTheStoredOffer()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, OfferCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, OfferCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         CredentialOffer stored = BuildPreAuthorizedOffer();
-        host.Server.OAuth().ResolveCredentialOfferAsync =
-            (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
-                string.Equals(offerId, OfferId, StringComparison.Ordinal) ? stored : null);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCredentialOfferAsync =
+                (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
+                    string.Equals(offerId, OfferId, StringComparison.Ordinal) ? stored : null);
+        }).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -112,14 +118,22 @@ internal sealed class Oid4VciWalletOfferTests
         string byReferenceLink = CredentialOfferSerializer.ToByReferenceDeepLink(credentialOfferUri);
 
         string? observedContentType = null;
+        OutboundTransportDelegate innerTransport =
+            GuardedHttpClientTransport.BuildSingleHopTransport(host.Host("default").SharedHttpClient!);
         Oid4VciWalletClient walletClient = BuildWalletClient(
-            fetchCredentialOffer: (uri, ct) => FetchOfferAsync(
-                host.Host("default").SharedHttpClient!, uri, contentType => observedContentType = contentType, ct));
+            fetchCredentialOffer: async (request, context, ct) =>
+            {
+                OutboundResponse response = await innerTransport(request, context, ct).ConfigureAwait(false);
+                _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out observedContentType);
 
-        CredentialOffer parsed = await walletClient.AcceptCredentialOfferAsync(
-            byReferenceLink, TestContext.CancellationToken).ConfigureAwait(false);
+                return response;
+            });
 
-        AssertOfferEquivalent(stored, parsed);
+        Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.AcceptCredentialOfferAsync(
+            byReferenceLink, TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, "The by-reference fetch must succeed over the wire.");
+        AssertOfferEquivalent(stored, outcome.Value);
         Assert.AreEqual("application/json", observedContentType,
             "§4.1.3: the by-reference Credential Offer response MUST use the media type application/json.");
     }
@@ -230,7 +244,7 @@ internal sealed class Oid4VciWalletOfferTests
 
         InvalidOperationException error = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             async () => await walletClient.AcceptCredentialOfferAsync(
-                byReferenceLink, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                byReferenceLink, TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy), TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.Contains("FetchCredentialOffer", error.Message,
             "A by-reference offer needs the FetchCredentialOffer transport to run the §4.1.3 GET.");
@@ -274,38 +288,23 @@ internal sealed class Oid4VciWalletOfferTests
     //Builds a wallet client whose issuance transports are unused here (the offer flow only needs
     //the FetchCredentialOffer seam). The POST seams throw if reached, proving the offer path drives
     //no issuance call on its own.
-    private Oid4VciWalletClient BuildWalletClient(Oid4VciFetchCredentialOfferDelegate? fetchCredentialOffer)
+    private Oid4VciWalletClient BuildWalletClient(OutboundTransportDelegate? fetchCredentialOffer)
     {
         Oid4VciWalletConfiguration configuration = new()
         {
-            SendFormPost = (_, _, _) => throw new InvalidOperationException("The offer flow makes no §6 Token Request."),
-            SendJsonPost = (_, _, _, _) => throw new InvalidOperationException("The offer flow makes no §7/§8 request."),
+            SendFormPost = (_, _, _, _, _) => throw new InvalidOperationException("The offer flow makes no §6 Token Request."),
+            SendJsonPost = (_, _, _, _, _) => throw new InvalidOperationException("The offer flow makes no §7/§8 request."),
             JwtHeaderSerializer = static header => throw new InvalidOperationException("No proof is minted in the offer flow."),
             JwtPayloadSerializer = static payload => throw new InvalidOperationException("No proof is minted in the offer flow."),
             Base64UrlEncoder = TestSetup.Base64UrlEncoder,
             TimeProvider = TimeProvider,
             MemoryPool = Pool,
-            FetchCredentialOffer = fetchCredentialOffer
+            FetchCredentialOffer = fetchCredentialOffer,
+            OutboundFetchPolicy = TestHostShell.LoopbackOutboundFetchPolicy
         };
 
         return new Oid4VciWalletClient(configuration);
     }
 
 
-    //The wallet's §4.1.3 by-reference GET transport: a real HTTP GET over the started host's
-    //SharedHttpClient. The library stays System.Net-free; the test supplies the plumbing and
-    //surfaces the response Content-Type so the test can assert the §4.1.3 application/json contract.
-    private static async ValueTask<(int StatusCode, string Body)> FetchOfferAsync(
-        HttpClient httpClient,
-        Uri credentialOfferUri,
-        Action<string?> observeContentType,
-        CancellationToken cancellationToken)
-    {
-        using HttpResponseMessage response = await httpClient.GetAsync(
-            credentialOfferUri, cancellationToken).ConfigureAwait(false);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        observeContentType(response.Content.Headers.ContentType?.MediaType);
-
-        return ((int)response.StatusCode, body);
-    }
 }

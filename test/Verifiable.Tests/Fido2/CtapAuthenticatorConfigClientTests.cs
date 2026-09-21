@@ -72,7 +72,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     }
 
 
-    /// <summary>A <see langword="null"/> <paramref name="transceive"/> is rejected before anything is sent.</summary>
+    /// <summary>A <see langword="null"/> <c>transceive</c> is rejected before anything is sent.</summary>
     [TestMethod]
     public async Task ThrowsArgumentNullExceptionForNullTransceive()
     {
@@ -83,7 +83,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     }
 
 
-    /// <summary>A <see langword="null"/> <paramref name="encodeRequest"/> is rejected before anything is sent.</summary>
+    /// <summary>A <see langword="null"/> <c>encodeRequest</c> is rejected before anything is sent.</summary>
     [TestMethod]
     public async Task ThrowsArgumentNullExceptionForNullEncodeRequest()
     {
@@ -97,7 +97,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     }
 
 
-    /// <summary>A <see langword="null"/> <paramref name="request"/> is rejected before anything is sent.</summary>
+    /// <summary>A <see langword="null"/> <c>request</c> is rejected before anything is sent.</summary>
     [TestMethod]
     public async Task ThrowsArgumentNullExceptionForNullRequest()
     {
@@ -110,7 +110,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     }
 
 
-    /// <summary>A <see langword="null"/> <paramref name="pool"/> is rejected before anything is sent.</summary>
+    /// <summary>A <see langword="null"/> <c>pool</c> is rejected before anything is sent.</summary>
     [TestMethod]
     public async Task ThrowsArgumentNullExceptionForNullPool()
     {

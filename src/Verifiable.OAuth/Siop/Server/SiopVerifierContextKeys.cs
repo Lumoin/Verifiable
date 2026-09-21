@@ -39,7 +39,7 @@ public static class SiopVerifierContextKeys
     /// <summary>
     /// The Relying Party's <c>client_id</c> — the expected <c>aud</c> of the Self-Issued ID Token.
     /// When absent, the preparation endpoint falls back to the resolved registration's
-    /// <see cref="ClientRecord.ClientId"/>. Value type: <see cref="string"/>.
+    /// <see cref="Verifiable.OAuth.Server.ClientRecord.ClientId"/>. Value type: <see cref="string"/>.
     /// </summary>
     public static string ClientId { get; } = Utf8Constants.ToInternedString(ClientIdUtf8);
 
@@ -124,7 +124,7 @@ public static class SiopVerifierContextKeys
     /// <summary>
     /// The opaque per-flow request handle the preparation endpoint mints. The application reads it
     /// after dispatch to echo as the <c>state</c> the Wallet returns on the response POST, so
-    /// <see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/> can map it back to
+    /// <c>AuthorizationServerIntegration.ResolveCorrelationKeyAsync</c> can map it back to
     /// the internal flow identifier. Value type: <see cref="string"/>.
     /// </summary>
     public static string RequestHandle { get; } = Utf8Constants.ToInternedString(RequestHandleUtf8);
@@ -148,7 +148,7 @@ public static class SiopVerifierContextKeys
     /// <summary>
     /// The absolute §9 <c>request_uri</c> the preparation endpoint composed for the by-reference
     /// flow. Set by the preparation endpoint after it resolves the URL through
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>; read by the application
+    /// <c>AuthorizationServerIntegration.ResolveEndpointUriAsync</c>; read by the application
     /// after dispatch to carry in a QR code or deep link. Value type: <see cref="System.Uri"/>.
     /// </summary>
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",

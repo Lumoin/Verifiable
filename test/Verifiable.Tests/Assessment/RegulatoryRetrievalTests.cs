@@ -51,6 +51,99 @@ internal sealed class CompositeClaimAssessorTests
     }
 
 
+    /// <summary>
+    /// <see cref="CompositeClaimAssessor{TInput}.AssessAsync"/>'s <c>TotalDuration</c> is read from the
+    /// passed <see cref="TimeProvider"/>, not wall time: it equals exactly the amount that clock was
+    /// advanced during the run, even though the run itself takes no measurable wall-clock time.
+    /// </summary>
+    [TestMethod]
+    public async Task AssessAsyncTotalDurationEqualsTheInjectedClocksAdvance()
+    {
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        var advance = TimeSpan.FromSeconds(5);
+        var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
+        var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
+
+        ValueTask<AssessmentResult> AdvancingAssessor(
+            ClaimIssueResult claims,
+            string assessorId,
+            DateTime timestamp,
+            string? traceId,
+            string? spanId,
+            IReadOnlyDictionary<string, string>? baggage,
+            CancellationToken ct = default)
+        {
+            timeProvider.Advance(advance);
+
+            return ValueTask.FromResult(new AssessmentResult(
+                IsSuccess: true,
+                AssessorId: assessorId,
+                AssessmentId: Guid.NewGuid().ToString(),
+                CorrelationId: claims.CorrelationId,
+                AssessorVersion: "1.0.0",
+                CreationTimestampInUtc: timestamp,
+                AssessmentContext: new AssessmentContext(),
+                ClaimsResult: claims,
+                TraceId: traceId,
+                SpanId: spanId,
+                Baggage: baggage));
+        }
+
+        var assessors = new List<AssessorConfiguration> { new("advancing", AdvancingAssessor) };
+        var composite = new CompositeClaimAssessor<string>(issuer, assessors, timeProvider, AssessmentAggregationStrategy.AllMustSucceed);
+
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(advance, result.TotalDuration, "TotalDuration must equal the injected clock's advance, not wall time.");
+    }
+
+
+    /// <summary>
+    /// <see cref="IndividualAssessorResult.Duration"/> is read from the passed <see cref="TimeProvider"/>,
+    /// not wall time: it equals exactly the amount that clock was advanced while the assessor ran.
+    /// </summary>
+    [TestMethod]
+    public async Task AssessAsyncIndividualResultDurationEqualsTheInjectedClocksAdvance()
+    {
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        var advance = TimeSpan.FromSeconds(5);
+        var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
+        var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
+
+        ValueTask<AssessmentResult> AdvancingAssessor(
+            ClaimIssueResult claims,
+            string assessorId,
+            DateTime timestamp,
+            string? traceId,
+            string? spanId,
+            IReadOnlyDictionary<string, string>? baggage,
+            CancellationToken ct = default)
+        {
+            timeProvider.Advance(advance);
+
+            return ValueTask.FromResult(new AssessmentResult(
+                IsSuccess: true,
+                AssessorId: assessorId,
+                AssessmentId: Guid.NewGuid().ToString(),
+                CorrelationId: claims.CorrelationId,
+                AssessorVersion: "1.0.0",
+                CreationTimestampInUtc: timestamp,
+                AssessmentContext: new AssessmentContext(),
+                ClaimsResult: claims,
+                TraceId: traceId,
+                SpanId: spanId,
+                Baggage: baggage));
+        }
+
+        var assessors = new List<AssessorConfiguration> { new("advancing", AdvancingAssessor) };
+        var composite = new CompositeClaimAssessor<string>(issuer, assessors, timeProvider, AssessmentAggregationStrategy.AllMustSucceed);
+
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(advance, result.IndividualResults[0].Duration, "Duration must equal the injected clock's advance, not wall time.");
+    }
+
+
     [TestMethod]
     public async Task AllAssessorsRunInParallel()
     {
@@ -387,7 +480,6 @@ internal sealed class CompositeClaimAssessorTests
     }
 
 
-    #region Test Helpers
 
     /// <summary>
     /// A simple claim rule for testing.
@@ -499,5 +591,4 @@ internal sealed class CompositeClaimAssessorTests
         throw new InvalidOperationException("Remote AI service unavailable.");
     }
 
-    #endregion
 }

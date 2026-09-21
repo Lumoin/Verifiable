@@ -20,10 +20,10 @@ namespace Verifiable.Cryptography.Pki;
 /// <see cref="CmsSignedAttributesEncoding"/>) together with their digest;
 /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/> takes a
 /// signature value produced however the caller obtained it and assembles the final <c>SignedData</c>;
-/// <see cref="SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>
+/// <see cref="SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/>
 /// composes both phases around a <see cref="SigningDelegate"/> resolved from the signer's <see cref="Tag"/>
 /// through <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> — the same shape
-/// <see cref="Verifiable.JCose.Cose"/>'s <c>SignAsync</c> uses for COSE_Sign1. A remote signer (CSC,
+/// <c>Verifiable.JCose.Cose</c>'s <c>SignAsync</c> uses for COSE_Sign1. A remote signer (CSC,
 /// ETSI TS 119 432) consumes phases 1 and 2 unchanged: it never sees a private key, only the bytes-to-sign
 /// phase 1 returns and the signature value it hands to phase 2.
 /// </para>
@@ -594,7 +594,7 @@ public static class CAdESSignatureCreation
     /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>
     /// around a <see cref="SigningDelegate"/>
     /// resolved from <paramref name="privateKey"/>'s <see cref="Tag"/> — phase (3), the convenience the
-    /// registry-resolved <see cref="Verifiable.JCose.Cose"/>'s <c>SignAsync</c> overload mirrors.
+    /// registry-resolved <c>Verifiable.JCose.Cose</c>'s <c>SignAsync</c> overload mirrors.
     /// </summary>
     /// <param name="signerCertificate">The signer's own certificate.</param>
     /// <param name="privateKey">The signing key; its <see cref="Tag"/> resolves both the <see cref="SigningDelegate"/> and the ESS/CMS algorithm identities.</param>
@@ -1144,7 +1144,7 @@ public static class CAdESSignatureCreation
     /// <exception cref="ArgumentNullException">When <paramref name="signedData"/>, <paramref name="signerCertificate"/>, or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">When <paramref name="detachedContentDigest"/> is supplied beside an attached content or missing for a detached structure, its tag names no digest algorithm this library states in PKI structures or a different one than <paramref name="messageDigestAlgorithm"/>, its length is not that algorithm's output length, or an existing signer's <c>message-digest</c> under the same algorithm states different octets (parallel signers sign the same content; a signer under a different algorithm cannot be compared without the content and does not refuse the join).</exception>
     /// <exception cref="NotSupportedException">When the structure's <c>eContentType</c> is not <c>id-data</c> (this surface emits requirement f's <c>id-data</c> <c>content-type</c> attribute only), or <paramref name="messageDigestAlgorithm"/> is refused as <see cref="PrepareAsync"/> refuses it.</exception>
-    /// <exception cref="CryptographicException">When the structure is not a CMS SignedData this library reads, or its <c>eContent</c> is not one primitive definite-length OCTET STRING (<see cref="CmsSignedDataAugmentation.ReadEncapsulatedContentInfo"/>).</exception>
+    /// <exception cref="System.Security.Cryptography.CryptographicException">When the structure is not a CMS SignedData this library reads, or its <c>eContent</c> is not one primitive definite-length OCTET STRING (<see cref="CmsSignedDataAugmentation.ReadEncapsulatedContentInfo"/>).</exception>
     [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
         Justification = "optionalAttributes is deliberately the LAST parameter, after cancellationToken; see PrepareAsync's remarks and its matching suppression.")]
     public static async ValueTask<CAdESSignaturePreparation> PrepareParallelSignatureAsync(
@@ -1948,7 +1948,7 @@ public static class CAdESSignatureCreation
 /// <summary>
 /// The result of <see cref="CAdESSignatureCreation.PrepareAsync"/>: the CAdES-B-B <c>SignedAttributes</c> in
 /// both DER forms and their digest, ready for either an external signer (phases 1+2, e.g. CSC/TS 119 432) or
-/// the registered signing seam (<see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>).
+/// the registered signing seam (<see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/>).
 /// </summary>
 public sealed class CAdESSignaturePreparation: IDisposable
 {

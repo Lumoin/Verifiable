@@ -110,7 +110,7 @@ namespace Verifiable.Tpm.Automata;
 /// is that point's cached SEC1 view — retained so a later command that needs the object's public key without
 /// re-deriving it from the private scalar — the ECDH secret exchange of <c>TPM2_MakeCredential</c> /
 /// <c>TPM2_ActivateCredential</c> (Part 1, clause 21; Part 3, clauses 12.6 and 12.5) chief among them — can read
-/// it directly (<see cref="EncodedEcPoint.AsReadOnlySpan"/>/<c>AsReadOnlyMemory</c>) rather than re-splitting
+/// it directly (<see cref="SensitiveMemory.AsReadOnlySpan"/>/<c>AsReadOnlyMemory</c>) rather than re-splitting
 /// <see cref="PublicArea"/>'s coordinates on every use. Owned like <see cref="AuthValue"/>: adopted at the
 /// installing transition, DEEP-COPIED on persist so the transient and persistent entries never co-own the
 /// buffer, and released on eviction.

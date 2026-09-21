@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -104,7 +105,8 @@ internal sealed class TpmInHouseSimulatorLoadExternalTests
         Assert.IsTrue(readPublic.Name.Span.SequenceEqual(expectedName), "TPM2_ReadPublic() echoes the same Name.");
         Assert.IsTrue(readPublic.QualifiedName.Span.SequenceEqual(expectedName), "The Qualified Name for the object will be the same as its Name (Part 3, clause 12.3.1).");
 
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
         byte[] signature = key.Key.SignHash(digest, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
         using VerifySignatureResponse verified = await VerifyEcdsaAsync(tpm, registry, pool, loaded.ObjectHandle, digest, signature).ConfigureAwait(false);
         Assert.AreEqual(TpmStConstants.TPM_ST_VERIFIED, verified.Validation.Tag, "The ticket tag is TPM_ST_VERIFIED.");

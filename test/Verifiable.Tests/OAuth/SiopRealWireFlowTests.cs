@@ -29,7 +29,7 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="TestHostShell.StartHttpHostAsync(System.Threading.CancellationToken)"/> and a real
 /// <see cref="HttpClient"/>: the by-reference <c>request_uri</c> GET, the self-issued ID Token
 /// response POST, and the combined <c>id_token</c> + <c>vp_token</c> response POST. The in-process
-/// tests stay as unit coverage — this class never calls <see cref="TestHostShell.DispatchAtEndpointAsync"/>.
+/// tests stay as unit coverage — this class never calls <see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, Verifiable.Server.RequestFields, Verifiable.Core.ExchangeContext, System.Threading.CancellationToken)"/>.
 /// The <see cref="AuthorizationServerHttpApplication"/> skin already routes the SIOP endpoints; the
 /// preparation step stays in-process because it is verifier-internal (never visible to the Wallet),
 /// the same status OID4VP's PAR preparation holds.
@@ -73,7 +73,7 @@ internal sealed class SiopRealWireFlowTests
 
     /// <summary>
     /// <see cref="RelyingPartyClientId"/> as a <see cref="Uri"/>, the shape
-    /// <see cref="TestHostShell.RegisterClient"/> and
+    /// <see cref="TestHostShell.RegisterClientAsync"/> and
     /// <see cref="TestHostShell.AlignRegistrationToHostHttpBase"/> require.
     /// </summary>
     private static Uri RelyingPartyBaseUri { get; } = new(RelyingPartyClientId);
@@ -125,8 +125,8 @@ internal sealed class SiopRealWireFlowTests
         await using TestHostShell host = new(TimeProvider);
         await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         rpKeys.Registration = host.AlignRegistrationToHostHttpBase("default", rpKeys.Registration);
         string tenant = rpKeys.Registration.TenantId.Value;
 
@@ -206,8 +206,8 @@ internal sealed class SiopRealWireFlowTests
         await using TestHostShell host = new(TimeProvider);
         await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         const string nonce = "n-siop-real-wire-direct-01";
@@ -252,6 +252,109 @@ internal sealed class SiopRealWireFlowTests
 
 
     /// <summary>
+    /// A verifier processes one self-issued response per transaction: once the direct (same-device)
+    /// POST has carried the Wallet's Self-Issued ID Token to
+    /// <see cref="SelfIssuedAuthenticationVerifiedState"/>, the flow is no longer in
+    /// <see cref="SiopRequestPreparedState"/> or <see cref="SiopRequestObjectServedState"/> — the only
+    /// two states the SIOP Response endpoint accepts a POST from — so a second, later response for the
+    /// SAME <c>state</c> is refused, and the FIRST response's verified result is left exactly as it was
+    /// rather than being replaced. This rule is stated in plain words rather than a SIOPv2 quotation.
+    /// </summary>
+    [TestMethod]
+    public async Task ASecondSelfIssuedResponseForTheSameStateIsRefusedAndTheFirstVerifiedResultStandsOverRealWire()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
+        string tenant = rpKeys.Registration.TenantId.Value;
+
+        const string nonce = "n-siop-secondpost-01";
+        string requestHandle = await host.HandleSiopRequestPreparationAsync(
+            rpKeys, nonce, RelyingPartyClientId, AllowedSiopAlgorithms,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+
+        var firstSiopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory firstSiopPublic = firstSiopKeys.PublicKey;
+        using PrivateKeyMemory firstSiopPrivate = firstSiopKeys.PrivateKey;
+
+        string firstIdToken = await SelfIssuedIdTokenIssuance.IssueWithJwkThumbprintAsync(
+            firstSiopPrivate, firstSiopPublic, RelyingPartyClientId, nonce,
+            issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
+            TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string firstExpectedSubject = SelfIssuedSubjectThumbprint(firstSiopPublic);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri responseUrl = new(
+            hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.SiopResponse, tenant));
+
+        using FormUrlEncodedContent firstResponseBody = new(new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.IdToken] = firstIdToken,
+            [OAuthRequestParameterNames.State] = requestHandle
+        });
+
+        using HttpResponseMessage firstResponse = await hosted.SharedHttpClient!
+            .PostAsync(responseUrl, firstResponseBody, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string firstResponseText = await firstResponse.Content
+            .ReadAsStringAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual((int)HttpStatusCode.OK, (int)firstResponse.StatusCode, firstResponseText);
+
+        (FlowState stateAfterFirst, _) = host.GetFlowState(requestHandle);
+        SelfIssuedAuthenticationVerifiedState firstVerified =
+            Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(stateAfterFirst);
+        Assert.AreEqual(firstExpectedSubject, firstVerified.Subject);
+
+        TimeProvider.Advance(TimeSpan.FromSeconds(1));
+
+        //A second, well-formed but different Self-Issued ID Token — minted under a DIFFERENT key pair,
+        //so its subject genuinely differs from the first — posted with the SAME state.
+        var secondSiopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory secondSiopPublic = secondSiopKeys.PublicKey;
+        using PrivateKeyMemory secondSiopPrivate = secondSiopKeys.PrivateKey;
+
+        string secondIdToken = await SelfIssuedIdTokenIssuance.IssueWithJwkThumbprintAsync(
+            secondSiopPrivate, secondSiopPublic, RelyingPartyClientId, nonce,
+            issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
+            TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string secondSubject = SelfIssuedSubjectThumbprint(secondSiopPublic);
+        Assert.AreNotEqual(firstExpectedSubject, secondSubject,
+            "The second ID Token is minted under a different key pair, so its subject genuinely differs from the first.");
+
+        using FormUrlEncodedContent secondResponseBody = new(new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.IdToken] = secondIdToken,
+            [OAuthRequestParameterNames.State] = requestHandle
+        });
+
+        using HttpResponseMessage secondResponse = await hosted.SharedHttpClient!
+            .PostAsync(responseUrl, secondResponseBody, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string secondResponseText = await secondResponse.Content
+            .ReadAsStringAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual((int)HttpStatusCode.BadRequest, (int)secondResponse.StatusCode, secondResponseText);
+
+        (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(secondResponseText);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
+            "A verifier processes one self-issued response per transaction: the state guard refuses a second response as invalid_request.");
+        Assert.AreEqual("Flow not in expected state for SIOP response.", wireDescription,
+            "The state guard's own fixed wire sentence names the refused condition.");
+
+        (FlowState stateAfterSecond, _) = host.GetFlowState(requestHandle);
+        SelfIssuedAuthenticationVerifiedState stateAfterSecondPost =
+            Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(stateAfterSecond);
+        Assert.AreEqual(firstVerified.Subject, stateAfterSecondPost.Subject,
+            "The refused second POST left the flow's verified subject exactly as the first self-issued response produced it.");
+        Assert.AreEqual(firstVerified.VerifiedAt, stateAfterSecondPost.VerifiedAt,
+            "The refused second POST left the flow's verified result exactly as the first response produced it — no re-verification occurred.");
+    }
+
+
+    /// <summary>
     /// The richest flow: the RP prepares a transaction in-process, the Wallet mints BOTH a
     /// JWK-Thumbprint Self-Issued ID Token and a vp_token (SD-JWT VC + KB-JWT) bound to the same
     /// transaction, and POSTs <c>id_token</c> + <c>vp_token</c> + <c>state</c> as one §12 combined
@@ -272,8 +375,8 @@ internal sealed class SiopRealWireFlowTests
             await using TestHostShell host = new(TimeProvider);
             await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            using VerifierKeyMaterial rpKeys = host.RegisterClient(
-                RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+            using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+                RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
             string tenant = rpKeys.Registration.TenantId.Value;
 
             host.RegisterIssuerTrust(IssuerId, issuerPublicKey);

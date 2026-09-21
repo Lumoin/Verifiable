@@ -247,7 +247,7 @@ internal class Tpm2bStructureTests
     }
 
     /// <summary>
-    /// <see cref="Tpm2bSensitiveCreate.ForSealedData"/> refuses a secret wider than <c>MAX_SYM_DATA</c> after the
+    /// <see cref="Tpm2bSensitiveCreate.ForSealedData(ReadOnlySpan{byte}, ReadOnlySpan{byte}, BaseMemoryPool)"/> refuses a secret wider than <c>MAX_SYM_DATA</c> after the
     /// authorization carrier is already rented; the refusal releases that carrier, so a refused factory call leaves
     /// the pool balanced rather than orphaning a pinned rental.
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clauses 11.1.14 and 11.1.15, Tables 170 and 171</see>.

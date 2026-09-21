@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Server.Metadata;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Register at startup via <see cref="EndpointServer.EndpointBuilders"/>:
+/// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// server.EndpointBuilders.AddRange([
@@ -28,7 +28,7 @@ namespace Verifiable.OAuth.Server.Metadata;
 /// </para>
 /// <para>
 /// The discovery endpoint composes URLs by asking the application via
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>. The
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>. The
 /// library never composes paths from templates — each URL the discovery document
 /// advertises is the URL the application actually serves.
 /// </para>
@@ -72,7 +72,7 @@ public static class MetadataEndpoints
 
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="EndpointServer.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
@@ -154,7 +154,7 @@ public static class MetadataEndpoints
             //is never reached.
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 if(oauth.Cryptography.BuildJwksDocumentAsync is null)
@@ -206,10 +206,10 @@ public static class MetadataEndpoints
     /// <para>
     /// The endpoint is stateless:
     /// <see cref="ServerEndpoint.BuildInputAsync"/> resolves the issuer via
-    /// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/>
     /// (falling back to <see cref="DefaultIssuerResolver"/>), then asks the
     /// application's
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
     /// for the absolute URL of each capability-gated endpoint, optionally
     /// merges fields from
     /// <see cref="AuthorizationServerIntegration.ContributeDiscoveryFieldsAsync"/>,
@@ -221,7 +221,7 @@ public static class MetadataEndpoints
     /// The library never composes paths; each advertised URL comes from the
     /// per-request <see cref="EndpointChain"/> the dispatcher placed on the
     /// context. Endpoints are projected through
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
     /// at chain-build time; discovery emission then reads
     /// <see cref="ServerEndpoint.ResolvedUri"/> directly, guaranteeing the
     /// advertised URL is the same URL the matcher will match against.
@@ -263,7 +263,7 @@ public static class MetadataEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -599,20 +599,13 @@ public static class MetadataEndpoints
                         }
                     }
 
-                    //code_challenge_methods_supported (RFC 8414 §2) reflects the resolved
-                    //policy, matching enforcement: S256-only under PkceMethodSet.S256Only (OAuth
-                    //2.1 draft-16 §7.5.2: "The plain code challenge method, defined in [RFC7636],
-                    //is explicitly forbidden in OAuth 2.1." for the FAPI/HAIP/2.1 profiles),
-                    //S256-and-plain under PkceMethodSet.S256AndPlain (the RFC 6749 + RFC 7636
-                    //baseline profile, RFC 9700 §2.1.1's SHOULD-not-use-plain notwithstanding).
+                    //RFC 8414 §2 advertises S256 only: OAuth 2.1 §7.5.2 forbids plain under every profile.
                     if(authorizationCodeOnChain)
                     {
                         AppendStringArrayField(
                             sb,
                             AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported,
-                            context.AllowedPkceMethods == PkceMethodSet.S256AndPlain
-                                ? CodeChallengeMethodS256AndPlain
-                                : CodeChallengeMethodS256,
+                            CodeChallengeMethodS256,
                             emittedFieldNames);
 
                         //FAPI 2.0 §5.2.2 / RFC 9207: advertise whether PAR is mandatory and
@@ -845,6 +838,9 @@ public static class MetadataEndpoints
     /// <paramref name="key"/> is recorded into it when the array is non-empty, so a
     /// later contributed field of the same name is refused (RFC 8259 §4).
     /// </param>
+    /// <param name="sb">The discovery-document builder to append the field to.</param>
+    /// <param name="key">The wire field name to emit.</param>
+    /// <param name="values">The values to emit as the JSON array; an empty list omits the field.</param>
     private static void AppendStringArrayField(
         StringBuilder sb, string key, IReadOnlyList<string> values, HashSet<string> emittedFieldNames)
     {
@@ -866,6 +862,9 @@ public static class MetadataEndpoints
     /// <paramref name="key"/> is recorded into it so a later contributed field of
     /// the same name is refused (RFC 8259 §4).
     /// </param>
+    /// <param name="sb">The discovery-document builder to append the field to.</param>
+    /// <param name="key">The wire field name to emit.</param>
+    /// <param name="value">The boolean value to emit.</param>
     private static void AppendBooleanField(StringBuilder sb, string key, bool value, HashSet<string> emittedFieldNames)
     {
         bool first = false;
@@ -874,13 +873,20 @@ public static class MetadataEndpoints
     }
 
 
-    //Static well-known value sets emitted by the discovery endpoint.
+    /// <summary>The public subject-identifier type advertised by discovery.</summary>
     private static IReadOnlyList<string> SubjectTypePublic { get; } = ["public"];
+
+
+    /// <summary>The authorization-code response type advertised by discovery.</summary>
     private static IReadOnlyList<string> ResponseTypeCode { get; } = ["code"];
+
+
+    /// <summary>The RFC 8414 §2 method advertisement; OAuth 2.1 §7.5.2 forbids plain.</summary>
     private static IReadOnlyList<string> CodeChallengeMethodS256 { get; } =
         [WellKnownCodeChallengeMethods.S256];
-    private static IReadOnlyList<string> CodeChallengeMethodS256AndPlain { get; } =
-        [WellKnownCodeChallengeMethods.S256, WellKnownCodeChallengeMethods.Plain];
+
+
+    /// <summary>The normal claim type advertised by discovery.</summary>
     private static IReadOnlyList<string> ClaimTypeNormal { get; } = ["normal"];
 
     /// <summary>
@@ -889,7 +895,7 @@ public static class MetadataEndpoints
     /// plus the spec-required <c>sub</c>. Sorted ordinally for deterministic
     /// wire output. Synchronisation invariant: every name added to or removed
     /// from the standard contributors must update this
-    /// list. The <see cref="ContributorChainRegressionTests"/> baseline pins
+    /// list. The <c>ContributorChainRegressionTests</c> baseline pins
     /// the contributor output; this list pins the wire advertisement.
     /// </summary>
     private static IReadOnlyList<string> StandardClaimsSupported { get; } =
@@ -936,10 +942,10 @@ public static class MetadataEndpoints
 
     /// <summary>
     /// Derives <c>id_token_signing_alg_values_supported</c> from the
-    /// registration's <see cref="KeyUsageContext.IdTokenIssuance"/> signing
+    /// registration's <see cref="Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance"/> signing
     /// keys. Each <see cref="KeyId"/> in the rotation-aware
     /// <see cref="SigningKeySet"/> is resolved through the verification-key
-    /// resolver and its <see cref="PublicKeyMemory.Tag"/> mapped to a JWA
+    /// resolver and its <c>Tag</c> mapped to a JWA
     /// identifier via <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/>.
     /// The set is deduplicated by ordinal equality and stable across the
     /// rotation-slot order.
@@ -1083,7 +1089,7 @@ public static class MetadataEndpoints
     /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-5">RFC 7517 §5</see>
     /// JSON wire form: <c>{"keys":[{...},{...}]}</c>. Each
     /// <see cref="JsonWebKey"/>'s entries are emitted in iteration order via
-    /// <see cref="AppendJsonValue"/>; no field-name precedence or omission
+    /// <see cref="JsonAppender.AppendObject"/>; no field-name precedence or omission
     /// rules are applied here, the document is taken as-is.
     /// </summary>
     /// <remarks>

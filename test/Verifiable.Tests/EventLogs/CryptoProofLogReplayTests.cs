@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.EventLogs;
@@ -30,7 +29,7 @@ internal sealed class CryptoProofLogReplayTests
         using PrivateKeyMemory privateKey = keys.PrivateKey;
 
         byte[] canonical = "Domain-agnostic attestation statement."u8.ToArray();
-        byte[] digest = SHA256.HashData(canonical);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(canonical, 32, CryptoTags.Sha256Digest, pool);
 
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
         (Signature signature, _) = await sign(
@@ -42,7 +41,7 @@ internal sealed class CryptoProofLogReplayTests
         {
             Index = 0,
             PreviousDigest = null,
-            Digest = digest,
+            Digest = digest.AsReadOnlyMemory(),
             CanonicalBytes = canonical,
             Operation = canonical,
             Proofs = [proof]
@@ -70,6 +69,7 @@ internal sealed class CryptoProofLogReplayTests
         (Signature signature, _) = await sign(
             privateKey.AsReadOnlyMemory(), signedBytes, pool, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         using var disposableSignature = signature;
+        using DigestValue tamperedDigest = CryptographicKeyEvents.ComputeDigest(tamperedBytes, 32, CryptoTags.Sha256Digest, pool);
 
         //The entry is internally consistent (digest matches its canonical bytes), but the signature was produced
         //over different bytes — so proof validation must fail-closed and the genesis state must not be applied.
@@ -78,7 +78,7 @@ internal sealed class CryptoProofLogReplayTests
         {
             Index = 0,
             PreviousDigest = null,
-            Digest = SHA256.HashData(tamperedBytes),
+            Digest = tamperedDigest.AsReadOnlyMemory(),
             CanonicalBytes = tamperedBytes,
             Operation = tamperedBytes,
             Proofs = [proof]

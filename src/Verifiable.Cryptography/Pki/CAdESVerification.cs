@@ -141,6 +141,10 @@ public static class CAdESVerification
     /// present. <see cref="VerifyDetachedAsync"/>'s documented registry-with-fallback therefore holds even with
     /// nothing registered, for the common case of a signature carrying no timestamp.
     /// </param>
+    /// <param name="signedData">The CMS <c>SignedData</c> structure whose attributes are checked.</param>
+    /// <param name="content">The core-verified content the signature covers.</param>
+    /// <param name="pool">The memory pool every allocation this call performs is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
     private static async ValueTask<CAdESVerificationResult> VerifyAttributesAsync(
         CmsSignedData signedData, CmsVerifiedContent content, VerifyCmsSignedDataDelegate? verifyCms, BaseMemoryPool pool, CancellationToken cancellationToken)
     {

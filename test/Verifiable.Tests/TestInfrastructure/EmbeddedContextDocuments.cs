@@ -212,12 +212,15 @@ namespace Verifiable.Tests.TestInfrastructure
 
 
         /// <summary>
-        /// W3C Verifiable Credentials Data Model v2.0 context document.
+        /// The Verifiable Credentials Data Model v2.0 Recommendation's base context document.
         /// </summary>
         /// <remarks>
-        /// Source: <see href="https://www.w3.org/ns/credentials/v2"/>.
-        /// This is an embedded copy for test determinism and offline operation.
-        /// In production, fetch from the canonical URL and verify against <see cref="CredentialsV2ContextSha256"/>.
+        /// Source: <see href="https://www.w3.org/ns/credentials/v2"/>. Per
+        /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#base-context">Appendix B.1 Base Context</see>,
+        /// implementations MUST treat this value, located at that IRI, as already retrieved; the
+        /// Recommendation publishes its hexadecimal SHA2-256 digest as
+        /// <c>59955ced6697d61e03f2b2556febe5308ab16842846f5b586d7f1f7adec92734</c>. This is an embedded
+        /// copy for test determinism and offline operation.
         /// </remarks>
         public static string CredentialsV2ContextJson { get; } =
         /*lang=json,strict*/
@@ -225,8 +228,10 @@ namespace Verifiable.Tests.TestInfrastructure
         {
           "@context": {
             "@protected": true,
+
             "id": "@id",
             "type": "@type",
+
             "description": "https://schema.org/description",
             "digestMultibase": {
               "@id": "https://w3id.org/security#digestMultibase",
@@ -240,12 +245,15 @@ namespace Verifiable.Tests.TestInfrastructure
               "@id": "https://schema.org/encodingFormat"
             },
             "name": "https://schema.org/name",
+
             "VerifiableCredential": {
               "@id": "https://www.w3.org/2018/credentials#VerifiableCredential",
               "@context": {
                 "@protected": true,
+
                 "id": "@id",
                 "type": "@type",
+
                 "confidenceMethod": {
                   "@id": "https://www.w3.org/2018/credentials#confidenceMethod",
                   "@type": "@id"
@@ -303,16 +311,139 @@ namespace Verifiable.Tests.TestInfrastructure
                 }
               }
             },
+
+            "EnvelopedVerifiableCredential":
+              "https://www.w3.org/2018/credentials#EnvelopedVerifiableCredential",
+
+            "VerifiablePresentation": {
+              "@id": "https://www.w3.org/2018/credentials#VerifiablePresentation",
+              "@context": {
+                "@protected": true,
+
+                "id": "@id",
+                "type": "@type",
+
+                "holder": {
+                  "@id": "https://www.w3.org/2018/credentials#holder",
+                  "@type": "@id"
+                },
+                "proof": {
+                  "@id": "https://w3id.org/security#proof",
+                  "@type": "@id",
+                  "@container": "@graph"
+                },
+                "termsOfUse": {
+                  "@id": "https://www.w3.org/2018/credentials#termsOfUse",
+                  "@type": "@id"
+                },
+                "verifiableCredential": {
+                  "@id": "https://www.w3.org/2018/credentials#verifiableCredential",
+                  "@type": "@id",
+                  "@container": "@graph",
+                  "@context": null
+                }
+              }
+            },
+
+            "EnvelopedVerifiablePresentation":
+              "https://www.w3.org/2018/credentials#EnvelopedVerifiablePresentation",
+
+            "JsonSchemaCredential":
+              "https://www.w3.org/2018/credentials#JsonSchemaCredential",
+
+            "JsonSchema": {
+              "@id": "https://www.w3.org/2018/credentials#JsonSchema",
+              "@context": {
+                "@protected": true,
+
+                "id": "@id",
+                "type": "@type",
+
+                "jsonSchema": {
+                  "@id": "https://www.w3.org/2018/credentials#jsonSchema",
+                  "@type": "@json"
+                }
+              }
+            },
+
+            "BitstringStatusListCredential":
+              "https://www.w3.org/ns/credentials/status#BitstringStatusListCredential",
+
+            "BitstringStatusList": {
+              "@id": "https://www.w3.org/ns/credentials/status#BitstringStatusList",
+              "@context": {
+                "@protected": true,
+
+                "id": "@id",
+                "type": "@type",
+
+                "encodedList": {
+                  "@id": "https://www.w3.org/ns/credentials/status#encodedList",
+                  "@type": "https://w3id.org/security#multibase"
+                },
+                "statusPurpose":
+                  "https://www.w3.org/ns/credentials/status#statusPurpose",
+                "ttl": "https://www.w3.org/ns/credentials/status#ttl"
+              }
+            },
+
+            "BitstringStatusListEntry": {
+              "@id":
+                "https://www.w3.org/ns/credentials/status#BitstringStatusListEntry",
+              "@context": {
+                "@protected": true,
+
+                "id": "@id",
+                "type": "@type",
+
+                "statusListCredential": {
+                  "@id":
+                    "https://www.w3.org/ns/credentials/status#statusListCredential",
+                  "@type": "@id"
+                },
+                "statusListIndex":
+                  "https://www.w3.org/ns/credentials/status#statusListIndex",
+                "statusPurpose":
+                  "https://www.w3.org/ns/credentials/status#statusPurpose",
+                "statusMessage": {
+                  "@id": "https://www.w3.org/ns/credentials/status#statusMessage",
+                  "@context": {
+                    "@protected": true,
+
+                    "id": "@id",
+                    "type": "@type",
+
+                    "message": "https://www.w3.org/ns/credentials/status#message",
+                    "status": "https://www.w3.org/ns/credentials/status#status"
+                  }
+                },
+                "statusReference": {
+                  "@id": "https://www.w3.org/ns/credentials/status#statusReference",
+                  "@type": "@id"
+                },
+                "statusSize": {
+                  "@id": "https://www.w3.org/ns/credentials/status#statusSize",
+                  "@type": "https://www.w3.org/2001/XMLSchema#integer"
+                }
+              }
+            },
+
             "DataIntegrityProof": {
               "@id": "https://w3id.org/security#DataIntegrityProof",
               "@context": {
                 "@protected": true,
+
                 "id": "@id",
                 "type": "@type",
+
                 "challenge": "https://w3id.org/security#challenge",
                 "created": {
                   "@id": "http://purl.org/dc/terms/created",
                   "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+                },
+                "cryptosuite": {
+                  "@id": "https://w3id.org/security#cryptosuite",
+                  "@type": "https://w3id.org/security#cryptosuiteString"
                 },
                 "domain": "https://w3id.org/security#domain",
                 "expires": {
@@ -329,18 +460,36 @@ namespace Verifiable.Tests.TestInfrastructure
                   "@type": "@vocab",
                   "@context": {
                     "@protected": true,
+
                     "id": "@id",
                     "type": "@type",
+
                     "assertionMethod": {
                       "@id": "https://w3id.org/security#assertionMethod",
                       "@type": "@id",
                       "@container": "@set"
+                    },
+                    "authentication": {
+                      "@id": "https://w3id.org/security#authenticationMethod",
+                      "@type": "@id",
+                      "@container": "@set"
+                    },
+                    "capabilityDelegation": {
+                      "@id": "https://w3id.org/security#capabilityDelegationMethod",
+                      "@type": "@id",
+                      "@container": "@set"
+                    },
+                    "capabilityInvocation": {
+                      "@id": "https://w3id.org/security#capabilityInvocationMethod",
+                      "@type": "@id",
+                      "@container": "@set"
+                    },
+                    "keyAgreement": {
+                      "@id": "https://w3id.org/security#keyAgreementMethod",
+                      "@type": "@id",
+                      "@container": "@set"
                     }
                   }
-                },
-                "cryptosuite": {
-                  "@id": "https://w3id.org/security#cryptosuite",
-                  "@type": "https://w3id.org/security#cryptosuiteString"
                 },
                 "proofValue": {
                   "@id": "https://w3id.org/security#proofValue",
@@ -351,6 +500,68 @@ namespace Verifiable.Tests.TestInfrastructure
                   "@type": "@id"
                 }
               }
+            },
+
+            "...": {
+              "@id": "https://www.iana.org/assignments/jwt#..."
+            },
+            "_sd": {
+              "@id": "https://www.iana.org/assignments/jwt#_sd",
+              "@type": "@json"
+            },
+            "_sd_alg": {
+              "@id": "https://www.iana.org/assignments/jwt#_sd_alg"
+            },
+            "aud": {
+              "@id": "https://www.iana.org/assignments/jwt#aud",
+              "@type": "@id"
+            },
+            "cnf": {
+              "@id": "https://www.iana.org/assignments/jwt#cnf",
+              "@context": {
+                "@protected": true,
+
+                "kid": {
+                  "@id": "https://www.iana.org/assignments/jwt#kid",
+                  "@type": "@id"
+                },
+                "jwk": {
+                  "@id": "https://www.iana.org/assignments/jwt#jwk",
+                  "@type": "@json"
+                }
+              }
+            },
+            "exp": {
+              "@id": "https://www.iana.org/assignments/jwt#exp",
+              "@type": "https://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            },
+            "iat": {
+              "@id": "https://www.iana.org/assignments/jwt#iat",
+              "@type": "https://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            },
+            "iss": {
+              "@id": "https://www.iana.org/assignments/jose#iss",
+              "@type": "@id"
+            },
+            "jku": {
+              "@id": "https://www.iana.org/assignments/jose#jku",
+              "@type": "@id"
+            },
+            "kid": {
+              "@id": "https://www.iana.org/assignments/jose#kid",
+              "@type": "@id"
+            },
+            "nbf": {
+              "@id": "https://www.iana.org/assignments/jwt#nbf",
+              "@type": "https://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            },
+            "sub": {
+              "@id": "https://www.iana.org/assignments/jose#sub",
+              "@type": "@id"
+            },
+            "x5u": {
+              "@id": "https://www.iana.org/assignments/jose#x5u",
+              "@type": "@id"
             }
           }
         }

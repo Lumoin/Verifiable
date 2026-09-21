@@ -28,14 +28,16 @@ namespace Verifiable.Json;
 /// <c>id</c>) is Base64url encoded, matching every other FIDO2 JSON writer in this project.
 /// </para>
 /// <para>
-/// The four named extension-input carve-outs this writer emits (<see cref="PublicKeyCredentialCreationOptions.AppIdExclude"/>,
+/// The five named extension-input carve-outs this writer emits (<see cref="PublicKeyCredentialCreationOptions.AppIdExclude"/>,
 /// <see cref="PublicKeyCredentialCreationOptions.LargeBlob"/>, <see cref="PublicKeyCredentialCreationOptions.MinPinLength"/>,
-/// <see cref="PublicKeyCredentialCreationOptions.CredProtect"/>) are written under <c>extensions</c>;
-/// <c>appidExclude</c>/<c>largeBlob</c>/<c>minPinLength</c> are keyed by their own
-/// <see cref="WellKnownWebAuthnExtensionIdentifiers"/> identifier, while <c>credProtect</c>'s two
-/// members (<c>credentialProtectionPolicy</c>/<c>enforceCredentialProtectionPolicy</c>) are FLAT
-/// top-level <c>extensions</c> members per CTAP 2.3 §12.1's own client-input IDL — no
+/// <see cref="PublicKeyCredentialCreationOptions.CredProtect"/>, <see cref="PublicKeyCredentialCreationOptions.Prf"/>)
+/// are written under <c>extensions</c>; <c>appidExclude</c>/<c>largeBlob</c>/<c>minPinLength</c>/<c>prf</c>
+/// are keyed by their own <see cref="WellKnownWebAuthnExtensionIdentifiers"/> identifier, while
+/// <c>credProtect</c>'s two members (<c>credentialProtectionPolicy</c>/<c>enforceCredentialProtectionPolicy</c>)
+/// are FLAT top-level <c>extensions</c> members per CTAP 2.3 §12.1's own client-input IDL — no
 /// <c>"credProtect"</c> wrapper key exists on the wire (see <see cref="Fido2CredProtectRegistrationExtensionInput"/>'s
+/// own remarks). <c>prf</c> writes only its <c>eval</c> member on the registration side —
+/// <c>evalByCredential</c> is assertion-only (see <see cref="Fido2PrfRegistrationExtensionInput"/>'s
 /// own remarks). The <c>extensions</c> member itself is omitted entirely when no carve-out is
 /// populated, since the generic <c>AuthenticationExtensionsClientInputsJSON</c> surface remains out of
 /// scope.
@@ -117,6 +119,15 @@ public static class PublicKeyCredentialCreationOptionsJsonWriter
 
     /// <summary>The <c>extensions.enforceCredentialProtectionPolicy</c> member name — a flat top-level <c>extensions</c> member, not nested under a <c>credProtect</c> key.</summary>
     private const string EnforceCredentialProtectionPolicyMember = "enforceCredentialProtectionPolicy";
+
+    /// <summary>The <c>extensions.prf.eval</c> member name.</summary>
+    private const string EvalMember = "eval";
+
+    /// <summary>The <c>extensions.prf.eval.first</c>/<c>evalByCredential</c> entry <c>first</c> member name.</summary>
+    private const string FirstMember = "first";
+
+    /// <summary>The <c>extensions.prf.eval.second</c>/<c>evalByCredential</c> entry <c>second</c> member name.</summary>
+    private const string SecondMember = "second";
 
 
     /// <summary>
@@ -212,7 +223,7 @@ public static class PublicKeyCredentialCreationOptionsJsonWriter
             writer.WriteEndArray();
         }
 
-        WriteExtensions(writer, options.AppIdExclude, options.LargeBlob, options.MinPinLength, options.CredProtect);
+        WriteExtensions(writer, options.AppIdExclude, options.LargeBlob, options.MinPinLength, options.CredProtect, options.Prf);
 
         writer.WriteEndObject();
         writer.Flush();
@@ -225,9 +236,9 @@ public static class PublicKeyCredentialCreationOptionsJsonWriter
     /// </summary>
     private static void WriteExtensions(
         Utf8JsonWriter writer, string? appIdExclude, Fido2LargeBlobRegistrationExtensionInput? largeBlob, bool? minPinLength,
-        Fido2CredProtectRegistrationExtensionInput? credProtect)
+        Fido2CredProtectRegistrationExtensionInput? credProtect, Fido2PrfRegistrationExtensionInput? prf)
     {
-        if(appIdExclude is null && largeBlob is null && minPinLength is null && credProtect is null)
+        if(appIdExclude is null && largeBlob is null && minPinLength is null && credProtect is null && prf is null)
         {
             return;
         }
@@ -256,7 +267,29 @@ public static class PublicKeyCredentialCreationOptionsJsonWriter
             writer.WriteBoolean(EnforceCredentialProtectionPolicyMember, credProtect.EnforceCredentialProtectionPolicy);
         }
 
+        if(prf is not null)
+        {
+            writer.WriteStartObject(WellKnownWebAuthnExtensionIdentifiers.Prf);
+            writer.WriteStartObject(EvalMember);
+            WritePrfValues(writer, prf.Eval);
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
         writer.WriteEndObject();
+    }
+
+
+    /// <summary>
+    /// Writes <paramref name="values"/>' <c>first</c>/<c>second</c> members, base64url-encoded.
+    /// </summary>
+    private static void WritePrfValues(Utf8JsonWriter writer, Fido2PrfValues values)
+    {
+        writer.WriteString(FirstMember, Base64Url.EncodeToString(values.First.Span));
+        if(values.Second is TaggedMemory<byte> second)
+        {
+            writer.WriteString(SecondMember, Base64Url.EncodeToString(second.Span));
+        }
     }
 
 

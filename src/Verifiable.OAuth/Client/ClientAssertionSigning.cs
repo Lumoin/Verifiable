@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Client;
 /// the Resource Authorization Server's JWT Bearer endpoint (the redeem), since
 /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §9.1 supports ID-JAG only for confidential clients
 /// and §4.3.1 illustrates client authentication with a JWT Bearer client assertion. Composes
-/// <see cref="JwtHeaderExtensions.ForSigning"/> and <see cref="JwtSigningExtensions.SignAsync"/> — the
+/// <see cref="JwtHeaderExtensions.ForSigning"/> and <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> — the
 /// same JCose composition the JAR signer (<see cref="AuthCode.AuthCodeJarSigning"/>) uses.
 /// </remarks>
 public static class ClientAssertionSigning

@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
-using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -26,6 +25,10 @@ internal sealed class TenantIdThreadingTests
         new DateTimeOffset(2026, 5, 15, 12, 0, 0, TimeSpan.Zero));
 
 
+    /// <summary>
+    /// Signing-key resolution receives the tenant identifier of the registration being served.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#middle-layer-cryptographic-primitive-delegates">Cryptographic delegates §3</see>.
+    /// </summary>
     [TestMethod]
     public async Task SigningResolverReceivesRegistrationTenantId()
     {
@@ -36,14 +39,18 @@ internal sealed class TenantIdThreadingTests
         ConcurrentBag<TenantId> observed = [];
         ServerSigningKeyResolverDelegate previous =
             host.Server.OAuth().Cryptography.SigningKeyResolver!;
-        host.Server.OAuth().Cryptography.SigningKeyResolver = (keyId, tenantId, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            observed.Add(tenantId);
-            return previous(keyId, tenantId, ctx, ct);
-        };
+            candidateIntegration.Cryptography.SigningKeyResolver = (keyId, tenantId, ctx, ct) =>
+            {
+                observed.Add(tenantId);
 
-        using VerifierKeyMaterial keys = host.RegisterDpopClient(
-            clientId, clientBase, profile: PolicyProfile.Rfc6749WithPkce);
+                return previous(keyId, tenantId, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterDpopClientAsync(
+            clientId, clientBase, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         await DriveCodeExchangeAsync(host, keys).ConfigureAwait(false);
 
@@ -84,26 +91,35 @@ internal sealed class TenantIdThreadingTests
     }
 
 
+    /// <summary>
+    /// HMAC-key resolution receives the tenant identifier carried by the request context.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#middle-layer-cryptographic-primitive-delegates">Cryptographic delegates §3</see>.
+    /// </summary>
     [TestMethod]
     public async Task HmacResolverReceivesTenantIdFromContext()
     {
         await using TestHostShell host = new(TimeProvider);
-        _ = host.EnableDpop();
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         ConcurrentBag<TenantId> observed = [];
         ResolveServerHmacKeyDelegate previous =
             host.Server.OAuth().ResolveServerHmacKeyAsync!;
-        host.Server.OAuth().ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            observed.Add(tenantId);
-            return previous(kid, tenantId, ctx, ct);
-        };
+            candidateIntegration.ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
+            {
+                observed.Add(tenantId);
+
+                return previous(kid, tenantId, ctx, ct);
+            };
+        }).ConfigureAwait(false);
 
         //Issue a nonce through the integration delegate — exercises the
         //byte-loader path with the configured tenant.
         TenantId tenant = new("tenant-x");
         ExchangeContext ctx = [];
         ctx.SetTenantId(tenant.Value);
+        ctx.SetServer(host.Server);
 
         _ = await host.Server.OAuth().IssueDpopNonceAsync!(
             new Uri("https://issuer.test/abcd1234"),
@@ -123,79 +139,11 @@ internal sealed class TenantIdThreadingTests
 
     private async Task DriveCodeExchangeAsync(TestHostShell host, VerifierKeyMaterial keys)
     {
-        const string clientId = "https://client.example.com";
         Uri redirectUri = new("https://client.example.com/callback");
-        string tenant = keys.Registration.TenantId.Value;
 
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = clientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            tenant, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
+        _ = await InProcessAuthCodeDriver.DriveAsync(
+            host, keys, "subject-1", redirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = WellKnownScopes.OpenId },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode);
-        string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
-
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = clientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId("subject-1");
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            tenant, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode);
-        string code = ExtractCodeFromLocation(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = clientId,
-            [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString
-        };
-        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
-            tenant, WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-    }
-
-
-    private static string ExtractFromBody(string body, string property)
-    {
-        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(body);
-        return doc.RootElement.GetProperty(property).GetString()!;
-    }
-
-
-    private static string ExtractCodeFromLocation(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Authorize redirect did not carry a code parameter: {location}");
     }
 }

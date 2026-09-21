@@ -318,6 +318,35 @@ internal sealed class ClientIdMetadataDocumentReaderTests
     }
 
 
+    /// <summary>
+    /// RFC 8259 §4: a fetched document repeating <c>redirect_uris</c> — the attacker's value
+    /// first, the honest value last — is refused through the existing
+    /// <see cref="ClientIdMetadataDocumentDefects.MissingClientId"/> defect (no new defect), while
+    /// the SAME document with the repetition removed parses with no defects: the refusal is
+    /// attributable to the repetition alone.
+    /// </summary>
+    [TestMethod]
+    public void ParseFlagsDuplicateRedirectUrisButAcceptsTheSameDocumentOnce()
+    {
+        string duplicateDocument =
+            "{\"client_id\":\"https://client.example.com/app\","
+            + "\"redirect_uris\":[\"https://attacker.example.com/cb\"],"
+            + "\"redirect_uris\":[\"https://client.example.com/cb\"]}";
+
+        ClientIdMetadataDocumentReadResult rejected = Parse(duplicateDocument);
+        Assert.IsTrue(rejected.Defects.HasFlag(ClientIdMetadataDocumentDefects.MissingClientId));
+        Assert.IsNull(rejected.ClientId);
+
+        string singleDocument =
+            "{\"client_id\":\"https://client.example.com/app\","
+            + "\"redirect_uris\":[\"https://client.example.com/cb\"]}";
+
+        ClientIdMetadataDocumentReadResult accepted = Parse(singleDocument);
+        Assert.AreEqual(ClientIdMetadataDocumentDefects.None, accepted.Defects);
+        Assert.AreEqual("https://client.example.com/app", accepted.ClientId);
+    }
+
+
     private static ClientIdMetadataDocumentReadResult Parse(string document) =>
         ClientIdMetadataDocumentReader.Parse(Encoding.UTF8.GetBytes(document));
 }

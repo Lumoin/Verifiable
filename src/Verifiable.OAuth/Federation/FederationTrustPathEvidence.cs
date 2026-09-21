@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.Federation;
 /// wallet's own familiar Trust Anchors.
 /// </summary>
 /// <remarks>
-/// Runs entirely against <paramref name="familiarTrustAnchors"/>: an anchor absent from that
+/// Runs entirely against <c>familiarTrustAnchors</c>: an anchor absent from that
 /// collection is neither fetched from nor validated against, which is how
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-15.10">
 /// Section 15.10</see>'s "Wallets SHOULD NOT access URLs included in a request from the Verifier ...
@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Federation;
 /// request" is met structurally — the caller resolves evidence from ITS OWN anchors, ahead of and
 /// independently of any Verifier request, and the resulting set is later compared, never dereferenced,
 /// against request-supplied values by
-/// <see cref="Verifiable.Core.Model.Dcql.TrustedAuthoritiesQuery.Matches(Verifiable.Core.Model.Dcql.TrustedAuthorityEvidence)"/>.
+/// <see cref="Verifiable.Core.Dcql.DcqlQueryExtensions.Matches"/>.
 /// </remarks>
 public static class FederationTrustPathEvidence
 {

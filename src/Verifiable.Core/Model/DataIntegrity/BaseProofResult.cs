@@ -155,6 +155,7 @@ public sealed class BaseProofResult: IDisposable
     /// <summary>
     /// Creates a new base proof result with all intermediate values.
     /// </summary>
+    /// <param name="canonicalProofOptions">Canonical N-Quads representation of the proof options.</param>
     /// <param name="proofValue">The multibase-encoded proof value.</param>
     /// <param name="canonicalStatements">Canonical N-Quads before relabeling.</param>
     /// <param name="relabeledStatements">N-Quads after HMAC relabeling.</param>

@@ -374,12 +374,16 @@ internal sealed class SdJwtSerializerTests
     private static byte[] ComputeHash(byte[] data, string algorithmName)
     {
         HashAlgorithmName algorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(algorithmName);
-        return algorithm.Name switch
+        (Tag tag, int length, string? qualifier) = algorithm.Name switch
         {
-            WellKnownHashAlgorithms.Sha256 => SHA256.HashData(data),
-            WellKnownHashAlgorithms.Sha384 => SHA384.HashData(data),
-            WellKnownHashAlgorithms.Sha512 => SHA512.HashData(data),
+            WellKnownHashAlgorithms.Sha256 => (CryptoTags.Sha256Digest, 32, null),
+            WellKnownHashAlgorithms.Sha384 => (CryptoTags.Sha384Digest, 48, nameof(HashAlgorithmName.SHA384)),
+            WellKnownHashAlgorithms.Sha512 => (CryptoTags.Sha512Digest, 64, nameof(HashAlgorithmName.SHA512)),
             _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithmName}'.", nameof(algorithmName))
         };
+
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(data, length, tag, BaseMemoryPool.Shared, qualifier);
+
+        return digest.AsReadOnlySpan().ToArray();
     }
 }

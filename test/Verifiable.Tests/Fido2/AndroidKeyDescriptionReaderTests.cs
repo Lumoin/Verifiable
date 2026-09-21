@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Fido2;
 
 namespace Verifiable.Tests.Fido2;
@@ -41,11 +41,11 @@ internal sealed class AndroidKeyDescriptionReaderTests
     {
         byte[] keyDescriptionBytes = Convert.FromHexString(Section1614KeyDescriptionHex);
         byte[] clientDataJsonBytes = Convert.FromHexString(Section1614ClientDataJsonHex);
-        byte[] expectedChallenge = SHA256.HashData(clientDataJsonBytes);
+        using DigestValue expectedChallengeDigest = CryptographicKeyEvents.ComputeDigest(clientDataJsonBytes, 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
 
         AndroidKeyDescription keyDescription = AndroidKeyDescription.Read(keyDescriptionBytes);
 
-        Assert.IsTrue(keyDescription.AttestationChallenge.Span.SequenceEqual(expectedChallenge));
+        Assert.IsTrue(keyDescription.AttestationChallenge.Span.SequenceEqual(expectedChallengeDigest.AsReadOnlySpan()));
 
         Assert.IsEmpty(keyDescription.SoftwareEnforced.Purposes);
         Assert.IsNull(keyDescription.SoftwareEnforced.Origin);

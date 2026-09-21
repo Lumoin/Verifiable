@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// then collapses the session to a single OR digest:
 /// <c>policyDigest = H(0...0 || TPM_CC_PolicyOR || pHashList)</c>, where <c>pHashList</c> is the concatenation of
 /// the branch digests' bytes. The result depends only on the branch set, not on which branch matched, so a
-/// caller can predict it from the branches alone (see <see cref="TpmPolicyDigest.ExtendForOr"/>). On a trial
+/// caller can predict it from the branches alone (see <see cref="TpmPolicyDigest.ExtendForOr(IReadOnlyList{ReadOnlyMemory{byte}}, TpmAlgIdConstants, Span{byte}, BaseMemoryPool)"/>). On a trial
 /// session the match check is skipped and the digest is set unconditionally.
 /// </para>
 /// <para>

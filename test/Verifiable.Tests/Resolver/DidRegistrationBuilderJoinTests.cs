@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Resolver;
 /// <summary>
 /// Tests the builder join (registration matrix J1): a <see cref="BeginCreate"/> carrying key material is
 /// dispatched through <see cref="DidRegistrationBuilders"/> to the per-method document builder
-/// (<see cref="KeyDidBuilder"/>/<see cref="WebDidBuilder"/>) and completes the real registration PDA with a
+/// (<see cref="KeyDidBuilder"/>/<see cref="Verifiable.Core.Did.Methods.Web.WebDidBuilder"/>) and completes the real registration PDA with a
 /// standards-shaped document. This proves the join end-to-end (the builders consume key material; the PDA carries
 /// a create request; the registry method handler bridges the two).
 /// </summary>

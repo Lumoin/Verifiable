@@ -47,7 +47,7 @@ public delegate JwtPayload JwtClaimsDeserializer(ReadOnlySpan<byte> payloadJson)
 /// </summary>
 /// <remarks>
 /// <para>
-/// Provides <see cref="SignAsync"/> which takes an <see cref="UnsignedJwt"/> containing
+/// Provides <see cref="SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> which takes an <see cref="UnsignedJwt"/> containing
 /// the header and payload pair, serializes them via caller-supplied delegates, and signs
 /// using the <see cref="CryptoFunctionRegistry{TAlgorithm, TPurpose}"/> dispatch pattern.
 /// </para>
@@ -108,7 +108,7 @@ public static class JwtSigningExtensions
     /// <see cref="SigningDelegate"/>. The registry-resolving overload above
     /// delegates here after resolving the function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="privateKey"/>'s <see cref="Verifiable.Foundation.SensitiveMemory.Tag"/>.
+    /// from <paramref name="privateKey"/>'s <c>Tag</c>.
     /// </summary>
     /// <param name="unsignedJwt">The unsigned JWT to sign.</param>
     /// <param name="privateKey">The private key for signing.</param>

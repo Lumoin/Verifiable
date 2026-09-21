@@ -73,6 +73,20 @@ public static class EllipticCurveSigningCertificateResolution
 
                 return true;
 
+            case EllipticCurveTypes.None:
+            case EllipticCurveTypes.BrainpoolP224r1:
+            case EllipticCurveTypes.BrainpoolP256r1:
+            case EllipticCurveTypes.BrainpoolP320r1:
+            case EllipticCurveTypes.BrainpoolP384r1:
+            case EllipticCurveTypes.BrainpoolP512r1:
+            case EllipticCurveTypes.Curve25519:
+            case EllipticCurveTypes.NistCurves:
+            case EllipticCurveTypes.BrainpoolCurves:
+                algorithm = default;
+                publicKeyPoint = default;
+
+                return false;
+
             default:
                 algorithm = default;
                 publicKeyPoint = default;

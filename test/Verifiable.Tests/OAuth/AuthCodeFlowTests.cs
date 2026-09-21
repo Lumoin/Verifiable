@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using Verifiable.Core;
 using Verifiable.Core.Assessment;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
@@ -71,6 +73,61 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
         Assert.AreEqual("server_error", result.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// A <see cref="ResolveAuthorizationServerMetadataDelegate"/> answering
+    /// <see cref="AuthorizationServerMetadataResolutionOutcome.FetchFailed"/> maps to this flow's own
+    /// <c>server_error</c> failure without throwing, and without sending the PAR request or persisting
+    /// any flow state — the resolution failed before the flow had a PAR endpoint to send to.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleParAsyncReturnsServerErrorWhenMetadataFetchFails()
+    {
+        Dictionary<string, FlowState> store = [];
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            metadataResolutionOutcome: AuthorizationServerMetadataResolutionOutcome.FetchFailed,
+            metadataResolutionDefect: "simulated transport failure");
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(),
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
+        Assert.AreEqual("server_error", result.ErrorCode);
+        Assert.IsEmpty(store, "A failed metadata resolution must not reach the PAR send or state save.");
+    }
+
+
+    /// <summary>
+    /// A <see cref="ResolveAuthorizationServerMetadataDelegate"/> answering
+    /// <see cref="AuthorizationServerMetadataResolutionOutcome.IssuerMismatch"/> maps to this flow's own
+    /// <c>server_error</c> failure without throwing, the same channel a fetch failure takes.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleParAsyncReturnsServerErrorWhenMetadataIssuerMismatches()
+    {
+        Dictionary<string, FlowState> store = [];
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            metadataResolutionOutcome: AuthorizationServerMetadataResolutionOutcome.IssuerMismatch,
+            metadataResolutionDefect: "simulated issuer mismatch");
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(),
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
+        Assert.AreEqual("server_error", result.ErrorCode);
+        Assert.IsEmpty(store, "A failed metadata resolution must not reach the PAR send or state save.");
     }
 
 
@@ -169,12 +226,14 @@ internal sealed class AuthCodeFlowTests
             loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("Test does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             memoryPool: BaseMemoryPool.Shared,
@@ -367,6 +426,213 @@ internal sealed class AuthCodeFlowTests
     }
 
 
+    /// <summary>
+    /// <see cref="OutboundRequest"/>: "the endpoints a client POSTs to — an OAuth/RFC 9728 token
+    /// endpoint, a PAR endpoint — are themselves taken from discovered metadata, so a malicious or
+    /// misconfigured metadata document could point them at an internal, loopback, or
+    /// cloud-metadata address ... The OutboundFetchPolicy must therefore gate every method." A
+    /// <c>token_endpoint</c> naming a loopback IP literal is refused before the §6 form POST is
+    /// ever sent.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleTokenAsyncRefusesLoopbackTokenEndpointBeforeAnyDial()
+    {
+        var store = new Dictionary<string, FlowState>();
+        List<Uri> invocations = [];
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:loopback-token", 60),
+            tokenEndpointOverride: new Uri("https://127.0.0.1/token"),
+            sendFormPostInvocations: invocations);
+
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+        string flowId = GetSingleFlowId(store);
+
+        _ = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "code-loopback-token",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The PAR endpoint above is not loopback and is legitimately dialed; only the token
+        //endpoint's own denial is under test here, so the spy is reset immediately before it.
+        invocations.Clear();
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleTokenAsync(
+            new Dictionary<string, string> { [AuthCodeFlowRoutes.FlowIdField] = flowId },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
+            "A token_endpoint naming a loopback IP literal must be refused, never dialed.");
+        Assert.IsEmpty(invocations, "The transport spy must record ZERO invocations when the policy denies the endpoint.");
+    }
+
+
+    /// <summary>
+    /// <see cref="OutboundRequest"/>'s SSRF remark applies identically to the cloud-metadata
+    /// literal <c>169.254.169.254</c>: a <c>token_endpoint</c> naming it is refused before any
+    /// dial, exactly as the loopback case is.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleTokenAsyncRefusesCloudMetadataTokenEndpointBeforeAnyDial()
+    {
+        var store = new Dictionary<string, FlowState>();
+        List<Uri> invocations = [];
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:cloud-token", 60),
+            tokenEndpointOverride: new Uri("https://169.254.169.254/token"),
+            sendFormPostInvocations: invocations);
+
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+        string flowId = GetSingleFlowId(store);
+
+        _ = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "code-cloud-token",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The PAR endpoint above is not loopback and is legitimately dialed; only the token
+        //endpoint's own denial is under test here, so the spy is reset immediately before it.
+        invocations.Clear();
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleTokenAsync(
+            new Dictionary<string, string> { [AuthCodeFlowRoutes.FlowIdField] = flowId },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
+            "A token_endpoint naming the cloud-metadata literal must be refused, never dialed.");
+        Assert.IsEmpty(invocations, "The transport spy must record ZERO invocations when the policy denies the endpoint.");
+    }
+
+
+    /// <summary>
+    /// <see cref="OutboundRequest"/>'s SSRF remark names the PAR endpoint alongside the token
+    /// endpoint as an equally-discovered, equally-gated target: a
+    /// <c>pushed_authorization_request_endpoint</c> naming a loopback IP literal is refused before
+    /// the PAR form POST is ever sent.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleParAsyncRefusesLoopbackParEndpointBeforeAnyDial()
+    {
+        List<Uri> invocations = [];
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            [],
+            pushedAuthorizationRequestEndpointOverride: new Uri("https://127.0.0.1/par"),
+            sendFormPostInvocations: invocations);
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
+            "A pushed_authorization_request_endpoint naming a loopback IP literal must be refused, never dialed.");
+        Assert.IsEmpty(invocations, "The transport spy must record ZERO invocations when the policy denies the endpoint.");
+    }
+
+
+    /// <summary>
+    /// <see cref="OutboundRequest"/>'s SSRF remark applies identically to the PAR endpoint naming
+    /// the cloud-metadata literal <c>169.254.169.254</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleParAsyncRefusesCloudMetadataParEndpointBeforeAnyDial()
+    {
+        List<Uri> invocations = [];
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            [],
+            pushedAuthorizationRequestEndpointOverride: new Uri("https://169.254.169.254/par"),
+            sendFormPostInvocations: invocations);
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
+            "A pushed_authorization_request_endpoint naming the cloud-metadata literal must be refused, never dialed.");
+        Assert.IsEmpty(invocations, "The transport spy must record ZERO invocations when the policy denies the endpoint.");
+    }
+
+
+    /// <summary>
+    /// <see cref="OAuthClientInfrastructure.OutboundFetchPolicy"/> governs a dial whose
+    /// <see cref="ExchangeContext"/> carries no policy of its own: a loopback token endpoint
+    /// refuses under the infrastructure's default and dials once the infrastructure names a
+    /// loopback-allowing policy — proving the configuration, not just the hard-coded secure
+    /// default, is consulted.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleTokenAsyncConsultsInfrastructurePolicyWhenContextCarriesNone()
+    {
+        Uri loopbackParEndpoint = new("https://127.0.0.1/par");
+        OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
+
+        var deniedStore = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure deniedInfrastructure, ClientRegistration deniedRegistration) = CreateInfrastructureAndRegistration(
+            deniedStore,
+            pushedAuthorizationRequestEndpointOverride: loopbackParEndpoint);
+
+        AuthCodeFlowEndpointResult deniedResult = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(), DefaultRedirectUri, deniedInfrastructure, deniedRegistration, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, deniedResult.Outcome,
+            "The infrastructure's default (SecureDefault) must refuse the loopback PAR endpoint.");
+
+        var allowedStore = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure allowedInfrastructure, ClientRegistration allowedRegistration) = CreateInfrastructureAndRegistration(
+            allowedStore,
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:cfg-loopback", 60),
+            pushedAuthorizationRequestEndpointOverride: loopbackParEndpoint,
+            outboundFetchPolicy: loopbackAllowing);
+
+        AuthCodeFlowEndpointResult allowedResult = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(), DefaultRedirectUri, allowedInfrastructure, allowedRegistration, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, allowedResult.Outcome,
+            "Naming a loopback-allowing policy on the infrastructure must let the same loopback endpoint dial.");
+    }
+
+
+    /// <summary>
+    /// A policy set explicitly on the call's <see cref="ExchangeContext"/> overrides
+    /// <see cref="OAuthClientInfrastructure.OutboundFetchPolicy"/>: an infrastructure configured to
+    /// allow loopback still refuses when the per-call context names the stricter secure default.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleParAsyncContextPolicyOverridesInfrastructurePolicy()
+    {
+        Uri loopbackParEndpoint = new("https://127.0.0.1/par");
+        OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
+
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            [],
+            pushedAuthorizationRequestEndpointOverride: loopbackParEndpoint,
+            outboundFetchPolicy: loopbackAllowing);
+
+        ExchangeContext strictContext = [];
+        strictContext.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, strictContext, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
+            "The context's explicit SecureDefault must override the infrastructure's loopback-allowing configuration.");
+    }
+
+
     [TestMethod]
     public async Task HandleRevocationAsyncReturnsBadRequestWhenEndpointMissing()
     {
@@ -550,7 +816,13 @@ internal sealed class AuthCodeFlowTests
         string? tokenResponse = null,
         Exception? httpException = null,
         Uri? revocationEndpoint = null,
-        bool useDefaultRevocationEndpoint = true)
+        bool useDefaultRevocationEndpoint = true,
+        AuthorizationServerMetadataResolutionOutcome? metadataResolutionOutcome = null,
+        string? metadataResolutionDefect = null,
+        Uri? pushedAuthorizationRequestEndpointOverride = null,
+        Uri? tokenEndpointOverride = null,
+        List<Uri>? sendFormPostInvocations = null,
+        OutboundFetchPolicy? outboundFetchPolicy = null)
     {
         Uri? resolvedRevocationEndpoint = revocationEndpoint
             ?? (useDefaultRevocationEndpoint ? new Uri("https://as.example.com/revoke") : null);
@@ -560,15 +832,17 @@ internal sealed class AuthCodeFlowTests
         AuthorizationServerMetadata metadata = new()
         {
             Issuer = issuerUri,
-            PushedAuthorizationRequestEndpoint = new Uri("https://as.example.com/par"),
+            PushedAuthorizationRequestEndpoint = pushedAuthorizationRequestEndpointOverride ?? new Uri("https://as.example.com/par"),
             AuthorizationEndpoint = new Uri("https://as.example.com/authorize"),
-            TokenEndpoint = new Uri("https://as.example.com/token"),
+            TokenEndpoint = tokenEndpointOverride ?? new Uri("https://as.example.com/token"),
             RevocationEndpoint = resolvedRevocationEndpoint
         };
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
             sendFormPostAsync: (endpoint, _, _, _, __) =>
             {
+                sendFormPostInvocations?.Add(endpoint);
+
                 if(httpException is not null)
                 {
                     throw httpException;
@@ -603,12 +877,16 @@ internal sealed class AuthCodeFlowTests
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            parseAuthorizationServerMetadataAsync: (body, ct) =>
-                throw new NotImplementedException("Test pre-resolves metadata; the parser is not exercised."),
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("AuthCodeFlowTests does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadata),
+                ValueTask.FromResult(metadataResolutionOutcome is AuthorizationServerMetadataResolutionOutcome outcome
+                    ? new AuthorizationServerMetadataResolution { Outcome = outcome, Defect = metadataResolutionDefect }
+                    : new AuthorizationServerMetadataResolution
+                    {
+                        Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                        Metadata = metadata
+                    }),
             resolveCallbackValidator: (registration, timeProvider) =>
                 new ClaimIssuer<ValidationContext>(
                     "test-callback-validator",
@@ -618,7 +896,8 @@ internal sealed class AuthCodeFlowTests
             memoryPool: BaseMemoryPool.Shared,
             timeProvider: TimeProvider,
             fillEntropy: ClientEntropy,
-            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, ClientEntropy, BaseMemoryPool.Shared));
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, ClientEntropy, BaseMemoryPool.Shared),
+            outboundFetchPolicy: outboundFetchPolicy);
 
         ClientRegistration registration = new()
         {

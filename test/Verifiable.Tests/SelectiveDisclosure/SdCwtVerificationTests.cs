@@ -143,7 +143,7 @@ internal sealed class SdCwtVerificationTests
 
         Assert.IsFalse(result.IsValid, "Verification under the wrong key must fail.");
         Assert.AreEqual(SdVerificationFailureReason.IssuerSignatureInvalid, result.FailureReason);
-        Assert.HasCount(0, result.ClaimResults, "Digest binding must not run when the signature is invalid.");
+        Assert.IsEmpty(result.ClaimResults, "Digest binding must not run when the signature is invalid.");
     }
 
 
@@ -285,3 +285,4 @@ internal sealed class SdCwtVerificationTests
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 }
+

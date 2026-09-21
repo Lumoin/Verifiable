@@ -42,11 +42,14 @@ internal sealed class Oid4VciNonceEndpointTests
     public async Task NonceEndpointReturnsFreshCNonceUncacheable()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, NonceCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, NonceCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().IssueCredentialNonceAsync = static (_, _) =>
-            ValueTask.FromResult("wKI4LT17ac15ES9bw8ac4");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.IssueCredentialNonceAsync = static (_, _) =>
+                ValueTask.FromResult("wKI4LT17ac15ES9bw8ac4");
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -78,8 +81,8 @@ internal sealed class Oid4VciNonceEndpointTests
     public async Task NonceEndpointAbsentWhenSeamUnwired()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, NonceCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, NonceCapabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

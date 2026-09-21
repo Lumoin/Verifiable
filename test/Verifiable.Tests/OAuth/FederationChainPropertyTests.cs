@@ -8,7 +8,6 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.Federation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -91,24 +90,22 @@ internal sealed class FederationChainPropertyTests
     /// the fetch + validate cycle independently on each sample.
     /// </summary>
     [TestMethod]
-    public void ChainAssembledOverWireValidatesOnEveryFetch()
+    public async Task ChainAssembledOverWireValidatesOnEveryFetch()
     {
         //Gen.Int gives CsCheck a knob it can shrink; each sample re-fetches
         //the chain freshly. The seed value isn't otherwise consumed.
-        Gen.Int[0, 1000].Sample(_ =>
+        await Gen.Int[0, 1000].SampleAsync(async _ =>
         {
-            string[] chain = Fixture.FetchChainAsync(TestContext.CancellationToken)
-                .GetAwaiter().GetResult();
+            string[] chain = await Fixture.FetchChainAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-            TrustChainValidationOutcome outcome = Fixture.ValidateChainAsync(
+            TrustChainValidationOutcome outcome = await Fixture.ValidateChainAsync(
                     chain,
                     [Fixture.AnchorNode.Identifier],
-                    TestContext.CancellationToken)
-                .GetAwaiter().GetResult();
+                    TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(outcome.IsValid,
                 $"Chain validation must succeed every fetch. Reason: {outcome.FailureReason}");
-        }, iter: 25);
+        }, iter: 25, threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 
@@ -121,10 +118,9 @@ internal sealed class FederationChainPropertyTests
     /// verification.
     /// </summary>
     [TestMethod]
-    public void TamperingAnyByteRejectsTheChain()
+    public async Task TamperingAnyByteRejectsTheChain()
     {
-        string[] validChain = Fixture.FetchChainAsync(TestContext.CancellationToken)
-            .GetAwaiter().GetResult();
+        string[] validChain = await Fixture.FetchChainAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         Gen<(int Element, int ByteOffset, byte XorMask)> tamperGen =
             Gen.Int[0, validChain.Length - 1].SelectMany(elementIndex =>
@@ -132,7 +128,7 @@ internal sealed class FederationChainPropertyTests
                     Gen.Byte[1, 255].Select(xorMask =>
                         (elementIndex, byteOffset, xorMask))));
 
-        tamperGen.Sample(tuple =>
+        await tamperGen.SampleAsync(async tuple =>
         {
             string[] tamperedChain = (string[])validChain.Clone();
             char[] mutated = tamperedChain[tuple.Element].ToCharArray();
@@ -142,16 +138,15 @@ internal sealed class FederationChainPropertyTests
             mutated[tuple.ByteOffset] = (char)(mutated[tuple.ByteOffset] ^ tuple.XorMask);
             tamperedChain[tuple.Element] = new string(mutated);
 
-            TrustChainValidationOutcome outcome = Fixture.ValidateChainAsync(
+            TrustChainValidationOutcome outcome = await Fixture.ValidateChainAsync(
                     tamperedChain,
                     [Fixture.AnchorNode.Identifier],
-                    TestContext.CancellationToken)
-                .GetAwaiter().GetResult();
+                    TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(outcome.IsValid,
                 $"Tampering element {tuple.Element} at byte {tuple.ByteOffset} (XOR {tuple.XorMask:X2}) must reject. " +
                 $"Original: '{validChain[tuple.Element]}', Tampered: '{tamperedChain[tuple.Element]}'.");
-        }, iter: 50);
+        }, iter: 50, threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 
@@ -162,10 +157,9 @@ internal sealed class FederationChainPropertyTests
     /// real anchor's identifier) and asserts the rejection.
     /// </summary>
     [TestMethod]
-    public void AnchorAllowListExcludingChainTerminalRejectsChain()
+    public async Task AnchorAllowListExcludingChainTerminalRejectsChain()
     {
-        string[] validChain = Fixture.FetchChainAsync(TestContext.CancellationToken)
-            .GetAwaiter().GetResult();
+        string[] validChain = await Fixture.FetchChainAsync(TestContext.CancellationToken).ConfigureAwait(false);
         string realAnchorId = Fixture.AnchorNode.Identifier.Value;
 
         Gen<EntityIdentifier[]> wrongAnchorsGen =
@@ -177,18 +171,17 @@ internal sealed class FederationChainPropertyTests
                         .Select(n => new EntityIdentifier($"https://{n}.example.com"))
                         .ToArray()));
 
-        wrongAnchorsGen.Sample(wrongAnchors =>
+        await wrongAnchorsGen.SampleAsync(async wrongAnchors =>
         {
-            TrustChainValidationOutcome outcome = Fixture.ValidateChainAsync(
+            TrustChainValidationOutcome outcome = await Fixture.ValidateChainAsync(
                     validChain,
                     wrongAnchors,
-                    TestContext.CancellationToken)
-                .GetAwaiter().GetResult();
+                    TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(outcome.IsValid,
                 $"Validation against anchor set [{string.Join(',', wrongAnchors.Select(a => a.Value))}] " +
                 "must reject — none of these are the chain's terminal anchor.");
-        }, iter: 30);
+        }, iter: 30, threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 
@@ -278,6 +271,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     private VerifierKeyMaterial IntermediateKeys { get; }
     private VerifierKeyMaterial AnchorKeys { get; }
 
+
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
@@ -295,6 +289,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
 
     /// <summary>The anchor ring node — supplies its Entity Identifier for the trust-anchor allow-list and signs trust marks.</summary>
     public FederationTestRingNode AnchorNode { get; }
+
 
     /// <summary>The verifier (leaf) ring node, keyed by the same federation key its EC publishes — the trust-mark subject.</summary>
     public FederationTestRingNode VerifierNode { get; }
@@ -322,6 +317,9 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Builds the signed entity statements and validation delegates needed by the generated trust-chain case.
+    /// </summary>
     public static async ValueTask<FederationTopologyFixture> BuildAsync()
     {
         FakeTimeProvider timeProvider = new();
@@ -348,32 +346,32 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
         //Verifier (leaf): EC only, no subordinates.
-        VerifierKeyMaterial verifierKeys = host.RegisterFederationCapableClient(
+        VerifierKeyMaterial verifierKeys = await host.RegisterFederationCapableClientAsync(
             clientId: "https://verifier.example.com",
             baseUri: verifierEntityId,
             federationEntityId: verifierEntityId,
             federationSigningKeyPair: verifierFederationKeys,
-            baseCapabilities: ImmutableHashSet<CapabilityIdentifier>.Empty);
+            baseCapabilities: ImmutableHashSet<CapabilityIdentifier>.Empty).ConfigureAwait(false);
 
         //Intermediate: EC + SS issuer.
-        VerifierKeyMaterial intermediateKeys = host.RegisterFederationCapableClientOnHost(
+        VerifierKeyMaterial intermediateKeys = await host.RegisterFederationCapableClientOnHostAsync(
             hostName: "intermediate",
             clientId: intermediateEntityId.ToString(),
             baseUri: intermediateEntityId,
             federationEntityId: intermediateEntityId,
             federationSigningKeyPair: intermediateFederationKeys,
             baseCapabilities: ImmutableHashSet.Create(
-                WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement));
+                WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement)).ConfigureAwait(false);
 
         //Anchor: EC + SS issuer.
-        VerifierKeyMaterial anchorKeys = host.RegisterFederationCapableClientOnHost(
+        VerifierKeyMaterial anchorKeys = await host.RegisterFederationCapableClientOnHostAsync(
             hostName: "anchor",
             clientId: anchorEntityId.ToString(),
             baseUri: anchorEntityId,
             federationEntityId: anchorEntityId,
             federationSigningKeyPair: anchorFederationKeys,
             baseCapabilities: ImmutableHashSet.Create(
-                WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement));
+                WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement)).ConfigureAwait(false);
 
         //Align intermediate + anchor to their own Kestrel bases so EC URLs
         //and federation_fetch URLs resolve against the right authority.
@@ -395,66 +393,80 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         //metadata.federation_entity (the wire shape a real wallet parses).
         Uri intermediateFetchUrl = new(intermediateHost.HttpBaseAddress!,
             $"/connect/{intermediateSegment}/federation_fetch");
-        intermediateHost.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
-            ValueTask.FromResult(new FederationEntityConfigurationContribution
-            {
-                Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+        await TestHostShell.AlterAsync(intermediateHost.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeFederationMetadataAsync = (_, _, _) =>
+                ValueTask.FromResult(new FederationEntityConfigurationContribution
                 {
-                    [WellKnownEntityTypeIdentifiers.FederationEntity] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
                     {
-                        ["federation_fetch_endpoint"] = intermediateFetchUrl.ToString()
+                        [WellKnownEntityTypeIdentifiers.FederationEntity] = new Dictionary<string, object>(StringComparer.Ordinal)
+                        {
+                            ["federation_fetch_endpoint"] = intermediateFetchUrl.ToString()
+                        }
                     }
-                }
-            });
+                });
+        }).ConfigureAwait(false);
 
         Dictionary<string, object> verifierSubjectJwks = OAuthJwksFixtures.BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
-        intermediateHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        await TestHostShell.AlterAsync(intermediateHost.Server, candidateIntegration =>
         {
-            if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
+            candidateIntegration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
             {
-                return ValueTask.FromResult<SubordinateStatementContribution?>(null);
-            }
+                if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
+                {
 
-            return ValueTask.FromResult<SubordinateStatementContribution?>(
-                new SubordinateStatementContribution { Jwks = verifierSubjectJwks });
-        };
+                    return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+                }
+
+                return ValueTask.FromResult<SubordinateStatementContribution?>(
+                    new SubordinateStatementContribution { Jwks = verifierSubjectJwks });
+            };
+        }).ConfigureAwait(false);
 
         //Anchor publishes its federation_fetch URL and serves SS about
         //the intermediate.
         Uri anchorFetchUrl = new(anchorHost.HttpBaseAddress!,
             $"/connect/{anchorSegment}/federation_fetch");
-        anchorHost.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
-            ValueTask.FromResult(new FederationEntityConfigurationContribution
-            {
-                Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+        await TestHostShell.AlterAsync(anchorHost.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeFederationMetadataAsync = (_, _, _) =>
+                ValueTask.FromResult(new FederationEntityConfigurationContribution
                 {
-                    [WellKnownEntityTypeIdentifiers.FederationEntity] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
                     {
-                        ["federation_fetch_endpoint"] = anchorFetchUrl.ToString()
-                    }
-                },
-                //The Trust Anchor authorizes itself as a trust-mark issuer for TrustMarkId (§6.2), so a mark it
-                //signs is admitted by the trust-mark resolver over the fetched chain.
-                AdditionalClaims = new Dictionary<string, object>(StringComparer.Ordinal)
-                {
-                    [WellKnownFederationClaimNames.TrustMarkIssuers] = new Dictionary<string, object>(StringComparer.Ordinal)
+                        [WellKnownEntityTypeIdentifiers.FederationEntity] = new Dictionary<string, object>(StringComparer.Ordinal)
+                        {
+                            ["federation_fetch_endpoint"] = anchorFetchUrl.ToString()
+                        }
+                    },
+                    //The Trust Anchor authorizes itself as a trust-mark issuer for TrustMarkId (§6.2), so a mark it
+                    //signs is admitted by the trust-mark resolver over the fetched chain.
+                    AdditionalClaims = new Dictionary<string, object>(StringComparer.Ordinal)
                     {
-                        [TrustMarkId] = new List<object> { anchorEntityId.ToString() }
+                        [WellKnownFederationClaimNames.TrustMarkIssuers] = new Dictionary<string, object>(StringComparer.Ordinal)
+                        {
+                            [TrustMarkId] = new List<object> { anchorEntityId.ToString() }
+                        }
                     }
-                }
-            });
+                });
+        }).ConfigureAwait(false);
 
         Dictionary<string, object> intermediateSubjectJwks = OAuthJwksFixtures.BuildSingleEcKeyJwks(intermediateFederationKeys.PublicKey);
-        anchorHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        await TestHostShell.AlterAsync(anchorHost.Server, candidateIntegration =>
         {
-            if(!string.Equals(subject.Value, intermediateEntityId.ToString(), StringComparison.Ordinal))
+            candidateIntegration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
             {
-                return ValueTask.FromResult<SubordinateStatementContribution?>(null);
-            }
+                if(!string.Equals(subject.Value, intermediateEntityId.ToString(), StringComparison.Ordinal))
+                {
 
-            return ValueTask.FromResult<SubordinateStatementContribution?>(
-                new SubordinateStatementContribution { Jwks = intermediateSubjectJwks });
-        };
+                    return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+                }
+
+                return ValueTask.FromResult<SubordinateStatementContribution?>(
+                    new SubordinateStatementContribution { Jwks = intermediateSubjectJwks });
+            };
+        }).ConfigureAwait(false);
 
         //The anchor's ring node supplies its EntityIdentifier for the
         //trust-anchor allow-list the property tests pass to

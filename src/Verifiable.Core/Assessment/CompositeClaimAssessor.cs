@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Diagnostics;
 
 namespace Verifiable.Core.Assessment
@@ -30,7 +29,7 @@ namespace Verifiable.Core.Assessment
     /// <list type="bullet">
     /// <item><description>
     /// <strong>Parallel Execution:</strong> All assessors run concurrently using
-    /// <see cref="Task.WhenAll"/>, with individual timeout support.
+    /// <see cref="Task.WhenAll(System.Collections.Generic.IEnumerable{Task})"/>, with individual timeout support.
     /// </description></item>
     /// <item><description>
     /// <strong>Partial Results:</strong> If some assessors fail or timeout, results
@@ -150,7 +149,7 @@ namespace Verifiable.Core.Assessment
             string correlationId,
             CancellationToken cancellationToken = default)
         {
-            var overallStopwatch = Stopwatch.StartNew();
+            var overallStartTimestamp = TimeProvider.GetTimestamp();
             var traceId = TracingUtilities.GetOrCreateTraceId();
             var parentSpanId = TracingUtilities.GetOrCreateSpanId();
             var baggage = TracingUtilities.GetOrCreateBaggage();
@@ -164,11 +163,11 @@ namespace Verifiable.Core.Assessment
             //Step 2: Run all assessors in parallel.
             var creationTimestamp = TimeProvider.GetUtcNow().UtcDateTime;
             var assessorTasks = Assessors.Select(config =>
-                CompositeClaimAssessor<TInput>.RunAssessorWithTimeoutAsync(config, claimsResult, creationTimestamp, traceId, baggage, cancellationToken));
+                CompositeClaimAssessor<TInput>.RunAssessorWithTimeoutAsync(config, claimsResult, creationTimestamp, traceId, baggage, TimeProvider, cancellationToken));
 
             var individualResults = await Task.WhenAll(assessorTasks).ConfigureAwait(false);
 
-            overallStopwatch.Stop();
+            var totalDuration = TimeProvider.GetElapsedTime(overallStartTimestamp);
 
             //Step 3: Aggregate results.
             var aggregatedAssessmentId = Guid.NewGuid().ToString();
@@ -180,7 +179,7 @@ namespace Verifiable.Core.Assessment
                 IndividualResults: individualResults,
                 AggregationStrategy: AggregationStrategy,
                 CreationTimestampInUtc: creationTimestamp,
-                TotalDuration: overallStopwatch.Elapsed,
+                TotalDuration: totalDuration,
                 TraceId: traceId,
                 SpanId: parentSpanId,
                 Baggage: baggage)
@@ -193,15 +192,23 @@ namespace Verifiable.Core.Assessment
         /// <summary>
         /// Runs a single assessor with optional timeout, capturing all outcomes.
         /// </summary>
+        /// <param name="config">The configuration of the assessor to run.</param>
+        /// <param name="claimsResult">The claims generated for the input under assessment.</param>
+        /// <param name="creationTimestamp">The instant, from the enclosing <see cref="CompositeClaimAssessor{TInput}.TimeProvider"/>, passed to the assessor as its own creation timestamp.</param>
+        /// <param name="traceId">The trace identifier correlating this assessor with the composite run.</param>
+        /// <param name="baggage">Distributed context propagated to the assessor.</param>
+        /// <param name="timeProvider">The time provider the enclosing <see cref="CompositeClaimAssessor{TInput}"/> was constructed with, used to measure <see cref="IndividualAssessorResult.Duration"/>.</param>
+        /// <param name="cancellationToken">Token to monitor for cancellation.</param>
         private static async Task<IndividualAssessorResult> RunAssessorWithTimeoutAsync(
             AssessorConfiguration config,
             ClaimIssueResult claimsResult,
             DateTime creationTimestamp,
             string? traceId,
             IReadOnlyDictionary<string, string>? baggage,
+            TimeProvider timeProvider,
             CancellationToken cancellationToken)
         {
-            var stopwatch = Stopwatch.StartNew();
+            var startTimestamp = timeProvider.GetTimestamp();
             var spanId = TracingUtilities.GetOrCreateSpanId();
 
             try
@@ -226,37 +233,33 @@ namespace Verifiable.Core.Assessment
                     baggage,
                     effectiveToken).ConfigureAwait(false);
 
-                stopwatch.Stop();
-
                 return new IndividualAssessorResult(
                     AssessorId: config.AssessorId,
                     CompletionStatus: AssessorCompletionStatus.Completed,
                     Result: result,
                     ErrorMessage: null,
-                    Duration: stopwatch.Elapsed,
+                    Duration: timeProvider.GetElapsedTime(startTimestamp),
                     SpanId: spanId);
             }
             catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested)
             {
-                stopwatch.Stop();
                 return new IndividualAssessorResult(
                     AssessorId: config.AssessorId,
                     CompletionStatus: AssessorCompletionStatus.Cancelled,
                     Result: null,
                     ErrorMessage: "Assessment was cancelled.",
-                    Duration: stopwatch.Elapsed,
+                    Duration: timeProvider.GetElapsedTime(startTimestamp),
                     SpanId: spanId);
             }
             catch(OperationCanceledException)
             {
                 //Timeout (not external cancellation).
-                stopwatch.Stop();
                 return new IndividualAssessorResult(
                     AssessorId: config.AssessorId,
                     CompletionStatus: AssessorCompletionStatus.TimedOut,
                     Result: null,
                     ErrorMessage: $"Assessment timed out after {config.Timeout}.",
-                    Duration: stopwatch.Elapsed,
+                    Duration: timeProvider.GetElapsedTime(startTimestamp),
                     SpanId: spanId);
             }
             catch(Exception ex)
@@ -264,13 +267,12 @@ namespace Verifiable.Core.Assessment
                 //Each configured assessor is isolated: a fault from one (a caller-registered, arbitrary
                 //assessment delegate) is recorded as this assessor's own Faulted outcome and never takes
                 //down the composite run, cancellation excepted above.
-                stopwatch.Stop();
                 return new IndividualAssessorResult(
                     AssessorId: config.AssessorId,
                     CompletionStatus: AssessorCompletionStatus.Faulted,
                     Result: null,
                     ErrorMessage: ex.Message,
-                    Duration: stopwatch.Elapsed,
+                    Duration: timeProvider.GetElapsedTime(startTimestamp),
                     SpanId: spanId);
             }
         }

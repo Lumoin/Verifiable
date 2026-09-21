@@ -19,11 +19,11 @@ namespace Verifiable.Fido2;
 /// remarks — the same reasoning applies here.
 /// </para>
 /// <para>
-/// <strong>Extension inputs.</strong> This assertion-side surface carves out exactly two named
-/// extension-input members (<see cref="AppId"/>, <see cref="LargeBlob"/>); neither
+/// <strong>Extension inputs.</strong> This assertion-side surface carves out three named
+/// extension-input members (<see cref="AppId"/>, <see cref="LargeBlob"/>, <see cref="Prf"/>); neither
 /// <c>minPinLength</c> nor <c>credProtect</c> gains an assertion-side member (both are
 /// registration-only, CTAP 2.3 §12.5/§12.1) — see <see cref="PublicKeyCredentialCreationOptions"/>'s
-/// matching remarks for the full, five-member registration-side count.
+/// matching remarks for the full, six-member registration-side count.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PublicKeyCredentialRequestOptions(RpId={RpId}, AllowCredentials={AllowCredentials?.Count})")]
@@ -33,7 +33,7 @@ public sealed record PublicKeyCredentialRequestOptions
     /// The base64url-encoded challenge the authenticator signs over. Required by the CR.
     /// </summary>
     /// <remarks>
-    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.BaseMemoryPool)"/>
+    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(BaseMemoryPool)"/>
     /// returns this exact shape, matching <c>AssertionCeremonyInput.ExpectedChallenge</c>'s own
     /// plain-<see cref="string"/> modeling.
     /// </remarks>
@@ -113,4 +113,27 @@ public sealed record PublicKeyCredentialRequestOptions
     /// <see cref="Fido2LargeBlobAssertionExtensionInput"/>).
     /// </remarks>
     public Fido2LargeBlobAssertionExtensionInput? LargeBlob { get; set; }
+
+    /// <summary>
+    /// The <c>prf</c> extension's assertion-side client extension input, or <see langword="null"/>
+    /// when not requested.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication Level 3,
+    /// section 10.1.4: Pseudo-random function extension (prf)</see>. One of this type's three named
+    /// extension-input carve-outs (see the type-level remarks and
+    /// <see cref="Fido2PrfAssertionExtensionInput"/>).
+    /// </para>
+    /// <para>
+    /// <see cref="Fido2AssertionOptionsBuilder"/> resolves this member against <see cref="AllowCredentials"/>:
+    /// section 10.1.4's authentication-processing algorithm returns a client-side <c>NotSupportedError</c>
+    /// when <see cref="Fido2PrfAssertionExtensionInput.EvalByCredential"/> is non-empty but
+    /// <see cref="AllowCredentials"/> is empty, and a <c>SyntaxError</c> when a key names no entry of
+    /// <see cref="AllowCredentials"/> — the builder never advertises a request the client would itself
+    /// refuse, so it resolves this member to <see langword="null"/> instead of propagating either
+    /// violation.
+    /// </para>
+    /// </remarks>
+    public Fido2PrfAssertionExtensionInput? Prf { get; set; }
 }

@@ -90,7 +90,21 @@ public enum VerificationFailureReason
     /// the claimed identifier but whose verification method declares a different controller does not
     /// authenticate that identifier, even though the signature itself is valid.
     /// </summary>
-    ControllerMismatch
+    ControllerMismatch,
+
+    /// <summary>
+    /// The document's <c>@context</c> failed context validation, run after proof verification
+    /// succeeded: it failed the <see cref="Verifiable.Core.Validation.ContextValidationRules"/>
+    /// normative pipeline, it does not deeply equal the application's known <c>@context</c>, a
+    /// subtree of the document carries its own <c>@context</c> property, or the canonicalizer could
+    /// not load a context the document names. Mandated by
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">Data Integrity 1.0
+    /// §2.4.1 Validating Contexts</see> ("Applications MUST use the algorithm in Section 4.6 Context
+    /// Validation, or one that achieves equivalent protections") and
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+    /// Validation</see>.
+    /// </summary>
+    ContextValidationFailed
 }
 
 

@@ -38,7 +38,7 @@ namespace Verifiable.Json.Converters;
 /// <see cref="JsonThrowHelper.ThrowJsonException(string)"/>. The Return-Route extension's
 /// <c>return_route</c>/<c>return_route_thread</c> headers get the analogous string-typing check. The
 /// domain-level structural validation (required headers, message-type-URI shape, recipient identifier
-/// shape) is applied above this converter by <see cref="DidCommPlaintextExtensions.UnpackPlaintext"/>.
+/// shape) is applied above this converter by <see cref="Verifiable.DidComm.DidCommPlaintextExtensions.UnpackPlaintext(Verifiable.DidComm.DidCommPlaintextMessage, Verifiable.DidComm.DidCommMessageParser)"/>.
 /// </para>
 /// </remarks>
 public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>

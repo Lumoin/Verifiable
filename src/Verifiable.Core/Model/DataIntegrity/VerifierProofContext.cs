@@ -9,7 +9,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This type is returned by <see cref="CredentialEcdsaSd2023Extensions.ParseDerivedProofAsync"/>.
+/// This type is returned by <see cref="CredentialEcdsaSd2023Extensions.VerifyDerivedProofVerboseAsync"/>.
 /// It contains all the information the verifier needs to verify a derived proof:
 /// </para>
 /// <list type="bullet">

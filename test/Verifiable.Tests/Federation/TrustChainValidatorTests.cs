@@ -26,7 +26,7 @@ internal sealed class TrustChainValidatorTests
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
             subject, anchor, now, now.AddHours(1),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<bool> linkVerified = await VerifyChainAsync(
             minted, subject, anchor, TestContext.CancellationToken).ConfigureAwait(false);
@@ -69,7 +69,7 @@ internal sealed class TrustChainValidatorTests
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
             subject, anchor, now, now.AddHours(1),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<bool> linkVerified = await VerifyChainAsync(
             minted, subject, anchor, TestContext.CancellationToken).ConfigureAwait(false);
@@ -113,7 +113,7 @@ internal sealed class TrustChainValidatorTests
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
             subject, anchor, now, now.AddHours(1),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Simulate a tampered link by forcing position 1's verify outcome to false.
         bool[] linkVerified = [true, false, true];
@@ -148,7 +148,7 @@ internal sealed class TrustChainValidatorTests
             new EntityIdentifier("https://example.test/anchor"));
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Reorder so position 0 is the anchor's Subordinate Statement (iss != sub) rather
         //than the subject's self-issued Entity Configuration. §10.1 requires the chain to
@@ -191,7 +191,7 @@ internal sealed class TrustChainValidatorTests
             new EntityIdentifier("https://example.test/anchor"));
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Duplicate the anchor's Subordinate Statement: a non-self-issued statement whose
         //(iss, sub) pair repeats is a cycle per §10.2.

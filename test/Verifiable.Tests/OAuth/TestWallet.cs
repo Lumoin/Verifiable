@@ -25,7 +25,7 @@ namespace Verifiable.Tests.OAuth;
 /// Each public method corresponds to one user interaction or protocol step,
 /// allowing tests to assert PDA state at intermediate transition points. The
 /// production wallet path is
-/// <see cref="Verifiable.OAuth.Oid4Vp.Wallet.Oid4VpWalletClient.PresentJarAsync"/>,
+/// <see cref="Verifiable.OAuth.Oid4Vp.Wallet.Oid4VpWalletClient.PresentJarAsync(PresentJarOptions, System.Threading.CancellationToken)"/>,
 /// which collapses the whole flow into a single call.
 /// </summary>
 /// <remarks>
@@ -124,8 +124,7 @@ internal sealed class TestWallet
     /// <summary>
     /// Wallet POST to <c>request_uri</c> — the <c>request_uri_method=post</c>
     /// path per OID4VP 1.0 §5.10. The Wallet sends <paramref name="walletNonce"/>
-    /// (and optionally <paramref name="walletMetadataJson"/>) so the Verifier
-    /// can echo the nonce in the signed JAR. Drives the Wallet PDA
+    /// so the Verifier can echo the nonce in the signed JAR. Drives the Wallet PDA
     /// <c>RequestUriReceived</c> → <c>WalletNonceSent</c>; the JAR fetch and
     /// echo-verification happen subsequently in <see cref="HandleJarFetchAsync"/>.
     /// </summary>

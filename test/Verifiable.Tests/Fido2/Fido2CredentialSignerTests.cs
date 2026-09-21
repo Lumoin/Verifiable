@@ -176,7 +176,7 @@ internal sealed class Fido2CredentialSignerTests
     }
 
 
-    /// <summary>Runs <see cref="Fido2AssertionVerifier.VerifyAsync"/>, reconstructing the ceremony input from wire bytes only.</summary>
+    /// <summary>Runs <see cref="Fido2AssertionVerifier.VerifyAsync(CoseKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AssertionCeremonyInput, string, BaseMemoryPool, TimeProvider, CancellationToken)"/>, reconstructing the ceremony input from wire bytes only.</summary>
     private static async ValueTask<Fido2AssertionOutcome> VerifyAsync(
         CoseKey credentialPublicKey, ReadOnlyMemory<byte> signature, byte[] authenticatorDataBytes, byte[] clientDataJson,
         string expectedChallenge, byte[] expectedRpIdHash, CancellationToken cancellationToken)

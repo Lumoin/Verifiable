@@ -12,13 +12,13 @@ namespace Verifiable.Core.Model.Credentials;
 /// Captures the signing parameters that are fixed across multiple builds —
 /// the private key, verification method, cryptosuite, canonicalization, and
 /// codec wiring. Per-build parameters (issuer, subject, validity period) are
-/// supplied at <see cref="CredentialBuilder.BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>
+/// supplied at <see cref="CredentialBuilder.BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, ExchangeContext?, CancellationToken)"/>
 /// time.
 /// </para>
 /// <para>
 /// The config is set on the builder via
 /// <see cref="CredentialBuilderExtensions.WithDataIntegritySigning(CredentialBuilder, DataIntegritySigningConfig)"/>.
-/// <see cref="CredentialBuilder.BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>
+/// <see cref="CredentialBuilder.BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, ExchangeContext?, CancellationToken)"/>
 /// reads the config and applies the proof after the credential is built.
 /// </para>
 /// <para>
@@ -28,13 +28,11 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// <para>
 /// <strong>Time handling.</strong>
-#pragma warning disable RS0030 // Banned API referenced in documentation only.
 /// <see cref="ProofCreated"/> is the timestamp written into the proof's
 /// <c>created</c> field. The library does not consult
-/// <see cref="System.DateTime.UtcNow"/> or <see cref="System.TimeProvider"/>;
+/// <c>System.DateTime.UtcNow</c> or <c>System.TimeProvider</c>;
 /// the caller supplies the timestamp explicitly so signing remains
 /// deterministic and testable.
-#pragma warning restore RS0030
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DataIntegritySigningConfig VerificationMethodId={VerificationMethodId,nq} Cryptosuite={Cryptosuite}")]

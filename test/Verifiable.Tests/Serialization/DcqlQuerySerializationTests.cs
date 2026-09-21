@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Json;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
 
@@ -75,7 +74,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -115,7 +114,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -156,7 +155,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
 
         //Verify the JSON wire format contains the expected mixed-type array.
@@ -211,7 +210,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -260,7 +259,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -309,7 +308,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
 
         //Verify wire format is a flat array of arrays.
@@ -374,7 +373,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -435,7 +434,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         DcqlQuery deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -488,7 +487,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         DcqlQuery deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(WireJson, options)!;
 
         CredentialQuery query = deserialized.Credentials![0];
@@ -568,7 +567,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         _ = Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
@@ -586,7 +585,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         _ = Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
@@ -610,7 +609,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         _ = Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
@@ -672,7 +671,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.Credentials);

@@ -97,6 +97,7 @@ public static class AuthCodeServerFlowTransitions
                                 ExpiresIn = par.ExpiresIn,
                                 AcrValues = par.AcrValues,
                                 MaxAge = par.MaxAge,
+                                Prompt = par.Prompt,
                                 State = par.State,
                                 AuthorizationDetails = par.AuthorizationDetails,
                                 ResponseMode = par.ResponseMode,
@@ -197,7 +198,11 @@ public static class AuthCodeServerFlowTransitions
                                 RedirectUri = issued.RedirectUri,
                                 CodeChallenge = issued.CodeChallenge,
                                 CodeChallengeMethod = issued.CodeChallengeMethod,
-                                RefreshFlowId = token.RefreshFlowId
+
+                                //This terminal state IS the grant's own root record: its own
+                                //FlowId is the grant key every sibling refresh record under it
+                                //carries forward.
+                                GrantFlowId = issued.FlowId
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerTokenIssued"),
@@ -231,7 +236,11 @@ public static class AuthCodeServerFlowTransitions
                                 //the DPoP binding exactly as a live redemption would, per
                                 //HandleRefreshTokenReuseAsync.
                                 ClientId = refresh.ClientId,
-                                PredecessorFlowId = refresh.PredecessorFlowId,
+
+                                //Carried verbatim from the redeemed refresh record, exactly as
+                                //OriginatingGrantType is, so the retired record still names the
+                                //grant a later reuse reads in one call.
+                                GrantFlowId = refresh.GrantFlowId,
                                 SuccessorRefreshFlowId = token.SuccessorRefreshFlowId
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,

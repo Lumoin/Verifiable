@@ -1,4 +1,5 @@
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
@@ -115,4 +116,14 @@ public sealed record Oid4VpWalletConfiguration
 
     /// <summary>Memory pool for transient cryptographic buffers.</summary>
     public required BaseMemoryPool MemoryPool { get; init; }
+
+    /// <summary>
+    /// The outbound-fetch policy the §5.10 <see cref="SendFormPost"/> dial is evaluated against
+    /// when the call's <see cref="Verifiable.Core.ExchangeContext"/> carries none (see
+    /// <see cref="OutboundFetchPolicyExchangeContextExtensions.ResolveOutboundFetchPolicy"/>).
+    /// Defaults to <see cref="OutboundFetchPolicy.SecureDefault"/>. The <c>request_uri</c> this
+    /// dials is named by discovered request data, not chosen by this library, so a deployment
+    /// that talks to a loopback or private-network Verifier names a policy here that allows it.
+    /// </summary>
+    public OutboundFetchPolicy OutboundFetchPolicy { get; init; } = OutboundFetchPolicy.SecureDefault;
 }

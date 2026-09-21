@@ -30,7 +30,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// The maximum request-body size, in bytes, the VCALM 1.0 endpoints accept before answering
     /// HTTP 413. Defaults to the §2.4 RECOMMENDED 10 MB baseline.
     /// </summary>
-    public long VcalmMaxRequestBytes { get; set; } = 10L * 1024 * 1024;
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public long VcalmMaxRequestBytes
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    } = 10L * 1024 * 1024;
+
 
     /// <summary>
     /// The default lifetime a §3.6.3 exchange is created with when the create request omits
@@ -38,7 +57,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// §3.6.2) ceases to be valid. Defaults to 15 minutes; a deployment with longer-running mediated
     /// exchanges raises it. An explicit <c>expires</c> in the create body overrides it.
     /// </summary>
-    public TimeSpan VcalmExchangeDefaultLifetime { get; set; } = TimeSpan.FromMinutes(15);
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public TimeSpan VcalmExchangeDefaultLifetime
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    } = TimeSpan.FromMinutes(15);
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.3.1 <c>/credentials/verify</c> request body into the neutral
@@ -47,7 +85,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// endpoint cannot read its body without it. The default JSON implementation lives in
     /// <c>Verifiable.Json</c> and is wired by the application (serialization firewall).
     /// </summary>
-    public ParseVcalmVerifyCredentialDelegate? ParseVcalmVerifyCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmVerifyCredentialDelegate? ParseVcalmVerifyCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.3.2 <c>/presentations/verify</c> request body into the neutral
@@ -55,7 +112,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="WellKnownVcalmCapabilities.VcalmVerifier"/> capability is allowed. The default JSON
     /// implementation lives in <c>Verifiable.Json</c>.
     /// </summary>
-    public ParseVcalmVerifyPresentationDelegate? ParseVcalmVerifyPresentationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmVerifyPresentationDelegate? ParseVcalmVerifyPresentationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The application-supplied Data Integrity verification seams the VCALM 1.0 §3.3.1 / §3.3.2
@@ -65,7 +141,28 @@ public sealed class VcalmIntegration: ServerIntegration
     /// it verified (fail-closed). The library does not hardcode the cryptosuite / canonicalization
     /// choice.
     /// </summary>
-    public VcalmCredentialVerification? VcalmCredentialVerification { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// <para>Candidate assignments copy this container and refuse components attached to another server.
+    /// Application resources and delegate targets remain shared references.</para>
+    /// </remarks>
+    public VcalmCredentialVerification? VcalmCredentialVerification
+    {
+        get;
+        set
+        {
+            WithComponentLocks([this, value?.SchemaValidators], () =>
+            {
+                EnsureMutable();
+                field = value is null ? null : value with { SchemaValidators = AdoptComponent(value.SchemaValidators) };
+            });
+        }
+    }
+
 
     /// <summary>
     /// Persists a challenge the VCALM 1.0 §3.3.3 <c>/challenges</c> endpoint minted, so a later
@@ -73,14 +170,52 @@ public sealed class VcalmIntegration: ServerIntegration
     /// Optional — when both this and <see cref="ConsumeVcalmChallengeAsync"/> are unwired, the
     /// §3.3.3 endpoint still mints and returns a challenge but the instance does not track issuance.
     /// </summary>
-    public PersistVcalmChallengeDelegate? PersistVcalmChallengeAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public PersistVcalmChallengeDelegate? PersistVcalmChallengeAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Consumes a challenge presented on a VCALM 1.0 §3.3.2 call: returns whether the instance
     /// issued it (§3.3.3 issuance gating). Optional — when unwired, a presented challenge is matched
     /// against the presentation proof only, not gated on issuance.
     /// </summary>
-    public ConsumeVcalmChallengeDelegate? ConsumeVcalmChallengeAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ConsumeVcalmChallengeDelegate? ConsumeVcalmChallengeAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.2.1 <c>/credentials/issue</c> request body into the neutral
@@ -89,7 +224,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// endpoint cannot read its body without it. The default JSON implementation lives in
     /// <c>Verifiable.Json</c> and is wired by the application (serialization firewall).
     /// </summary>
-    public ParseVcalmIssueCredentialDelegate? ParseVcalmIssueCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmIssueCredentialDelegate? ParseVcalmIssueCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The application-supplied Data Integrity signing seams the VCALM 1.0 §3.2.1 issuer composes
@@ -99,7 +253,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="WellKnownVcalmCapabilities.VcalmIssuer"/> capability is allowed — without it the
     /// §3.2.1 endpoint cannot secure a credential (fail-closed; the route does not materialize).
     /// </summary>
-    public VcalmCredentialIssuance? VcalmCredentialIssuance { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public VcalmCredentialIssuance? VcalmCredentialIssuance
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the §3.2.1 issuance configuration for the tenant the current request was dispatched to,
@@ -111,7 +284,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// for a single issuer, this resolver for per-tenant issuers. The application keys its per-tenant
     /// store off <c>context.TenantId</c>, exactly as the issued-credential and challenge stores do.
     /// </summary>
-    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmCredentialIssuanceAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmCredentialIssuanceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The §3.2.1 issuance configuration in effect for the current request: the per-tenant
@@ -134,13 +326,51 @@ public sealed class VcalmIntegration: ServerIntegration
     /// so the §3.2.2 / §3.2.3 retrieval / deletion interfaces can reach it. Optional — when unwired
     /// the issuer is stateless and the §3.2.2 / §3.2.3 MAY interfaces do not materialize.
     /// </summary>
-    public StoreVcalmIssuedCredentialDelegate? StoreVcalmIssuedCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public StoreVcalmIssuedCredentialDelegate? StoreVcalmIssuedCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Loads a stored issued credential by id for the §3.2.2 <c>GET /credentials/{id}</c> endpoint.
     /// Optional — when unwired the §3.2.2 retrieval interface does not materialize.
     /// </summary>
-    public LoadVcalmIssuedCredentialDelegate? LoadVcalmIssuedCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public LoadVcalmIssuedCredentialDelegate? LoadVcalmIssuedCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Soft-deletes a stored issued credential by id for the §3.2.3 <c>DELETE /credentials/{id}</c>
@@ -148,7 +378,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// (deletion semantics: partial vs complete, status side-effects) is the application's concern
     /// behind this seam.
     /// </summary>
-    public DeleteVcalmIssuedCredentialDelegate? DeleteVcalmIssuedCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public DeleteVcalmIssuedCredentialDelegate? DeleteVcalmIssuedCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §C.3 <c>/credentials/status</c> request body into the neutral
@@ -157,7 +406,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// cannot read its body without it. The default JSON implementation lives in
     /// <c>Verifiable.Json</c> and is wired by the application (serialization firewall).
     /// </summary>
-    public ParseVcalmUpdateStatusDelegate? ParseVcalmUpdateStatusAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmUpdateStatusDelegate? ParseVcalmUpdateStatusAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Applies a §C.3 status update behind the application's storage boundary (load the status-list
@@ -165,14 +433,52 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="WellKnownVcalmCapabilities.VcalmStatus"/> capability is allowed — the §1.3 binding
     /// §C.3 endpoint cannot mutate a status without it (fail-closed; the route does not materialize).
     /// </summary>
-    public UpdateVcalmCredentialStatusDelegate? UpdateVcalmCredentialStatusAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public UpdateVcalmCredentialStatusDelegate? UpdateVcalmCredentialStatusAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §C.1 <c>/status-lists</c> request body into the neutral
     /// <see cref="VcalmCreateStatusListRequest"/>. Required for the §C.1 MAY endpoint to materialize.
     /// The default JSON implementation lives in <c>Verifiable.Json</c>.
     /// </summary>
-    public ParseVcalmCreateStatusListDelegate? ParseVcalmCreateStatusListAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmCreateStatusListDelegate? ParseVcalmCreateStatusListAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The application-supplied Data Integrity signing configuration the §C.1
@@ -182,7 +488,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="VcalmCredentialIssuance"/> value here, or supply a distinct one for a stand-alone
     /// status service. Required for the §C.1 MAY endpoint to materialize.
     /// </summary>
-    public VcalmCredentialIssuance? VcalmStatusListIssuance { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public VcalmCredentialIssuance? VcalmStatusListIssuance
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the §C.1 status-list signing configuration for the tenant the current request was
@@ -191,7 +516,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="VcalmStatusListIssuance"/>. When wired it SUPERSEDES <see cref="VcalmStatusListIssuance"/>
     /// for the §C.1 endpoint; when null, the endpoint reads the flat value.
     /// </summary>
-    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmStatusListIssuanceAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmStatusListIssuanceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The §C.1 status-list signing configuration in effect for the current request: the per-tenant
@@ -213,14 +557,52 @@ public sealed class VcalmIntegration: ServerIntegration
     /// §3.2 herd-privacy minimum (131072). A larger value is permitted; a smaller one is rejected by
     /// the codec.
     /// </summary>
-    public int VcalmStatusListEntryCount { get; set; } = Verifiable.Core.StatusList.BitstringStatusListCodec.MinimumEntries;
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public int VcalmStatusListEntryCount
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    } = Verifiable.Core.StatusList.BitstringStatusListCodec.MinimumEntries;
+
 
     /// <summary>
     /// Persists a status-list credential the §C.1 endpoint secured, keyed by its <c>id</c>, so the
     /// §C.2 <c>GET /status-lists/{id}</c> interface can retrieve it. Optional — when unwired the §C.1
     /// endpoint still secures and returns the list but the instance does not retain it.
     /// </summary>
-    public StoreVcalmStatusListDelegate? StoreVcalmStatusListAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public StoreVcalmStatusListDelegate? StoreVcalmStatusListAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Loads a stored status-list credential by id for the §C.2 <c>GET /status-lists/{id}</c>
@@ -228,7 +610,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// "typically publicly accessible without authentication" (the §C privacy guidance prefers
     /// holders carrying the list over verifiers phoning home).
     /// </summary>
-    public LoadVcalmStatusListDelegate? LoadVcalmStatusListAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public LoadVcalmStatusListDelegate? LoadVcalmStatusListAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the decoded W3C Bitstring Status List a verified credential's
@@ -239,7 +640,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// asserted as revoked). Carried on the verifier-facing surface because the verifier composes it;
     /// the §C privacy guidance prefers the holder supplying the list over a verifier fetch.
     /// </summary>
-    public ResolveVcalmStatusListDelegate? ResolveVcalmStatusListAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmStatusListDelegate? ResolveVcalmStatusListAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.5.1 <c>/credentials/derive</c> request body into the neutral
@@ -248,7 +668,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// cannot read its body without it. The default JSON implementation lives in <c>Verifiable.Json</c>
     /// and is wired by the application (serialization firewall).
     /// </summary>
-    public ParseVcalmDeriveCredentialDelegate? ParseVcalmDeriveCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmDeriveCredentialDelegate? ParseVcalmDeriveCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The application-supplied ecdsa-sd-2023 selective-disclosure derive seams the VCALM 1.0 §3.5.1
@@ -259,7 +698,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// §3.5.1 endpoint cannot derive a credential (fail-closed; the route does not materialize). The
     /// library does not hardcode the cryptosuite / canonicalization choice.
     /// </summary>
-    public VcalmCredentialDerivation? VcalmCredentialDerivation { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public VcalmCredentialDerivation? VcalmCredentialDerivation
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the §3.5.1 derive configuration for the tenant the current request was dispatched to, so
@@ -267,7 +725,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// counterpart of the single, server-global <see cref="VcalmCredentialDerivation"/>. When wired it
     /// SUPERSEDES <see cref="VcalmCredentialDerivation"/> for the §3.5.1 endpoint.
     /// </summary>
-    public ResolveVcalmCredentialDerivationDelegate? ResolveVcalmCredentialDerivationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmCredentialDerivationDelegate? ResolveVcalmCredentialDerivationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The §3.5.1 derive configuration in effect for the current request: the per-tenant
@@ -290,7 +767,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="WellKnownVcalmCapabilities.VcalmHolder"/> capability is allowed — the §3.5.2 endpoint
     /// cannot read its body without it. The default JSON implementation lives in <c>Verifiable.Json</c>.
     /// </summary>
-    public ParseVcalmCreatePresentationDelegate? ParseVcalmCreatePresentationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmCreatePresentationDelegate? ParseVcalmCreatePresentationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The application-supplied presentation Data Integrity signing seams the VCALM 1.0 §3.5.2 holder
@@ -300,7 +796,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="WellKnownVcalmCapabilities.VcalmHolder"/> capability is allowed — without it the
     /// §3.5.2 endpoint cannot secure a presentation (fail-closed; the route does not materialize).
     /// </summary>
-    public VcalmPresentationSigning? VcalmPresentationSigning { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public VcalmPresentationSigning? VcalmPresentationSigning
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the §3.5.2 presentation-signing configuration for the tenant the current request was
@@ -309,7 +824,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="VcalmPresentationSigning"/>. When wired it SUPERSEDES <see cref="VcalmPresentationSigning"/>
     /// for the §3.5.2 endpoint.
     /// </summary>
-    public ResolveVcalmPresentationSigningDelegate? ResolveVcalmPresentationSigningAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmPresentationSigningDelegate? ResolveVcalmPresentationSigningAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The §3.5.2 presentation-signing configuration in effect for the current request: the per-tenant
@@ -331,26 +865,102 @@ public sealed class VcalmIntegration: ServerIntegration
     /// §3.5.4 / §3.5.5 listing / retrieval / deletion interfaces can reach it. Optional — when unwired
     /// the holder is stateless and the §3.5.3 / §3.5.4 / §3.5.5 MAY interfaces do not materialize.
     /// </summary>
-    public StoreVcalmPresentationDelegate? StoreVcalmPresentationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public StoreVcalmPresentationDelegate? StoreVcalmPresentationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Lists the stored presentations the §3.5.3 <c>GET /presentations</c> endpoint returns. Optional —
     /// when unwired the §3.5.3 listing interface does not materialize.
     /// </summary>
-    public ListVcalmPresentationsDelegate? ListVcalmPresentationsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ListVcalmPresentationsDelegate? ListVcalmPresentationsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Loads a stored presentation by id for the §3.5.4 <c>GET /presentations/{id}</c> endpoint.
     /// Optional — when unwired the §3.5.4 retrieval interface does not materialize.
     /// </summary>
-    public LoadVcalmPresentationDelegate? LoadVcalmPresentationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public LoadVcalmPresentationDelegate? LoadVcalmPresentationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Soft-deletes a stored presentation by id for the §3.5.5 <c>DELETE /presentations/{id}</c>
     /// endpoint. Optional — when unwired the §3.5.5 deletion interface does not materialize. B.3
     /// (deletion semantics) is the application's concern behind this seam.
     /// </summary>
-    public DeleteVcalmPresentationDelegate? DeleteVcalmPresentationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public DeleteVcalmPresentationDelegate? DeleteVcalmPresentationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.6.3 <c>POST /workflows/{localWorkflowId}/exchanges</c> create-exchange
@@ -359,7 +969,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// endpoint cannot read its body without it. The default JSON implementation lives in
     /// <c>Verifiable.Json</c> and is wired by the application (serialization firewall).
     /// </summary>
-    public ParseVcalmCreateExchangeDelegate? ParseVcalmCreateExchangeAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmCreateExchangeDelegate? ParseVcalmCreateExchangeAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.6.5 vcapi protocol message body into the neutral
@@ -368,7 +997,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// §3.6.5 participate endpoint cannot read its body without it. The default JSON implementation
     /// lives in <c>Verifiable.Json</c>.
     /// </summary>
-    public ParseVcalmExchangeMessageDelegate? ParseVcalmExchangeMessageAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmExchangeMessageDelegate? ParseVcalmExchangeMessageAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves a §3.6 exchange's <c>{localExchangeId}</c> to the internal flow id its PDA
@@ -379,7 +1027,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// keeps only the exchange-id → flow-id index, not a separate exchange store. A
     /// <see langword="null"/> result is the §3.6 404 (unknown exchange).
     /// </summary>
-    public ResolveVcalmExchangeFlowIdDelegate? ResolveVcalmExchangeFlowIdAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmExchangeFlowIdDelegate? ResolveVcalmExchangeFlowIdAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The application-supplied Data Integrity verification seams the §3.6.5 exchange engine composes
@@ -390,7 +1057,28 @@ public sealed class VcalmIntegration: ServerIntegration
     /// shares the one configuration. When neither is wired the engine cannot verify a presented
     /// presentation and rejects the step (fail-closed).
     /// </summary>
-    public VcalmCredentialVerification? VcalmExchangeVerification { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// <para>Candidate assignments copy this container and refuse components attached to another server.
+    /// Application resources and delegate targets remain shared references.</para>
+    /// </remarks>
+    public VcalmCredentialVerification? VcalmExchangeVerification
+    {
+        get;
+        set
+        {
+            WithComponentLocks([this, value?.SchemaValidators], () =>
+            {
+                EnsureMutable();
+                field = value is null ? null : value with { SchemaValidators = AdoptComponent(value.SchemaValidators) };
+            });
+        }
+    }
+
 
     /// <summary>
     /// The §3.6.5 verification configuration the exchange engine uses, preferring the dedicated
@@ -409,7 +1097,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// decide what to ask of or offer the client (fail-closed; the route does not materialize). The
     /// V-5c workflow surface layers an admin-authored step graph behind this seam.
     /// </summary>
-    public ResolveVcalmExchangeStepDelegate? ResolveVcalmExchangeStepAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmExchangeStepDelegate? ResolveVcalmExchangeStepAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The §3.6.1 credential-template evaluation seam — the registry the workflow surface (V-5c)
@@ -420,7 +1127,28 @@ public sealed class VcalmIntegration: ServerIntegration
     /// reference to one. The seam carries raw UTF-8 JSON bytes, not <c>System.Text.Json</c>
     /// (serialization firewall).
     /// </summary>
-    public VcalmTemplateEvaluatorRegistry VcalmTemplateEvaluators { get; set; } = new();
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// <para>Candidate assignments copy this container and refuse components attached to another server.
+    /// Application resources and delegate targets remain shared references.</para>
+    /// </remarks>
+    public VcalmTemplateEvaluatorRegistry VcalmTemplateEvaluators
+    {
+        get;
+        set
+        {
+            WithComponentLocks([this, value], () =>
+            {
+                EnsureMutable();
+                field = AdoptComponent(value)!;
+            });
+        }
+    } = new();
+
 
     /// <summary>
     /// The §3.6.1 schema-validation mechanism registry the participate endpoint dispatches a step's
@@ -430,7 +1158,28 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <c>presentationSchema</c> whose mechanism is not registered refuses presented presentations
     /// (fail closed) — the workflow author demanded a check this instance cannot run.
     /// </summary>
-    public VcalmSchemaValidatorRegistry VcalmSchemaValidators { get; set; } = new();
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// <para>Candidate assignments copy this container and refuse components attached to another server.
+    /// Application resources and delegate targets remain shared references.</para>
+    /// </remarks>
+    public VcalmSchemaValidatorRegistry VcalmSchemaValidators
+    {
+        get;
+        set
+        {
+            WithComponentLocks([this, value], () =>
+            {
+                EnsureMutable();
+                field = AdoptComponent(value)!;
+            });
+        }
+    } = new();
+
 
     /// <summary>
     /// Parses a §3.6.1 <c>presentationSchema</c> envelope's verbatim JSON into the neutral
@@ -438,7 +1187,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <c>presentationSchema</c>; the default JSON implementation lives in <c>Verifiable.Json</c>.
     /// When unwired, a schema-declaring step refuses presented presentations (fail closed).
     /// </summary>
-    public ParseVcalmPresentationSchemaDelegate? ParseVcalmPresentationSchema { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmPresentationSchemaDelegate? ParseVcalmPresentationSchema
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.6.1 <c>POST /workflows</c> create-workflow request body into the neutral
@@ -447,7 +1215,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// endpoint cannot read its body without it. The default JSON implementation lives in
     /// <c>Verifiable.Json</c> and is wired by the application (serialization firewall).
     /// </summary>
-    public ParseVcalmCreateWorkflowDelegate? ParseVcalmCreateWorkflowAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmCreateWorkflowDelegate? ParseVcalmCreateWorkflowAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Persists a §3.6.1 workflow configuration the <c>POST /workflows</c> endpoint accepted, keyed by
@@ -456,7 +1243,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// the §3.6.1 create endpoint cannot retain the workflow (fail-closed; the route does not
     /// materialize). The application owns the workflow store behind this seam.
     /// </summary>
-    public StoreVcalmWorkflowDelegate? StoreVcalmWorkflowAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public StoreVcalmWorkflowDelegate? StoreVcalmWorkflowAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Loads a §3.6.1 workflow configuration by its <c>{localWorkflowId}</c> for the §3.6.2
@@ -465,7 +1271,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// the §3.6.2 read cannot find a workflow (fail-closed; the route does not materialize). A
     /// <see langword="null"/> result is the §3.6.2 404 (unknown workflow).
     /// </summary>
-    public LoadVcalmWorkflowDelegate? LoadVcalmWorkflowAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public LoadVcalmWorkflowDelegate? LoadVcalmWorkflowAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the §3.6.1 workflow configuration an exchange runs on, given the exchange's
@@ -475,7 +1300,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="ResolveVcalmExchangeStepAsync"/> seam. A deployment may wire BOTH: the explicit seam
     /// is a per-deployment override of the config-derived default.
     /// </summary>
-    public ResolveVcalmWorkflowForExchangeDelegate? ResolveVcalmWorkflowForExchangeAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmWorkflowForExchangeDelegate? ResolveVcalmWorkflowForExchangeAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The application-supplied Data Integrity signing configuration the §3.6 exchange engine composes
@@ -487,7 +1331,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// unwired, a step with <c>issueRequests</c> cannot mint and the engine rejects the step
     /// (fail-closed: an exchange that cannot honour its workflow's issuance step does not complete it).
     /// </summary>
-    public VcalmCredentialIssuance? VcalmExchangeIssuance { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public VcalmCredentialIssuance? VcalmExchangeIssuance
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the §3.6 issuance-in-exchange signing configuration for the tenant the current request
@@ -496,7 +1359,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <see cref="VcalmExchangeIssuance"/>. When wired it SUPERSEDES <see cref="VcalmExchangeIssuance"/>
     /// for the §3.6 engine; when null, the engine reads the flat value, then the issuer fallback.
     /// </summary>
-    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmExchangeIssuanceAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmExchangeIssuanceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The §3.6 issuance-in-exchange signing configuration in effect for the current request, preferring
@@ -526,6 +1408,7 @@ public sealed class VcalmIntegration: ServerIntegration
             ?? await ResolveEffectiveCredentialIssuanceAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
+
     /// <summary>
     /// Parses a VCALM 1.0 §3.6.7 <c>POST /callbacks/{localCallbackId}</c> request body into the neutral
     /// <see cref="VcalmCallbackRequest"/>. Required when the
@@ -533,7 +1416,26 @@ public sealed class VcalmIntegration: ServerIntegration
     /// callback endpoint is part of the workflow service). The default JSON implementation lives in
     /// <c>Verifiable.Json</c>.
     /// </summary>
-    public ParseVcalmCallbackDelegate? ParseVcalmCallbackAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmCallbackDelegate? ParseVcalmCallbackAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Delivers a §3.6.7 step callback by POSTing the engine-composed <c>{event{data{exchangeId}}}</c>
@@ -541,18 +1443,56 @@ public sealed class VcalmIntegration: ServerIntegration
     /// outbound HTTP POST is the application's, behind this seam. Optional — when unwired, a step that
     /// names a callback does not fire it.
     /// </summary>
-    public DeliverVcalmCallbackDelegate? DeliverVcalmCallbackAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public DeliverVcalmCallbackDelegate? DeliverVcalmCallbackAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the §3.7.4 protocols map for a §3.7.1 interaction id — the protocol identifier →
-    /// initiation URL pairs the coordinator advertises for the interaction. Required when the
+    /// initiation URL pairs the interaction service advertises for the interaction. Required when the
     /// <see cref="WellKnownVcalmCapabilities.VcalmCoordinator"/> capability is allowed — without it the
     /// §3.7.4 interaction-protocols-response endpoint cannot answer (fail-closed; the route does not
     /// materialize). A <see langword="null"/> result is the §3.7.4 404 (unknown interaction). The §3.7.6
     /// vcapi entry in the resolved map addresses a §3.6 exchange's §3.6.5 participate URL — the
     /// coordinator points at the §3.6 engine rather than re-implementing it.
     /// </summary>
-    public ResolveVcalmInteractionProtocolsDelegate? ResolveVcalmInteractionProtocolsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmInteractionProtocolsDelegate? ResolveVcalmInteractionProtocolsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a §3.7.5 inviteRequest body into the neutral <see cref="VcalmInviteRequest"/>. Required
@@ -560,13 +1500,140 @@ public sealed class VcalmIntegration: ServerIntegration
     /// §3.7.5 endpoint cannot read its body without it. The default JSON implementation lives in
     /// <c>Verifiable.Json</c> and is wired by the application (serialization firewall).
     /// </summary>
-    public ParseVcalmInviteRequestDelegate? ParseVcalmInviteRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseVcalmInviteRequestDelegate? ParseVcalmInviteRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
-    /// Records a §3.7.5 inviteRequest the coordinator accepted, keyed by the <c>{localInviteId}</c> path
+    /// Records a §3.7.5 inviteRequest the interaction service accepted, keyed by the <c>{localInviteId}</c> path
     /// segment. Optional — when unwired the §3.7.5 endpoint still validates and accepts the invitation
-    /// (200) but the coordinator does not retain it. The application owns the invite store behind this
+    /// (200) but the interaction service does not retain it. The application owns the invite store behind this
     /// seam.
     /// </summary>
-    public StoreVcalmInviteRequestDelegate? StoreVcalmInviteRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public StoreVcalmInviteRequestDelegate? StoreVcalmInviteRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>Validates host seams and workflow containers when this family is the primary integration.</summary>
+    public override void Validate()
+    {
+        base.Validate();
+        ValidateFamily(this);
+    }
+
+
+    /// <summary>Requires the family containers needed to process enabled workflows.</summary>
+    /// <param name="primaryIntegration">The validated host operations shared with this family.</param>
+    public override void ValidateFamily(ServerIntegration primaryIntegration)
+    {
+        ArgumentNullException.ThrowIfNull(primaryIntegration);
+        IsValidated = false;
+        if(VcalmTemplateEvaluators is null || VcalmTemplateEvaluators.Limits is null)
+        {
+            throw new InvalidOperationException("VcalmIntegration requires VcalmTemplateEvaluators and its Limits.");
+        }
+
+        if(VcalmSchemaValidators is null)
+        {
+            throw new InvalidOperationException("VcalmIntegration requires VcalmSchemaValidators.");
+        }
+
+        IsValidated = true;
+    }
+
+
+    /// <summary>Copies family registries and preserves aliases shared by verification configurations.</summary>
+    protected override WiringComponent CloneCore()
+    {
+        VcalmIntegration copy = (VcalmIntegration)base.CloneCore();
+        Dictionary<VcalmSchemaValidatorRegistry, VcalmSchemaValidatorRegistry> schemas = new(ReferenceEqualityComparer.Instance);
+        //Retains shared schema-registry identity within the candidate.
+        VcalmSchemaValidatorRegistry CopySchema(VcalmSchemaValidatorRegistry registry)
+        {
+            if(!schemas.TryGetValue(registry, out VcalmSchemaValidatorRegistry? candidate))
+            {
+                candidate = CopyComponent(registry);
+                schemas.Add(registry, candidate);
+            }
+
+            return candidate;
+        }
+
+        copy.VcalmTemplateEvaluators = VcalmTemplateEvaluators is null ? null! : CopyComponent(VcalmTemplateEvaluators);
+        copy.VcalmSchemaValidators = VcalmSchemaValidators is null ? null! : CopySchema(VcalmSchemaValidators);
+        if(VcalmCredentialVerification?.SchemaValidators is VcalmSchemaValidatorRegistry credentialSchemas)
+        {
+            copy.VcalmCredentialVerification = VcalmCredentialVerification with { SchemaValidators = CopySchema(credentialSchemas) };
+        }
+
+        if(VcalmExchangeVerification?.SchemaValidators is VcalmSchemaValidatorRegistry exchangeSchemas)
+        {
+            copy.VcalmExchangeVerification = VcalmExchangeVerification with { SchemaValidators = CopySchema(exchangeSchemas) };
+        }
+
+        return copy;
+    }
+
+
+    /// <summary>The family registries participating in publication and validation invalidation.</summary>
+    protected override IEnumerable<WiringComponent> Children
+    {
+        get
+        {
+            if(VcalmTemplateEvaluators is not null)
+            {
+                yield return VcalmTemplateEvaluators;
+            }
+
+            if(VcalmSchemaValidators is not null)
+            {
+                yield return VcalmSchemaValidators;
+            }
+
+            if(VcalmCredentialVerification?.SchemaValidators is WiringComponent credentialSchemas)
+            {
+                yield return credentialSchemas;
+            }
+
+            if(VcalmExchangeVerification?.SchemaValidators is WiringComponent exchangeSchemas)
+            {
+                yield return exchangeSchemas;
+            }
+        }
+    }
+
 }

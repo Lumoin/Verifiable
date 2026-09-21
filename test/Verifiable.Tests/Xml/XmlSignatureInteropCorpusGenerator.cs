@@ -75,7 +75,7 @@ public sealed class RsaPkcs1Sha256SignatureDescription: SignatureDescription
 
     /// <summary>
     /// Returns a fresh <see cref="SHA256"/> instance directly, bypassing the base implementation's
-    /// <see cref="CryptoConfig.CreateFromName(string)"/> resolution of <see cref="DigestAlgorithm"/> — that
+    /// <see cref="CryptoConfig.CreateFromName(string)"/> resolution of <see cref="System.Security.Cryptography.SignatureDescription.DigestAlgorithm"/> — that
     /// resolution instantiates the named type via reflection, which fails for the abstract
     /// <see cref="SHA256"/> class itself; <see cref="SHA256.Create()"/> is the concrete factory every other
     /// digest computation in this library's own test infrastructure already goes through.
@@ -214,7 +214,7 @@ internal sealed class EcdsaRawSignatureDeformatter: AsymmetricSignatureDeformatt
 /// </para>
 /// <para>
 /// <strong>Canonical XML 1.1 has no platform transform</strong> — confirmed by this same test project's differential harness (<c>XmlCanonicalizationDifferentialTests</c>'s own type doc comment: "Canonical XML 1.1
-/// is deliberately absent: the platform ships no transform for it"). <see cref="SignedXml.ComputeSignature"/> therefore cannot mint a document whose <c>CanonicalizationMethod</c> is <see
+/// is deliberately absent: the platform ships no transform for it"). <see cref="SignedXml.ComputeSignature()"/> therefore cannot mint a document whose <c>CanonicalizationMethod</c> is <see
 /// cref="XmlSignatureWellKnown.CanonicalXml11Uri"/>. The seventh case, <c>HandAssembledC14N11SignedInfo</c>, supplies this algorithm instead: its <c>Reference</c> digest is computed through the house digest seam
 /// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(System.ReadOnlyMemory{byte},int,Tag,BaseMemoryPool,System.Collections.Frozen.FrozenDictionary{string,object}?,string?,System.Threading.CancellationToken)"/>)
 /// over a namespace-free, already-canonical <c>Data</c> element (so no namespace-axis rendering needs deriving by hand), its <c>SignedInfo</c> canonical octets are produced by THIS library's own <see

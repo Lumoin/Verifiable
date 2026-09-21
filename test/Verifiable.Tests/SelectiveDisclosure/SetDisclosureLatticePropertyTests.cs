@@ -1,5 +1,6 @@
 using CsCheck;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -35,7 +36,7 @@ internal sealed class SetDisclosureLatticePropertyTests
         {
             Assert.IsTrue(Universe.Join(a, a).SetEquals(a), "Join must be idempotent: a ∨ a = a.");
             Assert.IsTrue(Universe.Meet(a, a).SetEquals(a), "Meet must be idempotent: a ∧ a = a.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -48,7 +49,7 @@ internal sealed class SetDisclosureLatticePropertyTests
 
             Assert.IsTrue(Universe.Join(a, b).SetEquals(Universe.Join(b, a)), "Join must be commutative: a ∨ b = b ∨ a.");
             Assert.IsTrue(Universe.Meet(a, b).SetEquals(Universe.Meet(b, a)), "Meet must be commutative: a ∧ b = b ∧ a.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -66,7 +67,7 @@ internal sealed class SetDisclosureLatticePropertyTests
             var meetLeft = Universe.Meet(Universe.Meet(a, b), c);
             var meetRight = Universe.Meet(a, Universe.Meet(b, c));
             Assert.IsTrue(meetLeft.SetEquals(meetRight), "Meet must be associative: (a ∧ b) ∧ c = a ∧ (b ∧ c).");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -79,7 +80,7 @@ internal sealed class SetDisclosureLatticePropertyTests
 
             Assert.IsTrue(Universe.Join(a, Universe.Meet(a, b)).SetEquals(a), "Absorption: a ∨ (a ∧ b) = a.");
             Assert.IsTrue(Universe.Meet(a, Universe.Join(a, b)).SetEquals(a), "Absorption: a ∧ (a ∨ b) = a.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -94,7 +95,7 @@ internal sealed class SetDisclosureLatticePropertyTests
             //In any lattice: a ≤ b ⟺ a ∧ b = a ⟺ a ∨ b = b.
             Assert.AreEqual(aLeB, Universe.Meet(a, b).SetEquals(a), "a ≤ b must coincide with a ∧ b = a.");
             Assert.AreEqual(aLeB, Universe.Join(a, b).SetEquals(b), "a ≤ b must coincide with a ∨ b = b.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -107,6 +108,6 @@ internal sealed class SetDisclosureLatticePropertyTests
         {
             Assert.IsTrue(Universe.Join(a, empty).SetEquals(a), "Empty set is the identity for Join: a ∨ ∅ = a.");
             Assert.IsTrue(Universe.Meet(a, Universe.Top).SetEquals(a), "The universe is the identity for Meet over its subsets: a ∧ ⊤ = a.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

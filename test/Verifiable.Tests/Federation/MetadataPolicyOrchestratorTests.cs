@@ -29,7 +29,7 @@ internal sealed class MetadataPolicyOrchestratorTests
 
         MintedChain chain = await FederationTestRing.BuildDirectChainAsync(
             subject, anchor, now, now.AddHours(1),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         ClaimIssueResult result = await MetadataPolicyOrchestrator.RunAsync(
             chain.Chain,

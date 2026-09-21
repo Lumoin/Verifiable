@@ -1106,11 +1106,16 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// (Part 1, clause 16.6.5) plus the nonceTPMdecrypt fold, clause 16.6.3.4) through the project's registered digest/HMAC seam, and submits
     /// the raw bytes directly to the simulator.
     /// </summary>
+    /// <param name="simulator">The simulator connection the hand-crafted command bytes are submitted to.</param>
+    /// <param name="pool">The memory pool backing the drawn nonces and the assembled command.</param>
+    /// <param name="parentHandle">The loaded parent's handle authorizing the create.</param>
+    /// <param name="parentName">The loaded parent's Name, folded into both sessions' command and parameter-encryption HMAC keys.</param>
     /// <param name="corruptDeclaredInSensitiveSize">
     /// When set, <c>inSensitive</c>'s own outer size field (never itself encrypted, Part 1 clause 20.1) is
     /// overwritten to declare far more bytes than actually follow, after encryption — proving the simulator's own
     /// truncated-size guard independently of the host executor's identical, unavoidable pre-flight guard.
     /// </param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
     /// <param name="userAuthOverride">
     /// The octets to place in <c>TPMS_SENSITIVE_CREATE.userAuth</c> instead of <see cref="IntendedUserAuth"/>,
     /// written straight to the wire rather than through <see cref="Tpm2bAuth"/> so a proof can declare a width

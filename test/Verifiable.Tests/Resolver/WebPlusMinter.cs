@@ -136,7 +136,7 @@ internal static class WebPlusMinter
     /// <summary>
     /// Mints a non-root document: it references the fixed DID, chains to its predecessor by
     /// <c>prevDIDDocumentSelfHash</c>, declares its own <c>updateRules</c>, and carries a detached-JWS proof from
-    /// <paramref name="signer"/> over the placeholder form. The <c>selfHash</c> field and the verification
+    /// <c>signer</c> over the placeholder form. The <c>selfHash</c> field and the verification
     /// method's <c>selfHash</c> query parameter are the self-hash slots.
     /// </summary>
     /// <param name="did">The fixed DID (every document's <c>id</c>).</param>
@@ -160,7 +160,7 @@ internal static class WebPlusMinter
 
         //The proofs member is an array of the detached-JWS proofs; a ProofsMutator can replace it with a
         //non-array shape (the WP-DM-6 negative).
-        JsonArray proofs = new(proof);
+        JsonArray proofs = [proof];
         unsigned["proofs"] = plan.ProofsMutator is { } mutateProofs ? mutateProofs(proofs) : proofs;
 
         return SelfHash(Jcs.CanonicalizeToUtf8Bytes(unsigned.ToJsonString()), placeholder);

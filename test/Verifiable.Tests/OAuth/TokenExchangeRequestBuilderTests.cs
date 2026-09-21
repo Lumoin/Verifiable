@@ -271,8 +271,8 @@ internal sealed class TokenExchangeRequestBuilderTests
     public async Task ImpersonationBuilderOutputRoundTripsThroughShippedEndpointOverHttpWire()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireImpersonationSeams(app);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -302,18 +302,22 @@ internal sealed class TokenExchangeRequestBuilderTests
     public async Task DelegationBuilderOutputRoundTripsThroughShippedEndpointOverHttpWire()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
-        WireClientAuthentication(app);
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
-                        ? new ValidatedSecurityToken { Subject = ActorIdentity }
-                        : new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization { Subject = subject.Subject, Scope = GrantedScope, IssuedTokenType = TokenType.AccessToken });
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
+                            ? new ValidatedSecurityToken { Subject = ActorIdentity }
+                            : new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization { Subject = subject.Subject, Scope = GrantedScope, IssuedTokenType = TokenType.AccessToken });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -344,8 +348,8 @@ internal sealed class TokenExchangeRequestBuilderTests
 
 
     /// <summary>Registers a confidential client allowed the <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability, with the signing keys the RFC 9068 access-token producer needs.</summary>
-    private static VerifierKeyMaterial RegisterTokenExchangeClient(TestHostShell app) =>
-        app.RegisterDpopClient(
+    private static async Task<VerifierKeyMaterial> RegisterTokenExchangeClientAsync(TestHostShell app) =>
+        await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -354,31 +358,38 @@ internal sealed class TokenExchangeRequestBuilderTests
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
 
     /// <summary>Wires the <c>client_secret_post</c> (RFC 6749 §2.3.1) authentication seam that checks the request's <c>client_secret</c> form field against the fixture secret.</summary>
-    private static void WireClientAuthentication(TestHostShell app) =>
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+    private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
 
     /// <summary>Wires client authentication plus a token-exchange validation and policy seam that accepts the fixture subject token and permits every exchange (RFC 8693 §1.1 impersonation).</summary>
-    private static void WireImpersonationSeams(TestHostShell app)
+    private static async Task WireImpersonationSeamsAsync(TestHostShell app)
     {
-        WireClientAuthentication(app);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
-            static (token, tokenType, registration, context, ct) =>
-                ValueTask.FromResult<ValidatedSecurityToken?>(
-                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
 
-        app.Server.OAuth().AuthorizeTokenExchangeAsync =
-            static (subject, actor, request, registration, context, ct) =>
-                ValueTask.FromResult<TokenExchangeAuthorization?>(
-                    new TokenExchangeAuthorization { Subject = subject.Subject, Scope = GrantedScope, IssuedTokenType = TokenType.AccessToken });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization { Subject = subject.Subject, Scope = GrantedScope, IssuedTokenType = TokenType.AccessToken });
+        }).ConfigureAwait(false);
     }
 
 

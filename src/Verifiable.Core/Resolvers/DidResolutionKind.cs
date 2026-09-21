@@ -27,7 +27,7 @@ public readonly struct DidResolutionKind: IEquatable<DidResolutionKind>
     public static DidResolutionKind Error { get; } = new(0);
 
     /// <summary>
-    /// The result contains a fully resolved <see cref="DidDocument"/>.
+    /// The result contains a fully resolved <see cref="Verifiable.Core.Model.Did.DidDocument"/>.
     /// </summary>
     public static DidResolutionKind Document { get; } = new(1);
 

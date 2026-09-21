@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Fido2;
 
 /// <summary>
 /// Tests for the content equality added to the FIDO2 <see cref="IDisposable"/> ownership-tree
-/// types <see cref="AuthenticatorData"/>, <see cref="Fido2.AttestedCredentialData"/>, and
+/// types <see cref="AuthenticatorData"/>, <see cref="AttestedCredentialData"/>, and
 /// <see cref="Fido2CredentialRecord"/>: two independently built instances carrying byte-identical
 /// content must compare equal and report the same hash code, every differing member must break
 /// equality, and <see cref="Fido2CredentialRecord"/>'s <see cref="Fido2CredentialRecord.Transports"/>
@@ -140,7 +140,7 @@ internal sealed class Fido2OwnershipTypeEqualityTests
 
 
     /// <summary>
-    /// Two <see cref="Fido2.AttestedCredentialData"/> instances built independently from the same
+    /// Two <see cref="AttestedCredentialData"/> instances built independently from the same
     /// AAGUID, credential ID bytes, and key material compare equal and report the same hash code.
     /// </summary>
     [TestMethod]
@@ -172,7 +172,7 @@ internal sealed class Fido2OwnershipTypeEqualityTests
     }
 
 
-    /// <summary>A differing <see cref="Fido2.AttestedCredentialData.Aaguid"/> breaks equality.</summary>
+    /// <summary>A differing <see cref="AttestedCredentialData.Aaguid"/> breaks equality.</summary>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the CredentialId instances transfers to the AttestedCredentialData instances, disposed via their using declarations.")]
@@ -199,7 +199,7 @@ internal sealed class Fido2OwnershipTypeEqualityTests
     }
 
 
-    /// <summary>A differing <see cref="Fido2.AttestedCredentialData.CredentialId"/> breaks equality.</summary>
+    /// <summary>A differing <see cref="AttestedCredentialData.CredentialId"/> breaks equality.</summary>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the CredentialId instances transfers to the AttestedCredentialData instances, disposed via their using declarations.")]
@@ -226,7 +226,7 @@ internal sealed class Fido2OwnershipTypeEqualityTests
     }
 
 
-    /// <summary>A differing <see cref="Fido2.AttestedCredentialData.CredentialPublicKey"/> breaks equality.</summary>
+    /// <summary>A differing <see cref="AttestedCredentialData.CredentialPublicKey"/> breaks equality.</summary>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the CredentialId instances transfers to the AttestedCredentialData instances, disposed via their using declarations.")]
@@ -279,7 +279,7 @@ internal sealed class Fido2OwnershipTypeEqualityTests
             CoseKey keyB = MdocTestFixtures.CoseKeyFromP256Public(keyMaterial.PublicKey);
 
             List<string> transportsA = ["usb", "nfc"];
-            List<string> transportsB = new(transportsA);
+            List<string> transportsB = [.. transportsA];
             Assert.AreNotSame(transportsA, transportsB);
 
             using Fido2CredentialRecord recordA = new(WellKnownPublicKeyCredentialTypes.PublicKey, idA, keyA, 3, true, transportsA, false, false);

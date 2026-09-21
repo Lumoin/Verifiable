@@ -112,7 +112,7 @@ namespace Verifiable.Tests.Cryptography
     /// codec value following some data. In DIDs, VCs and related technologies
     /// one (must) check against known string headers (or byte patterns) to limit
     /// exposure and in general check values are allowed in the context of
-    /// <see cref="CryptoSuiteConstants"/> used.
+    /// <c>CryptoSuiteConstants</c> used.
     /// </remarks>
     [TestClass]
     internal sealed class MultibaseEncodingTests

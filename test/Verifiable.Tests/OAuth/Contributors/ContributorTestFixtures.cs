@@ -8,7 +8,7 @@ namespace Verifiable.Tests.OAuth.Contributors;
 
 /// <summary>
 /// Fixture helpers shared by the per-contributor unit tests. Each helper
-/// constructs a minimal target shape — no <see cref="AuthorizationServer"/>
+/// constructs a minimal target shape — no <c>AuthorizationServer</c>
 /// wiring, no full <see cref="TestHostShell"/>. The (α) population strategy
 /// allows per-rule tests to pre-populate
 /// <see cref="IdTokenTarget.ResolvedOidcClaims"/> so the contributor never

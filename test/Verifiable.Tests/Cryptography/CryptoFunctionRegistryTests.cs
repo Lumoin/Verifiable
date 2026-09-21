@@ -55,5 +55,19 @@ namespace Verifiable.Tests.Cryptography
             (bool isVerified, CryptoEvent? _) = await publicKey(TestData, signature.AsReadOnlyMemory(), keys.PublicKey.AsReadOnlyMemory(), context: null, cancellationToken: default).ConfigureAwait(false);
             Assert.IsTrue(isVerified);
         }
+
+
+        /// <summary>
+        /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}.IsInitialized"/> is
+        /// <see langword="true"/> once <c>TestSetup</c>'s module initializer has run
+        /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}.Initialize"/>. The
+        /// process-wide <c>[ModuleInitializer]</c> runs before any test, so only the true-after state
+        /// is observable here without disturbing the other tests' process-wide registration.
+        /// </summary>
+        [TestMethod]
+        public void IsInitializedIsTrueAfterProcessWideSetup()
+        {
+            Assert.IsTrue(CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized);
+        }
     }
 }

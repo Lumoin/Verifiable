@@ -202,7 +202,7 @@ public delegate CBAdESSign1ParseResult ParseCBAdESSign1Delegate(ReadOnlyMemory<b
 /// originate from a CBOR parse implementation this library's own <c>InternalsVisibleTo</c> grants access to
 /// (<c>Verifiable.Cbor</c>, which implements <see cref="ParseCBAdESSign1Delegate"/> at stage m4, and
 /// <c>Verifiable.Tests</c>) — application code cannot fabricate a "successfully parsed" result. Mirrors
-/// <see cref="Verifiable.Cbor.CoseVerificationResult"/>'s mint-only pattern.
+/// <c>Verifiable.Cbor.CoseVerificationResult</c>'s mint-only pattern.
 /// </para>
 /// <para>
 /// <strong>Ownership.</strong> Unlike <c>CoseVerificationResult</c> (which copies its payload/header out to
@@ -393,7 +393,7 @@ public sealed class CBAdESSign1ParseResult: IDisposable
 /// <remarks>
 /// <para>
 /// <strong>Firewalled end-to-end finding, recorded here — a gap the earlier shipped composition left
-/// open, closed here.</strong> The generic <see cref="Verifiable.Cbor.CoseSerialization.SerializeCoseSign1"/>
+/// open, closed here.</strong> The generic <c>Verifiable.Cbor.CoseSerialization.SerializeCoseSign1</c>
 /// delegate always writes the payload slot as a byte string: <see cref="CoseSign1Message.Payload"/> is a plain
 /// <see cref="ReadOnlyMemory{T}"/> with no "absent" arm of its own, so that generic serializer cannot tell a
 /// genuinely detached payload from an attached, zero-length one — it emits an empty <c>bstr</c> either way.

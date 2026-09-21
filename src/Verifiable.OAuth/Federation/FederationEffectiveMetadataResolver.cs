@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// Returns <see langword="null"/> when the subject did not declare metadata
-/// for <paramref name="entityType"/> — that is not a policy failure; it is
+/// for <c>entityType</c> — that is not a policy failure; it is
 /// a structural fact about the chain (the subject doesn't play that role).
 /// Callers distinguish "subject didn't declare" (null) from "policy failed"
 /// (non-null result with <see cref="MetadataPolicyApplyResult.IsSuccess"/>
@@ -110,6 +110,31 @@ public static class FederationEffectiveMetadataResolver
         //§6.1.4.2 apply.
         return await applicator(effectiveDeclaredMetadata, rawMergedBlock, entityType, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Reads every Entity Type the subject of <paramref name="chain"/> declares in its own
+    /// <c>metadata</c> claim, in ordinal order of the identifier — the OpenID Federation 1.0
+    /// §8.3 Resolve Request's <c>entity_type</c> parameter is "OPTIONAL. A specific Entity Type
+    /// to resolve... If this parameter is not present, then all Entity Types are returned,"
+    /// which requires enumerating every declared type up front. Composed over
+    /// <see cref="MetadataPolicyOrchestrator.ReadSubjectDeclaredMetadata(TrustChain)"/> rather
+    /// than a second reader.
+    /// </summary>
+    /// <param name="chain">The validated trust chain whose subject statement is read.</param>
+    /// <returns>
+    /// The declared Entity Type Identifiers, ordinally sorted by <see cref="EntityTypeIdentifier.Value"/>;
+    /// empty when the subject declares no <c>metadata</c> claim at all.
+    /// </returns>
+    public static IReadOnlyList<EntityTypeIdentifier> ReadDeclaredEntityTypes(TrustChain chain)
+    {
+        ArgumentNullException.ThrowIfNull(chain);
+
+        return MetadataPolicyOrchestrator.ReadSubjectDeclaredMetadata(chain)
+            .Keys
+            .OrderBy(static entityType => entityType.Value, StringComparer.Ordinal)
+            .ToArray();
     }
 
 

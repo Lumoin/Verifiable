@@ -404,8 +404,8 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     }
 
     /// <summary>
-    /// Proves the pooled ownership of <see cref="Automata.TpmActivateCredentialRequested.CredentialBlob"/> and
-    /// <see cref="Automata.TpmActivateCredentialRequested.Secret"/> across a refusal that happens AFTER the
+    /// Proves the pooled ownership of <see cref="TpmActivateCredentialRequested.CredentialBlob"/> and
+    /// <see cref="TpmActivateCredentialRequested.Secret"/> across a refusal that happens AFTER the
     /// parse has fully rented both: a genuinely non-empty credentialBlob/secret pair against unknown handles
     /// parses cleanly (both carriers are rented as the parse's last act), then the command refuses on
     /// <c>activateHandle</c> (the 1st handle in the handle area, index 0) with

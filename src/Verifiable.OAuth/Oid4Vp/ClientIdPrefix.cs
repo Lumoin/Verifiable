@@ -16,7 +16,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// equality on <see cref="Value"/>. Same shape as
 /// <see cref="Verifiable.Core.Model.Federation.EntityIdentifier"/>,
 /// <see cref="Verifiable.OAuth.Federation.EntityTypeIdentifier"/>,
-/// <see cref="Verifiable.OAuth.Server.CapabilityIdentifier"/>, and
+/// <see cref="Verifiable.Server.CapabilityIdentifier"/>, and
 /// <see cref="Verifiable.OAuth.Federation.MetadataPolicyOperator"/> —
 /// semantic-type-over-string-keys, with constructor validation forbidding
 /// the trailing colon (which is a separator, not part of the prefix

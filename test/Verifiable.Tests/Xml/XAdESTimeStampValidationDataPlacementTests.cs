@@ -240,9 +240,9 @@ internal sealed class XAdESTimeStampValidationDataPlacementTests
 
     /// <summary>
     /// Proves the table-identity guard extends to <c>unsignedSignatureProperties</c> itself, not only <c>timeStampValidationData</c>: a <c>container</c> read from a SEPARATE
-    /// parse of the IDENTICAL document text is refused rather than accepted, even though its own <c>ElementIndex</c> ordinals are numerically identical to <paramref
-    /// name="table"/>'s own (deterministic parsing assigns the same integer offsets to structurally identical documents) — the "adjacentMismatch" entry, whose adjacency
-    /// check would otherwise spuriously succeed against <paramref name="table"/>'s own <c>stamp1</c> index by sheer numeric coincidence, is the fixture chosen specifically
+    /// parse of the IDENTICAL document text is refused rather than accepted, even though its own <c>ElementIndex</c> ordinals are numerically identical to <c>table</c>'s own
+    /// (deterministic parsing assigns the same integer offsets to structurally identical documents) — the "adjacentMismatch" entry, whose adjacency
+    /// check would otherwise spuriously succeed against <c>table</c>'s own <c>stamp1</c> index by sheer numeric coincidence, is the fixture chosen specifically
     /// to exercise the adjacency branch this guard protects. Anchored to <see
     /// href="https://www.etsi.org/deliver/etsi_en/319100_319199/31913201/01.03.01_60/en_31913201v010301p.pdf">ETSI EN 319 132-1 V1.3.1</see> clause 5.5.1.2.
     /// </summary>

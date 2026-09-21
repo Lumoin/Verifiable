@@ -10,6 +10,8 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Extensions.Pin;
+using Verifiable.Tpm.Extensions.Policy;
+using Verifiable.Tpm.Extensions.Seal;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -17,7 +19,7 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Drives the PIN-over-HMAC-session authorization channel (<see cref="TpmDeviceExtensions"/>'s
+/// Drives the PIN-over-HMAC-session authorization channel (<see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions"/>'s
 /// <c>VerifyPinAsync</c>, its salted overload, the four owner-authorized verbs, and every
 /// <c>…WithPasswordAsync</c> opt-out) against the in-house behavioural <see cref="TpmSimulator"/> - entirely
 /// in-process, with no external assets - through the same production command path production code uses
@@ -563,6 +565,106 @@ internal sealed class TpmNvSecureChannelTests
             TpmRcConstants.TPM_RC_ATTRIBUTES, verifyResult.ResponseCode,
             "The refusal names the offending session, so the raw wire code carries the session-index modifier.");
     }
+
+    /// <summary>
+    /// The HMAC arm <c>UnsealUnderPinAsync</c> composes for its <c>TPM2_PolicySecret</c> leg never carries the
+    /// candidate PIN in the clear: the authorizing session captured on the wire is a real (non-<c>TPM_RS_PW</c>)
+    /// session, and the candidate PIN never appears as a contiguous byte sequence in the captured PolicySecret
+    /// command, mirroring <see cref="DefinePinFailIndexAsyncEncryptsTheAuthParameterSoThePinHashNeverAppearsInTheDefineCommand"/>'s
+    /// wire-capture proof for the Seal group's PIN composition (<see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions.extension(TpmDevice).UnsealUnderPinAsync"/>).
+    /// </summary>
+    [TestMethod]
+    public async Task UnsealUnderPinAsyncNeverSendsTheCandidatePinInTheClearOnThePolicySecretCommand()
+    {
+        const uint PinLimit = 3;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+        TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexAsync(
+            ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"DefinePinFailIndexAsync failed: '{defineResult.ResponseCode}'.");
+
+        byte[] pinIndexName;
+        TpmResult<NvReadPublicResponse> readPublicResult = await tpm.NvReadPublicAsync(PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(readPublicResult.IsSuccess, $"NvReadPublicAsync failed: '{readPublicResult.ResponseCode}'.");
+        using(NvReadPublicResponse readPublic = readPublicResult.Value)
+        {
+            pinIndexName = readPublic.NvName.Span.ToArray();
+        }
+
+        using CreatePrimaryResponse parent = await CreateEccStorageParentAsync(tpm, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        try
+        {
+            TpmResult<TpmSealedBlob> sealResult = await tpm.SealUnderPinAsync(
+                parentHandle, ReadOnlyMemory<byte>.Empty, SealedPayload, PinIndexHandle, pinIndexName,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(sealResult.IsSuccess, $"SealUnderPinAsync failed: '{sealResult.ResponseCode}'.");
+
+            using TpmSealedBlob sealedBlob = sealResult.Value;
+
+            var capturedCommands = new List<byte[]>();
+            async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
+            {
+                capturedCommands.Add(command.ToArray());
+
+                return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
+            }
+
+            using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+            TpmResult<UnsealResponse> unsealResult = await capturingDevice.UnsealUnderPinAsync(
+                parentHandle, ReadOnlyMemory<byte>.Empty, sealedBlob, PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(unsealResult.IsSuccess, $"UnsealUnderPinAsync failed: '{unsealResult.ResponseCode}'.");
+            unsealResult.Value.Dispose();
+
+            byte[]? policySecretCommand = capturedCommands.Find(c => ReadCommandCode(c) == TpmCcConstants.TPM_CC_PolicySecret);
+            Assert.IsNotNull(policySecretCommand, "The capturing wrapper must have observed the PolicySecret command.");
+            Assert.IsFalse(
+                ContainsSubsequence(policySecretCommand, CorrectPinHash),
+                "The default HMAC arm must never send the candidate PIN as a contiguous byte sequence in the PolicySecret command.");
+
+            //PolicySecretInput's handle area is (authHandle, policySession) - two handles - so its authorizing
+            //session's own handle sits right after them.
+            uint authorizingSessionHandle = ReadFirstSessionHandleAfterHandleCount(policySecretCommand, handleCount: 2);
+            Assert.AreNotEqual(
+                (uint)TpmRh.TPM_RH_PW, authorizingSessionHandle,
+                "The default arm must authorize PolicySecret over a real session, never the TPM_RS_PW password handle.");
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(parentHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Creates the deterministic ECC storage parent under the owner hierarchy, exactly as the Seal verbs' own
+    /// flow tests do, for the one test in this file that seals under a PIN Fail Index's policy.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The CreatePrimary response for the storage parent.</returns>
+    private async Task<CreatePrimaryResponse> CreateEccStorageParentAsync(TpmDevice tpm, BaseMemoryPool pool)
+    {
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
+
+        using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
+            TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, parentInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary storage parent failed: '{parentResult.ResponseCode}'.");
+
+        return parentResult.Value;
+    }
+
+    /// <summary>The secret sealed by <see cref="UnsealUnderPinAsyncNeverSendsTheCandidatePinInTheClearOnThePolicySecretCommand"/>.</summary>
+    private static byte[] SealedPayload { get; } = "PIN-gated secret for the wire-capture proof."u8.ToArray();
 
     /// <summary>
     /// The default enrollment encrypts the stored PIN form on the bus: it rides <c>TPM2_NV_DefineSpace</c>'s

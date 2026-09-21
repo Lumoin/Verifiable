@@ -102,6 +102,19 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string MaxAge { get; } = Utf8Constants.ToInternedString(MaxAgeUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Prompt"/>.</summary>
+    public static ReadOnlySpan<byte> PromptUtf8 => "prompt"u8;
+
+    /// <summary>
+    /// The <c>prompt</c> parameter. A space-delimited, case-sensitive list of values that
+    /// specifies whether the Authorization Server prompts the End-User for reauthentication
+    /// and consent per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>
+    /// (<see cref="Verifiable.OAuth.WellKnown.WellKnownPromptValues"/> names the defined values).
+    /// A list containing <c>none</c> together with any other value is a request error.
+    /// </summary>
+    public static string Prompt { get; } = Utf8Constants.ToInternedString(PromptUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="State"/>.</summary>
     public static ReadOnlySpan<byte> StateUtf8 => "state"u8;
 

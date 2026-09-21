@@ -122,6 +122,10 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     }
 
 
+    /// <summary>
+    /// A proof-bound access token cannot authorize credential issuance when proof validation is unavailable.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7">RFC 9449 §7</see>.
+    /// </summary>
     [TestMethod]
     public async Task DpopBoundTokenWithUnwiredValidationSeamFailsClosed()
     {
@@ -131,7 +135,10 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         //Unwire the proof-validation seam AFTER the bound token was minted: a bound token must
         //never silently fall back to bearer, so the credential endpoint fails loud.
-        host.Server.OAuth().ValidateDpopProofAsync = null;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateDpopProofAsync = null;
+        }).ConfigureAwait(false);
 
         string proof = await BuildCredentialProofAsync(ctx, freshKey: null).ConfigureAwait(false);
         using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
@@ -156,12 +163,17 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         "VerifierKeyMaterial is a handle to those same instances, released when the host is disposed.")]
     private async Task<BoundTokenContext> AcquireAsync(TestHostShell host)
     {
-        VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Haip10, Capabilities);
-        _ = host.EnableDpop();
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, Capabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
 
         DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken)

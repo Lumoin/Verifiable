@@ -10,7 +10,7 @@ namespace Verifiable.DidComm.Routing;
 /// <remarks>
 /// Each name declares its single UTF-8 source literal as a <c>ReadOnlySpan&lt;byte&gt;</c> property and
 /// derives the interned string view through <see cref="Utf8Constants.ToInternedString"/>, matching
-/// <see cref="WellKnownOutOfBandNames"/> and <see cref="WellKnownDidCommMemberNames"/>. The
+/// <see cref="Verifiable.DidComm.OutOfBand.WellKnownOutOfBandNames"/> and <see cref="WellKnownDidCommMemberNames"/>. The
 /// <see cref="Profile"/> is the DIDComm Messaging <em>profile</em> string a service's <c>accept</c> array
 /// lists (DIDComm v2.1 §DID Document Service Endpoint), distinct from the envelope IANA media types in
 /// <see cref="DidCommMediaTypes"/> — a service profile is not a <c>Content-Type</c>.

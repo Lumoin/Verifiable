@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Verifiable.Core;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 
@@ -29,9 +31,17 @@ public static class IdJagFlowHandlers
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
-        AuthorizationServerMetadata metadata = await infrastructure
+        AuthorizationServerMetadataResolution resolution = await infrastructure
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
             .ConfigureAwait(false);
+
+        if(!resolution.IsResolved)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(
+                BuildAuthorizationServerMetadataResolutionFailure(resolution));
+        }
+
+        AuthorizationServerMetadata metadata = resolution.Metadata!;
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         Uri tokenEndpoint = metadata.TokenEndpoint!;
 
@@ -64,13 +74,27 @@ public static class IdJagFlowHandlers
             form[OAuthRequestParameterNames.AuthorizationDetails] = options.AuthorizationDetails;
         }
 
-        await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-            form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
-            options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
-            infrastructure, now, context, cancellationToken).ConfigureAwait(false);
+        if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure) is OAuthOutboundFetchPolicyDenied mintPolicyDenial)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(mintPolicyDenial);
+        }
 
-        HttpResponseData response = await infrastructure.SendFormPostAsync(
-            tokenEndpoint, form, OutgoingHeaders.Empty, context, cancellationToken).ConfigureAwait(false);
+        //RFC 9449 §8.1's retry re-sends this SAME request; attaching the private_key_jwt client
+        //assertion per attempt (rather than once before the first send) gives the retry a fresh
+        //jti/iat instead of the assertion the challenged attempt already presented — see
+        //TokenEndpointClientOperations.SendWithDpopRetryAsync's remarks.
+        HttpResponseData response = await TokenEndpointClientOperations.SendWithDpopRetryAsync(
+            infrastructure, tokenEndpoint, form,
+            async (attemptNow, ct) =>
+            {
+                await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
+                    form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
+                    options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
+                    infrastructure, attemptNow, context, ct).ConfigureAwait(false);
+
+                return OutgoingHeaders.Empty;
+            },
+            context, cancellationToken).ConfigureAwait(false);
 
         return infrastructure.ParseTokenResponseAsync(response, now);
     }
@@ -93,9 +117,17 @@ public static class IdJagFlowHandlers
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
-        AuthorizationServerMetadata metadata = await infrastructure
+        AuthorizationServerMetadataResolution resolution = await infrastructure
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
             .ConfigureAwait(false);
+
+        if(!resolution.IsResolved)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(
+                BuildAuthorizationServerMetadataResolutionFailure(resolution));
+        }
+
+        AuthorizationServerMetadata metadata = resolution.Metadata!;
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         Uri tokenEndpoint = metadata.TokenEndpoint!;
 
@@ -105,14 +137,94 @@ public static class IdJagFlowHandlers
             [OAuthRequestParameterNames.Assertion] = options.Assertion
         };
 
-        await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-            form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
-            options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
-            infrastructure, now, context, cancellationToken).ConfigureAwait(false);
+        if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure) is OAuthOutboundFetchPolicyDenied redeemPolicyDenial)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(redeemPolicyDenial);
+        }
 
-        HttpResponseData response = await infrastructure.SendFormPostAsync(
-            tokenEndpoint, form, OutgoingHeaders.Empty, context, cancellationToken).ConfigureAwait(false);
+        //RFC 9449 §8.1's retry re-sends this SAME request; attaching the private_key_jwt client
+        //assertion per attempt (rather than once before the first send) gives the retry a fresh
+        //jti/iat instead of the assertion the challenged attempt already presented — see
+        //TokenEndpointClientOperations.SendWithDpopRetryAsync's remarks.
+        HttpResponseData response = await TokenEndpointClientOperations.SendWithDpopRetryAsync(
+            infrastructure, tokenEndpoint, form,
+            async (attemptNow, ct) =>
+            {
+                await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
+                    form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
+                    options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
+                    infrastructure, attemptNow, context, ct).ConfigureAwait(false);
+
+                return OutgoingHeaders.Empty;
+            },
+            context, cancellationToken).ConfigureAwait(false);
 
         return infrastructure.ParseTokenResponseAsync(response, now);
     }
+
+
+    /// <summary>
+    /// Evaluates <paramref name="target"/> against <paramref name="context"/>'s
+    /// <see cref="OutboundFetchPolicy"/> (falling back to <paramref name="infrastructure"/>'s
+    /// deployment default) before a client-side dial to the token endpoint named by resolved
+    /// authorization-server metadata — the same SSRF-hardening class as the AuthCode PAR and token
+    /// sends, since the token endpoint is likewise read out of a discovered document rather than
+    /// chosen by this library.
+    /// </summary>
+    /// <param name="target">The token endpoint the flow is about to dial.</param>
+    /// <param name="context">The per-operation exchange context carrying the policy.</param>
+    /// <param name="infrastructure">
+    /// Supplies <see cref="OAuthClientInfrastructure.OutboundFetchPolicy"/>, the deployment
+    /// default applied when <paramref name="context"/> carries none.
+    /// </param>
+    /// <returns>
+    /// <see langword="null"/> when <paramref name="target"/> is allowed; otherwise the typed
+    /// denial to return from <see cref="MintAsync"/> or <see cref="RedeemAsync"/>.
+    /// </returns>
+    private static OAuthOutboundFetchPolicyDenied? EvaluateOutboundPolicy(
+        Uri target, ExchangeContext context, OAuthClientInfrastructure infrastructure)
+    {
+        OutboundFetchPolicy policy = context.ResolveOutboundFetchPolicy(infrastructure.OutboundFetchPolicy);
+        OutboundFetchDecision decision = policy.Evaluate(target);
+
+        if(decision.IsAllowed)
+        {
+            return null;
+        }
+
+        ActivityTagsCollection tags = new()
+        {
+            [OAuthEventNames.OutboundFetchPolicyDenialReasonTagName] = decision.DenyReason,
+            [OAuthEventNames.OutboundFetchPolicyDenialEndpointTagName] = target.ToString()
+        };
+
+        _ = (Activity.Current?.AddEvent(new ActivityEvent(OAuthEventNames.OutboundFetchPolicyDenied, tags: tags)));
+
+        return new OAuthOutboundFetchPolicyDenied(
+            target,
+            decision.DenyReason!,
+            new DecisionSupport("The token endpoint was refused by the outbound fetch policy.")
+            {
+                SpecificationReference = "RFC 8707 §2"
+            });
+    }
+
+
+    /// <summary>
+    /// Builds the <see cref="OAuthAuthorizationServerMetadataUnresolved"/> failure for a non-
+    /// <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/> <paramref name="resolution"/>,
+    /// carrying the outcome and the resolver's internal
+    /// <see cref="AuthorizationServerMetadataResolution.Defect"/> as
+    /// <see cref="DecisionSupport.LikelyCause"/> — safe here since this Result is consumed
+    /// in-process by the calling application rather than serialized onto an outbound wire response.
+    /// </summary>
+    private static OAuthAuthorizationServerMetadataUnresolved BuildAuthorizationServerMetadataResolutionFailure(
+        AuthorizationServerMetadataResolution resolution) =>
+        new(
+            resolution.Outcome,
+            new DecisionSupport("The authorization server metadata required for this exchange did not resolve.")
+            {
+                LikelyCause = resolution.Defect,
+                SpecificationReference = "RFC 8414 §3"
+            });
 }

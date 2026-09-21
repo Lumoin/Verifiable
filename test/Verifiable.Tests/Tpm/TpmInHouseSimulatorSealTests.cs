@@ -334,7 +334,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     }
 
     /// <summary>
-    /// Proves the pooled ownership of <see cref="Automata.TpmLoadObjectRequested.PrivateBlob"/> across a
+    /// Proves the pooled ownership of <see cref="TpmLoadObjectRequested.PrivateBlob"/> across a
     /// refusal that happens AFTER the parse has fully rented it: a genuinely non-empty <c>inPrivate</c>
     /// against an unknown <c>@parentHandle</c> parses cleanly (the private blob carrier is rented as the
     /// parse's last act), then the command refuses on <c>parentHandle</c> (the sole handle, index 0)

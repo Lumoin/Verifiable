@@ -124,7 +124,7 @@ internal sealed class XAdESCertificateValuesTests
         Assert.IsTrue(isRead, $"An empty CertificateValues element must read, per the schema's minOccurs=\"0\" choice, but was refused with {error.Failure}.");
         using(value)
         {
-            Assert.HasCount(0, value!.Entries);
+            Assert.IsEmpty(value!.Entries);
         }
     }
 
@@ -281,3 +281,4 @@ internal sealed class XAdESCertificateValuesTests
         }
     }
 }
+

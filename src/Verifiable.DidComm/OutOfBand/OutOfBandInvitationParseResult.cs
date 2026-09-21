@@ -40,7 +40,7 @@ public enum OutOfBandUrlParseError
 /// <see cref="Error"/> reason otherwise.
 /// </summary>
 /// <remarks>
-/// Produced by <see cref="OutOfBandInvitationExtensions.TryParseOutOfBandUrl"/>, which never throws to
+/// Produced by <see cref="OutOfBandInvitationExtensions.TryParseOutOfBandUrl(string, DidCommMessageParser, BaseMemoryPool, out OutOfBandInvitationParseResult)"/>, which never throws to
 /// the caller: the <c>_oob</c> value is observed, unauthenticated wire input (DIDComm v2.1 §Privacy
 /// Considerations), so a missing parameter, a malformed encoding, or a non-conformant invitation each
 /// becomes a typed <see cref="OutOfBandUrlParseError"/> rather than an exception.

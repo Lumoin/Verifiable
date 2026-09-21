@@ -8,7 +8,7 @@ namespace Verifiable.Tests.Did
 {
     /// <summary>
     /// Validation tests for the DID Core <c>@context</c> first-entry rule, exercised through
-    /// <see cref="ContextValidationRules.ValidateFirstEntry"/>.
+    /// <see cref="ContextValidationRules.ValidateFirstEntry(Context?, string)"/>.
     /// </summary>
     [TestClass]
     internal sealed class DidCoreValidationTests

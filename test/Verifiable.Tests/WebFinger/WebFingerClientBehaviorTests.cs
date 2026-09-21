@@ -42,7 +42,31 @@ internal sealed class WebFingerClientBehaviorTests
     }
 
 
-    /// <summary>A non-200 response at the WebFinger resource maps to <see cref="WebFingerResolutionErrors.NotFound"/>.</summary>
+    /// <summary>
+    /// A JRD response carrying <c>Cache-Control: max-age</c> reports that many seconds of storable freshness
+    /// on the result, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
+    {
+        const string jrdJson = """{"subject":"acct:alice@example.com"}""";
+        FakeTransport transport = FakeTransport.RespondingWith(
+            QueryUrl, 200, jrdJson, HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.CacheControl, "max-age=600")));
+
+        WebFingerResolutionResult result = await Resolve(transport).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful, $"Resolution MUST succeed. Error: {result.Error?.Code}.");
+        Assert.IsTrue(result.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(600), result.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
+    }
+
+
+    /// <summary>
+    /// A non-200 response at the WebFinger resource maps to <see cref="WebFingerResolutionErrors.NotFound"/>
+    /// and reports non-storable freshness — there is no document a cache could keep, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task NonSuccessStatusYieldsNotFound()
     {
@@ -52,6 +76,7 @@ internal sealed class WebFingerClientBehaviorTests
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual(WebFingerResolutionErrors.NotFound, result.Error);
+        Assert.IsFalse(result.Freshness.IsStorable, "A resolution that never reached a document reports no storable freshness.");
     }
 
 
@@ -153,10 +178,24 @@ internal sealed class WebFingerClientBehaviorTests
         public List<OutboundRequest> Calls { get; } = [];
 
 
+        //Additive: response headers per URL, consulted by Delegate below. Left empty by every existing route,
+        //so a caller that never sets an entry here sees the same header-less OutboundResponse as before.
+        private Dictionary<string, HttpHeaderSet> ResponseHeaders { get; } = new(StringComparer.Ordinal);
+
+
         public static FakeTransport RespondingWith(string url, int status, string? body)
         {
             FakeTransport transport = new(failure: null);
             transport.Routes[url] = (status, body);
+
+            return transport;
+        }
+
+
+        public static FakeTransport RespondingWith(string url, int status, string? body, HttpHeaderSet headers)
+        {
+            FakeTransport transport = RespondingWith(url, status, body);
+            transport.ResponseHeaders[url] = headers;
 
             return transport;
         }
@@ -183,7 +222,11 @@ internal sealed class WebFingerClientBehaviorTests
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(Encoding.UTF8.GetBytes(route.Body), BufferTags.Json);
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body });
+            HttpHeaderSet headers = ResponseHeaders.TryGetValue(request.Target.AbsoluteUri, out HttpHeaderSet? configuredHeaders)
+                ? configuredHeaders
+                : HttpHeaderSet.Empty;
+
+            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
         };
     }
 }

@@ -1,5 +1,4 @@
 using CsCheck;
-using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
@@ -24,10 +23,6 @@ namespace Verifiable.Tests.Cryptography;
 /// what unsigned attribute of what size is placed inside the protected countersignature in the second. The
 /// coverage is always stated by the shipped component both directions here compute the clause 5.5.2 index
 /// and the clause 5.5.3 imprint input with.
-/// </para>
-/// <para>
-/// CsCheck's <c>Sample</c> callback is synchronous; the asynchronous calls inside it are blocked on with
-/// <c>AsTask().GetAwaiter().GetResult()</c>, the idiom <see cref="ArchiveTimestampV3PropertyTests"/> already uses.
 /// A failing sample is a defect, not noise: CsCheck shrinks it and prints the seed that reproduces it.
 /// </para>
 /// </remarks>
@@ -63,8 +58,6 @@ internal sealed class CAdESCountersignaturePropertyTests
     /// ETSI EN 319 122-1 V1.3.1</see> 5.5.3-note6-sibling-survives.
     /// </remarks>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
     public async Task SiblingCountersignaturesNeverInvalidateAnEarlierArchiveTimestamp()
     {
         using Scenario scenario = Scenario.Create();
@@ -88,11 +81,11 @@ internal sealed class CAdESCountersignaturePropertyTests
                     CAdESSignatureFacts.CountersignatureAttributeOid, countersignature.AsReadOnlySpan(), BaseMemoryPool.Shared));
             }
 
-            (from siblingCount in Gen.Int[1, 3]
-             from oneAtATime in Gen.Bool
-             select (siblingCount, oneAtATime))
-            .Sample(sample => TheArchiveTimestampSurvivesTheSiblings(
-                archived, siblings, sample.siblingCount, sample.oneAtATime, TestContext.CancellationToken));
+            await (from siblingCount in Gen.Int[1, 3]
+                   from oneAtATime in Gen.Bool
+                   select (siblingCount, oneAtATime))
+            .SampleAsync(async sample => await TheArchiveTimestampSurvivesTheSiblings(
+                archived, siblings, sample.siblingCount, sample.oneAtATime, TestContext.CancellationToken).ConfigureAwait(false), threads: CsCheckSampling.Threads).ConfigureAwait(false);
         }
         finally
         {
@@ -116,8 +109,6 @@ internal sealed class CAdESCountersignaturePropertyTests
     /// ETSI EN 319 122-1 V1.3.1</see> 5.5.3-note6-mutation-invalidates.
     /// </remarks>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
     public async Task AnyUnsignedAttributeAddedInsideAProtectedCountersignatureInvalidatesTheArchiveTimestamp()
     {
         using Scenario scenario = Scenario.Create();
@@ -145,11 +136,11 @@ internal sealed class CAdESCountersignaturePropertyTests
         Assert.AreEqual(ArchiveTimestampCoverageStatus.Stated, before.Status, "The world every sample mutates starts from a valid archive time-stamp.");
         Assert.IsTrue(CAdESCountersignatureTests.CountersignatureValuesAreCovered(before), "And from a countersignature the index actually names.");
 
-        (from typeIndex in Gen.Int[0, InnerAttributeTypes.Length - 1]
-         from valueLength in Gen.Int[0, 300]
-         select (typeIndex, valueLength))
-        .Sample(sample => TheArchiveTimestampBreaksOnTheInnerAttribute(
-            archived, preparation, scenario, signatureValue, sample.typeIndex, sample.valueLength, TestContext.CancellationToken));
+        await (from typeIndex in Gen.Int[0, InnerAttributeTypes.Length - 1]
+               from valueLength in Gen.Int[0, 300]
+               select (typeIndex, valueLength))
+        .SampleAsync(async sample => await TheArchiveTimestampBreaksOnTheInnerAttribute(
+            archived, preparation, scenario, signatureValue, sample.typeIndex, sample.valueLength, TestContext.CancellationToken).ConfigureAwait(false), threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 
@@ -164,9 +155,7 @@ internal sealed class CAdESCountersignaturePropertyTests
     /// <param name="oneAtATime">Whether to append them in separate splices rather than one.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the sample upheld the property.</returns>
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    private static bool TheArchiveTimestampSurvivesTheSiblings(
+    private static async Task<bool> TheArchiveTimestampSurvivesTheSiblings(
         CmsSignedData archived,
         List<CmsAttribute> siblings,
         int siblingCount,
@@ -200,8 +189,8 @@ internal sealed class CAdESCountersignaturePropertyTests
                 appended.Add(current);
             }
 
-            using ArchiveTimestampCoverage coverage = CAdESCountersignatureTests.StateArchiveCoverageAsync(current, cancellationToken)
-                .AsTask().GetAwaiter().GetResult();
+            using ArchiveTimestampCoverage coverage = await CAdESCountersignatureTests.StateArchiveCoverageAsync(current, cancellationToken)
+                .AsTask().ConfigureAwait(false);
             if(coverage.Status != ArchiveTimestampCoverageStatus.Stated || !coverage.ProtectedObjects!.EveryIndexEntryMatched)
             {
                 return false;
@@ -233,8 +222,8 @@ internal sealed class CAdESCountersignaturePropertyTests
                 return false;
             }
 
-            return CAdESCountersignatureTests.ArchiveTimestampImprintStillVerifiesAsync(current, coverage, cancellationToken)
-                .AsTask().GetAwaiter().GetResult();
+            return await CAdESCountersignatureTests.ArchiveTimestampImprintStillVerifiesAsync(current, coverage, cancellationToken)
+                .AsTask().ConfigureAwait(false);
         }
         finally
         {
@@ -259,9 +248,7 @@ internal sealed class CAdESCountersignaturePropertyTests
     /// <param name="valueLength">The size of the inner attribute's value.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the sample upheld the property.</returns>
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    private static bool TheArchiveTimestampBreaksOnTheInnerAttribute(
+    private static async Task<bool> TheArchiveTimestampBreaksOnTheInnerAttribute(
         CmsSignedData archived,
         CAdESSignaturePreparation preparation,
         Scenario scenario,
@@ -275,8 +262,8 @@ internal sealed class CAdESCountersignaturePropertyTests
         using PooledMemory mutated = CAdESSignatureCreation.CompleteCountersignature(
             preparation, scenario.CountersignerCertificate, CryptoAlgorithm.P256, signatureValue, [innerAttribute], BaseMemoryPool.Shared);
         using CmsSignedData tampered = CAdESCountersignatureTests.ReplaceCountersignatureValue(archived, mutated.AsReadOnlySpan());
-        using ArchiveTimestampCoverage coverage = CAdESCountersignatureTests.StateArchiveCoverageAsync(tampered, cancellationToken)
-            .AsTask().GetAwaiter().GetResult();
+        using ArchiveTimestampCoverage coverage = await CAdESCountersignatureTests.StateArchiveCoverageAsync(tampered, cancellationToken)
+            .AsTask().ConfigureAwait(false);
 
         return coverage.Status == ArchiveTimestampCoverageStatus.HashIndexInvalid
             && !coverage.ProtectedObjects!.EveryIndexEntryMatched

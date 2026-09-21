@@ -32,7 +32,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </para>
 /// <para>
 /// Mirrors the registry/delegate split <see cref="Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, CancellationToken)"/>
-/// vs <see cref="Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CancellationToken)"/>
+/// vs <see cref="Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CryptoEventSink?, CancellationToken)"/>
 /// already exposes: the explicit-delegate overload carries the entire verification body; the
 /// registry overload resolves the verification function via
 /// <see cref="CryptoFunctionRegistry{CryptoAlgorithm, Purpose}"/> and then delegates.
@@ -101,7 +101,7 @@ public static class SdCwtVerificationExtensions
         /// <paramref name="issuerVerificationKey"/>, resolving the
         /// verification function from
         /// <see cref="CryptoFunctionRegistry{CryptoAlgorithm, Purpose}"/>
-        /// via the key's <see cref="SensitiveMemory.Tag"/>. Delegates to the
+        /// via the key's <see cref="Lumoin.Base.SensitiveData.Tag"/>. Delegates to the
         /// <see cref="VerificationDelegate"/>-accepting overload above with
         /// the resolved function — callers that need a non-registry function
         /// (custom backend, test stub, hardware-bound verifier) should call

@@ -1,4 +1,3 @@
-using System.Text;
 using Verifiable.Core;
 
 namespace Verifiable.OAuth.Client;
@@ -107,7 +106,7 @@ public static class DynamicRegistrationHandlers
 
     /// <summary>
     /// Handles RFC 7592 §2.2 client update. PUTs the new metadata with the
-    /// registration's bearer token, parses the echoed updated metadata.
+    /// registration's bearer token and issued client identifier, then parses the complete echoed metadata.
     /// </summary>
     public static async ValueTask<ClientMetadata> HandleUpdateAsync(
         ClientRegistration registration,
@@ -137,7 +136,7 @@ public static class DynamicRegistrationHandlers
                 "OAuthClientInfrastructure.ParseClientMetadataAsync is not configured.");
         }
 
-        string body = SerializeClientMetadata(newMetadata);
+        string body = SerializeClientMetadata(newMetadata with { ClientId = registration.ClientId.Value });
 
         OutgoingHeaders headers = OutgoingHeaders.Empty
             .WithAuthorization(WellKnownAuthenticationSchemes.Bearer, registration.AccessToken.Value.Value);
@@ -195,6 +194,7 @@ public static class DynamicRegistrationHandlers
     }
 
 
+    /// <summary>Combines the issued registration response with the client-owned settings and key material.</summary>
     private static ClientRegistration BuildRegistration(
         RegisterClientOptions options,
         RegistrationResponse response) =>
@@ -218,58 +218,6 @@ public static class DynamicRegistrationHandlers
         };
 
 
-    private static string SerializeClientMetadata(ClientMetadata metadata)
-    {
-        //Field order follows RFC 7591 §2 table order. Optional fields are
-        //emitted only when populated so the wire body stays minimal.
-        StringBuilder sb = JsonAppender.Rent();
-        try
-        {
-            _ = sb.Append('{');
-            bool first = true;
-            if(metadata.RedirectUris.Count > 0)
-            {
-                JsonAppender.AppendUriArrayField(
-                    sb, ClientMetadataParameterNames.RedirectUris, metadata.RedirectUris, ref first);
-            }
-            if(metadata.TokenEndpointAuthMethod is not null)
-            {
-                JsonAppender.AppendStringField(
-                    sb, ClientMetadataParameterNames.TokenEndpointAuthMethod,
-                    ClientAuthenticationMethodNames.GetName(metadata.TokenEndpointAuthMethod.Value),
-                    ref first);
-            }
-            if(metadata.ClientName is not null)
-            {
-                JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientName, metadata.ClientName, ref first);
-            }
-            if(metadata.ClientUri is not null)
-            {
-                JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.ClientUri, metadata.ClientUri, ref first);
-            }
-            if(metadata.Scope is not null)
-            {
-                JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.Scope, metadata.Scope, ref first);
-            }
-            if(metadata.AuthorizationDetailsTypes is not null)
-            {
-                //RFC 9396 §10/§14.5: the client declares the authorization details types it will
-                //use so the AS can entitle it to exactly those types.
-                JsonAppender.AppendStringArrayField(
-                    sb, AuthorizationDetailsParameterNames.AuthorizationDetailsTypes,
-                    metadata.AuthorizationDetailsTypes, ref first);
-            }
-            if(metadata.JwksUri is not null)
-            {
-                JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.JwksUri, metadata.JwksUri, ref first);
-            }
-            _ = sb.Append('}');
-
-            return sb.ToString();
-        }
-        finally
-        {
-            JsonAppender.Return(sb);
-        }
-    }
+    /// <summary>Serializes complete client metadata with the issued identifier required for an RFC 7592 replacement.</summary>
+    private static string SerializeClientMetadata(ClientMetadata metadata) => ClientMetadataJson.Serialize(metadata);
 }

@@ -9,9 +9,10 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// Client ID Metadata Document per
 /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html">
 /// draft-ietf-oauth-client-id-metadata-document-02</see>. A non-<see cref="None"/> value means the
-/// document is not usable as client metadata; the resolver that owns network policy (
-/// <c>ClientIdMetadataDocuments.BuildResolving</c>) maps any set flag to the
-/// <c>ClientIdMetadataResolutionOutcome.InvalidDocument</c> outcome and never caches the result.
+/// document is not usable as client metadata; the attempt that owns network policy,
+/// <see cref="ClientIdMetadataDocuments.ResolveAsync"/>, maps any set flag to the
+/// <see cref="ClientIdMetadataResolutionOutcome.InvalidDocument"/> outcome, which reports nothing
+/// storable to the caller's cache.
 /// </summary>
 [Flags]
 public enum ClientIdMetadataDocumentDefects
@@ -145,6 +146,23 @@ public static class ClientIdMetadataDocumentReader
     public static ClientIdMetadataDocumentReadResult Parse(ReadOnlySpan<byte> document)
     {
         ClientIdMetadataDocumentDefects defects = ClientIdMetadataDocumentDefects.None;
+
+        //RFC 8259 §4 uniqueness posture applied to a fetched, client-controlled document: a repeated
+        //"jwks_uri" or "redirect_uris" would let this reader select the first occurrence while another
+        //consumer of the same bytes resolves the last, so the whole document is gated for well-formedness
+        //— no duplicate member name at any depth — before a single field is extracted from it. A document
+        //that fails this gate can carry no verifiable client_id either, so it reports through the existing
+        //MissingClientId defect — the same outcome an absent client_id already produces — rather than a
+        //new defect vocabulary; the resolver maps any set defect to InvalidDocument regardless.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(document))
+        {
+            return new ClientIdMetadataDocumentReadResult
+            {
+                ClientId = null,
+                Metadata = new ClientMetadata(),
+                Defects = ClientIdMetadataDocumentDefects.MissingClientId
+            };
+        }
 
         string? clientId = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.ClientIdUtf8);
         if(clientId is null)

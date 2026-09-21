@@ -54,6 +54,10 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
             {
                 CredentialProtectionPolicy = WellKnownCredProtectPolicies.UserVerificationRequired,
                 EnforceCredentialProtectionPolicy = true
+            },
+            Prf = new Fido2PrfRegistrationExtensionInput
+            {
+                Eval = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 11, 22, 33 }, Fido2BufferTags.PrfValue) }
             }
         };
 
@@ -89,6 +93,38 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
         Assert.AreEqual(original.MinPinLength, roundTripped.MinPinLength);
         Assert.AreEqual(original.CredProtect!.CredentialProtectionPolicy, roundTripped.CredProtect!.CredentialProtectionPolicy);
         Assert.AreEqual(original.CredProtect.EnforceCredentialProtectionPolicy, roundTripped.CredProtect.EnforceCredentialProtectionPolicy);
+        Assert.IsTrue(original.Prf!.Eval.First.Span.SequenceEqual(roundTripped.Prf!.Eval.First.Span));
+        Assert.IsNull(roundTripped.Prf.Eval.Second);
+    }
+
+
+    /// <summary>The prf extension's two-salt eval input round-trips both values.</summary>
+    [TestMethod]
+    public void PrfEvalWithTwoSaltsRoundTripsBothValues()
+    {
+        PublicKeyCredentialCreationOptions original = new()
+        {
+            Rp = new PublicKeyCredentialRpEntity { Name = "example.com" },
+            User = new PublicKeyCredentialUserEntity { Id = UserHandle.Create([1], BaseMemoryPool.Shared), Name = "alexm", DisplayName = string.Empty },
+            Challenge = "AQIDBA",
+            PubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }],
+            Prf = new Fido2PrfRegistrationExtensionInput
+            {
+                Eval = new Fido2PrfValues
+                {
+                    First = new TaggedMemory<byte>(new byte[] { 1, 2, 3 }, Fido2BufferTags.PrfValue),
+                    Second = new TaggedMemory<byte>(new byte[] { 4, 5, 6 }, Fido2BufferTags.PrfValue)
+                }
+            }
+        };
+
+        ArrayBufferWriter<byte> buffer = new();
+        PublicKeyCredentialCreationOptionsJsonWriter.Write(original, buffer);
+
+        PublicKeyCredentialCreationOptions roundTripped = PublicKeyCredentialCreationOptionsJsonReader.Read(buffer.WrittenMemory, BaseMemoryPool.Shared);
+
+        Assert.IsTrue(original.Prf.Eval.First.Span.SequenceEqual(roundTripped.Prf!.Eval.First.Span));
+        Assert.IsTrue(original.Prf.Eval.Second!.Value.Span.SequenceEqual(roundTripped.Prf.Eval.Second!.Value.Span));
     }
 
 
@@ -126,6 +162,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
         Assert.IsNull(roundTripped.LargeBlob);
         Assert.IsNull(roundTripped.MinPinLength);
         Assert.IsNull(roundTripped.CredProtect);
+        Assert.IsNull(roundTripped.Prf);
     }
 
 
@@ -236,6 +273,23 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
     public void MissingRequiredRpMemberIsRejected()
     {
         string json = MinimalValidDocument().Replace("\"rp\":{\"name\":\"example.com\"},", "", StringComparison.Ordinal);
+
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// Row 8516: <c>evalByCredential</c> is assertion-only — a registration document's
+    /// <c>extensions.prf</c> carrying it is rejected as an unrecognised member, since
+    /// <see cref="Fido2PrfRegistrationExtensionInput"/> has no such member to populate.
+    /// </summary>
+    [TestMethod]
+    public void PrfEvalByCredentialOnRegistrationIsRejected()
+    {
+        string json = MinimalValidDocument().Replace(
+            "\"pubKeyCredParams\":[{\"type\":\"public-key\",\"alg\":-7}]",
+            "\"pubKeyCredParams\":[{\"type\":\"public-key\",\"alg\":-7}],\"extensions\":{\"prf\":{\"evalByCredential\":{}}}",
+            StringComparison.Ordinal);
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }

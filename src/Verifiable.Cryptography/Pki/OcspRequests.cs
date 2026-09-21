@@ -43,7 +43,7 @@ public sealed class OcspRequestContent: IDisposable
     /// Gets the nonce this request carries in its <c>requestExtensions</c>, or <see langword="null"/> when
     /// <see cref="OcspRequests.CreateAsync"/> was called with <c>includeNonce: false</c>. Owned by this instance;
     /// its bytes were already consumed (<see cref="Nonce.UseNonce"/>) to embed them in <see cref="Request"/>,
-    /// so a later comparison against a response reads <see cref="Nonce.AsReadOnlySpan"/> directly rather than
+    /// so a later comparison against a response reads <c>Nonce.AsReadOnlySpan</c> directly rather than
     /// calling <see cref="Nonce.UseNonce"/> a second time.
     /// </summary>
     public Nonce? RequestNonce { get; }

@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Dpop;
 
 /// <summary>
 /// The library's default <see cref="ConstructDpopProofDelegate"/>
-/// implementation, composing existing <see cref="Jws.SignAsync"/> with
+/// implementation, composing existing <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> with
 /// DPoP's specific payload + header shape.
 /// </summary>
 public static class DpopProofConstruction
@@ -13,11 +13,11 @@ public static class DpopProofConstruction
     /// <summary>
     /// Builds a DPoP proof. Composes the embedded JWK header, serialises
     /// header and claims via the configured serializer, signs via
-    /// <see cref="Jws.SignAsync"/>, and returns the compact wire form.
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>, and returns the compact wire form.
     /// </summary>
     /// <remarks>
     /// The serializer / encoder / signing / pool parameters mirror
-    /// <see cref="Jws.SignAsync"/>'s parameter set so applications wire
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>'s parameter set so applications wire
     /// the same delegates they use elsewhere in the library.
     /// </remarks>
     public static async ValueTask<string> BuildAsync(

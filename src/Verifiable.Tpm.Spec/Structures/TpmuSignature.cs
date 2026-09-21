@@ -154,6 +154,66 @@ public sealed class TpmuSignature: IDisposable
             TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS => new TpmuSignature(sigAlg, hashAlg, Tpm2bPublicKeyRsa.Create(signature, pool)),
             TpmAlgIdConstants.TPM_ALG_HMAC => CreateHmac(sigAlg, hashAlg, signature, pool),
             TpmAlgIdConstants.TPM_ALG_NULL => Null,
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_RSA or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_ECC or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+                throw new NotSupportedException($"Signing algorithm '{sigAlg}' is not supported."),
             _ => throw new NotSupportedException($"Signing algorithm '{sigAlg}' is not supported.")
         };
 
@@ -242,6 +302,67 @@ public sealed class TpmuSignature: IDisposable
             TpmAlgIdConstants.TPM_ALG_ECDSA => sizeof(ushort) + SignatureR!.SerializedSize + SignatureS!.SerializedSize,
             TpmAlgIdConstants.TPM_ALG_HMAC => HmacSignature!.SerializedSize,
             TpmAlgIdConstants.TPM_ALG_NULL => 0,
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_RSA or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSASSA or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_RSAPSS or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_ECC or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => sizeof(ushort) + RsaSignature.SerializedSize,
             _ => sizeof(ushort) + RsaSignature.SerializedSize
         };
     }
@@ -279,6 +400,67 @@ public sealed class TpmuSignature: IDisposable
                 //TPMT_SIGNATURE already wrote.
                 break;
             }
+            case TpmAlgIdConstants.TPM_ALG_ERROR:
+            case TpmAlgIdConstants.TPM_ALG_RSA:
+            case TpmAlgIdConstants.TPM_ALG_TDES:
+            case TpmAlgIdConstants.TPM_ALG_SHA:
+            case TpmAlgIdConstants.TPM_ALG_AES:
+            case TpmAlgIdConstants.TPM_ALG_MGF1:
+            case TpmAlgIdConstants.TPM_ALG_KEYEDHASH:
+            case TpmAlgIdConstants.TPM_ALG_XOR:
+            case TpmAlgIdConstants.TPM_ALG_SHA256:
+            case TpmAlgIdConstants.TPM_ALG_SHA384:
+            case TpmAlgIdConstants.TPM_ALG_SHA512:
+            case TpmAlgIdConstants.TPM_ALG_SHA256_192:
+            case TpmAlgIdConstants.TPM_ALG_SM3_256:
+            case TpmAlgIdConstants.TPM_ALG_SM4:
+            case TpmAlgIdConstants.TPM_ALG_RSASSA:
+            case TpmAlgIdConstants.TPM_ALG_RSAES:
+            case TpmAlgIdConstants.TPM_ALG_RSAPSS:
+            case TpmAlgIdConstants.TPM_ALG_OAEP:
+            case TpmAlgIdConstants.TPM_ALG_ECDH:
+            case TpmAlgIdConstants.TPM_ALG_ECDAA:
+            case TpmAlgIdConstants.TPM_ALG_SM2:
+            case TpmAlgIdConstants.TPM_ALG_ECSCHNORR:
+            case TpmAlgIdConstants.TPM_ALG_ECMQV:
+            case TpmAlgIdConstants.TPM_ALG_HKDF:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A:
+            case TpmAlgIdConstants.TPM_ALG_KDF2:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108:
+            case TpmAlgIdConstants.TPM_ALG_ECC:
+            case TpmAlgIdConstants.TPM_ALG_SYMCIPHER:
+            case TpmAlgIdConstants.TPM_ALG_CAMELLIA:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_256:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_384:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_512:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE128:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_192:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_512:
+            case TpmAlgIdConstants.TPM_ALG_CMAC:
+            case TpmAlgIdConstants.TPM_ALG_CTR:
+            case TpmAlgIdConstants.TPM_ALG_OFB:
+            case TpmAlgIdConstants.TPM_ALG_CBC:
+            case TpmAlgIdConstants.TPM_ALG_CFB:
+            case TpmAlgIdConstants.TPM_ALG_ECB:
+            case TpmAlgIdConstants.TPM_ALG_CCM:
+            case TpmAlgIdConstants.TPM_ALG_GCM:
+            case TpmAlgIdConstants.TPM_ALG_KW:
+            case TpmAlgIdConstants.TPM_ALG_KWP:
+            case TpmAlgIdConstants.TPM_ALG_EAX:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA_PH:
+            case TpmAlgIdConstants.TPM_ALG_LMS:
+            case TpmAlgIdConstants.TPM_ALG_XMSS:
+            case TpmAlgIdConstants.TPM_ALG_KEYEDXOF:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF128:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF256:
+            case TpmAlgIdConstants.TPM_ALG_KMAC128:
+            case TpmAlgIdConstants.TPM_ALG_KMAC256:
+            case TpmAlgIdConstants.TPM_ALG_MLKEM:
+            case TpmAlgIdConstants.TPM_ALG_MLDSA:
+            case TpmAlgIdConstants.TPM_ALG_HASH_MLDSA:
             default:
             {
                 writer.WriteUInt16((ushort)HashAlgorithm);
@@ -321,6 +503,68 @@ public sealed class TpmuSignature: IDisposable
         {
             TpmAlgIdConstants.TPM_ALG_ECDSA => ParseEcdsa(sigAlg, hashAlg, ref reader, pool),
             TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS => ParseRsa(sigAlg, hashAlg, ref reader, pool),
+            TpmAlgIdConstants.TPM_ALG_ERROR or
+            TpmAlgIdConstants.TPM_ALG_RSA or
+            TpmAlgIdConstants.TPM_ALG_TDES or
+            TpmAlgIdConstants.TPM_ALG_SHA or
+            TpmAlgIdConstants.TPM_ALG_HMAC or
+            TpmAlgIdConstants.TPM_ALG_AES or
+            TpmAlgIdConstants.TPM_ALG_MGF1 or
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+            TpmAlgIdConstants.TPM_ALG_XOR or
+            TpmAlgIdConstants.TPM_ALG_SHA256 or
+            TpmAlgIdConstants.TPM_ALG_SHA384 or
+            TpmAlgIdConstants.TPM_ALG_SHA512 or
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+            TpmAlgIdConstants.TPM_ALG_NULL or
+            TpmAlgIdConstants.TPM_ALG_SM3_256 or
+            TpmAlgIdConstants.TPM_ALG_SM4 or
+            TpmAlgIdConstants.TPM_ALG_RSAES or
+            TpmAlgIdConstants.TPM_ALG_OAEP or
+            TpmAlgIdConstants.TPM_ALG_ECDH or
+            TpmAlgIdConstants.TPM_ALG_ECDAA or
+            TpmAlgIdConstants.TPM_ALG_SM2 or
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+            TpmAlgIdConstants.TPM_ALG_ECMQV or
+            TpmAlgIdConstants.TPM_ALG_HKDF or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+            TpmAlgIdConstants.TPM_ALG_KDF2 or
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+            TpmAlgIdConstants.TPM_ALG_ECC or
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+            TpmAlgIdConstants.TPM_ALG_CMAC or
+            TpmAlgIdConstants.TPM_ALG_CTR or
+            TpmAlgIdConstants.TPM_ALG_OFB or
+            TpmAlgIdConstants.TPM_ALG_CBC or
+            TpmAlgIdConstants.TPM_ALG_CFB or
+            TpmAlgIdConstants.TPM_ALG_ECB or
+            TpmAlgIdConstants.TPM_ALG_CCM or
+            TpmAlgIdConstants.TPM_ALG_GCM or
+            TpmAlgIdConstants.TPM_ALG_KW or
+            TpmAlgIdConstants.TPM_ALG_KWP or
+            TpmAlgIdConstants.TPM_ALG_EAX or
+            TpmAlgIdConstants.TPM_ALG_EDDSA or
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+            TpmAlgIdConstants.TPM_ALG_LMS or
+            TpmAlgIdConstants.TPM_ALG_XMSS or
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+            TpmAlgIdConstants.TPM_ALG_KMAC128 or
+            TpmAlgIdConstants.TPM_ALG_KMAC256 or
+            TpmAlgIdConstants.TPM_ALG_MLKEM or
+            TpmAlgIdConstants.TPM_ALG_MLDSA or
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA =>
+                throw new NotSupportedException($"Signing algorithm '{sigAlg}' is not supported for parsing."),
             _ => throw new NotSupportedException($"Signing algorithm '{sigAlg}' is not supported for parsing.")
         };
 
@@ -372,6 +616,65 @@ public sealed class TpmuSignature: IDisposable
         TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS => $"TPMU_SIGNATURE({Type}, {HashAlgorithm}, {RsaSignature.Size} bytes)",
         TpmAlgIdConstants.TPM_ALG_HMAC => $"TPMU_SIGNATURE(HMAC, {HashAlgorithm}, {HmacSignature?.Size ?? 0} bytes)",
         TpmAlgIdConstants.TPM_ALG_NULL => "TPMU_SIGNATURE(NULL)",
+        TpmAlgIdConstants.TPM_ALG_ERROR or
+        TpmAlgIdConstants.TPM_ALG_RSA or
+        TpmAlgIdConstants.TPM_ALG_TDES or
+        TpmAlgIdConstants.TPM_ALG_SHA or
+        TpmAlgIdConstants.TPM_ALG_AES or
+        TpmAlgIdConstants.TPM_ALG_MGF1 or
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH or
+        TpmAlgIdConstants.TPM_ALG_XOR or
+        TpmAlgIdConstants.TPM_ALG_SHA256 or
+        TpmAlgIdConstants.TPM_ALG_SHA384 or
+        TpmAlgIdConstants.TPM_ALG_SHA512 or
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 or
+        TpmAlgIdConstants.TPM_ALG_SM3_256 or
+        TpmAlgIdConstants.TPM_ALG_SM4 or
+        TpmAlgIdConstants.TPM_ALG_RSAES or
+        TpmAlgIdConstants.TPM_ALG_OAEP or
+        TpmAlgIdConstants.TPM_ALG_ECDH or
+        TpmAlgIdConstants.TPM_ALG_ECDAA or
+        TpmAlgIdConstants.TPM_ALG_SM2 or
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR or
+        TpmAlgIdConstants.TPM_ALG_ECMQV or
+        TpmAlgIdConstants.TPM_ALG_HKDF or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
+        TpmAlgIdConstants.TPM_ALG_KDF2 or
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+        TpmAlgIdConstants.TPM_ALG_ECC or
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER or
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA or
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 or
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 or
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 or
+        TpmAlgIdConstants.TPM_ALG_CMAC or
+        TpmAlgIdConstants.TPM_ALG_CTR or
+        TpmAlgIdConstants.TPM_ALG_OFB or
+        TpmAlgIdConstants.TPM_ALG_CBC or
+        TpmAlgIdConstants.TPM_ALG_CFB or
+        TpmAlgIdConstants.TPM_ALG_ECB or
+        TpmAlgIdConstants.TPM_ALG_CCM or
+        TpmAlgIdConstants.TPM_ALG_GCM or
+        TpmAlgIdConstants.TPM_ALG_KW or
+        TpmAlgIdConstants.TPM_ALG_KWP or
+        TpmAlgIdConstants.TPM_ALG_EAX or
+        TpmAlgIdConstants.TPM_ALG_EDDSA or
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH or
+        TpmAlgIdConstants.TPM_ALG_LMS or
+        TpmAlgIdConstants.TPM_ALG_XMSS or
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 or
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 or
+        TpmAlgIdConstants.TPM_ALG_KMAC128 or
+        TpmAlgIdConstants.TPM_ALG_KMAC256 or
+        TpmAlgIdConstants.TPM_ALG_MLKEM or
+        TpmAlgIdConstants.TPM_ALG_MLDSA or
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => $"TPMU_SIGNATURE({Type})",
         _ => $"TPMU_SIGNATURE({Type})"
     };
 

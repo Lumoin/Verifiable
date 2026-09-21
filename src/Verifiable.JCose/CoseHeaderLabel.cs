@@ -21,7 +21,7 @@ namespace Verifiable.JCose;
 /// <strong>Not used for the seven clause-5.2 CB-AdES-specific components.</strong> Clause 5.2.1 requires those
 /// labels (261-267, <see cref="CBAdESHeaderParameters"/>) to be integers ("All of them shall be identified by a
 /// label in the corresponding CBOR map that shall be an integer") — genuinely integer-only, unlike the general
-/// COSE label union this type models. <see cref="Verifiable.Cbor.CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader"/>'s
+/// COSE label union this type models. <c>Verifiable.Cbor.CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader</c>'s
 /// fixed profiled-header entries for those seven labels (plus <c>alg</c>, <c>content type</c>, <c>kid</c>, CWT
 /// Claims, <c>x5chain</c>, <c>x5t</c>, <c>x5u</c>) are always minted as <see cref="CoseHeaderIntegerLabel"/>;
 /// only <c>crit</c>'s array elements and <see cref="CBAdESProtectedHeaders.UnprofiledHeaders"/>'s keys can ever

@@ -18,8 +18,8 @@ namespace Verifiable.Core.Model.Federation;
 /// <para>
 /// Value type wrapping <see cref="string"/> rather than <see cref="Uri"/>
 /// to match the wire-format identifier discipline shared with
-/// <see cref="Server.CapabilityIdentifier"/> and
-/// <see cref="Server.IdentifierPurpose"/>: the identifier flows opaquely
+/// <c>Verifiable.Server.CapabilityIdentifier</c> and
+/// <c>Verifiable.Server.IdentifierPurpose</c>: the identifier flows opaquely
 /// into telemetry / audit / metadata documents and the round-trip cost of
 /// <see cref="Uri"/> normalisation is unnecessary. Construction validates
 /// absolute-URL shape via <see cref="Uri.TryCreate(string, UriKind, out Uri)"/>.

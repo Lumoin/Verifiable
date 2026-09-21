@@ -52,7 +52,7 @@ public static class SubjectIdentifierContributor
             return [new Claim(WellKnownClaimIds.SubjectIdentifier, ClaimOutcome.NotApplicable)];
         }
 
-        EndpointServer? server = ctx.ExchangeContext.Server;
+        EndpointServer? server = ctx.ExchangeContext.RequestServer;
         ResolveSubjectIdentifierDelegate? resolve = server?.OAuth().ResolveSubjectIdentifierAsync;
         if(resolve is null)
         {

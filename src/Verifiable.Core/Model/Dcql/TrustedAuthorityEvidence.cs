@@ -19,7 +19,7 @@ namespace Verifiable.Core.Model.Dcql;
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-15.10">
 /// Section 15.10</see>'s "Wallets SHOULD NOT access URLs included in a request from the Verifier ...
 /// treated purely as identifiers and not actually retrieved by the Wallet upon receiving the
-/// request." <see cref="TrustedAuthoritiesQuery.Matches(TrustedAuthorityEvidence)"/> reads this value
+/// request." <c>TrustedAuthoritiesQuery.Matches(TrustedAuthorityEvidence)</c> reads this value
 /// purely, performing no I/O of its own.
 /// </remarks>
 [DebuggerDisplay("Aki={AuthorityKeyIdentifiers.Count} EtsiTl={TrustedListMemberships.Count} Federation={FederationTrustPathEntities.Count}")]

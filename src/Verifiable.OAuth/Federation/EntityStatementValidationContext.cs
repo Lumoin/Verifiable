@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Federation;
 
 /// <summary>
 /// Input to <see cref="EntityStatementValidator"/> and the
-/// <see cref="ClaimDelegateAsync{TInput}"/>-shaped checks on
+/// <see cref="Verifiable.Core.Assessment.ClaimDelegateAsync{TInput}"/>-shaped checks on
 /// <see cref="FederationValidationChecks"/>. Carries the parsed header /
 /// statement plus pre-computed signature outcome and time-of-evaluation
 /// snapshot so individual check methods stay synchronous and side-effect-

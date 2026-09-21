@@ -9,8 +9,8 @@ namespace Verifiable.OAuth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Three distinct failure modes exist when parsing a PAR or token endpoint
-/// response. Callers must distinguish between them to respond appropriately:
+/// Four distinct failure modes exist for a client flow driving a PAR or token
+/// endpoint call. Callers must distinguish between them to respond appropriately:
 /// </para>
 /// <list type="bullet">
 ///   <item>
@@ -32,6 +32,20 @@ namespace Verifiable.OAuth;
 ///     <description>
 ///       <see cref="OAuthInvalidFieldValue"/> — a required field was present but
 ///       its value failed validation per the relevant specification.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthAuthorizationServerMetadataUnresolved"/> — the flow could not resolve the
+///       authorization server metadata document the call needed before a request could even be
+///       built.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthOutboundFetchPolicyDenied"/> — the metadata resolved and named an
+///       endpoint, but that endpoint was refused by the caller's
+///       <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> before any request was sent.
 ///     </description>
 ///   </item>
 /// </list>
@@ -137,4 +151,39 @@ public sealed record OAuthInvalidFieldValue(
     string FieldName,
     string ReceivedValue,
     string Reason,
+    DecisionSupport Support): OAuthParseError(Support);
+
+
+/// <summary>
+/// The client flow could not resolve the authorization server metadata document a PAR, token, or
+/// grant-exchange call needed before a request could even be built.
+/// </summary>
+/// <remarks>
+/// Carries the <see cref="Verifiable.OAuth.Client.ResolveAuthorizationServerMetadataDelegate"/>'s own
+/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome"/> rather than an
+/// HTTP status or a parsed field, since no usable document — sometimes no document at all, for
+/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome.InvalidIssuer"/> or
+/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome.PolicyDenied"/> —
+/// was ever obtained to parse.
+/// </remarks>
+public sealed record OAuthAuthorizationServerMetadataUnresolved(
+    Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome Outcome,
+    DecisionSupport Support): OAuthParseError(Support);
+
+
+/// <summary>
+/// The endpoint this exchange was about to dial was refused by the caller's
+/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> before any network contact.
+/// </summary>
+/// <remarks>
+/// Distinct from <see cref="OAuthAuthorizationServerMetadataUnresolved"/>: the metadata document
+/// resolved and named a token endpoint, so a document was obtained and parsed successfully — the
+/// endpoint it named simply failed the outbound-fetch policy's SSRF checks (scheme, loopback, or
+/// private-network denial per
+/// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>-style resource
+/// hardening), a policy decision rather than an unresolved document.
+/// </remarks>
+public sealed record OAuthOutboundFetchPolicyDenied(
+    Uri Endpoint,
+    string DenyReason,
     DecisionSupport Support): OAuthParseError(Support);

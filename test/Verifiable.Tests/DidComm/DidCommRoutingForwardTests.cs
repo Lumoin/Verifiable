@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
@@ -387,7 +386,7 @@ internal sealed class DidCommRoutingForwardTests
     /// A forward whose data.base64 length exceeds <see cref="RoutingForwardExtensions.MaximumForwardedMessageLength"/>
     /// is rejected as MalformedForwardedMessage — the bound is checked BEFORE decoding so a hostile forward cannot
     /// drive an unbounded allocation — with no throw. The bound is proven directly against
-    /// <see cref="RoutingForwardExtensions.InterpretForward"/> because a multi-MiB forward cannot be round-tripped
+    /// <see cref="RoutingForwardExtensions.InterpretForwardAsync"/> because a multi-MiB forward cannot be round-tripped
     /// through the anoncrypt envelope (the envelope unpack rejects it first).
     /// </summary>
     [TestMethod]
@@ -519,7 +518,8 @@ internal sealed class DidCommRoutingForwardTests
         Span<byte> multihash = stackalloc byte[1 + 1 + 32];
         multihash[0] = 0x12;
         multihash[1] = 0x20;
-        _ = SHA256.HashData(content, multihash[2..]);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(content, 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+        digest.AsReadOnlySpan().CopyTo(multihash[2..]);
 
         return "z" + TestSetup.Base58Encoder(multihash);
     }

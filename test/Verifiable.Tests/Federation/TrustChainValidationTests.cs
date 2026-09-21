@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using Verifiable.Core.Assessment;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
@@ -59,7 +60,7 @@ internal sealed class TrustChainValidationTests
             FederationTestRing.CreateNode(new EntityIdentifier("https://anchor.example.com"));
 
         MintedChain chain = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         ValidateTrustChainAsyncDelegate validate = BuildValidator();
 
@@ -89,7 +90,7 @@ internal sealed class TrustChainValidationTests
             FederationTestRing.CreateNode(new EntityIdentifier("https://anchor.example.com"));
 
         MintedChain chain = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Flip a character in the Subordinate Statement's signature segment. The
         //in-chain resolver still finds the anchor's key (in the anchor's Entity
@@ -119,5 +120,60 @@ internal sealed class TrustChainValidationTests
 
         Assert.IsFalse(outcome.IsValid,
             "A chain whose link signature does not verify under the chain-vouched key must be rejected.");
+    }
+
+
+    /// <summary>
+    /// The rejection produced when the chain fails <see href="https://openid.net/specs/openid-federation-1_0.html#section-10.2-3.5">
+    /// OpenID Federation 1.0 §10.2, rule 5</see> ("verify that the signature of ES[j] validates with a
+    /// public key in ES[j+1]["jwks"]") carries the <see cref="ClaimIssueResult"/> the claim loop was
+    /// already holding, not just the flattened reason string — a consumer can see which
+    /// <see cref="Claim"/> failed and its <see cref="ClaimOutcome"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task ChainWithATamperedLinkSignatureRejectionCarriesTheFailingClaim()
+    {
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+
+        using FederationTestRingNode subject =
+            FederationTestRing.CreateNode(new EntityIdentifier("https://leaf.example.com"));
+        using FederationTestRingNode anchor =
+            FederationTestRing.CreateNode(new EntityIdentifier("https://anchor.example.com"));
+
+        MintedChain chain = await FederationTestRing.BuildDirectChainAsync(
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string[] parts = chain.CompactJwsByPosition[1].Split('.');
+        char[] signature = parts[2].ToCharArray();
+        signature[0] = signature[0] == 'A' ? 'B' : 'A';
+        string tamperedLink = $"{parts[0]}.{parts[1]}.{new string(signature)}";
+
+        List<string> tamperedChain =
+        [
+            chain.CompactJwsByPosition[0],
+            tamperedLink,
+            chain.CompactJwsByPosition[2]
+        ];
+
+        ValidateTrustChainAsyncDelegate validate = BuildValidator();
+
+        TrustChainValidationOutcome outcome = await validate(
+            tamperedChain,
+            [anchor.Identifier],
+            now,
+            TimeSpan.FromMinutes(5),
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsValid,
+            "A chain whose link signature does not verify under the chain-vouched key must be rejected.");
+        Assert.IsNotNull(outcome.ValidationResult,
+            "The rejection from the claim loop must carry the ClaimIssueResult it was already holding.");
+
+        Claim? failingClaim = outcome.ValidationResult.Claims.FirstOrDefault(
+            static claim => claim.Outcome is not (ClaimOutcome.Success or ClaimOutcome.NotApplicable));
+
+        Assert.IsNotNull(failingClaim, "At least one claim must record the non-success outcome that rejected the chain.");
+        Assert.IsNotEmpty(failingClaim.Id.ToString(), "The failing claim must be identifiable, not anonymous.");
     }
 }

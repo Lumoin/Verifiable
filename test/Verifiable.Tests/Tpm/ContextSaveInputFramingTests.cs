@@ -88,7 +88,7 @@ internal sealed class ContextSaveInputFramingTests
 
     /// <summary>
     /// Table 225's response parses to the <c>TPMS_CONTEXT</c> the wire carried, field by field — the parser
-    /// <see cref="TpmResponseCodec.ContextSave"/> installs.
+    /// <c>TpmResponseCodec.Create&lt;ContextSaveResponse&gt;</c> installs.
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 28.2, Table 225</see>.
     /// </summary>
     [TestMethod]

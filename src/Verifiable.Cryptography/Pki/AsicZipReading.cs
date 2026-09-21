@@ -1121,7 +1121,7 @@ public static class AsicZipReading
     /// <returns>The entry's octets, which the caller owns whatever <paramref name="status"/> says.</returns>
     /// <remarks>
     /// The compressed range is decompressed directly with <see cref="DeflateStream"/> over the raw octets rather
-    /// than through <see cref="ZipArchiveEntry.Open"/>: the runtime's own entry stream validates the header's
+    /// than through <see cref="ZipArchiveEntry.Open()"/>: the runtime's own entry stream validates the header's
     /// CRC-32 as it is read and raises <see cref="InvalidDataException"/> the moment it disagrees, which would
     /// report every checksum failure as the same structural fault a corrupted deflate bitstream produces. Reading
     /// the raw range keeps the two apart — a bitstream a decompressor cannot parse is

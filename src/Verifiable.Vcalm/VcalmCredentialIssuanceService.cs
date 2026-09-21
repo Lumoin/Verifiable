@@ -16,7 +16,7 @@ namespace Verifiable.Vcalm;
 /// §3.2.1: "If a use case requires an issuer instance to attach multiple proofs … the instance MUST
 /// attach all of these proofs in response to a single call." This service applies every descriptor in
 /// <see cref="VcalmCredentialIssuance.SigningDescriptors"/> within one call. The multi-descriptor
-/// proofs are appended in list order as a §2.1.2 proof chain (each <see cref="SignAsync"/> append
+/// proofs are appended in list order as a §2.1.2 proof chain (each <see cref="CredentialDataIntegrityExtensions.SignAsync"/> append
 /// chains onto the prior via <c>previousProof</c>); the caller-supplied existing-proof case is handled
 /// per <see cref="VcalmCredentialIssuance.ExistingProofHandling"/>.
 /// </remarks>

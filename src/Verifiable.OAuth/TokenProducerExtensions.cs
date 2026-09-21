@@ -43,7 +43,7 @@ public static class TokenProducerExtensions
         /// </summary>
         /// <remarks>
         /// Applies to every token-endpoint request. Resolves a signing key from
-        /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.TokenIssuance"/>
+        /// <c>Verifiable.Cryptography.Context.KeyUsageContext.TokenIssuance</c>
         /// and emits a payload with the RFC 9068 claim set
         /// (<c>iss</c>, <c>sub</c>, <c>aud</c>, <c>exp</c>, <c>iat</c>, <c>jti</c>,
         /// <c>scope</c>, <c>client_id</c>) plus <c>typ=at+jwt</c>.

@@ -19,7 +19,7 @@ namespace Verifiable.Tests.OAuth;
 /// <summary>
 /// Proves the <see cref="JtiReplayGuard"/> store self-check over the guard directly: a store
 /// wired for other correlation kinds but that cannot resolve what it recorded under
-/// <see cref="FlowKind.JtiReplay"/> is treated as unavailable under every policy, a store that
+/// <c>FlowKind.JtiReplay</c> is treated as unavailable under every policy, a store that
 /// answers a foreign flow id is as defective as one that answers nothing, a correctly wired store
 /// records a first use and refuses the repeat, <see cref="JtiReplayPolicy.Disabled"/> never touches
 /// the store, and an oversized <c>jti</c> is refused before any store access. These exercise
@@ -52,7 +52,7 @@ internal sealed class JtiReplayGuardStoreProofTests
     /// RFC 7523 §3 rule 7: "The authorization server MAY ensure that JWTs are not replayed by
     /// maintaining the set of used "jti" values for the length of time for which the JWT would be
     /// considered valid based on the applicable "exp" instant." A store wired for other correlation
-    /// kinds but that never resolves what it saved under <see cref="FlowKind.JtiReplay"/> cannot
+    /// kinds but that never resolves what it saved under <c>FlowKind.JtiReplay</c> cannot
     /// maintain that set; under <see cref="JtiReplayPolicy.Required"/> the guard fails closed with
     /// <see cref="JtiReplayOutcome.StoreUnavailable"/> rather than answer a silent first use.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523, Section 3</see>.
@@ -340,7 +340,7 @@ internal sealed class JtiReplayGuardStoreProofTests
 
     /// <summary>
     /// How the test store answers its resolver after a save, modelling a correctly wired store, a store
-    /// wired for other correlation kinds but never for <see cref="FlowKind.JtiReplay"/>, and a store that
+    /// wired for other correlation kinds but never for <c>FlowKind.JtiReplay</c>, and a store that
     /// resolves a foreign flow id.
     /// </summary>
     private enum JtiStoreBehavior
@@ -348,7 +348,7 @@ internal sealed class JtiReplayGuardStoreProofTests
         /// <summary>The store resolves exactly the flow id it saved under the correlation key.</summary>
         ResolvesWhatItSaved,
 
-        /// <summary>Saves succeed, but the resolver never answers under <see cref="FlowKind.JtiReplay"/>.</summary>
+        /// <summary>Saves succeed, but the resolver never answers under <c>FlowKind.JtiReplay</c>.</summary>
         NeverResolvesJtiReplay,
 
         /// <summary>Saves succeed, but the resolver answers a flow id unrelated to what was saved.</summary>
@@ -359,7 +359,7 @@ internal sealed class JtiReplayGuardStoreProofTests
     /// <summary>
     /// A pooled-allocation-free in-memory <c>jti</c> correlation store standing in for a host's
     /// flow-state store, mirroring <c>HostedAuthorizationServer</c>'s save/resolve wiring under
-    /// <see cref="FlowKind.JtiReplay"/> and counting its calls so a policy that must not touch the store
+    /// <c>FlowKind.JtiReplay</c> and counting its calls so a policy that must not touch the store
     /// can be proved to have left it untouched.
     /// </summary>
     private sealed class InMemoryJtiStore
@@ -422,12 +422,12 @@ internal sealed class JtiReplayGuardStoreProofTests
         }
 
         /// <summary>
-        /// Resolves an external handle under <see cref="FlowKind.JtiReplay"/> to the saved flow id, or
+        /// Resolves an external handle under <c>FlowKind.JtiReplay</c> to the saved flow id, or
         /// answers <see langword="null"/> when the behaviour never resolves that flow kind or the key was
         /// never saved.
         /// </summary>
         /// <param name="tenantId">The tenant; accepted to match the delegate shape.</param>
-        /// <param name="flowKind">The flow kind; only <see cref="FlowKind.JtiReplay"/> is answered.</param>
+        /// <param name="flowKind">The flow kind; only <c>FlowKind.JtiReplay</c> is answered.</param>
         /// <param name="externalHandle">The correlation key to resolve.</param>
         /// <param name="context">The request context; accepted to match the delegate shape.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -457,7 +457,7 @@ internal sealed class JtiReplayGuardStoreProofTests
 /// <summary>
 /// Proves the <see cref="JtiReplayGuard"/> store self-check over the real dispatch wire on the SIOP
 /// nonce-replay consumer: with a store that saves but cannot resolve what it recorded under
-/// <see cref="FlowKind.JtiReplay"/>, the very first Self-Issued ID Token presentation fails closed
+/// <c>FlowKind.JtiReplay</c>, the very first Self-Issued ID Token presentation fails closed
 /// (SIOPv2 §11.2), and with a correctly wired store the second presentation of the same
 /// <c>(client_id, nonce)</c> is still refused as a replay. The other <c>jti</c> consumers (the JAR
 /// request object, the JWT Bearer / ID-JAG redemption, the <c>private_key_jwt</c> assertion, and the
@@ -509,7 +509,7 @@ internal sealed class JtiReplayGuardSiopWireProofTests
     /// <summary>
     /// SIOPv2 §11.2 replay defense over the real dispatch wire: the RP MUST reject a Self-Issued ID
     /// Token whose <c>nonce</c> cannot be proved unused. With a store that saves but never resolves
-    /// what it recorded under <see cref="FlowKind.JtiReplay"/>, the guard answers
+    /// what it recorded under <c>FlowKind.JtiReplay</c>, the guard answers
     /// <see cref="JtiReplayOutcome.StoreUnavailable"/> and the SIOP verifier fails the very FIRST
     /// presentation closed — the silent no-op the half-wiring would otherwise produce is caught.
     /// <see href="https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#section-11.2">SIOPv2 §11.2</see>.
@@ -518,11 +518,11 @@ internal sealed class JtiReplayGuardSiopWireProofTests
     public async Task SiopNonceFailsClosedWhenStoreCannotProveItself()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
-        HalfWireJtiReplayStore(host.Server);
+        await HalfWireJtiReplayStoreAsync(host.Server).ConfigureAwait(false);
 
         (PublicKeyMemory siopPublic, PrivateKeyMemory siopPrivate) = CreateSiopKeys();
         using(siopPublic)
@@ -560,8 +560,8 @@ internal sealed class JtiReplayGuardSiopWireProofTests
     public async Task SiopNonceReplayStillRefusedWithCorrectStore()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         (PublicKeyMemory siopPublic, PrivateKeyMemory siopPrivate) = CreateSiopKeys();
@@ -601,18 +601,21 @@ internal sealed class JtiReplayGuardSiopWireProofTests
 
     /// <summary>
     /// Rewires the host's replay store so it saves normally but never resolves anything under
-    /// <see cref="FlowKind.JtiReplay"/>, while every other correlation kind (the SIOP request handle
+    /// <c>FlowKind.JtiReplay</c>, while every other correlation kind (the SIOP request handle
     /// among them) still resolves through the host's real resolver. This is the half-wired store the
     /// guard's post-save self-check must catch.
     /// </summary>
     /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
-    private static void HalfWireJtiReplayStore(EndpointServer server)
+    private static async Task HalfWireJtiReplayStoreAsync(EndpointServer server)
     {
         ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
-        server.OAuth().ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
-            flowKind == FlowKind.JtiReplay
-                ? ValueTask.FromResult<string?>(null)
-                : original(tenantId, flowKind, externalHandle, ctx, ct);
+        await TestHostShell.AlterAsync(server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
+                flowKind == FlowKind.JtiReplay
+                    ? ValueTask.FromResult<string?>(null)
+                    : original(tenantId, flowKind, externalHandle, ctx, ct);
+        }).ConfigureAwait(false);
     }
 
 

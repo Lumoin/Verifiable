@@ -16,7 +16,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// <remarks>
 /// <para>
 /// These tests exercise the <see cref="SdJwtIssuanceExtensions"/> POCO-based issuance API for
-/// arbitrary types serializable via <see cref="JsonSerializer"/>. No W3C Verifiable Credential
+/// arbitrary types serializable via <see cref="System.Text.Json.JsonSerializer"/>. No W3C Verifiable Credential
 /// awareness — flat and nested claim maps only.
 /// </para>
 /// <para>
@@ -127,7 +127,7 @@ new HashSet<CredentialPath>(),
             Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(0, result.Disclosures);
+        Assert.IsEmpty(result.Disclosures);
         Assert.IsGreaterThan(0, result.SignedToken.Length, "Token must still be produced.");
     }
 
@@ -164,3 +164,4 @@ disclosablePaths,
         Assert.AreEqual("address", result.Disclosures[0].ClaimName);
     }
 }
+

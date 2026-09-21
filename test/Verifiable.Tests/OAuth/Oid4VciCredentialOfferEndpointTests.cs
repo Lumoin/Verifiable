@@ -55,12 +55,15 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
     public async Task ServesStoredOfferByReference()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, OfferCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, OfferCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        host.Server.OAuth().ResolveCredentialOfferAsync =
-            (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
-                string.Equals(offerId, OfferId, StringComparison.Ordinal) ? BuildStoredOffer() : null);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCredentialOfferAsync =
+                (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
+                    string.Equals(offerId, OfferId, StringComparison.Ordinal) ? BuildStoredOffer() : null);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchOfferAsync(host, segment, OfferId).ConfigureAwait(false);
 
@@ -89,11 +92,14 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
     public async Task UnknownOfferIdYields404()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, OfferCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, OfferCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        host.Server.OAuth().ResolveCredentialOfferAsync =
-            (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(null);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCredentialOfferAsync =
+                (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(null);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchOfferAsync(host, segment, "no-such-offer").ConfigureAwait(false);
 
@@ -111,7 +117,7 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
     public async Task OfferEndpointAbsentWhenResolveSeamUnwired()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, OfferCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, OfferCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         //The resolve seam is deliberately left unwired.

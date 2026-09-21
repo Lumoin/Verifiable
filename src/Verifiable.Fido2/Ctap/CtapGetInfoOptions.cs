@@ -18,7 +18,7 @@ namespace Verifiable.Fido2.Ctap;
 /// <see cref="PinUvAuthToken"/> (<c>pinUvAuthToken</c>), <see cref="SetMinPinLength"/>
 /// (<c>setMinPINLength</c>), and <see cref="MakeCredUvNotRqd"/> (<c>makeCredUvNotRqd</c>) are modeled,
 /// in the record's own declaration order matching the canonical CBOR wire order documented on
-/// <see cref="Verifiable.Cbor.Ctap.CtapGetInfoResponseCborWriter"/> — <see cref="Ep"/> declares FIRST
+/// <c>Verifiable.Cbor.Ctap.CtapGetInfoResponseCborWriter</c> — <see cref="Ep"/> declares FIRST
 /// because <c>"ep"</c> (length 2, <c>'e'</c> 0x65) sorts before every other modeled option ID
 /// including the other length-2 pair <c>"rk"</c>/<c>"uv"</c> (CTAP2 canonical CBOR sorts map keys
 /// shorter-first, then bytewise lexically for ties) — the remaining option-ID table

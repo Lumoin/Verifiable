@@ -77,7 +77,7 @@ public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? 
     /// <summary>
     /// A sensible general-purpose salt length in bytes (16 bytes = 128 bits) —
     /// NIST SP 800-132's 128-bit minimum for salts. A convenience default for
-    /// <see cref="Generate(Tag, BaseMemoryPool)"/> and an explicit-provenance
+    /// <see cref="Generate(int, Tag, FillEntropyDelegate, EntropyHealthObservation, BaseMemoryPool, Activity?)"/> and an explicit-provenance
     /// alternative to a literal length; it is <strong>not</strong> a protocol
     /// rule. Salt is a general primitive — its <see cref="Length"/> flows through
     /// the seams and each consumer decides whether a length is sufficient against
@@ -102,6 +102,11 @@ public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? 
     /// The health observation for the entropy source at generation time.
     /// </param>
     /// <param name="pool">The memory pool to allocate from.</param>
+    /// <param name="lifetime">
+    /// Optional OTel activity spanning the generated salt's lifetime. Started by the backend;
+    /// stopped on <see cref="SensitiveMemory.Dispose()"/>. Pass <see langword="null"/>
+    /// when no OTel listener is active.
+    /// </param>
     /// <returns>A new <see cref="Salt"/> containing cryptographically random bytes.</returns>
     public static Salt Generate(
         int byteLength,

@@ -96,13 +96,33 @@ public static class JarmResponseValidation
             {
                 using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool);
                 ReadOnlySpan<byte> header = headerBytes.Memory.Span;
+
+                //RFC 7515 §4: the Header Parameter names MUST be unique. Gate the whole decoded header
+                //for well-formedness — a repeated "alg"/"kid" at any nesting depth — before extracting
+                //either, so the algorithm/key-id selection below never runs against a first occurrence
+                //while a duplicate second occurrence goes unnoticed.
+                if(!JwkJsonReader.IsWellFormedJsonDocument(header))
+                {
+                    return new JarmResponseValidationResult();
+                }
+
                 alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
                 kid = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.KidUtf8);
 
                 using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
-                claims = payloadDeserializer(payloadBytes.Memory.Span);
+                ReadOnlySpan<byte> payload = payloadBytes.Memory.Span;
+
+                //RFC 7519 §4: the Claim Names within a JWT Claims Set MUST be unique. Gate the payload the
+                //same way before it reaches the deserializer, so iss/aud/exp below are read off a document
+                //already known to carry no duplicate claim name at any depth.
+                if(!JwkJsonReader.IsWellFormedJsonDocument(payload))
+                {
+                    return new JarmResponseValidationResult();
+                }
+
+                claims = payloadDeserializer(payload);
             }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+            catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
             {
                 claims = null;
             }

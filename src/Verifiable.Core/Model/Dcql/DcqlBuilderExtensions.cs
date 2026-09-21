@@ -11,7 +11,7 @@ namespace Verifiable.Core.Model.Dcql;
 /// This class follows the same pattern as <c>DidBuilderExtensions</c>: the builder
 /// remains focused on the fold/aggregate mechanics while these extensions provide
 /// domain-specific, composable construction methods. Each method adds a transformation
-/// via <see cref="Verifiable.Foundation.Builder{TResult, TState, TBuilder}.With"/>
+/// via <see cref="Builder{TResult, TState, TBuilder}.With(Func{TResult, TBuilder, TState, CancellationToken, ValueTask{TResult}})"/>
 /// that modifies the <see cref="DcqlQueryBuildState"/> during the fold.
 /// </para>
 /// <para>
@@ -61,7 +61,7 @@ public static class DcqlBuilderExtensions
         /// REQUIRED — "vct_values: REQUIRED. A non-empty array of strings that specifies allowed
         /// values for the type of the requested Verifiable Credential" — so a <c>dc+sd-jwt</c>
         /// query without it is not expressible here, and every query this builds is one
-        /// <see cref="DcqlQueryExtensions"/>'s validation and
+        /// <see cref="Verifiable.Core.Dcql.DcqlQueryExtensions"/>'s validation and
         /// <see cref="Verifiable.Core.Dcql.DcqlEvaluator"/> accept.
         /// </remarks>
         /// <param name="id">The credential query identifier.</param>
@@ -95,7 +95,6 @@ public static class DcqlBuilderExtensions
         /// Adds a transformation that registers an ISO mdoc credential query with
         /// the given doctype and claims.
         /// </summary>
-        /// <param name="builder">The builder instance.</param>
         /// <param name="id">The credential query identifier.</param>
         /// <param name="doctypeValue">The required mdoc document type.</param>
         /// <param name="claims">The claims to request.</param>

@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// Wallet dereferences and echoed by the Wallet as the <c>state</c> form
 /// field in the direct_post per OID4VP 1.0 §6.1 and RFC 6749 §4.1.1. The
 /// application's
-/// <see cref="Verifiable.OAuth.Server.AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/>
 /// maps this token back to <paramref name="FlowId"/> on continuing-flow
 /// requests.
 /// </param>

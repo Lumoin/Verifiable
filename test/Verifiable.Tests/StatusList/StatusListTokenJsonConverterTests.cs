@@ -5,6 +5,7 @@ using System.Text.Json;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.StatusList;
+using Verifiable.Json;
 using Verifiable.Json.StatusList;
 using Verifiable.Tests.TestInfrastructure;
 using StatusListType = Verifiable.Core.StatusList.StatusList;
@@ -69,7 +70,7 @@ internal sealed class StatusListTokenJsonConverterTests
     /// nested Status List converter itself, so these carry no Status List specific configuration; they
     /// are the project defaults so the call shape matches how a serializer would invoke the converter.
     /// </summary>
-    private static JsonSerializerOptions Options { get; } = new JsonSerializerOptions().ApplyVerifiableDefaults();
+    private static JsonSerializerOptions Options { get; } = new JsonSerializerOptions().ApplyVerifiableDefaults(Pool);
 
     /// <summary>Gets or sets the context for the current test run.</summary>
     public TestContext TestContext { get; set; } = null!;

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
@@ -34,7 +35,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// per-format verify steps and the <c>ClaimIssuer</c> pipeline.
 /// </para>
 /// <para>
-/// Each <see cref="PresentJarAsync"/> invocation is a complete presentation:
+/// Each <see cref="PresentJarAsync(PresentJarOptions, ExchangeContext, CancellationToken)"/> invocation is a complete presentation:
 /// it constructs a fresh Wallet PDA, advances it through all transitions, and
 /// returns the encrypted JWE and the terminal state. Persisted-state Wallet
 /// scenarios compose <see cref="WalletFlowAutomaton.CreateFromSnapshot"/>
@@ -116,7 +117,7 @@ public sealed class Oid4VpWalletClient
     /// <param name="presentJarOptions">Per-call inputs.</param>
     /// <param name="context">
     /// The per-operation exchange context. The wallet stamps
-    /// <see cref="ExchangeContextExtensions.ValidationTime"/> from its
+    /// <c>ExchangeContextExtensions.ValidationTime</c> from its
     /// <see cref="TimeProvider"/> before resolving the JAR signing key, and
     /// threads the context into the key resolver, the presentation drop-out, and
     /// the transport delegates. The application places per-tenant trust material
@@ -364,6 +365,14 @@ public sealed class Oid4VpWalletClient
         using IMemoryOwner<byte> headerBytes = base64UrlDecoder(
             compactJar.AsSpan(0, firstDot).ToString(), pool);
 
+        //RFC 7515 §4: gate the peeked header for well-formedness — a repeated "alg" would otherwise let
+        //this signed/unsigned dispatch see a different value than the one the authoritative JWS verify
+        //later rejects the request for, diverging on which occurrence the two readers acted on.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(headerBytes.Memory.Span))
+        {
+            return null;
+        }
+
         return JwkJsonReader.ExtractStringValue(headerBytes.Memory.Span, WellKnownJoseHeaderNames.AlgUtf8);
     }
 
@@ -428,6 +437,43 @@ public sealed class Oid4VpWalletClient
                 "(PresentJarOptions.ExpectedVerifierClientId) and refuses a request bound to any " +
                 "other client_id — the OID4VP mix-up defence.");
         }
+    }
+
+
+    /// <summary>
+    /// Evaluates <paramref name="endpoint"/> against <paramref name="context"/>'s
+    /// <see cref="OutboundFetchPolicy"/> before this client dials it, refusing before any network
+    /// contact when denied. <see cref="OutboundRequest"/>'s remarks: the endpoint a wallet POSTs to
+    /// (a Verifier's <c>response_uri</c>, or its <c>request_uri</c> for the §5.10
+    /// <c>request_uri_method=post</c> fetch) is itself taken from discovered request data, so a
+    /// malicious or misconfigured request could point it at an internal, loopback, or
+    /// cloud-metadata address — the same SSRF vector a discovered GET target is, gated the same
+    /// way. The reason is never echoed onto a wire body; it names only the operation and the
+    /// policy's own deny reason for the caller's diagnostics.
+    /// </summary>
+    /// <param name="endpoint">The endpoint this client is about to dial.</param>
+    /// <param name="context">The per-operation exchange context carrying the policy.</param>
+    /// <param name="configurationPolicy">
+    /// The deployment default applied when <paramref name="context"/> carries none — the
+    /// <see cref="Client.OAuthClientInfrastructure.OutboundFetchPolicy"/> or
+    /// <see cref="Oid4VpWalletConfiguration.OutboundFetchPolicy"/> of whichever configuration
+    /// owns the transport this call dials.
+    /// </param>
+    /// <param name="operationDescription">Names the operation in the refusal message.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the policy denies <paramref name="endpoint"/>.</exception>
+    private static void EnsureOutboundPolicyAllows(
+        Uri endpoint, ExchangeContext context, OutboundFetchPolicy configurationPolicy, string operationDescription)
+    {
+        OutboundFetchPolicy policy = context.ResolveOutboundFetchPolicy(configurationPolicy);
+        OutboundFetchDecision decision = policy.Evaluate(endpoint);
+
+        if(decision.IsAllowed)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{operationDescription} was refused by the outbound fetch policy: {decision.DenyReason}");
     }
 
 
@@ -698,6 +744,8 @@ public sealed class Oid4VpWalletClient
             postFields[OAuthRequestParameterNames.State] = request.State;
         }
 
+        EnsureOutboundPolicyAllows(request.ResponseUri, context, Infrastructure.OutboundFetchPolicy, "The direct_post response to response_uri");
+
         HttpResponseData postResponse = await Infrastructure.SendFormPostAsync(
             request.ResponseUri,
             postFields,
@@ -736,7 +784,7 @@ public sealed class Oid4VpWalletClient
     /// Drives the OID4VP 1.0 §5.10 request_uri_method=post step: builds the
     /// wallet_metadata JSON, generates a fresh wallet_nonce, POSTs both as
     /// form fields to RequestUri via the configured
-    /// <see cref="SendFormPostDelegate"/>, and returns the JAR delivered in
+    /// <see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/>, and returns the JAR delivered in
     /// the response body alongside the nonce sent (so the PDA trace can
     /// reflect it). Caller validates the JAR's wallet_nonce echo on the
     /// existing decrypt-and-verify path.
@@ -782,6 +830,8 @@ public sealed class Oid4VpWalletClient
             [Oid4VpAuthorizationRequestParameterNames.WalletNonce] = walletNonce,
             [Oid4VpAuthorizationRequestParameterNames.WalletMetadata] = walletMetadataJson
         };
+
+        EnsureOutboundPolicyAllows(presentJarOptions.RequestUri, context, WalletConfiguration.OutboundFetchPolicy, "The request_uri_method=post JAR fetch");
 
         HttpResponseData response = await WalletConfiguration.SendFormPost(
             presentJarOptions.RequestUri,

@@ -217,6 +217,19 @@ internal static class BouncyCastleTpmEccSigningBackend
     private static X9ECParameters ResolveCurve(TpmEccCurveConstants curve) => curve switch
     {
         TpmEccCurveConstants.TPM_ECC_NIST_P256 => SecNamedCurves.GetByName("secp256r1"),
+        TpmEccCurveConstants.TPM_ECC_NONE => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_NIST_P192 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_NIST_P224 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_NIST_P384 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_NIST_P521 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_BN_P256 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_BN_P638 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_SM2_P256 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_BP_P256_R1 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_BP_P384_R1 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_BP_P512_R1 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_CURVE_25519 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
+        TpmEccCurveConstants.TPM_ECC_CURVE_448 => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported."),
         _ => throw new NotSupportedException($"The in-house signing backend models only NIST P-256; '{curve}' is not supported.")
     };
 

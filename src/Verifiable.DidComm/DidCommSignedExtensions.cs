@@ -481,6 +481,7 @@ public static class DidCommSignedExtensions
         DidCommRotationError.PriorDidResolutionFailed => DidCommSignatureVerificationError.PriorDidResolutionFailed,
         DidCommRotationError.RotationSignerNotAuthorized => DidCommSignatureVerificationError.RotationSignerNotAuthorized,
         DidCommRotationError.RotationSignatureInvalid => DidCommSignatureVerificationError.RotationSignatureInvalid,
+        DidCommRotationError.None => DidCommSignatureVerificationError.RotationJwtMalformed,
         _ => DidCommSignatureVerificationError.RotationJwtMalformed
     };
 

@@ -227,6 +227,16 @@ public static class CBAdESSignatureFacts
                         //is not performed here, so the whole raw value is surfaced as one certificate entry.
                         certificates.Add(CopyBytes(x5chain.Value, PkiCertificateTags.X509Certificate, pool));
                         break;
+
+                    case CBAdESUnsignedHeaderElementReferences:
+                    case CBAdESUnsignedHeaderElementFullCounterSignature:
+                    case CBAdESUnsignedHeaderElementAbbreviatedCounterSignature:
+                    case CBAdESUnsignedHeaderElementSignaturePolicyStore:
+                    case CBAdESUnsignedHeaderElementUnknown:
+                        //Carries no embedded timestamp, validation-data, or certificate-chain material this
+                        //collection copies; an explicit no-op arm preserving this switch's original silent
+                        //fall-through for every other kind.
+                        break;
                 }
             }
         }
@@ -460,12 +470,36 @@ public static class CBAdESSignatureFacts
                 case CBAdESDetachedObjectsUriHashMechanismDigestViolation:
                     Downgrade(attributes, "sigD");
                     break;
+
+                case CBAdESCertificateReferenceTriWayViolation:
+                case CBAdESCwtClaimsMissingViolation:
+                case CBAdESSignaturePolicyStoreGateViolation:
+                case CBAdESCoseSignBodyLayerPlacementViolation:
+                case CBAdESMd5DigestAlgorithmViolation:
+                case CBAdESSignatureTimestampMissingViolation:
+                case CBAdESSignatureTimestampTokenCountViolation:
+                case CBAdESArchiveTimestampMissingViolation:
+                case CBAdESTimestampTokenNotBaselineViolation:
+                case CBAdESRefsFamilyForbiddenViolation:
+                case CBAdESReferencesTimestampGenerationGateViolation:
+                case CBAdESTimestampValidationDataServiceViolation:
+                case CBAdESReferencesSigningCertificateExclusionViolation:
+                case CBAdESRefsFamilyMd5DigestAlgorithmViolation:
+                case CBAdESReferencesValidationDataConsistencyViolation:
+                case CBAdESTimestampSignerCertificateCoverageViolation:
+                case CBAdESUndisclosedAlternativeMechanismViolation:
+                case CBAdESCounterSignatureMalformedViolation:
+                case CBAdESCounterSignatureDetachedObjectsViolation:
+                case CBAdESCounterSignatureVerificationFailedViolation:
+                    //No attribute this violation kind names is downgraded by this pass; an explicit no-op
+                    //arm preserving this switch's original silent fall-through for every other kind.
+                    break;
             }
         }
 
-        /// <summary>Replaces the named attribute's entry with an <c>IsWellFormed = false</c> copy, when present.</summary>
-        /// <param name="candidates">The attributes to search and update in place.</param>
-        /// <param name="identifier">The Table 14 column-1 name to downgrade.</param>
+        //Replaces the named attribute's entry with an IsWellFormed = false copy, when present.
+        //candidates: the attributes to search and update in place.
+        //identifier: the Table 14 column-1 name to downgrade.
         static void Downgrade(List<SignatureAttributeFacts> candidates, string identifier)
         {
             for(int i = 0; i < candidates.Count; ++i)

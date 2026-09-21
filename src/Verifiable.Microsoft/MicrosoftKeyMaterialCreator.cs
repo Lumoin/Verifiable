@@ -560,6 +560,7 @@ public static class MicrosoftKeyMaterialCreator
     /// <param name="algorithm">The algorithm the created key pair represents.</param>
     /// <param name="purpose">The purpose (signing, exchange) the created key pair is registered for.</param>
     /// <param name="memoryPool">The memory pool to allocate key material from.</param>
+    /// <param name="timeProvider">Time source stamped onto the produced <see cref="KeyMaterialGeneratedEvent"/>.</param>
     /// <returns>The created key pair, paired with the <see cref="KeyMaterialGeneratedEvent"/> describing it.</returns>
     public static (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Keys, CryptoEvent? Event) CreateKeysWithEvent(
         PublicPrivateKeyCreationDelegate<PublicKeyMemory, PrivateKeyMemory> creator,

@@ -45,7 +45,7 @@ public static class TrustChainValidation
     /// </param>
     /// <param name="base64UrlDecoder">
     /// Decodes the base64url segments of each compact JWS — used both to
-    /// materialize the header/payload bytes and by <see cref="Jws.VerifyAsync"/>.
+    /// materialize the header/payload bytes and by <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>.
     /// </param>
     /// <param name="keyResolver">
     /// Resolves the verification key for each statement from its issuer
@@ -169,7 +169,7 @@ public static class TrustChainValidation
                 if(claim.Outcome is not (ClaimOutcome.Success or ClaimOutcome.NotApplicable))
                 {
                     return TrustChainValidationOutcome.Rejected(
-                        $"Chain validation produced non-success claim {claim.Id} ({claim.Outcome}).");
+                        $"Chain validation produced non-success claim {claim.Id} ({claim.Outcome}).", result);
                 }
             }
 

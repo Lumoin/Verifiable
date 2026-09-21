@@ -14,7 +14,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Apdu;
 
 /// <summary>
-/// Drives the real Terminal Authentication terminal (<see cref="TerminalAuthentication.AuthenticateAsync"/>)
+/// Drives the real Terminal Authentication terminal (<see cref="TerminalAuthentication.AuthenticateAsync(ApduDevice, SecureMessagingSession, IReadOnlyList{CardVerifiableCertificate}, PrivateKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken)"/>)
 /// against the stateful <see cref="CardSimulator"/> through the full EACv1 ordering — Basic Access Control,
 /// then Chip Authentication, then Terminal Authentication over the re-keyed session — for a terminal whose
 /// Terminal Authentication key is RSA (an <c>id-TA-RSA-v1-5-SHA-256</c> key). The certificate chain stays

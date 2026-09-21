@@ -242,8 +242,8 @@ namespace Verifiable.JCose
         /// Returns the equivalent static instance, or the original instance if none match.
         /// This conversion is optional but allows for performance optimizations when comparing method values elsewhere.
         /// </summary>
-        /// <param name="property">The property to canocalize.</param>
-        /// <returns>The equivalent static instance of <paramref name="property"/>, or the original instance if none match.</returns>
+        /// <param name="crv">The curve value to canonicalize.</param>
+        /// <returns>The equivalent static instance of <paramref name="crv"/>, or the original instance if none match.</returns>
         public static string GetCanonicalizedValue(string crv) => crv switch
         {
             string when IsEd25519(crv) => Ed25519,

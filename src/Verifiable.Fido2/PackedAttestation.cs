@@ -380,6 +380,9 @@ public static class PackedAttestation
     /// Rents a buffer sized to <paramref name="authenticatorData"/> plus <paramref name="clientDataHash"/>
     /// and fills it with their concatenation — the bytes every packed attestation signature covers.
     /// </summary>
+    /// <param name="authenticatorData">The authenticator data bytes, copied first into the returned buffer.</param>
+    /// <param name="clientDataHash">The client data hash, copied immediately after <paramref name="authenticatorData"/>.</param>
+    /// <param name="pool">The memory pool the returned buffer is rented from.</param>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
     private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {

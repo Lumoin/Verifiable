@@ -14,7 +14,7 @@ namespace Verifiable.Cryptography;
 /// re-resolving from the registry per call.
 /// </para>
 /// <para>
-/// The default <paramref name="defaultContext"/> applies to every operation that
+/// The default <see cref="DefaultContext"/> applies to every operation that
 /// does not pass its own context. Use cases include FAPI 2.0 deployments that
 /// thread an audience identifier or policy code through every HMAC verification.
 /// </para>

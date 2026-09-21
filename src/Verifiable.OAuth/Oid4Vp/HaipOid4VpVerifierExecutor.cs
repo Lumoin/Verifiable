@@ -63,6 +63,7 @@ public static class HaipOid4VpVerifierExecutor
     /// <param name="dcqlQuerySerializer">Delegate for serializing DCQL queries.</param>
     /// <param name="clientMetadataSerializer">Delegate for serializing client metadata.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
+    /// <param name="encoder">Delegate for Base64Url encoding.</param>
     /// <param name="resolveIssuerKey">
     /// Resolves an issuer public key from its identifier for credential signature verification.
     /// </param>
@@ -71,6 +72,14 @@ public static class HaipOid4VpVerifierExecutor
     /// </param>
     /// <param name="computeSdJwtHashInput">
     /// Computes the <c>sd_hash</c> input string. Wired to <c>SdJwtSerializer.GetSdJwtForHashing</c>.
+    /// </param>
+    /// <param name="computeDigest">
+    /// Async digest delegate for status list and disclosure hash computation over multi-segment or
+    /// hardware/network-backed input.
+    /// </param>
+    /// <param name="vpValidators">
+    /// The claims-query validators keyed by credential format identifier, dispatched against each
+    /// presented credential's <see cref="ValidationContext"/>.
     /// </param>
     /// <param name="keyAgreementDecryptDelegate">
     /// ECDH-ES key agreement decryption delegate per
@@ -99,6 +108,27 @@ public static class HaipOid4VpVerifierExecutor
     /// encryption path to populate the EPK header. <see langword="null"/>
     /// when JAR encryption is not supported.
     /// </param>
+    /// <param name="mdocSeams">
+    /// Optional CBOR/COSE serialization seams enabling <c>mso_mdoc</c> VP-token verification.
+    /// <see langword="null"/> disables mdoc support.
+    /// </param>
+    /// <param name="sdCwtSeams">
+    /// Optional CBOR/COSE serialization seams enabling <c>dc+sd-cwt</c> VP-token verification.
+    /// <see langword="null"/> disables SD-CWT support.
+    /// </param>
+    /// <param name="saltReuseSeam">
+    /// Optional disclosure-commitment reuse detector guarding against a replayed disclosure salt across
+    /// presentations. <see langword="null"/> leaves reuse detection off.
+    /// </param>
+    /// <param name="assessDisclosure">
+    /// Optional DCQL-satisfaction and over-disclosure assessment delegate applied to a presentation's
+    /// disclosed claims. <see langword="null"/> skips the assessment.
+    /// </param>
+    /// <param name="resolveVerifiedStatusListToken">
+    /// Optional resolver of a credential's referenced, verified Status List Token, consulted before
+    /// <paramref name="credentialStatusPolicy"/> is applied. <see langword="null"/> leaves every
+    /// credential's status unresolved.
+    /// </param>
     /// <param name="parseX5c">
     /// Optional parser for a <c>dc+sd-jwt</c> issuer JWS's <c>x5c</c> header (RFC 7515 §4.1.6), the
     /// <c>aki</c>/<c>etsi_tl</c> evidence source for <paramref name="resolveTrustedAuthorityEvidence"/>.
@@ -108,7 +138,7 @@ public static class HaipOid4VpVerifierExecutor
     /// Optional resolver of the OID4VP 1.0 §6.1.1 trust evidence for a <c>dc+sd-jwt</c> credential
     /// from its <paramref name="parseX5c"/>-parsed certificate chain and verified <c>iss</c>, wired
     /// to e.g. <see cref="TrustedAuthorityEvidenceResolution.Build"/>, surfaced on
-    /// <see cref="VpTokenParsed.TrustedAuthorityEvidence"/>. <see langword="null"/> surfaces no
+    /// <see cref="Oid4Vp.Server.VpCredentialClaims.TrustedAuthorityEvidence"/>. <see langword="null"/> surfaces no
     /// evidence, so a <c>trusted_authorities</c> constraint on a <c>dc+sd-jwt</c> query fails closed
     /// (<see cref="Verifiable.Core.Dcql.DcqlFailureReasons.TrustedAuthorityEvidenceAbsent"/>).
     /// </param>
@@ -233,10 +263,46 @@ public static class HaipOid4VpVerifierExecutor
     /// <param name="dcqlQuerySerializer">Delegate for serializing DCQL queries.</param>
     /// <param name="clientMetadataSerializer">Delegate for serializing client metadata.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
+    /// <param name="encoder">Delegate for Base64Url encoding.</param>
     /// <param name="resolveIssuerKey">
     /// Resolves an issuer public key from its identifier for credential signature verification.
     /// </param>
+    /// <param name="parseSdJwtToken">
+    /// Parses an SD-JWT from its wire format. Wired to <c>SdJwtSerializer.ParseToken</c>.
+    /// </param>
+    /// <param name="computeSdJwtHashInput">
+    /// Computes the <c>sd_hash</c> input string. Wired to <c>SdJwtSerializer.GetSdJwtForHashing</c>.
+    /// </param>
+    /// <param name="computeDigest">
+    /// Async digest delegate for status list and disclosure hash computation over multi-segment or
+    /// hardware/network-backed input.
+    /// </param>
+    /// <param name="vpValidators">
+    /// The claims-query validators keyed by credential format identifier, dispatched against each
+    /// presented credential's <see cref="ValidationContext"/>.
+    /// </param>
     /// <param name="pool">Memory pool for allocations.</param>
+    /// <param name="mdocSeams">
+    /// Optional CBOR/COSE serialization seams enabling <c>mso_mdoc</c> VP-token verification.
+    /// <see langword="null"/> disables mdoc support.
+    /// </param>
+    /// <param name="sdCwtSeams">
+    /// Optional CBOR/COSE serialization seams enabling <c>dc+sd-cwt</c> VP-token verification.
+    /// <see langword="null"/> disables SD-CWT support.
+    /// </param>
+    /// <param name="saltReuseSeam">
+    /// Optional disclosure-commitment reuse detector guarding against a replayed disclosure salt across
+    /// presentations. <see langword="null"/> leaves reuse detection off.
+    /// </param>
+    /// <param name="assessDisclosure">
+    /// Optional DCQL-satisfaction and over-disclosure assessment delegate applied to a presentation's
+    /// disclosed claims. <see langword="null"/> skips the assessment.
+    /// </param>
+    /// <param name="resolveVerifiedStatusListToken">
+    /// Optional resolver of a credential's referenced, verified Status List Token, consulted before
+    /// <paramref name="credentialStatusPolicy"/> is applied. <see langword="null"/> leaves every
+    /// credential's status unresolved.
+    /// </param>
     /// <param name="parseX5c">
     /// Optional parser for a <c>dc+sd-jwt</c> issuer JWS's <c>x5c</c> header (RFC 7515 §4.1.6), the
     /// <c>aki</c>/<c>etsi_tl</c> evidence source for <paramref name="resolveTrustedAuthorityEvidence"/>.
@@ -246,7 +312,7 @@ public static class HaipOid4VpVerifierExecutor
     /// Optional resolver of the OID4VP 1.0 §6.1.1 trust evidence for a <c>dc+sd-jwt</c> credential
     /// from its <paramref name="parseX5c"/>-parsed certificate chain and verified <c>iss</c>, wired
     /// to e.g. <see cref="TrustedAuthorityEvidenceResolution.Build"/>, surfaced on
-    /// <see cref="VpTokenParsed.TrustedAuthorityEvidence"/>. <see langword="null"/> surfaces no
+    /// <see cref="Oid4Vp.Server.VpCredentialClaims.TrustedAuthorityEvidence"/>. <see langword="null"/> surfaces no
     /// evidence, so a <c>trusted_authorities</c> constraint on a <c>dc+sd-jwt</c> query fails closed
     /// (<see cref="Verifiable.Core.Dcql.DcqlFailureReasons.TrustedAuthorityEvidenceAbsent"/>).
     /// </param>
@@ -348,6 +414,7 @@ public static class HaipOid4VpVerifierExecutor
     }
 
 
+    /// <summary>Builds the verifier action dispatcher whose callbacks use each request's admitted wiring.</summary>
     private static OAuthActionExecutor BuildExecutor(
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
@@ -386,7 +453,7 @@ public static class HaipOid4VpVerifierExecutor
 
         executor.Register<SignJarAction>(async (action, context, ct) =>
         {
-            EndpointServer server = context.Server!;
+            EndpointServer server = context.RequestServer!;
             var oauth = server.OAuth();
 
             TenantId tenantId = context.TenantId
@@ -562,7 +629,7 @@ public static class HaipOid4VpVerifierExecutor
 
         executor.Register<DecryptResponseAction>(async (action, context, ct) =>
         {
-            EndpointServer server = context.Server!;
+            EndpointServer server = context.RequestServer!;
             var oauth = server.OAuth();
 
             PrivateKeyMemory? decryptionKey = await oauth.Cryptography.DecryptionKeyResolver!(
@@ -618,6 +685,16 @@ public static class HaipOid4VpVerifierExecutor
                     using IMemoryOwner<byte> headerBytes = decoder(
                         action.EncryptedResponseJwt.AsSpan(0, firstDot).ToString(), pool);
 
+                    //RFC 7516 §4: gate the peeked header for well-formedness — a repeated "enc" would
+                    //otherwise let this allowlist check see a different value than the one the
+                    //authoritative JWE parse below rejects the message for.
+                    if(!JwkJsonReader.IsWellFormedJsonDocument(headerBytes.Memory.Span))
+                    {
+                        throw new FormatException(
+                            "JWE protected header is not well-formed JSON, or contains a duplicate "
+                            + "Header Parameter name.");
+                    }
+
                     string? enc = JwkJsonReader.ExtractStringValue(
                         headerBytes.Memory.Span, "enc"u8);
 
@@ -669,6 +746,17 @@ public static class HaipOid4VpVerifierExecutor
                 }
 
                 using DecryptedContent ownedDecrypted = decrypted;
+
+                //RFC 7519 §4 uniqueness posture applied to the decrypted response: AEAD authentication
+                //proves the plaintext came from whoever holds the key, not that it carries no duplicate
+                //claim name — a repeated "vp_token" would let this reader select the first occurrence
+                //while a duplicate second occurrence goes unnoticed. Gate before extracting a single field.
+                if(!JwkJsonReader.IsWellFormedJsonDocument(ownedDecrypted.AsReadOnlySpan()))
+                {
+                    throw new FormatException(
+                        "The decrypted direct_post.jwt response is not well-formed JSON, or carries a "
+                        + "duplicate claim name.");
+                }
 
                 //OID4VP 1.0 §8.3.1: the direct_post.jwt JWE plaintext is the response JWT
                 //payload carrying the Authorization Response parameters as NAMED CLAIMS, so
@@ -849,8 +937,8 @@ public static class HaipOid4VpVerifierExecutor
 
                         parsed = await SdJwtVpTokenVerification.VerifyAsync(
                             compactPresentation, credentialQueryId, parseSdJwtToken, computeSdJwtHashInput,
-                            resolveIssuerKey, computeDigest, decoder, encoder, pool, saltReuseSeam, ct,
-                            parseX5c, resolveTrustedAuthorityEvidence)
+                            resolveIssuerKey, computeDigest, decoder, encoder, pool, saltReuseSeam,
+                            parseX5c, resolveTrustedAuthorityEvidence, context, ct)
                             .ConfigureAwait(false);
                     }
                     else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.MsoMdoc, StringComparison.Ordinal))
@@ -1029,7 +1117,7 @@ public static class HaipOid4VpVerifierExecutor
         //the handler skips the JWE parse / decrypt / enc-allowlist gate.
         executor.Register<ProcessVpTokenAction>(async (action, context, ct) =>
         {
-            EndpointServer server = context.Server!;
+            EndpointServer server = context.RequestServer!;
             var oauth = server.OAuth();
 
             context.SetTransactionNonce(action.Nonce);
@@ -1134,8 +1222,8 @@ public static class HaipOid4VpVerifierExecutor
                     {
                         parsed = await SdJwtVpTokenVerification.VerifyAsync(
                             compactPresentation, credentialQueryId, parseSdJwtToken, computeSdJwtHashInput,
-                            resolveIssuerKey, computeDigest, decoder, encoder, pool, saltReuseSeam, ct,
-                            parseX5c, resolveTrustedAuthorityEvidence)
+                            resolveIssuerKey, computeDigest, decoder, encoder, pool, saltReuseSeam,
+                            parseX5c, resolveTrustedAuthorityEvidence, context, ct)
                             .ConfigureAwait(false);
                     }
                     else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdCwt, StringComparison.Ordinal))
@@ -1373,6 +1461,16 @@ public static class HaipOid4VpVerifierExecutor
 
         using IMemoryOwner<byte> headerBytes = decoder(
             encryptedResponseJwt.AsSpan(0, firstDot).ToString(), pool);
+
+        //RFC 7516 §4: gate the peeked header for well-formedness — a repeated "apu" would otherwise let
+        //this reader select a different mdoc_generated_nonce than the one the authoritative JWE parse
+        //acts on.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(headerBytes.Memory.Span))
+        {
+            throw new FormatException(
+                "JWE protected header is not well-formed JSON, or contains a duplicate Header "
+                + "Parameter name.");
+        }
 
         string apu = JwkJsonReader.ExtractStringValue(headerBytes.Memory.Span, "apu"u8)
             ?? throw new FormatException(

@@ -45,6 +45,7 @@ internal static class JsonElementConversion
             JsonValueKind.Null => null,
             JsonValueKind.Number => NarrowNumber(element),
             JsonValueKind.Object or JsonValueKind.Array => ConvertContainer(element),
+            JsonValueKind.Undefined => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}."),
             _ => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}.")
         };
     }
@@ -120,6 +121,9 @@ internal static class JsonElementConversion
         JsonValueKind.False => false,
         JsonValueKind.Null => null,
         JsonValueKind.Number => NarrowNumber(element),
+        JsonValueKind.Undefined => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}."),
+        JsonValueKind.Object => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}."),
+        JsonValueKind.Array => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}."),
         _ => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}.")
     };
 

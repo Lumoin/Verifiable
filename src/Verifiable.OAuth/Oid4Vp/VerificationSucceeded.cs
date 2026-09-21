@@ -7,7 +7,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
 /// Carries the verified credentials extracted from the vp_token.
-/// Transitions from <see cref="ResponseReceived"/> to <see cref="PresentationVerified"/>.
+/// Transitions from <see cref="Verifiable.OAuth.Oid4Vp.States.ResponseReceivedState"/> to <see cref="Verifiable.OAuth.Oid4Vp.States.PresentationVerifiedState"/>.
 /// </summary>
 /// <param name="Credentials">
 /// The verified credentials, keyed by the <see cref="CredentialQueryId"/> each answered — one

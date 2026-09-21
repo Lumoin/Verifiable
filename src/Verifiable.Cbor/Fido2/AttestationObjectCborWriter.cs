@@ -19,12 +19,12 @@ namespace Verifiable.Cbor.Fido2;
 /// Conformance Classes</see>.
 /// </para>
 /// <para>
-/// <paramref name="attestationStatement"/> is spliced in verbatim via
+/// <c>attestationStatement</c> is spliced in verbatim via
 /// <see cref="CborWriter.WriteEncodedValue(ReadOnlySpan{byte})"/> — it is already CBOR-encoded by the
 /// caller's chosen attestation-format writer (for example the single byte
 /// <see cref="NoneAttestation.CanonicalEmptyMap"/> for <c>fmt=none</c>), exactly the nested-item shape
 /// <see cref="AttestationObjectCborReader.Parse"/> reads back via <see cref="CborReader.ReadEncodedValue"/>.
-/// <paramref name="authenticatorData"/>, by contrast, is raw <c>authData</c> bytes wrapped in a CBOR byte
+/// <c>authenticatorData</c>, by contrast, is raw <c>authData</c> bytes wrapped in a CBOR byte
 /// string via <see cref="CborWriter.WriteByteString(ReadOnlySpan{byte})"/> — the reader's own
 /// byte-string-peeling helper confirms this member is a byte string wrapper around the content, not a
 /// nested CBOR item.

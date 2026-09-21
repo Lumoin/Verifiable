@@ -6,7 +6,7 @@ namespace Verifiable.Tests.OAuth;
 /// <summary>
 /// Unit coverage for <see cref="Rfc7523AssertionValidation"/> — the reusable
 /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 §3</see> claim-rule checker
-/// generic (non-ID-JAG) jwt-bearer deployments consume directly. <see cref="IdJagAssertionValidation"/>
+/// generic (non-ID-JAG) jwt-bearer deployments consume directly. <see cref="Verifiable.OAuth.IdJag.IdJagAssertionValidation"/>
 /// consumes the SAME implementation for its own iss/sub/aud/exp/nbf/iat checks
 /// (<see cref="IdJagAssertionValidationTests"/> is the regression proof that extraction did not change
 /// its byte-identical behavior); this file pins the standalone entry point's own contract.
@@ -120,7 +120,7 @@ internal sealed class Rfc7523AssertionValidationTests
 
     /// <summary>
     /// The anti-audience-injection hardening this checker inherited from
-    /// <see cref="IdJagAssertionValidation"/>'s original implementation: a multi-element array is
+    /// <see cref="Verifiable.OAuth.IdJag.IdJagAssertionValidation"/>'s original implementation: a multi-element array is
     /// rejected even when one element matches, so an assertion crafted to also be valid at another
     /// audience can never be replayed here.
     /// </summary>

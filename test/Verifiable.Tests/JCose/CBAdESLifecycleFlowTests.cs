@@ -25,7 +25,7 @@ namespace Verifiable.Tests.JCose;
 /// signer performs -- creation, every augmentation verb, every Time-Stamping Authority acquisition -- runs
 /// inside its own nested block scope and disposes every creation/augmentation-side carrier before the block
 /// ends, copying ONLY the serialized wire bytes into an independent, GC-owned <c>byte[]</c> that crosses to the
-/// next step. The final <see cref="CBAdESSignatureValidation.ValidateAsync"/> call of every flow below
+/// next step. The final <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, CancellationToken)"/> call of every flow below
 /// reconstructs everything from that wire-bytes copy alone -- never a creation-side object, model, or
 /// in-memory decoded fact -- and, for flow 10's detached leg, its OWN dereference delegate instance and
 /// context over the shared published-object store (mirroring flows 3/4 of the sibling file).
@@ -1188,7 +1188,7 @@ internal sealed class CBAdESLifecycleFlowTests
 
     /// <summary>
     /// Validates <paramref name="wireCopy"/> at <paramref name="level"/> through the level-aware, registry-
-    /// resolved <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload, wiring the four shipped
+    /// resolved <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, CancellationToken)"/> overload, wiring the four shipped
     /// <see cref="CBAdESLevelMessageImprintAdapters"/> message-imprint-input seams every flow below needs --
     /// shared so each flow's call site states only what varies (the wire bytes, the key, the level, and the
     /// <c>sigD</c> dereference pair when detached).
@@ -1363,7 +1363,7 @@ internal sealed class CBAdESLifecycleFlowTests
     /// <see cref="ReferencesFamilyFlowCreatesRefsSigRTstAndRfsTstThenUpgradesToBLTStrippingTheFamily"/> uses --
     /// then augmented to B-LTA with a FIRST <c>arcTst</c> instance and a REPEATED, RENEWAL second <c>arcTst</c>
     /// instance, both bound to the SAME non-empty externally-supplied-data value (clause 5.3.5.3 step 5;
-    /// <see cref="CBAdESSignatureValidation.ValidateAsync"/> applies ONE externally-supplied-data value across
+    /// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, CancellationToken)"/> applies ONE externally-supplied-data value across
     /// every <c>arcTst</c> instance one call checks, so both generation calls below must agree). Shared by flow
     /// 12's positive and negative legs so each builds an identical baseline before diverging.
     /// </summary>

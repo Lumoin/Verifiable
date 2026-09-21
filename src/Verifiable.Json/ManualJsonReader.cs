@@ -64,6 +64,11 @@ internal static class ManualJsonReader
             {
                 return ReadStructured(ref reader);
             }
+            case JsonTokenType.None:
+            case JsonTokenType.EndObject:
+            case JsonTokenType.EndArray:
+            case JsonTokenType.PropertyName:
+            case JsonTokenType.Comment:
             default:
             {
                 throw new JsonException($"Unexpected token type '{reader.TokenType}'.");
@@ -167,6 +172,13 @@ internal static class ManualJsonReader
                     stack.Push((parent, null));
                     break;
                 }
+                case JsonTokenType.None:
+                case JsonTokenType.Comment:
+                case JsonTokenType.String:
+                case JsonTokenType.Number:
+                case JsonTokenType.True:
+                case JsonTokenType.False:
+                case JsonTokenType.Null:
                 default:
                 {
                     object? primitive = ReadPrimitive(ref reader);
@@ -191,6 +203,13 @@ internal static class ManualJsonReader
             JsonTokenType.True => true,
             JsonTokenType.False => false,
             JsonTokenType.Null => null,
+            JsonTokenType.None or
+            JsonTokenType.StartObject or
+            JsonTokenType.EndObject or
+            JsonTokenType.StartArray or
+            JsonTokenType.EndArray or
+            JsonTokenType.PropertyName or
+            JsonTokenType.Comment => throw new JsonException($"Unexpected token type '{reader.TokenType}'."),
             _ => throw new JsonException($"Unexpected token type '{reader.TokenType}'.")
         };
     }
@@ -202,6 +221,16 @@ internal static class ManualJsonReader
         {
             JsonTokenType.StartObject => new Dictionary<string, object>(),
             JsonTokenType.StartArray => new List<object>(),
+            JsonTokenType.None or
+            JsonTokenType.EndObject or
+            JsonTokenType.EndArray or
+            JsonTokenType.PropertyName or
+            JsonTokenType.Comment or
+            JsonTokenType.String or
+            JsonTokenType.Number or
+            JsonTokenType.True or
+            JsonTokenType.False or
+            JsonTokenType.Null => throw new JsonException($"Expected StartObject or StartArray, got '{tokenType}'."),
             _ => throw new JsonException($"Expected StartObject or StartArray, got '{tokenType}'.")
         };
     }

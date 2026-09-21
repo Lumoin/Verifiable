@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -315,7 +316,8 @@ internal sealed class TpmInHouseSimulatorVerifySequenceTests
 
         using CreatePrimaryResponse primary = await CreateX509SignEccSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
         byte[] message = "an x509sign key verifying through the sequence commands."u8.ToArray();
-        byte[] digest = SHA256.HashData(message);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(message, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
         byte[] p1363Signature = await SignDigestEcdsaAsync(tpm, registry, pool, primary.ObjectHandle, digest).ConfigureAwait(false);
 
         TpmiDhObject sequenceHandle = await StartVerifySequenceAsync(tpm, registry, pool, primary.ObjectHandle, []).ConfigureAwait(false);

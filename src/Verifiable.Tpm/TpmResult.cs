@@ -20,8 +20,8 @@ namespace Verifiable.Tpm;
 /// </para>
 /// <para>
 /// Some TPM commands return handles in the response (e.g., CreatePrimary returns an
-/// object handle, StartAuthSession returns a session handle). These are available via
-/// <see cref="OutHandles"/> on successful results.
+/// object handle, StartAuthSession returns a session handle). These are available on
+/// <see cref="Value"/> as part of the command-specific success type on successful results.
 /// </para>
 /// <para>
 /// <b>TPM error categories</b> (only valid when <see cref="IsTpmError"/> is true):
@@ -432,6 +432,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     {
         ResultKind.TpmError => $"Cannot access Value on TpmError result. Response code: {TpmResponseCode.GetDescription()}",
         ResultKind.TransportError => $"Cannot access Value on TransportError result. Error code: 0x{RawTransportErrorCode:X8}",
+        ResultKind.Success => "Cannot access Value on non-success result.",
         _ => "Cannot access Value on non-success result."
     };
 

@@ -170,6 +170,70 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
 
 
     [TestMethod]
+    public async Task RejectsDuplicateSubJwkMemberName()
+    {
+        //RFC 7519 §4: "The Claim Names within a JWT Claims Set MUST be unique." The payload below
+        //carries "sub_jwk" twice: the FIRST occurrence — the position the minted token already
+        //carries it in — is the honest key a first-match reader (and, before this fix, this
+        //validator's ExtractObjectProperties) would confirm and verify successfully; the LAST is an
+        //attacker's substituted key a last-value-wins reader would resolve instead. The payload is
+        //hand-edited JSON text — never rebuilt through JwtPayloadSerializer — re-signed over its
+        //exact bytes with the project's own signing primitive.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> subjectKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory subjectPublic = subjectKeys.PublicKey;
+        using PrivateKeyMemory subjectPrivate = subjectKeys.PrivateKey;
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> attackerKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory attackerPublic = attackerKeys.PublicKey;
+        using PrivateKeyMemory _ = attackerKeys.PrivateKey;
+
+        (string sub, Dictionary<string, object> subJwk) = ComposeThumbprintSubject(subjectPublic);
+        string idToken = await MintTokenAsync(
+            subjectPrivate, iss: sub, sub: sub, aud: ClientId, nonce: RequestNonce,
+            expiresAt: TimeProvider.GetUtcNow().AddMinutes(5), issuedAt: TimeProvider.GetUtcNow(),
+            subJwk: subJwk).ConfigureAwait(false);
+
+        string[] parts = idToken.Split('.');
+        string payloadJson;
+        using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
+        {
+            payloadJson = Encoding.UTF8.GetString(payloadBytes.Memory.Span).TrimEnd('\0');
+        }
+
+        string attackerAlgorithm = CryptoFormatConversions.DefaultTagToJwaConverter(attackerPublic.Tag);
+        IReadOnlyDictionary<string, string> attackerJwk = DpopJwkUtilities.ToJwk(
+            attackerPublic, attackerAlgorithm, TestSetup.Base64UrlEncoder);
+        string attackerJwkJson =
+            "{" + string.Join(",", attackerJwk.Select(member => $"\"{member.Key}\":\"{member.Value}\"")) + "}";
+
+        //Splice a second, attacker-controlled "sub_jwk" member in just before the closing brace.
+        //The honest "sub_jwk" the minted payload already carries stays where it is (FIRST); this
+        //appended one becomes the LAST occurrence of the same member name.
+        Assert.EndsWith("}", payloadJson);
+        string duplicateBearingPayload = payloadJson[..^1] + $",\"sub_jwk\":{attackerJwkJson}}}";
+
+        string payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(duplicateBearingPayload));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{payloadSegment}");
+        using Signature signature = await subjectPrivate.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureSegment = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+        string duplicateBearingToken = $"{parts[0]}.{payloadSegment}.{signatureSegment}";
+
+        SelfIssuedIdTokenValidationResult result = await SelfIssuedIdTokenValidation.ValidateAsync(
+            duplicateBearingToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
+            resolveDidVerificationKey: null,
+            TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        //Refused outright — no key is confirmed or verified under either occurrence.
+        Assert.IsFalse(result.IsStructurallyValid);
+        Assert.IsFalse(result.IsSubjectConfirmed);
+        Assert.IsFalse(result.IsSignatureValid);
+        Assert.IsFalse(result.IsValid);
+    }
+
+
+    [TestMethod]
     public async Task RejectsTamperedPayload()
     {
         //Front-channel tampering: an attacker splices a replayed token's nonce to the

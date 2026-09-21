@@ -39,7 +39,7 @@ namespace Verifiable.Tests.JCose;
 /// <para>
 /// <strong>The Sig_structure builder is the shared COSE substrate, not the encoder under test.</strong>
 /// <see cref="CoseSerialization.BuildSigStructure"/> is reused directly (both to mint each message's signature
-/// bytes and as the <c>buildSigStructure</c> parameter <see cref="CBAdESSignatureValidation.ValidateAsync"/>
+/// bytes and as the <c>buildSigStructure</c> parameter <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
 /// itself requires) — it is RFC 9052 §4.4's generic <c>Sig_structure</c> assembly, already exercised by
 /// <c>Verifiable.Tests.Cose.CoseTests</c>, and is never touched by <see cref="CBAdESSignatureSerialization"/> or
 /// <see cref="CBAdESHeaderRules"/>. Reusing it here is reuse over reinvention, not a firewall breach.
@@ -398,14 +398,9 @@ internal sealed class CBAdESSignatureValidationTests
         Assert.IsFalse(result.IsValid);
         _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
 
-        /// <summary>
-        /// Builds <paramref name="depth"/> nested single-element CBOR arrays around one integer -- otherwise
-        /// well-formed, only its nesting depth is adversarial. Mirrors the
-        /// <c>BuildDeeplyNestedArrayBytes</c> precedent; local to this test since no other test in this file
-        /// needs it.
-        /// </summary>
-        /// <param name="depth">The nesting depth.</param>
-        /// <returns>The encoded bytes.</returns>
+        //Builds depth nested single-element CBOR arrays around one integer -- otherwise well-formed,
+        //only its nesting depth is adversarial. Mirrors the BuildDeeplyNestedArrayBytes precedent;
+        //local to this test since no other test in this file needs it.
         static byte[] BuildDeeplyNestedArrayBytes(int depth)
         {
             var nestedWriterBuffer = new ArrayBufferWriter<byte>();
@@ -546,6 +541,7 @@ internal sealed class CBAdESSignatureValidationTests
                 case CBAdESCounterSignatureMalformedViolation:
                 case CBAdESCounterSignatureDetachedObjectsViolation:
                 case CBAdESCounterSignatureVerificationFailedViolation:
+                default:
                     break;
             }
         }
@@ -1172,7 +1168,7 @@ alwaysFails,
     /// A leak regression: a <see cref="CancellationTokenSource"/> is canceled as a SIDE EFFECT
     /// of the <c>sigD</c> <c>ObjectIdByURI</c> dereference delegate, which then still returns success -- so
     /// resolution (step c) completes normally, and the cancellation is observed only later, by
-    /// <see cref="Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CryptoEventSink?, CancellationToken)"/>'s
+    /// <see cref="global::Verifiable.JCose.Cose.VerifyAsync(Verifiable.JCose.CoseSign1Message, Verifiable.JCose.BuildSigStructureDelegate, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.VerificationDelegate, Verifiable.Cryptography.CryptoEventSink, System.Threading.CancellationToken)"/>'s
     /// own guard inside step d -- exactly the code region the <c>try</c>/<c>catch</c> wraps. This
     /// is a caller-cancellation throw, not the malformed-input no-throw contract (see the type remarks), so
     /// this test deliberately bypasses <see cref="ValidateExpectingNoThrowAsync"/> and asserts the throw
@@ -1410,8 +1406,8 @@ cancelThenSucceed,
         Fail(unexpectedException);
         return default;
 
-        /// <summary>Reports <paramref name="exception"/> as an unconditional test failure and never returns.</summary>
-        /// <param name="exception">The exception <see cref="ValidateExpectingNoThrowAsync"/> caught.</param>
+        //Reports exception (the exception ValidateExpectingNoThrowAsync caught) as an unconditional
+        //test failure and never returns.
         [DoesNotReturn]
         static void Fail(Exception? exception) =>
             Assert.Fail($"CBAdESSignatureValidation.ValidateAsync must never throw on untrusted wire bytes; threw {exception?.GetType().Name}: {exception?.Message}");
@@ -1528,7 +1524,7 @@ cancelThenSucceed,
 
     /// <summary>
     /// Computes a real SHA-256 digest over <paramref name="input"/> through the registered digest delegate
-    /// (<see cref="CryptographicKeyEvents.ComputeDigestAsync"/>), tagged with <see cref="CryptoTags.Sha256Digest"/>
+    /// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(System.Buffers.ReadOnlySequence{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>), tagged with <see cref="CryptoTags.Sha256Digest"/>
     /// — the fixture every <c>x5t</c>/<c>hashV</c> digest in this file is built from, never a hand-rolled hash.
     /// </summary>
     /// <param name="input">The bytes to digest.</param>

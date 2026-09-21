@@ -25,7 +25,7 @@ namespace Verifiable.OAuth;
 /// meaning. Server-side dispatchers in
 /// <see cref="Verifiable.OAuth.Server.PolicyProfiles"/> apply the per-request
 /// enforcement axes (PKCE method set, JAR lifetime ceiling, JTI replay
-/// policy, and so on) to the <see cref="Verifiable.OAuth.Server.ExchangeContext"/>.
+/// policy, and so on) to the <see cref="Verifiable.Core.ExchangeContext"/>.
 /// Client-side dispatchers in
 /// <see cref="Verifiable.OAuth.Client.ClientPolicyProfiles"/> resolve the
 /// callback validator, PKCE method selection, JAR composition rules, and the

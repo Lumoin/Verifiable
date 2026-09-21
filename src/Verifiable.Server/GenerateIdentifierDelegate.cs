@@ -12,7 +12,7 @@ namespace Verifiable.Server;
 /// <remarks>
 /// <para>
 /// The library default
-/// (<see cref="Pipeline.DefaultIdentifierGenerator.GenerateAsync"/>)
+/// (<c>DefaultIdentifierGenerator.For</c>)
 /// returns <c>Guid.CreateVersion7(timeProvider.GetUtcNow()).ToString("N")</c>
 /// regardless of purpose — a 32-character hex string with the v7 GUID's
 /// 48-bit Unix-milliseconds prefix sorting lexicographically by

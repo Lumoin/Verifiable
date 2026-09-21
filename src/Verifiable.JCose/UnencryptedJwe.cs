@@ -8,14 +8,14 @@ namespace Verifiable.JCose;
 /// <remarks>
 /// <para>
 /// This type is the JWE counterpart to <see cref="UnsignedJwt"/>. It is the anchor for
-/// <see cref="JweEncryptionExtensions.EncryptAsync"/> and makes the intent explicit in the
+/// <see cref="JweMessageExtensions.EncryptAsync"/> and makes the intent explicit in the
 /// type system — an <see cref="UnencryptedJwe"/> must be encrypted to produce a
 /// <see cref="JweMessage"/>, just as an <see cref="UnsignedJwt"/> must be signed to
 /// produce a <see cref="JwsMessage"/>.
 /// </para>
 /// <para>
 /// The header at construction time contains <c>alg</c> and <c>enc</c> but not <c>epk</c>.
-/// The ephemeral public key is added by <see cref="JweEncryptionExtensions.EncryptAsync"/>
+/// The ephemeral public key is added by <see cref="JweMessageExtensions.EncryptAsync"/>
 /// after key agreement completes, because the EPK is generated fresh per encryption
 /// operation and is not known until then.
 /// </para>

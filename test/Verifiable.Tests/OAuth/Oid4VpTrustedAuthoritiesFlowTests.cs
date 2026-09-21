@@ -114,7 +114,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
     /// of the conditions present in the corresponding trusted_authorities array if present." The DCQL
     /// query names only a stranger AuthorityKeyIdentifier that no certificate in the credential's chain
     /// bears, so the verifier's disclosure assessment — the consistency check on
-    /// <see cref="VpTokenParsed.TrustedAuthorityEvidence"/> — refuses the presentation, and the flow does
+    /// <see cref="Verifiable.OAuth.Oid4Vp.Server.VpCredentialClaims.TrustedAuthorityEvidence"/> — refuses the presentation, and the flow does
     /// NOT reach <see cref="PresentationVerifiedState"/>.
     /// </summary>
     /// <param name="backendName">The X.509 backend the verifier reads the chain through.</param>
@@ -194,7 +194,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         await using TestHostShell app = new(TimeProvider, resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await SdJwtVpFixture.IssuePidCredentialAsync(TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
@@ -237,7 +237,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
 
         await using TestHostShell app = new(
             TimeProvider, parseX5c: backend.ParseX5c, resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidCredentialWithX5cAsync(
@@ -376,7 +376,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
     /// chain — the <c>aki</c> evidence Section 6.1.1.1 reads. The issuer signature is verified against
     /// the registered issuer key (the trust framework's out-of-band <c>iss</c> resolution); the chain in
     /// the header is the credential's certificate-chain evidence, exactly the separation
-    /// <see cref="SdJwtVpTokenVerification"/> draws between key resolution and trust-authority evidence.
+    /// <see cref="Verifiable.OAuth.Oid4Vp.Server.SdJwtVpTokenVerification"/> draws between key resolution and trust-authority evidence.
     /// </summary>
     /// <param name="x5c">The base64-DER certificate chain (leaf first) to embed in the issuer JWS header.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

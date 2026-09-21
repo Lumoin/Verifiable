@@ -1,5 +1,4 @@
 using CsCheck;
-using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -41,14 +40,14 @@ internal sealed class EvidenceRecordRenewalPropertyTests
     /// Proves <see href="https://www.rfc-editor.org/rfc/rfc4998">RFC 4998</see> rfc4998-5.2-R34.
     /// </remarks>
     [TestMethod]
-    public void TheRenewalCombinationIsDeterministicAndMatchesTheIndependentComputation()
+    public async Task TheRenewalCombinationIsDeterministicAndMatchesTheIndependentComputation()
     {
-        (from dataObject in Gen.Byte.Array[1, 64]
-         from chainContent in Gen.Byte.Array[1, 64]
-         from algorithmIndex in Gen.Int[0, 2]
-         select (dataObject, chainContent, algorithmIndex))
-        .Sample(sample => TheCombinationMatches(
-            sample.dataObject, sample.chainContent, Algorithms[sample.algorithmIndex], TestContext.CancellationToken), iter: 50);
+        await (from dataObject in Gen.Byte.Array[1, 64]
+               from chainContent in Gen.Byte.Array[1, 64]
+               from algorithmIndex in Gen.Int[0, 2]
+               select (dataObject, chainContent, algorithmIndex))
+        .SampleAsync(async sample => await TheCombinationMatches(
+            sample.dataObject, sample.chainContent, Algorithms[sample.algorithmIndex], TestContext.CancellationToken), iter: 50, threads: CsCheckSampling.Threads);
     }
 
 
@@ -61,17 +60,15 @@ internal sealed class EvidenceRecordRenewalPropertyTests
     /// Proves <see href="https://www.rfc-editor.org/rfc/rfc4998">RFC 4998</see> rfc4998-5.2-R35.
     /// </remarks>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    public void EveryRenewalValueWalksItsReducedTreeBackToTheRoot()
+    public async Task EveryRenewalValueWalksItsReducedTreeBackToTheRoot()
     {
-        (from groupCount in Gen.Int[1, 7]
-         from objectsPerGroup in Gen.Int[1, 3]
-         from nodeArity in Gen.Int[2, 4]
-         from seed in Gen.Byte.Array[1, 8]
-         select (groupCount, objectsPerGroup, nodeArity, seed))
-        .Sample(sample => EveryRenewalValueReachesTheRoot(
-            sample.groupCount, sample.objectsPerGroup, sample.nodeArity, sample.seed, TestContext.CancellationToken), iter: 25);
+        await (from groupCount in Gen.Int[1, 7]
+               from objectsPerGroup in Gen.Int[1, 3]
+               from nodeArity in Gen.Int[2, 4]
+               from seed in Gen.Byte.Array[1, 8]
+               select (groupCount, objectsPerGroup, nodeArity, seed))
+        .SampleAsync(async sample => await EveryRenewalValueReachesTheRoot(
+            sample.groupCount, sample.objectsPerGroup, sample.nodeArity, sample.seed, TestContext.CancellationToken), iter: 25, threads: CsCheckSampling.Threads);
     }
 
 
@@ -85,17 +82,15 @@ internal sealed class EvidenceRecordRenewalPropertyTests
     /// <param name="algorithm">The renewal's new algorithm.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the sample upheld the property.</returns>
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    private static bool TheCombinationMatches(byte[] dataObject, byte[] chainContent, PkiDigestAlgorithm algorithm, CancellationToken cancellationToken)
+    private static async Task<bool> TheCombinationMatches(byte[] dataObject, byte[] chainContent, PkiDigestAlgorithm algorithm, CancellationToken cancellationToken)
     {
         byte[] priorChain = WrapAsChain(chainContent);
         byte[] encodedSequence = EvidenceRecordOracle.EncodeArchiveTimeStampSequence([priorChain]);
         byte[] expected = EvidenceRecordOracle.HashTreeRenewalValue(dataObject, [priorChain], algorithm);
         byte[] sorted = EvidenceRecordOracle.HashTreeRenewalValueSorted(dataObject, [priorChain], algorithm);
 
-        using DigestValue first = ComputeRenewalValue(dataObject, encodedSequence, algorithm, cancellationToken);
-        using DigestValue second = ComputeRenewalValue(dataObject, encodedSequence, algorithm, cancellationToken);
+        using DigestValue first = await ComputeRenewalValue(dataObject, encodedSequence, algorithm, cancellationToken);
+        using DigestValue second = await ComputeRenewalValue(dataObject, encodedSequence, algorithm, cancellationToken);
 
         ReadOnlySpan<byte> computed = first.AsReadOnlySpan()[..algorithm.OutputByteLength];
         if(!computed.SequenceEqual(second.AsReadOnlySpan()[..algorithm.OutputByteLength]) || !computed.SequenceEqual(expected))
@@ -119,9 +114,7 @@ internal sealed class EvidenceRecordRenewalPropertyTests
     /// <param name="seed">Octets mixed into every data object, so different samples bind different content.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the sample upheld the property.</returns>
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    private static bool EveryRenewalValueReachesTheRoot(int groupCount, int objectsPerGroup, int nodeArity, byte[] seed, CancellationToken cancellationToken)
+    private static async Task<bool> EveryRenewalValueReachesTheRoot(int groupCount, int objectsPerGroup, int nodeArity, byte[] seed, CancellationToken cancellationToken)
     {
         PkiDigestAlgorithm algorithm = PkiDigestAlgorithm.Sha256;
         var oracleGroups = new List<IReadOnlyList<byte[]>>(groupCount);
@@ -141,7 +134,7 @@ internal sealed class EvidenceRecordRenewalPropertyTests
                     byte[] dataObject = [.. seed, (byte)groupIndex, (byte)objectIndex, .. "data object"u8];
                     oracleLeaves.Add(EvidenceRecordOracle.HashTreeRenewalValue(dataObject, [priorChain], algorithm));
 
-                    DigestValue leaf = ComputeRenewalValue(dataObject, encodedSequence, algorithm, cancellationToken);
+                    DigestValue leaf = await ComputeRenewalValue(dataObject, encodedSequence, algorithm, cancellationToken);
                     owned.Add(leaf);
                     leaves.Add(leaf.AsReadOnlyMemory()[..algorithm.OutputByteLength]);
                 }
@@ -150,7 +143,7 @@ internal sealed class EvidenceRecordRenewalPropertyTests
                 leafGroups.Add(leaves);
             }
 
-            using EvidenceRecordHashTreeBuild build = EvidenceRecordHashTree.BuildFromHashValuesAsync(
+            using EvidenceRecordHashTreeBuild build = await EvidenceRecordHashTree.BuildFromHashValuesAsync(
                 new EvidenceRecordHashTreeHashValueBuildContext
                 {
                     HashValueGroups = leafGroups,
@@ -158,7 +151,7 @@ internal sealed class EvidenceRecordRenewalPropertyTests
                     NodeArity = nodeArity
                 },
                 BaseMemoryPool.Shared,
-                cancellationToken).AsTask().GetAwaiter().GetResult();
+                cancellationToken).AsTask();
 
             byte[] expectedRoot = EvidenceRecordOracle.BuildRootFromHashValues(oracleGroups, algorithm, nodeArity);
             if(!build.Root.AsReadOnlySpan().SequenceEqual(expectedRoot))
@@ -172,7 +165,7 @@ internal sealed class EvidenceRecordRenewalPropertyTests
                 for(int objectIndex = 0; objectIndex < objectsPerGroup; ++objectIndex)
                 {
                     using DigestValue leaf = CopyAsDigest(oracleGroups[groupIndex][objectIndex], algorithm);
-                    using EvidenceRecordRootComputation computation = EvidenceRecordHashTree.ComputeRootAsync(
+                    using EvidenceRecordRootComputation computation = await EvidenceRecordHashTree.ComputeRootAsync(
                         new EvidenceRecordRootComputationContext
                         {
                             DataObjectHash = leaf,
@@ -180,7 +173,7 @@ internal sealed class EvidenceRecordRenewalPropertyTests
                             DigestAlgorithm = algorithm
                         },
                         BaseMemoryPool.Shared,
-                        cancellationToken).AsTask().GetAwaiter().GetResult();
+                        cancellationToken).AsTask();
 
                     if(computation.Status != EvidenceRecordRootStatus.Computed
                         || computation.Root is null
@@ -204,21 +197,21 @@ internal sealed class EvidenceRecordRenewalPropertyTests
 
 
     /// <summary>
-    /// Computes one renewal value through the shipped surface, blocking until it completes.
+    /// Computes one renewal value through the shipped surface.
     /// </summary>
     /// <param name="dataObject">The archived data object's octets.</param>
     /// <param name="encodedSequence">The encoded <c>ArchiveTimeStampSequence</c> of every prior chain.</param>
     /// <param name="algorithm">The renewal's new algorithm.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The value. The caller disposes it.</returns>
-    private static DigestValue ComputeRenewalValue(byte[] dataObject, byte[] encodedSequence, PkiDigestAlgorithm algorithm, CancellationToken cancellationToken)
+    private static async Task<DigestValue> ComputeRenewalValue(byte[] dataObject, byte[] encodedSequence, PkiDigestAlgorithm algorithm, CancellationToken cancellationToken)
     {
-        return EvidenceRecords.ComputeHashTreeRenewalValueAsync(
+        return await EvidenceRecords.ComputeHashTreeRenewalValueAsync(
             new ReadOnlyMemory<byte>(dataObject),
             new ReadOnlyMemory<byte>(encodedSequence),
             algorithm,
             BaseMemoryPool.Shared,
-            cancellationToken).AsTask().GetAwaiter().GetResult();
+            cancellationToken).AsTask();
     }
 
 

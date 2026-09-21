@@ -39,7 +39,7 @@ public static class TrustMarkParser
         //RFC 8725 §3.11 explicit typing — trust marks carry typ=trust-mark+jwt.
         if(!header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
             || typObj is not string typ
-            || !string.Equals(typ, WellKnownFederationMediaTypes.TrustMarkJwt, StringComparison.Ordinal))
+            || !WellKnownFederationMediaTypes.IsTrustMarkJwt(typ))
         {
             return TrustMarkParseResult.Invalid(
                 $"JWT 'typ' header must equal '{WellKnownFederationMediaTypes.TrustMarkJwt}' per RFC 8725 §3.11.");

@@ -25,7 +25,7 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// the header and claims are scanned with <see cref="JwkJsonReader"/> (the <c>Verifiable.OAuth</c>
 /// serialization firewall), the holder key is reconstructed with
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/>, the signature is checked
-/// with <see cref="Jws.VerifyAsync"/>, the RFC 7638 thumbprint is computed with
+/// with <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>, the RFC 7638 thumbprint is computed with
 /// <see cref="DpopJwkUtilities.ComputeThumbprintFromJwk"/>, and the <c>iat</c> window is the shared
 /// <see cref="JwtTemporalChecks"/> arithmetic.
 /// </para>
@@ -177,6 +177,20 @@ public static class CredentialProofValidator
     /// entry as the §8.3.1.2 error its <see cref="CredentialProofValidationResult.FailureReason"/> maps to.
     /// </summary>
     /// <param name="proofs">The compact <c>jwt</c> proofs from the §8.2 <c>proofs.jwt</c> array.</param>
+    /// <param name="expectedAudience">The expected Credential Issuer identifier the proof's <c>aud</c> must match.</param>
+    /// <param name="expectedNonce">The expected <c>c_nonce</c> value, or <see langword="null"/> when nonce binding is not in effect.</param>
+    /// <param name="nonceRequired">Whether a missing or mismatched <c>nonce</c> claim fails the check.</param>
+    /// <param name="isProofSigningAlgAcceptable">Predicate deciding whether each proof's <c>alg</c> is acceptable per the issuer's <c>proof_signing_alg_values_supported</c> / local policy.</param>
+    /// <param name="resolveProofKey">Resolves the key for the <c>kid</c> reference mode, or <see langword="null"/> when that mode is not supported.</param>
+    /// <param name="x509Verification">Resolves the key for the <c>x5c</c> reference mode by composing the existing X.509 surface, or <see langword="null"/> when that mode is not supported.</param>
+    /// <param name="context">The per-request context threaded to a network-resolving <c>kid</c> and carrying the <c>x5c</c> trust anchors / validation time.</param>
+    /// <param name="base64UrlEncoder">Base64url encoder for the thumbprint.</param>
+    /// <param name="base64UrlDecoder">Base64url decoder for the JWS segments and JWK coordinates.</param>
+    /// <param name="timeProvider">The clock each proof's <c>iat</c> window is measured against.</param>
+    /// <param name="memoryPool">Memory pool for the transient decode/verify buffers.</param>
+    /// <param name="iatSkew">The half-width of each proof's <c>iat</c> acceptance window (§13.8).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The per-entry verdicts, in the same order as <paramref name="proofs"/>.</returns>
     public static async ValueTask<IReadOnlyList<CredentialProofValidationResult>> ValidateBatchAsync(
         IReadOnlyList<string> proofs,
         string expectedAudience,
@@ -311,6 +325,7 @@ public static class CredentialProofValidator
             expectedDomain,
             verification.Canonicalize,
             verification.ContextResolver,
+            verification.KnownContext,
             verification.DecodeProofValue,
             verification.SerializePresentation,
             verification.SerializeProofOptions,
@@ -432,6 +447,19 @@ public static class CredentialProofValidator
         {
             using IMemoryOwner<byte> headerOwner = base64UrlDecoder(parts[0], memoryPool);
             ReadOnlySpan<byte> header = headerOwner.Memory.Span;
+
+            using IMemoryOwner<byte> payloadOwner = base64UrlDecoder(parts[1], memoryPool);
+            ReadOnlySpan<byte> payload = payloadOwner.Memory.Span;
+
+            //RFC 7515 §4 / RFC 7519 §4: gate both the header and the claims set for well-formedness — a
+            //repeated name at any nesting depth, including inside a nested "jwk" — before extracting a
+            //single field from either, so typ/alg/kid/jwk/aud/nonce selection below never runs against a
+            //first occurrence while a duplicate second occurrence goes unnoticed.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(header) || !JwkJsonReader.IsWellFormedJsonDocument(payload))
+            {
+                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
+            }
+
             typ = JwkJsonReader.ExtractStringValue(header, WellKnownJoseHeaderNames.TypUtf8);
             alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
             hasJwk = JwkJsonReader.ContainsKey(header, WellKnownJoseHeaderNames.JwkUtf8);
@@ -443,8 +471,6 @@ public static class CredentialProofValidator
                 ? JwkJsonReader.ExtractObjectProperties(header, WellKnownJoseHeaderNames.JwkUtf8)
                 : null;
 
-            using IMemoryOwner<byte> payloadOwner = base64UrlDecoder(parts[1], memoryPool);
-            ReadOnlySpan<byte> payload = payloadOwner.Memory.Span;
             audience = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
             hasIat = JwkJsonReader.TryExtractLongValue(payload, WellKnownJwtClaimNames.IatUtf8, out iatSeconds);
             nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
@@ -457,8 +483,11 @@ public static class CredentialProofValidator
         }
 
         //§F.4: "the key proof is explicitly typed using header parameters as defined for that
-        //proof type" — §F.1 fixes that typing to typ = openid4vci-proof+jwt.
-        if(!string.Equals(typ, Wallet.Oid4VciProofIssuance.ProofJwtType, StringComparison.Ordinal))
+        //proof type" — §F.1 fixes that typing to typ = openid4vci-proof+jwt, compared as the RFC 7515
+        //§4.1.9 media type it is: case insensitive, and with the implicit "application/" prefix when
+        //the wire value carries no '/' of its own. A missing typ is a refusal, checked before the
+        //media-type comparison so a null header is never handed to it.
+        if(typ is null || !Wallet.Oid4VciProofIssuance.IsProofJwtType(typ))
         {
             return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.InvalidTyp);
         }
@@ -593,6 +622,7 @@ public static class CredentialProofValidator
             HeaderKeyResolutionStatus.JwkContainsPrivateKey => CredentialProofValidationFailureReason.JwkContainsPrivateKey,
             HeaderKeyResolutionStatus.KeyReferenceUnresolved => CredentialProofValidationFailureReason.KeyReferenceUnresolved,
             HeaderKeyResolutionStatus.InvalidKeyReference => CredentialProofValidationFailureReason.InvalidKeyReference,
+            HeaderKeyResolutionStatus.Resolved => CredentialProofValidationFailureReason.InvalidKeyReference,
 
             _ => CredentialProofValidationFailureReason.InvalidKeyReference
         };

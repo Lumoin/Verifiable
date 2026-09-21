@@ -37,6 +37,16 @@ public interface IRegistrationRecord
     TenantId TenantId { get; }
 
     /// <summary>
+    /// The tenant's public identifier, as distinct from <see cref="TenantId"/>, the internal key the
+    /// stores hang off: the value bound into the tenant's URLs and issuer identifier, and the only
+    /// tenant-shaped value the host writes to an exported span or delivers in a registration event
+    /// (see <see cref="Verifiable.Core.TenantHandle"/> for why a tenant carries two). <see langword="null"/>
+    /// when the application assigned none, in which case the dispatch host emits no tenant-shaped tag
+    /// for this registration's requests rather than falling back to <see cref="TenantId"/>.
+    /// </summary>
+    TenantHandle? TenantHandle { get; }
+
+    /// <summary>
     /// The capabilities the registration is allowed to exercise. The per-request
     /// chain build drops endpoint candidates whose capability is not in this set
     /// before any matcher runs.

@@ -24,10 +24,13 @@ namespace Verifiable.OAuth.Client;
 /// actually carries.
 /// </para>
 /// <para>
-/// JWKS material itself is resolved separately via
-/// <see cref="ResolveAuthorizationServerJwksDelegate"/> rather than embedded
-/// here, because JWKS rotation and AS metadata rotation are independent
-/// concerns with different caching characteristics.
+/// JWKS material behind <see cref="JwksUri"/> is resolved separately rather than embedded here,
+/// because JWKS rotation and AS metadata rotation are independent concerns with different caching
+/// characteristics. The client-side attempt is
+/// <see cref="Verifiable.OAuth.Server.Pipeline.JwksUriResolver.ResolveAsync"/> — the SAME seam the
+/// server side uses for a registered client's <c>jwks_uri</c> — reached through the application's own
+/// <see cref="Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate"/> implementation and its own
+/// lifetime; there is no second key-set resolution seam for the client side of the protocol.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerMetadata Issuer={Issuer}")]
@@ -57,7 +60,11 @@ public sealed record AuthorizationServerMetadata
     /// <summary>The introspection endpoint per RFC 7662.</summary>
     public Uri? IntrospectionEndpoint { get; init; }
 
-    /// <summary>The AS's JWKS URI per RFC 8414 §2.</summary>
+    /// <summary>
+    /// The AS's JWKS URI per RFC 8414 §2. The key set it names is resolved through
+    /// <see cref="Verifiable.OAuth.Server.Pipeline.JwksUriResolver.ResolveAsync"/> — the same attempt
+    /// the server side uses — with its own lifetime, never embedded in this record.
+    /// </summary>
     public Uri? JwksUri { get; init; }
 
     /// <summary>The RFC 7591 dynamic registration endpoint.</summary>

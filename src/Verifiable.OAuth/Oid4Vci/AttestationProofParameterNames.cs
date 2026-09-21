@@ -1,4 +1,5 @@
 using Verifiable.Cryptography.Text;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -35,6 +36,11 @@ public static class AttestationProofParameterNames
 
     /// <summary>The REQUIRED <c>typ</c> header value of a key attestation JWT (Appendix D.1).</summary>
     public static string KeyAttestationJwtType { get; } = Utf8Constants.ToInternedString(KeyAttestationJwtTypeUtf8);
+
+    /// <summary>Whether <paramref name="typ"/> is <see cref="KeyAttestationJwtType"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="KeyAttestationJwtType"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsKeyAttestationJwtType(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, KeyAttestationJwtType);
 
     /// <summary>The UTF-8 source literal of <see cref="AttestedKeys"/>.</summary>
     public static ReadOnlySpan<byte> AttestedKeysUtf8 => "attested_keys"u8;

@@ -20,7 +20,7 @@ namespace Verifiable.Apdu.Lds;
 /// ephemeral public key) — the same <c>K</c> the terminal agrees from the other side, so the re-keyed
 /// sessions interoperate only if the chip holds the matching private key. The cryptography reuses
 /// <see cref="PaceGenericMapping.AgreeSharedSecretAsync"/> and
-/// <see cref="PaceKeyDerivation.DeriveSessionKeysAsync"/> and the cipher-to-tag mapping of
+/// <see cref="PaceKeyDerivation.DeriveSessionKeysAsync(ReadOnlyMemory{byte}, Tag, Tag, BaseMemoryPool, CancellationToken)"/> and the cipher-to-tag mapping of
 /// <see cref="ChipAuthentication"/>; this responder owns no cryptography of its own. The chip's private key
 /// and the curve come from the card's DG14 personalisation.
 /// </para>

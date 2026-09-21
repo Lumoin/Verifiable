@@ -49,9 +49,9 @@ public static class AuthZenEndpoints
 
             //§7 Search APIs are OPTIONAL per-feature: each is active (and thus
             //advertised in the §9.1 metadata document) only when its seam is
-            //wired. context.Server is guaranteed set before builders run
+            //wired. context.RequestServer is guaranteed set before builders run
             //(EndpointChain.BuildForRequestAsync throws otherwise).
-            EndpointServer? server = context.Server;
+            EndpointServer? server = context.RequestServer;
             if(server?.OAuth().SearchSubjectsAsync is not null)
             {
                 candidates.Add(BuildSubjectSearch());
@@ -105,7 +105,7 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -206,7 +206,7 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -396,7 +396,7 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -458,7 +458,7 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -521,7 +521,7 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -771,7 +771,7 @@ public static class AuthZenEndpoints
     /// <para>
     /// Stateless: <see cref="ServerEndpoint.BuildInputAsync"/> resolves the
     /// PDP identifier via
-    /// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/>
     /// (falling back to the library default), reads each AuthZEN endpoint URL
     /// off the per-request <see cref="EndpointChain"/> the dispatcher placed on
     /// the context, hand-builds the JSON document, and short-circuits the
@@ -818,7 +818,7 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;

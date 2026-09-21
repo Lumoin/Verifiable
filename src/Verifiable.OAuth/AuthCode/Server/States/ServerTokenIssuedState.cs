@@ -66,7 +66,7 @@ public sealed record ServerTokenIssuedState: FlowState
     /// when this state was reached via a code-grant token exchange (the sibling refresh-rotation
     /// transition into this same record type leaves it <see langword="null"/>, since a
     /// <c>code</c> correlation key can never resolve to a refresh-rotated flow — see
-    /// <see cref="AuthCode.AuthCodeServerFlowTransitions"/>). A replayed presentation of the code
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.AuthCodeServerFlowTransitions"/>). A replayed presentation of the code
     /// that produced this state re-verifies <c>client_id</c> against this value exactly as a
     /// first presentation would.
     /// </summary>
@@ -97,22 +97,6 @@ public sealed record ServerTokenIssuedState: FlowState
     public string? CodeChallengeMethod { get; init; }
 
     /// <summary>
-    /// The internal flow identifier of the sibling <see cref="ServerRefreshTokenIssuedState"/>
-    /// this response also issued, or <see langword="null"/> when refresh-token issuance was not
-    /// configured for this response (<c>oauth.SaveFlowStateAsync</c> was null at issuance) or
-    /// this state was reached via refresh-token rotation rather than a code grant. A VALID replay
-    /// of the code that produced this state revokes the refresh token by walking
-    /// <see cref="AuthCode.AuthCodeEndpoints.RevokeRefreshTokenChainAsync"/> starting at this
-    /// identifier — the record here may itself already be retired by one or more rotations since
-    /// the code was redeemed, so the walk follows <see cref="SuccessorRefreshFlowId"/> links to the
-    /// family's still-live token and deletes THAT record, revoking every intermediate hop's
-    /// audited access tokens along the way, implementing
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>'s
-    /// "SHOULD revoke (when possible)". The raw refresh secret is not carried onto this state.
-    /// </summary>
-    public string? RefreshFlowId { get; init; }
-
-    /// <summary>
     /// The server UTC instant a valid code replay or refresh reuse triggered token revocation.
     /// Null until a <see cref="ServerAuthorizationCodeReplayDetected"/> or
     /// <see cref="ServerRefreshTokenReuseDetected"/> input sets it through a pure record-copy
@@ -128,27 +112,29 @@ public sealed record ServerTokenIssuedState: FlowState
     /// <summary>
     /// The internal flow identifier of the refresh token that replaced the one redeemed to reach
     /// this state, or <see langword="null"/> when this state was reached via a code-grant token
-    /// exchange rather than refresh rotation (or the deployment issues no refresh tokens). The
-    /// family link a reuse of the JUST-RETIRED refresh token walks: a later presentation of the
-    /// SAME refresh token that produced this state resolves back to it, and
-    /// <see cref="AuthCode.AuthCodeEndpoints.HandleRefreshTokenReuseAsync"/> starts
-    /// <see cref="AuthCode.AuthCodeEndpoints.RevokeRefreshTokenChainAsync"/> at this identifier —
-    /// following further <see cref="SuccessorRefreshFlowId"/> links, when this record has itself
-    /// since rotated again, until the family's still-live token is reached and deleted — per
+    /// exchange rather than refresh rotation (or the deployment issues no refresh tokens). A
+    /// non-null value is <see cref="AuthCode.AuthCodeEndpoints.HandleRefreshTokenReuseAsync"/>'s
+    /// discriminator for a retired, rotated-out record — a later presentation of the SAME refresh
+    /// token that produced this state resolves back to it and revokes the whole grant, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.14.2">RFC 9700 §4.14.2</see>,
     /// which describes reuse of a rotated-out refresh token as a signal of possible token theft.
     /// </summary>
     public string? SuccessorRefreshFlowId { get; init; }
 
     /// <summary>
-    /// The flow holding the audit of the access token minted alongside the refresh token
-    /// whose rotation produced this retired record. Copied from
-    /// <see cref="ServerRefreshTokenIssuedState.PredecessorFlowId"/> so a valid reuse revokes
-    /// that paired token under
+    /// The flow identifier naming the grant this record belongs to — the code flow's own
+    /// <see cref="FlowState.FlowId"/> for the terminal state a code redemption produces, or the
+    /// value carried verbatim from the <see cref="ServerRefreshTokenIssuedState.GrantFlowId"/> of
+    /// the refresh record a rotation retired in place. The application indexes every
+    /// <see cref="ServerTokenIssuedState"/> and <see cref="ServerRefreshTokenIssuedState"/> it
+    /// saves by this value so <see cref="Verifiable.OAuth.Server.LoadGrantFlowStatesDelegate"/> can
+    /// return every retained record of the grant in one read — a VALID replay or reuse revokes by
+    /// that read under
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
     /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
-    /// authorization grant associated with it." Null for a code-grant issuance or an imported
-    /// refresh state without this link.
+    /// authorization grant associated with it." <see langword="null"/> only for a state an
+    /// application imported without it; the grant key of any record is
+    /// <c>GrantFlowId ?? FlowId</c>.
     /// </summary>
-    public string? PredecessorFlowId { get; init; }
+    public string? GrantFlowId { get; init; }
 }

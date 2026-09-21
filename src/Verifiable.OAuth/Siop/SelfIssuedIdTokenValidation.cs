@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.Siop;
 /// This is a free-standing RP primitive with no <c>EndpointServer</c> coupling — a
 /// verifier website, a wallet checking a peer, or an agent all validate the same way.
 /// JSON field extraction uses <see cref="JwkJsonReader"/> (span-based UTF-8 scanning);
-/// signature verification composes <see cref="Jws.VerifyAsync"/>; the subject key is
+/// signature verification composes <see cref="Jws.VerifyAsync(Verifiable.JCose.JwsMessage, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.PublicKeyMemory, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/>; the subject key is
 /// reconstructed from <c>sub_jwk</c> via
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> or resolved from
 /// a DID Document via the application's <see cref="ResolveDidVerificationKeyDelegate"/>.
@@ -104,11 +104,24 @@ public static class SelfIssuedIdTokenValidation
             {
                 using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool);
                 ReadOnlySpan<byte> header = headerBytes.Memory.Span;
-                alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
-                kid = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.KidUtf8);
 
                 using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
                 ReadOnlySpan<byte> payload = payloadBytes.Memory.Span;
+
+                //RFC 7515 §4 / RFC 7519 §4: gate both the header and the claims set for well-formedness —
+                //a repeated name at any nesting depth, including inside the nested "sub_jwk" object — before
+                //extracting a single field, so alg/kid/sub_jwk selection below never runs against a first
+                //occurrence while a duplicate second occurrence goes unnoticed.
+                if(!JwkJsonReader.IsWellFormedJsonDocument(header) || !JwkJsonReader.IsWellFormedJsonDocument(payload))
+                {
+                    throw new FormatException(
+                        "Self-issued ID Token header or payload is not well-formed JSON, or contains a "
+                        + "duplicate member name.");
+                }
+
+                alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
+                kid = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.KidUtf8);
+
                 iss = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.IssUtf8);
                 sub = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.SubUtf8);
                 audString = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);

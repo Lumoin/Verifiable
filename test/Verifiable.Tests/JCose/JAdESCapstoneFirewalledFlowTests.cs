@@ -50,12 +50,12 @@ namespace Verifiable.Tests.JCose;
 /// </para>
 /// <para>
 /// <strong>Signing under a Verifiable-native key that is also the certificate's own key.</strong>
-/// <see cref="JAdESSignatureCreation.SignAsync"/> demands a <see cref="PrivateKeyMemory"/>/<see cref="SigningDelegate"/>
+/// <see cref="JAdESSignatureCreation.SignAsync(JAdESProtectedHeaders, JAdESSigningPayloadInput, Verifiable.Cryptography.Pki.JAdESUnsignedHeaders?, EncodeJAdESProtectedHeaderDelegate, EncodeJAdESUnprotectedHeaderDelegate, EncodeDelegate, PrivateKeyMemory, SigningDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, JAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> demands a <see cref="PrivateKeyMemory"/>/<see cref="SigningDelegate"/>
 /// pair; <see cref="X509ChainTestRingNode"/> exposes its key as a raw <see cref="ECDsa"/> instead. Rather than
 /// minting two independent, mismatched keys (one for the certificate, one for signing), <see cref="SignWithEcdsaAsync"/>
 /// is a <see cref="SigningDelegate"/> closing over the leaf's own <see cref="ECDsa"/> directly (RFC 7518 §3.4's
 /// ES256 wire format is the identical IEEE P1363 fixed-field concatenation COSE ES256 uses) — the
-/// <paramref name="privateKeyBytes"/> parameter every other <see cref="SigningDelegate"/> in this codebase
+/// <c>privateKeyBytes</c> parameter every other <see cref="SigningDelegate"/> in this codebase
 /// consumes is deliberately unused here, so the <see cref="PrivateKeyMemory"/> handed to <c>SignAsync</c> carries
 /// no meaningful bytes of its own (any well-formed placeholder does).
 /// </para>
@@ -329,22 +329,19 @@ internal sealed class JAdESCapstoneFirewalledFlowTests
     }
 
 
-    /// <summary>A <see cref="SigningDelegate"/> that signs with a captured <see cref="ECDsa"/> directly, ignoring the <c>privateKeyBytes</c> parameter every other implementation in this codebase consumes.</summary>
+    /// <summary>A <see cref="SigningDelegate"/> that signs over a P-256 key's exported scalar bytes, routed through
+    /// the registered <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> P-256 signing function
+    /// — the same choke point every other P-256 signer in this codebase resolves through.</summary>
     /// <param name="ecdsa">The key to sign with.</param>
     /// <param name="dataToSign">The bytes to sign.</param>
     /// <param name="signaturePool">The memory pool the returned <see cref="Signature"/> is rented from.</param>
     /// <returns>The JOSE-native (IEEE P1363 fixed-field) signature.</returns>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the minted Signature transfers into the ValueTask tuple this method " +
-            "returns, which JAdESSignatureCreation.SignAsync's own caller (this test's mint scope) disposes " +
-            "through the JAdESSignatureCreationResult it produces.")]
-    private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignWithEcdsaAsync(ECDsa ecdsa, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
+    private static async ValueTask<(Signature Signature, CryptoEvent? Event)> SignWithEcdsaAsync(ECDsa ecdsa, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
     {
-        byte[] signatureBytes = ecdsa.SignData(dataToSign.Span, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
-        IMemoryOwner<byte> owner = signaturePool.Rent(signatureBytes.Length);
-        signatureBytes.CopyTo(owner.Memory.Span);
+        byte[] privateKeyBytes = ecdsa.ExportParameters(true).D!;
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
 
-        return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(owner, CryptoTags.P256Signature), null));
+        return await sign(privateKeyBytes, dataToSign, signaturePool, context: null, cancellationToken: default).ConfigureAwait(false);
     }
 
 

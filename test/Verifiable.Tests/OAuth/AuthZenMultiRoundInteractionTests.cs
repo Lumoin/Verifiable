@@ -51,18 +51,28 @@ internal sealed class AuthZenMultiRoundInteractionTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
 
+    /// <summary>
+    /// Carries application-defined step-up advice in decision context before a subsequent permitted evaluation.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-5.5.1">Authorization API §5.5.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task StepUpAdviceLeadsToPermitOnReEvaluationWithStrongerAuthentication()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = app.RegisterClient(
+        using VerifierKeyMaterial pdp = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
-            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi)).ConfigureAwait(false);
 
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+        }).ConfigureAwait(false);
         var policy = new StepUpPolicy(requiredAcr: MfaAcr);
-        app.Server.OAuth().EvaluateAccessAsync = policy.EvaluateAsync;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAccessAsync = policy.EvaluateAsync;
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Uri url = EvaluationUrl(app, pdp);
@@ -92,18 +102,28 @@ internal sealed class AuthZenMultiRoundInteractionTests
     }
 
 
+    /// <summary>
+    /// Carries application-defined access advice while the host's timed entitlement determines subsequent decisions.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-5.5.1">Authorization API §5.5.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task RequestForAccessIsProvisionedJustInTimeAndExpires()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = app.RegisterClient(
+        using VerifierKeyMaterial pdp = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
-            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi)).ConfigureAwait(false);
 
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+        }).ConfigureAwait(false);
         var policy = new EntitlementPolicy(TimeProvider, requestUrl: "https://iga.example.com/requests/new");
-        app.Server.OAuth().EvaluateAccessAsync = policy.EvaluateAsync;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAccessAsync = policy.EvaluateAsync;
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Uri url = EvaluationUrl(app, pdp);

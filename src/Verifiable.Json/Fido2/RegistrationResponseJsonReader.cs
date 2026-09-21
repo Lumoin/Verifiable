@@ -27,7 +27,7 @@ namespace Verifiable.Json;
 /// note that <c>authenticatorData</c>, <c>transports</c>, <c>publicKey</c>, and <c>publicKeyAlgorithm</c>
 /// (all but <c>publicKey</c> likewise required) are mirrors of information already recoverable by
 /// decoding <c>attestationObject</c> itself
-/// (<see cref="Verifiable.Cbor.Fido2.AttestationObjectCborReader.Parse"/>), so a genuine client
+/// (<c>Verifiable.Cbor.Fido2.AttestationObjectCborReader.Parse</c>), so a genuine client
 /// response carrying any of them is tolerated rather than rejected, and none is modeled.
 /// </para>
 /// <para>

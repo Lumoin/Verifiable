@@ -1,5 +1,6 @@
 using CsCheck;
 using Verifiable.Fido2;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -19,13 +20,13 @@ internal sealed class NoneAttestationPropertyTests
     /// valid encoding (extra bytes, alternative map encodings, empty input) all fail closed the same way.
     /// </summary>
     [TestMethod]
-    public void AnyStatementOtherThanCanonicalEmptyMapIsRejectedWithStatementNotEmpty() =>
-        Gen.Byte.Array[0, 8]
+    public async Task AnyStatementOtherThanCanonicalEmptyMapIsRejectedWithStatementNotEmpty() =>
+        await Gen.Byte.Array[0, 8]
             .Where(bytes => bytes.Length != 1 || bytes[0] != NoneAttestationTests.CanonicalEmptyMap)
-            .Sample(bytes =>
+            .SampleAsync(async bytes =>
             {
-                Fido2AttestationError? error = NoneAttestationTests.VerifyAndGetRejectionErrorAsync(bytes).GetAwaiter().GetResult();
+                Fido2AttestationError? error = await NoneAttestationTests.VerifyAndGetRejectionErrorAsync(bytes);
 
                 return error is not null && error.Code == Fido2AttestationErrors.StatementNotEmpty.Code;
-            });
+            }, threads: CsCheckSampling.Threads);
 }

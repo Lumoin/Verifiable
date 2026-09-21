@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Extensions.Hierarchy;
 /// manufacture default for owner, endorsement, platform and lockout alike - the derived session key is
 /// reproducible by anyone who observed the <c>TPM2_StartAuthSession</c> exchange, whose nonces cross the wire in
 /// the clear. The mechanism becomes real protection the instant
-/// <see cref="ChangeHierarchyAuthAsync(TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>
+/// <see cref="ChangeHierarchyAuthAsync(TpmDevice, TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>
 /// installs a real value, which is the first provisioning step these verbs exist to serve.
 /// </para>
 /// <para>
@@ -59,8 +59,8 @@ namespace Verifiable.Tpm.Extensions.Hierarchy;
 /// values and are not dictionary-attack protected; <c>lockoutAuth</c> is the documented exception (Part 1,
 /// clause 16.8.1), so every verb here that authorizes with <c>lockoutAuth</c> -
 /// <see cref="ClearAsync"/> and the lockout arms of
-/// <see cref="ClearControlAsync(TpmRh, ReadOnlyMemory{byte}, bool, CancellationToken)"/> and
-/// <see cref="ChangeHierarchyAuthAsync(TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/> -
+/// <see cref="ClearControlAsync"/> and
+/// <see cref="ChangeHierarchyAuthAsync(TpmDevice, TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/> -
 /// gets exactly one strike: a wrong value disables further use of <c>lockoutAuth</c> until the configured
 /// <c>lockoutRecovery</c> interval elapses, a <c>TPM2_Startup</c> runs, or <c>lockoutPolicy</c> is satisfied
 /// (Part 1, clause 16.8.5), and a call made while that state is already engaged is refused with
@@ -90,7 +90,7 @@ public static class TpmDeviceExtensions
     /// <summary>
     /// The hash algorithm for every session this group composes internally: the hierarchy-bound authorization
     /// sessions every verb defaults to, and the decrypt companion
-    /// <see cref="ChangeHierarchyAuthAsync(TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>
+    /// <see cref="ChangeHierarchyAuthAsync(TpmDevice, TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>
     /// carries its replacement value over.
     /// </summary>
     private const TpmAlgIdConstants HierarchyAuthSessionHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -185,10 +185,10 @@ public static class TpmDeviceExtensions
         /// <remarks>
         /// <para>
         /// Identical in every authorization respect to
-        /// <see cref="ChangeHierarchyAuthAsync(TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>
+        /// <see cref="ChangeHierarchyAuthAsync(TpmDevice, TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>
         /// - the same bound sessions, the same USER-role authorization, the same size rule and the same lockout
         /// strike. What changes is the channel, on BOTH sessions. Each is bound AND salted
-        /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateBoundAndSaltedHmacSession(uint, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>),
+        /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateBoundAndSaltedHmacSession(uint, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, Verifiable.Cryptography.FillEntropyDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>),
         /// and each draws its OWN salt: two independent secrets, never one reused across the pair. Every salt is
         /// RSA-OAEP-encrypted (TPM 2.0 Library Part 1, clause 16.6.13) to
         /// <paramref name="tpmKeyModulus"/>/<paramref name="tpmKeyExponent"/>, so only the TPM holding
@@ -236,7 +236,7 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// The explicit low-protection opt-out for
-        /// <see cref="ChangeHierarchyAuthAsync(TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>:
+        /// <see cref="TpmDeviceExtensions.ChangeHierarchyAuthAsync(TpmDevice, TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>:
         /// authorizes with a plaintext <c>TPM_RS_PW</c> session and sends <paramref name="newAuth"/> unencrypted.
         /// </summary>
         /// <remarks>
@@ -323,7 +323,7 @@ public static class TpmDeviceExtensions
         /// </para>
         /// <para>
         /// <b>It can be disabled outright.</b> If <c>TPMA_PERMANENT.disableClear</c> is SET - by anyone holding
-        /// either authorization, through <see cref="ClearControlAsync(TpmRh, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
+        /// either authorization, through <see cref="ClearControlAsync"/>
         /// - this command is refused with <c>TPM_RC_DISABLED</c>, and only Platform Authorization can CLEAR that
         /// control again (Part 3, clause 24.7.1).
         /// </para>
@@ -420,7 +420,7 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// The explicit low-protection opt-out for
-        /// <see cref="ClearControlAsync(TpmRh, ReadOnlyMemory{byte}, bool, CancellationToken)"/>: authorizes with
+        /// <see cref="ClearControlAsync"/>: authorizes with
         /// a plaintext <c>TPM_RS_PW</c> session carrying <paramref name="authValue"/>.
         /// </summary>
         /// <remarks>
@@ -1406,13 +1406,13 @@ public static class TpmDeviceExtensions
         CancellationToken cancellationToken,
         TpmtSymDef? symmetric = null)
     {
-        (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateBoundAndSaltedHmacSession(
+        (StartAuthSessionInput input, IMemoryOwner<byte> salt, int saltLength) = await StartAuthSessionInput.CreateBoundAndSaltedHmacSession(
             tpmKey, (uint)hierarchyHandle, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, HierarchyAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken, symmetric).ConfigureAwait(false);
 
         try
         {
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-                device, salted.Input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+                device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!startResult.IsSuccess)
             {
@@ -1428,8 +1428,8 @@ public static class TpmDeviceExtensions
                 //The session takes ownership of started's nonceTPM, so the response is never disposed
                 //independently.
                 TpmSession session = await TpmSession.CreateBoundAsync(
-                    new TpmHandle(sessionHandle), StripTrailingZeros(hierarchyAuth), salted.Input.NonceCaller, started.NonceTPM,
-                    HierarchyAuthSessionHash, device.Rng, pool, symmetric: symmetric, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                    new TpmHandle(sessionHandle), StripTrailingZeros(hierarchyAuth), input.NonceCaller, started.NonceTPM,
+                    HierarchyAuthSessionHash, device.Rng, pool, symmetric: symmetric, salt: salt.Memory[..saltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return TpmResult<TpmSession>.Success(session);
             }
@@ -1450,8 +1450,8 @@ public static class TpmDeviceExtensions
         }
         finally
         {
-            salted.Salt.Memory.Span[..salted.SaltLength].Clear();
-            salted.Salt.Dispose();
+            salt.Memory.Span[..saltLength].Clear();
+            salt.Dispose();
         }
     }
 

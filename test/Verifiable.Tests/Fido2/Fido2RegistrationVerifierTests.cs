@@ -32,7 +32,7 @@ namespace Verifiable.Tests.Fido2;
 /// <see cref="Fido2TestVectors"/> infrastructure. The outer <c>attestationObject</c> CBOR
 /// (<c>fmt</c>/<c>attStmt</c>/<c>authData</c>) decode is out of scope — this library's CBOR codec
 /// is deferred — so, mirroring <c>PackedSelfAttestationTests</c>/<c>PackedCertifiedAttestationTests</c>,
-/// the raw <c>attStmt</c> bytes handed to <see cref="Fido2RegistrationVerifier.VerifyAsync"/> are a
+/// the raw <c>attStmt</c> bytes handed to <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, IReadOnlyList{PkiCertificateMemory}, DateTimeOffset, string, BaseMemoryPool, TimeProvider, IReadOnlyList{string}?, string?, bool, CancellationToken)"/> are a
 /// placeholder and the real <see cref="PackedAttestationStatement"/> is threaded through a stub
 /// <see cref="ParsePackedAttestationStatementDelegate"/>.
 /// </remarks>
@@ -167,7 +167,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256, Signature: signature, X5c: null);
 
         using RegistrationCeremonyInput ceremonyInput = Fido2CeremonyInputFactory.CreateValidRegistrationInput(
@@ -216,7 +216,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -397,7 +397,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
         signature[0] ^= 0xFF;
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256, Signature: signature, X5c: null);
 
@@ -587,7 +587,7 @@ internal sealed class Fido2RegistrationVerifierTests
     /// <summary>
     /// Mints a section 8.2.1-conformant packed-certified registration (real independent
     /// <see cref="ECDsa"/>-signed leaf/root chain, real wire <c>authData</c>/<c>clientDataJSON</c>)
-    /// and runs it through <see cref="Fido2RegistrationVerifier.VerifyAsync"/> with the row-6107
+    /// and runs it through <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, IReadOnlyList{PkiCertificateMemory}, DateTimeOffset, string, BaseMemoryPool, TimeProvider, IReadOnlyList{string}?, string?, bool, CancellationToken)"/> with the row-6107
     /// downgrade knob set to <paramref name="acceptsUntrustedAttestationAsNone"/>, for the downgrade
     /// matrix tests.
     /// </summary>
@@ -634,7 +634,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
         if(tamperSignature)
         {
             signature[0] ^= 0xFF;

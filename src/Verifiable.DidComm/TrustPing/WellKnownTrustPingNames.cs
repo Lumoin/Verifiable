@@ -13,7 +13,7 @@ namespace Verifiable.DidComm.TrustPing;
 /// agree, any mediators forward, and the envelope round-trips — by sending a <c>ping</c> and (optionally)
 /// receiving a <c>ping-response</c>. Each name declares its single UTF-8 source literal as a
 /// <c>ReadOnlySpan&lt;byte&gt;</c> property and derives the interned string view through
-/// <see cref="Utf8Constants.ToInternedString"/>, matching <see cref="WellKnownRoutingNames"/> and the other
+/// <see cref="Utf8Constants.ToInternedString"/>, matching <see cref="Verifiable.DidComm.Routing.WellKnownRoutingNames"/> and the other
 /// protocol name tables.
 /// </remarks>
 public static class WellKnownTrustPingNames

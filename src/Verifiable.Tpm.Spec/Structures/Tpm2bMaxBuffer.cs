@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <c>acDataIn</c>. It is NOT the NV data type: the NV commands' <c>data</c> parameter is a
 /// <c>TPM2B_MAX_NV_BUFFER</c> bounded by <c>MAX_NV_BUFFER_SIZE</c> (Part 2, clause 10.3.9, Table 97), which
 /// <see cref="Tpm2bMaxNvBuffer"/> carries. The content is public — it is caller-supplied input to a hashing or
-/// transport command — so this carrier holds no <see cref="Verifiable.Cryptography.SensitiveMemory"/> tag,
+/// transport command — so this carrier holds no <see cref="Lumoin.Base.SensitiveMemory"/> tag,
 /// matching <see cref="Tpm2bName"/> and <see cref="Tpm2bData"/> rather than the secret-shaped
 /// <see cref="Tpm2bDigest"/>.
 /// </para>

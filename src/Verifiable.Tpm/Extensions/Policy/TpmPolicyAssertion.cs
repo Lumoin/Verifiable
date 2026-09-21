@@ -143,7 +143,7 @@ public sealed record AuthorizeNvPolicyAssertion(uint AuthHandle, uint NvIndex, R
 /// <summary>
 /// A TPM2_PolicySigned assertion: bind the policy to a signature over <c>aHash</c> made by the key at
 /// <see cref="AuthObject"/>. Replay always uses an empty caller nonceTPM and an empty cpHashA (a
-/// session-unbound, command-unbound authorization) — the simplest form, mirroring how <see cref="WithSecret"/>'s
+/// session-unbound, command-unbound authorization) — the simplest form, mirroring how <see cref="TpmPolicyBuilder.WithSecret(uint)"/>'s
 /// own <see cref="SecretPolicyAssertion"/> covers only permanent handles. The signing step is an explicit
 /// delegate, never a captured closure: <see cref="Sign"/> receives <see cref="SigningContext"/> as a plain
 /// parameter on every call.

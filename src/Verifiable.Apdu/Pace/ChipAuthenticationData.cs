@@ -12,7 +12,7 @@ namespace Verifiable.Apdu.Pace;
 /// <remarks>
 /// A tracked carrier rather than a naked scalar: it owns its pooled memory and clears it on disposal. The
 /// value is derived from the chip's static private key, so it is held in pinned, zeroized memory. The
-/// <see cref="Verifiable.Foundation.SensitiveMemory.Tag"/> carries the curve the scalar is reduced over,
+/// <c>Tag</c> carries the curve the scalar is reduced over,
 /// needed for the verification scalar multiplication.
 /// </remarks>
 [DebuggerDisplay("ChipAuthenticationData({Length} bytes)")]

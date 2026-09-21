@@ -37,8 +37,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsIssuerVerbatimIncludingPathSegment()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -73,8 +73,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryIssuerMatchEnforcesSection33ConsumerSide()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -157,8 +157,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsSubjectTypesSupportedAsPublic()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -180,8 +180,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsResponseTypesSupportedAsCodeWhenAuthCodeOnChain()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -203,8 +203,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsIdTokenSigningAlgValuesFromIdTokenIssuanceKeys()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -226,8 +226,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsGrantTypesSupportedIncludingAuthorizationCodeAndRefreshToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -248,20 +248,21 @@ internal sealed class DiscoveryEndpointTests
 
 
     /// <summary>
-    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1
     /// draft-16 §7.5.2</see>: "The plain code challenge method, defined in [RFC7636], is
-    /// explicitly forbidden in OAuth 2.1." <see cref="PolicyProfile.Fapi20"/> resolves
-    /// <see cref="PkceMethodSet.S256Only"/>, and the advertisement matches that policy.
+    /// explicitly forbidden in OAuth 2.1." The advertisement under <see cref="PolicyProfile.Fapi20"/>
+    /// names S256 only.
     /// </summary>
     [TestMethod]
     public async Task DiscoveryEmitsCodeChallengeMethodsAsS256OnlyUnderFapi20()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20).ConfigureAwait(false);
 
-        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
-            .ConfigureAwait(false);
+        ServerHttpResponse response = await RawAuthCodeWirePushers.PushNamedEndpointAsync(
+            host, material.Registration.TenantId.Value, WellKnownEndpointNames.MetadataDiscovery,
+            WellKnownHttpMethods.Get, new RequestFields(), [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
 
@@ -278,22 +279,22 @@ internal sealed class DiscoveryEndpointTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see>: "JSON array
-    /// containing a list of Proof Key for Code Exchange (PKCE) [RFC7636] code challenge methods
-    /// supported by this authorization server." The advertisement reflects the RESOLVED policy
-    /// rather than a fixed value: <see cref="PolicyProfile.Rfc6749WithPkce"/> resolves
-    /// <see cref="PkceMethodSet.S256AndPlain"/>, and the advertisement names both methods, matching
-    /// the deployment that actually accepts <c>plain</c> at PAR and authorize.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see> advertises
+    /// supported methods. Under <see cref="PolicyProfile.Rfc6749WithPkce"/> this is S256 only,
+    /// applying the library's S256-only policy consistently with
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>:
+    /// "The plain code challenge method, defined in [RFC7636], is explicitly forbidden in OAuth 2.1."
     /// </summary>
     [TestMethod]
-    public async Task DiscoveryEmitsCodeChallengeMethodsAsS256AndPlainUnderRfc6749WithPkce()
+    public async Task DiscoveryEmitsCodeChallengeMethodsAsS256OnlyUnderRfc6749WithPkce()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
-            .ConfigureAwait(false);
+        ServerHttpResponse response = await RawAuthCodeWirePushers.PushNamedEndpointAsync(
+            host, material.Registration.TenantId.Value, WellKnownEndpointNames.MetadataDiscovery,
+            WellKnownHttpMethods.Get, new RequestFields(), [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
 
@@ -303,10 +304,8 @@ internal sealed class DiscoveryEndpointTests
 
         Assert.AreEqual(JsonValueKind.Array, methods.ValueKind);
         List<string> values = EnumerateStrings(methods);
-        Assert.Contains("S256", values);
-        Assert.Contains("plain", values);
-        Assert.HasCount(2, values,
-            "The RFC 6749 + RFC 7636 baseline policy accepts both methods; the advertisement must name both, no more.");
+        Assert.HasCount(1, values, "Every profile advertises S256 only.");
+        Assert.AreEqual("S256", values[0]);
     }
 
 
@@ -325,8 +324,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsTokenEndpointAuthMethodsFromDefaultNoneDeclaration()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -348,8 +347,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsScopesSupportedFromRegistrationAllowedScopes()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -387,8 +386,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsClaimsSupportedMatchingStandardContributors()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -438,8 +437,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsClaimTypesSupportedAsNormalOnly()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -464,8 +463,8 @@ internal sealed class DiscoveryEndpointTests
         //FAPI 2.0 §5.2.2 mandates PAR and RFC 9207 iss; the advertisement is driven by
         //the resolved policy so it matches enforcement.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -488,8 +487,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryAdvertisesRequireParFalseUnderRfc6749WithPkce()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -524,12 +523,15 @@ internal sealed class DiscoveryEndpointTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
             WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ResolveClientMetadataAsync = (uri, context, ct) =>
-            throw new NotImplementedException(
-                "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveClientMetadataAsync = (uri, context, ct) =>
+                throw new NotImplementedException(
+                    "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -566,8 +568,8 @@ internal sealed class DiscoveryEndpointTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
             WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -585,18 +587,21 @@ internal sealed class DiscoveryEndpointTests
     /// <summary>
     /// Fail-closed half of the §6 dual gate: the resolver is wired but the registration does not
     /// carry <see cref="WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument"/> (the default
-    /// <see cref="TestHostShell.RegisterDpopClient"/> capability set), so the flag must be omitted.
+    /// <see cref="TestHostShell.RegisterDpopClientAsync"/> capability set), so the flag must be omitted.
     /// </summary>
     [TestMethod]
     public async Task DiscoveryOmitsClientIdMetadataDocumentSupportedWhenCapabilityMissing()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        host.Server.OAuth().ResolveClientMetadataAsync = (uri, context, ct) =>
-            throw new NotImplementedException(
-                "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveClientMetadataAsync = (uri, context, ct) =>
+                throw new NotImplementedException(
+                    "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -617,11 +622,11 @@ internal sealed class DiscoveryEndpointTests
         //RFC 9449 §5.1 — when the AS wires DPoP proof validation it advertises the
         //accepted proof signature algorithms. RegisterDpopClient wires it.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //Wire the server's DPoP proof validation — the gate for advertising the algs.
-        _ = host.EnableDpop();
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -649,8 +654,8 @@ internal sealed class DiscoveryEndpointTests
         //registration. Chunks 12-16 each pinned individual fields; this
         //assertion ensures the additions compose end-to-end.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -708,8 +713,8 @@ internal sealed class DiscoveryEndpointTests
         //Regression guard — the REQUIRED-field additions must not displace the
         //pre-existing endpoint-URL emission.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -741,14 +746,17 @@ internal sealed class DiscoveryEndpointTests
     public async Task DiscoveryEmitsAppContributedAcrValuesSupported()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        host.Server.OAuth().ContributeDiscoveryFieldsAsync = static (_, _, _) =>
-            ValueTask.FromResult(new DiscoveryDocumentContribution(
-                [new DiscoveryStringArrayField(
-                    AuthorizationServerMetadataParameterNames.AcrValuesSupported,
-                    ["urn:mace:incommon:iap:silver", "loa-substantial"])]));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeDiscoveryFieldsAsync = static (_, _, _) =>
+                ValueTask.FromResult(new DiscoveryDocumentContribution(
+                    [new DiscoveryStringArrayField(
+                        AuthorizationServerMetadataParameterNames.AcrValuesSupported,
+                        ["urn:mace:incommon:iap:silver", "loa-substantial"])]));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -778,8 +786,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task OAuthAuthorizationServerMetadataServesAtInsertedLocationWithExactIssuer()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchOAuthAuthorizationServerMetadataAsync(host, material)
             .ConfigureAwait(false);
@@ -809,8 +817,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task OAuthAuthorizationServerMetadataIsByteIdenticalToOpenIdConfiguration()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse oauthMetadata = await DispatchOAuthAuthorizationServerMetadataAsync(host, material)
             .ConfigureAwait(false);
@@ -837,8 +845,8 @@ internal sealed class DiscoveryEndpointTests
     public async Task OpenIdConfigurationLocationContinuesToServeAlongsideOAuthAuthorizationServer()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);

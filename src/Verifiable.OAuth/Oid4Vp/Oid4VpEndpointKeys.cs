@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
 /// Endpoint-role identifiers passed by the library's OID4VP flow to
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/> when
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/> when
 /// it needs to embed an absolute URL in a produced artifact.
 /// </summary>
 /// <remarks>
@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// per-deployment static. The OID4VP <c>request_uri</c> is the canonical
 /// example: each PAR response carries a fresh, single-use URL whose path
 /// encodes a flow-scoped opaque token. Library code calls
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
 /// with one of these keys; the application's delegate reads any per-flow
 /// inputs the library placed on <see cref="ExchangeContext"/> via
 /// <see cref="Oid4VpContextKeys"/> and composes the URL according to the
@@ -43,7 +43,7 @@ public static class Oid4VpEndpointKeys
     /// <remarks>
     /// <para>
     /// The application's
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
     /// delegate composes the absolute URL using the deployment's routing
     /// scheme. The library places the per-flow opaque token on
     /// <see cref="ExchangeContext"/> via
@@ -55,7 +55,7 @@ public static class Oid4VpEndpointKeys
     /// <para>
     /// The token is unrelated to the internal flow identifier; the flow
     /// identifier never leaves the server process. The application's
-    /// <see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/>
     /// maps the inbound token back to the flow identifier when the JAR-fetch
     /// or direct-post requests arrive.
     /// </para>

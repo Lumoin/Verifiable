@@ -5,7 +5,7 @@ namespace Verifiable.Json;
 
 /// <summary>
 /// The decoded pieces of a W3C WebAuthn Level 3 <c>AuthenticationResponseJSON</c> document, ready for
-/// <see cref="Fido2AssertionVerifier.VerifyAsync"/> to consume.
+/// <see cref="Fido2AssertionVerifier.VerifyAsync(Verifiable.JCose.CoseKey, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, AssertionCeremonyInput, Verifiable.Core.Assessment.ClaimIssuer{AssertionCeremonyInput}, string, BaseMemoryPool, System.Threading.CancellationToken)"/> to consume.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,9 +17,9 @@ namespace Verifiable.Json;
 /// <para>
 /// <see cref="RawId"/> identifies the stored <see cref="Fido2CredentialRecord"/> the assertion is
 /// against; <see cref="ClientDataJson"/>, <see cref="AuthenticatorData"/>, and <see cref="Signature"/>
-/// are the exact bytes <see cref="Fido2AssertionVerifier.VerifyAsync"/> verifies the signature over.
+/// are the exact bytes <see cref="Fido2AssertionVerifier.VerifyAsync(Verifiable.JCose.CoseKey, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, AssertionCeremonyInput, Verifiable.Core.Assessment.ClaimIssuer{AssertionCeremonyInput}, string, BaseMemoryPool, System.Threading.CancellationToken)"/> verifies the signature over.
 /// <see cref="UserHandle"/> is present only when the client reported one — the discoverable-credential
-/// path requires it, per
+/// path requires it (see <see cref="Fido2AssertionVerifier.VerifyAsync(Verifiable.JCose.CoseKey, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, AssertionCeremonyInput, Verifiable.Core.Assessment.ClaimIssuer{AssertionCeremonyInput}, string, BaseMemoryPool, System.Threading.CancellationToken)"/>), per
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">section 7.2, step 6</see>.
 /// </para>
 /// </remarks>

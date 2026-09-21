@@ -20,7 +20,7 @@ internal sealed class McpServerPropertyTests
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
             Assert.Contains(id.ToString(CultureInfo.InvariantCulture), result.Value, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -33,7 +33,7 @@ internal sealed class McpServerPropertyTests
 
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -46,7 +46,7 @@ internal sealed class McpServerPropertyTests
 
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -59,7 +59,7 @@ internal sealed class McpServerPropertyTests
 
             Assert.IsTrue(result.IsSuccess);
             Assert.DoesNotContain("Extra parameter:", result.Value, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -72,7 +72,7 @@ internal sealed class McpServerPropertyTests
 
             Assert.IsTrue(result.IsSuccess);
             Assert.Contains(extra, result.Value, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -86,7 +86,7 @@ internal sealed class McpServerPropertyTests
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
             Assert.Contains(id.ToString(CultureInfo.InvariantCulture), result.Value, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -100,7 +100,7 @@ internal sealed class McpServerPropertyTests
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
             Assert.Contains(id.ToString(CultureInfo.InvariantCulture), result.Value, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -192,7 +192,7 @@ internal sealed class McpServerPropertyTests
             var result2 = VerifiableOperations.CreateDid(id, "param", null);
 
             Assert.AreEqual(result1.IsSuccess, result2.IsSuccess);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
     [TestMethod]
@@ -207,6 +207,6 @@ internal sealed class McpServerPropertyTests
 
             Assert.AreEqual(result.IsSuccess, hasValue, "IsSuccess should match presence of Value.");
             Assert.AreNotEqual(result.IsSuccess, hasError, "IsSuccess and HasError should be mutually exclusive.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

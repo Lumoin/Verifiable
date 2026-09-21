@@ -13,8 +13,8 @@ namespace Verifiable.Tests.Cryptography;
 
 /// <summary>
 /// Tests for ECDH-ES key agreement with P-256 and AES-GCM content encryption using
-/// the split delegate design. Covers encrypt (<see cref="JweExtensions.EncryptAsync"/>)
-/// and decrypt (<see cref="JweExtensions.DecryptAsync"/>) for both backends
+/// the split delegate design. Covers encrypt (<see cref="JweMessageExtensions.EncryptAsync"/>)
+/// and decrypt (<see cref="JweMessageExtensions.DecryptAsync(AeadMessage, PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>) for both backends
 /// and their cross-backend combinations.
 /// </summary>
 [TestClass]
@@ -504,6 +504,97 @@ internal sealed class EcdhEsTests
 
 
     [TestMethod]
+    public async Task RejectsProtectedHeaderWithDuplicateKidParameter()
+    {
+        //RFC 7516 §4 / §5.2 step 4: "Header Parameter names ... MUST be unique." The genuine header
+        //produced by EncryptAsync — alg, enc, and epk untouched — has a duplicate "kid" spliced in by
+        //hand: the attacker's value FIRST, a second value LAST. "kid" carries no expected-value check
+        //of its own in ParseAndValidateHeader (unlike alg/enc), so the well-formedness gate is the ONLY
+        //check standing between this header and a successfully parsed message — proving the gate,
+        //not an incidental mismatch elsewhere, is what refuses it, before any key is selected.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
+        using PublicKeyMemory publicKey = keyPair.PublicKey;
+
+        using JweMessage encrypted = await UnencryptedJwe.ForEcdhEs(
+            WellKnownJweAlgorithms.EcdhEs,
+            WellKnownJweEncryptionAlgorithms.A128Gcm,
+            Encoding.UTF8.GetBytes(/*lang=json,strict*/ "{\"test\":true}").AsMemory()).EncryptAsync(
+                publicKey,
+                JwtHeaderSerializer,
+                TestSetup.Base64UrlEncoder,
+                CryptoFormatConversions.DefaultTagToEpkCrvConverter,
+                BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
+                ConcatKdf.DefaultKeyDerivationDelegate,
+                BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+                Pool,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        string[] parts = encrypted.ToCompactJwe(TestSetup.Base64UrlEncoder).Split('.');
+        using IMemoryOwner<byte> genuineHeaderOwner = TestSetup.Base64UrlDecoder(parts[0], Pool);
+        string genuineHeaderJson = Encoding.UTF8.GetString(genuineHeaderOwner.Memory.Span);
+
+        //Splice a duplicate "kid" pair in right after the opening brace, leaving every genuine member
+        //(alg, enc, epk) exactly as EncryptAsync produced it.
+        string tamperedHeaderJson =
+            "{\"kid\":\"attacker-key\",\"kid\":\"honest-key\"," + genuineHeaderJson[1..];
+        parts[0] = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(tamperedHeaderJson));
+        string tampered = string.Join('.', parts);
+
+        _ = Assert.ThrowsExactly<FormatException>(() =>
+            JweParsing.ParseCompact(
+                tampered,
+                WellKnownJweAlgorithms.EcdhEs,
+                WellKnownJweEncryptionAlgorithms.A128Gcm,
+                TestSetup.Base64UrlDecoder,
+                Pool));
+    }
+
+
+    [TestMethod]
+    public async Task RejectsProtectedHeaderTruncatedBeforeItsClosingBrace()
+    {
+        //RFC 8259 §2: the decoded header must be exactly one well-formed JSON value. The genuine header
+        //produced by EncryptAsync — carrying a complete alg, enc, and epk, everything ParseAndValidateHeader
+        //reads — is truncated by exactly one byte: its own final closing brace. Every member is still
+        //present and extractable; only the grammar is broken. The well-formedness gate is therefore the
+        //ONLY check that can catch this, before any key is selected.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
+        using PublicKeyMemory publicKey = keyPair.PublicKey;
+
+        using JweMessage encrypted = await UnencryptedJwe.ForEcdhEs(
+            WellKnownJweAlgorithms.EcdhEs,
+            WellKnownJweEncryptionAlgorithms.A128Gcm,
+            Encoding.UTF8.GetBytes(/*lang=json,strict*/ "{\"test\":true}").AsMemory()).EncryptAsync(
+                publicKey,
+                JwtHeaderSerializer,
+                TestSetup.Base64UrlEncoder,
+                CryptoFormatConversions.DefaultTagToEpkCrvConverter,
+                BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
+                ConcatKdf.DefaultKeyDerivationDelegate,
+                BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+                Pool,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        string[] parts = encrypted.ToCompactJwe(TestSetup.Base64UrlEncoder).Split('.');
+        using IMemoryOwner<byte> genuineHeaderOwner = TestSetup.Base64UrlDecoder(parts[0], Pool);
+        string genuineHeaderJson = Encoding.UTF8.GetString(genuineHeaderOwner.Memory.Span);
+        string truncatedHeaderJson = genuineHeaderJson[..^1];
+        parts[0] = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(truncatedHeaderJson));
+        string tampered = string.Join('.', parts);
+
+        _ = Assert.ThrowsExactly<FormatException>(() =>
+            JweParsing.ParseCompact(
+                tampered,
+                WellKnownJweAlgorithms.EcdhEs,
+                WellKnownJweEncryptionAlgorithms.A128Gcm,
+                TestSetup.Base64UrlDecoder,
+                Pool));
+    }
+
+
+    [TestMethod]
     public async Task BrainpoolP256r1RoundTripProducesOriginalPlaintext()
     {
         await BrainpoolRoundTripAsync(
@@ -622,6 +713,31 @@ internal sealed class EcdhEsTests
             MicrosoftKeyAgreementFunctions.EcdhKeyAgreementDecryptP521Async,
             MicrosoftKeyAgreementFunctions.AesGcmDecryptAsync,
             WellKnownCurveValues.P521).ConfigureAwait(false);
+    }
+
+
+    [TestMethod]
+    public async Task AesGcmDecryptMatchesRfc7516AppendixA1KnownAnswerVector()
+    {
+        //RFC 7516 Appendix A.1: CEK (A.1.2), IV (A.1.4), AAD (A.1.5, the ASCII bytes of the
+        //base64url-encoded protected header from A.1.1) and ciphertext/tag (A.1.6), pinning the
+        //BouncyCastle-backed AES-256-GCM decrypt to the published vector independent of the RSA-OAEP
+        //key-wrapping half of that example.
+        using SymmetricKeyMemory key = KeyFromHex(
+            "B1A1F480548FE1733FB403FF6B9AD4F68A076E5B702E22692F82CB2E7AEA40FC");
+        using Nonce iv = IvFromBase64Url("48V1_ALb6US04U3b");
+        using Ciphertext ciphertext = CiphertextFromBase64Url(
+            "5eym8TW_c8SuK0ltJ3rpYIzOeDQz7TALvtu6UG9oMo4vpzs9tX_EFShS8iB7j6jiSdiwkIr3ajwQzaBtQD_A");
+        using AuthenticationTag tag = TagFromBase64Url("XFBoMYUZodetZdvTiFvSkQ");
+        using AdditionalData aad = AadFromAscii("eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ");
+
+        using DecryptedContent decrypted = await BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync(
+            ciphertext, key, iv, tag, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            "The true sign of intelligence is not knowledge but imagination.",
+            Encoding.UTF8.GetString(decrypted.AsReadOnlySpan()),
+            "Decrypted plaintext must match the RFC 7516 Appendix A.1 known-answer vector.");
     }
 
 
@@ -820,5 +936,33 @@ internal sealed class EcdhEsTests
         decoded.Memory.Span[0] ^= 0xFF;
         parts[segmentIndex] = TestSetup.Base64UrlEncoder(decoded.Memory.Span);
         return string.Join('.', parts);
+    }
+
+
+    private static SymmetricKeyMemory KeyFromHex(string hex)
+    {
+        byte[] bytes = Convert.FromHexString(hex);
+        IMemoryOwner<byte> owner = Pool.Rent(bytes.Length);
+        bytes.CopyTo(owner.Memory.Span);
+
+        return new SymmetricKeyMemory(owner, CryptoTags.AesGcmCek);
+    }
+
+    private static Nonce IvFromBase64Url(string base64Url) =>
+        new(TestSetup.Base64UrlDecoder(base64Url, Pool), CryptoTags.AesGcmIv);
+
+    private static Ciphertext CiphertextFromBase64Url(string base64Url) =>
+        new(TestSetup.Base64UrlDecoder(base64Url, Pool), CryptoTags.AesGcmCiphertext);
+
+    private static AuthenticationTag TagFromBase64Url(string base64Url) =>
+        new(TestSetup.Base64UrlDecoder(base64Url, Pool), CryptoTags.AesGcmAuthTag);
+
+    private static AdditionalData AadFromAscii(string ascii)
+    {
+        byte[] bytes = Encoding.ASCII.GetBytes(ascii);
+        IMemoryOwner<byte> owner = Pool.Rent(bytes.Length);
+        bytes.CopyTo(owner.Memory.Span);
+
+        return new AdditionalData(owner, CryptoTags.AesGcmAad);
     }
 }

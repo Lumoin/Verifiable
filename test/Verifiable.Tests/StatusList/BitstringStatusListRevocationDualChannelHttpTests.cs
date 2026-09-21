@@ -20,7 +20,7 @@ namespace Verifiable.Tests.StatusList;
 /// channels: the pull channel (flip the status bit, re-sign the BitstringStatusListCredential, and
 /// republish it so a polling verifier sees the revocation) AND the push channel (a CAEP
 /// <c>credential-change</c> Security Event Token delivered to a Shared Signals Receiver). The
-/// application composes both behind the <see cref="UpdateCredentialStatusDelegate"/> seam — the
+/// application composes both behind the <see cref="UpdateCredentialStatusesDelegate"/> seam — the
 /// credential-side analog of the global token-revocation fan-out in
 /// <see cref="OAuth.GlobalLogoutDualChannelHttpTests"/>.
 /// </summary>

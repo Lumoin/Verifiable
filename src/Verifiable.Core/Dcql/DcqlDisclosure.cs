@@ -82,7 +82,7 @@ public sealed record DcqlDisclosureResult<TCredential>
 /// The computation is genuinely asynchronous: <see cref="DisclosureComputation{TCredential}.ComputeAsync"/>
 /// runs the wired policy assessors, so there is no synchronous form. Callers wire
 /// their own <see cref="DisclosureComputation{TCredential}"/> (with policy
-/// assessors / cross-credential optimizers) by passing <paramref name="computation"/>,
+/// assessors / cross-credential optimizers) by passing <c>computation</c>,
 /// or accept the default empty-policy computation.
 /// </para>
 /// </remarks>

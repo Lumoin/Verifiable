@@ -72,6 +72,7 @@ public static class TpmDeviceExtensions
             TpmPlatform.Windows => "Windows",
             TpmPlatform.Linux => "Linux",
             TpmPlatform.Virtual => "Virtual",
+            TpmPlatform.Unknown => "Unknown",
             _ => "Unknown"
         };
 
@@ -341,6 +342,33 @@ public static class TpmDeviceExtensions
             TpmAlgIdConstants.TPM_ALG_CBC => "CBC",
             TpmAlgIdConstants.TPM_ALG_CFB => "CFB",
             TpmAlgIdConstants.TPM_ALG_ECB => "ECB",
+            TpmAlgIdConstants.TPM_ALG_ERROR => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_TDES => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_HKDF => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_CMAC => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_CCM => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_GCM => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_KW => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_KWP => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_EAX => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_EDDSA => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_LMS => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_XMSS => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_KMAC128 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_KMAC256 => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_MLKEM => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_MLDSA => $"ALG_0x{(ushort)algorithm:X4}",
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => $"ALG_0x{(ushort)algorithm:X4}",
             _ => $"ALG_0x{(ushort)algorithm:X4}"
         };
     }
@@ -357,6 +385,12 @@ public static class TpmDeviceExtensions
             TpmEccCurveConstants.TPM_ECC_BN_P256 => "BN_P256",
             TpmEccCurveConstants.TPM_ECC_BN_P638 => "BN_P638",
             TpmEccCurveConstants.TPM_ECC_SM2_P256 => "SM2_P256",
+            TpmEccCurveConstants.TPM_ECC_NONE => $"CURVE_0x{(ushort)curve:X4}",
+            TpmEccCurveConstants.TPM_ECC_BP_P256_R1 => $"CURVE_0x{(ushort)curve:X4}",
+            TpmEccCurveConstants.TPM_ECC_BP_P384_R1 => $"CURVE_0x{(ushort)curve:X4}",
+            TpmEccCurveConstants.TPM_ECC_BP_P512_R1 => $"CURVE_0x{(ushort)curve:X4}",
+            TpmEccCurveConstants.TPM_ECC_CURVE_25519 => $"CURVE_0x{(ushort)curve:X4}",
+            TpmEccCurveConstants.TPM_ECC_CURVE_448 => $"CURVE_0x{(ushort)curve:X4}",
             _ => $"CURVE_0x{(ushort)curve:X4}"
         };
     }

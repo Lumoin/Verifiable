@@ -67,7 +67,7 @@ internal sealed class ClockRateAdjustInputFramingTests
             $"'{undefinedRateAdjust}' names no Table 19 member, so the client-side guard must refuse it before framing.");
     }
 
-    /// <summary>Frames <paramref name="input"/>'s parameter area into <paramref name="buffer"/>, the single-statement call <see cref="Assert.ThrowsExactly{T}(Action, string)"/> requires.</summary>
+    /// <summary>Frames <paramref name="input"/>'s parameter area into <paramref name="buffer"/>, the single-statement call <c>Assert.ThrowsExactly&lt;T&gt;(Action, string)</c> requires.</summary>
     /// <param name="input">The command input under test.</param>
     /// <param name="buffer">The destination buffer, exactly one octet wide.</param>
     private static void WriteParametersInto(ClockRateAdjustInput input, byte[] buffer)

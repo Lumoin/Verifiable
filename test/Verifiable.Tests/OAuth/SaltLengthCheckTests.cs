@@ -11,7 +11,7 @@ namespace Verifiable.Tests.OAuth;
 /// salt-length signal. The shortest observed salt length
 /// (<see cref="ValidationContext.MinimumDisclosureSaltLengthBytes"/>) is captured in the verify step;
 /// this rule compares it against <see cref="Salt.RecommendedByteLength"/> and only fails when the
-/// deployment opts into enforcement (<see cref="PolicyExchangeContextExtensions.EnforceMinimumSaltLength"/>,
+/// deployment opts into enforcement (<see cref="PolicyExchangeContextExtensions.extension(ExchangeContext).EnforceMinimumSaltLength"/>,
 /// default observe — RFC 9901 §9.3 RECOMMENDS rather than mandates the length). These pin the gate ×
 /// signal matrix directly.
 /// </summary>

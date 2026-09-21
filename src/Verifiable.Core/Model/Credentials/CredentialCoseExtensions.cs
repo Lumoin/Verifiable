@@ -26,7 +26,8 @@ namespace Verifiable.Core.Model.Credentials;
 /// <item><description>
 /// <strong>Signing</strong>: Serializes a <see cref="VerifiableCredential"/> to CBOR bytes,
 /// constructs a protected header with algorithm and content type parameters, signs via
-/// <see cref="Cose.SignAsync"/>, and returns a <see cref="CoseSign1Message"/> POCO.
+/// <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>,
+/// and returns a <see cref="CoseSign1Message"/> POCO.
 /// </description></item>
 /// <item><description>
 /// <strong>Verification</strong>: Verifies a COSE_Sign1-secured credential and
@@ -105,7 +106,7 @@ public static class CredentialCoseExtensions
     /// <see cref="SigningDelegate"/>. The registry-resolving overload above
     /// delegates here after resolving the function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="privateKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// from <paramref name="privateKey"/>'s <c>Tag</c>.
     /// </summary>
     /// <param name="credential">The credential to sign.</param>
     /// <param name="privateKey">The private key for signing.</param>
@@ -230,7 +231,7 @@ public static class CredentialCoseExtensions
     /// <see cref="VerificationDelegate"/>. The registry-resolving overload
     /// above delegates here after resolving the function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// from <paramref name="publicKey"/>'s <c>Tag</c>.
     /// </summary>
     /// <remarks>
     /// This is a bring-your-own-key primitive: <paramref name="publicKey"/> is a plain parameter

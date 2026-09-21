@@ -156,6 +156,15 @@ public sealed class ClaimsQueryConverter: JsonConverter<ClaimsQuery>
                 JsonTokenType.String => PatternSegment.Key(reader.GetString()!),
                 JsonTokenType.Number => PatternSegment.Index(reader.GetInt32()),
                 JsonTokenType.Null => PatternSegment.Wildcard(),
+                JsonTokenType.None => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.StartObject => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.EndObject => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.StartArray => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.EndArray => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.PropertyName => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.Comment => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.True => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
+                JsonTokenType.False => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array."),
                 _ => throw new JsonException($"Unexpected token type '{reader.TokenType}' in claim path array.")
             };
 
@@ -220,6 +229,14 @@ public sealed class ClaimsQueryConverter: JsonConverter<ClaimsQuery>
                 JsonTokenType.Number => reader.GetInt64(),
                 JsonTokenType.True => true,
                 JsonTokenType.False => false,
+                JsonTokenType.None => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
+                JsonTokenType.StartObject => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
+                JsonTokenType.EndObject => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
+                JsonTokenType.StartArray => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
+                JsonTokenType.EndArray => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
+                JsonTokenType.PropertyName => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
+                JsonTokenType.Comment => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
+                JsonTokenType.Null => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array."),
                 _ => throw new JsonException($"Unexpected token type '{reader.TokenType}' in values array.")
             };
 

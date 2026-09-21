@@ -1,10 +1,12 @@
 using Lumoin.Veridical.Backends.Managed;
 using Lumoin.Veridical.Bbs;
 using Lumoin.Veridical.Core.Algebraic;
+using System.Buffers;
 using System.Security.Cryptography;
 using Verifiable.Cbor;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -45,6 +47,8 @@ internal sealed class Bbs2023ResolvingBindingTests
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+
+    private static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, Context.CredentialsExamples20);
 
     private static IReadOnlyList<CredentialPath> MandatoryPaths { get; } =
     [
@@ -170,6 +174,7 @@ internal sealed class Bbs2023ResolvingBindingTests
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -182,6 +187,66 @@ internal sealed class Bbs2023ResolvingBindingTests
         Assert.IsNotNull(result.Verified);
         Assert.IsFalse(result.Verified.Value.IsIdentityBound, "The BYOK overload must mint Asserted, never Bound.");
         Assert.IsTrue(result.Verified.Value.Provenance is AssertedProvenance);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#base-proof-transformation-bbs-2023">W3C VC Data
+    /// Integrity BBS Cryptosuites v1.0 §3.2.2 transformation</see>: createVerifyData canonicalizes the
+    /// credential before the mandatory hash and the BBS message vector are computed from it. A
+    /// credential with no resolvable JSON-LD context canonicalizes to zero statements, so both would be
+    /// computed over nothing; the issuer must refuse to mint a base proof over such a credential rather
+    /// than sign a proof that would later verify trivially.
+    /// </summary>
+    [TestMethod]
+    public async Task BaseProofCreationRefusesAContextlessCredential()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        using var bbs = ResolvingBbsOperations.Generate();
+
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await SignBaseAsync(bbs, "{}", mandatoryPaths: [], cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#verify-base-proof-bbs-2023">W3C VC Data Integrity BBS
+    /// Cryptosuites v1.0 §3.2.4 verifyBaseProof</see>: the mandatory hash and the BBS message vector
+    /// createVerifyData builds from the credential are what the base signature is checked against. A
+    /// credential that canonicalizes to zero statements would have both computed over nothing, and a
+    /// BBS signature verification over an empty message list verifies as valid regardless of what the
+    /// credential displays; that case is refused before the cryptographic call.
+    /// </summary>
+    [TestMethod]
+    public async Task BaseProofVerificationRefusesAProofThatCoversNoStatements()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        using var bbs = ResolvingBbsOperations.Generate();
+
+        //CreateBaseProofAsync now refuses to mint a base proof over a context-less credential
+        //(BaseProofCreationRefusesAContextlessCredential), so this proof cannot be produced through
+        //that path any more. It is hand-built here the same way BuildVacuousDerivedCredential builds a
+        //vacuous derived proof: the same real BBS signing call, over the same empty header and empty
+        //message vector an unguarded issuer implementation would have produced.
+        var credential = await BuildVacuousBaseProofCredentialAsync(bbs, cancellationToken).ConfigureAwait(false);
+
+        var result = await credential.VerifyBaseProofAsync(
+            bbs.Verify,
+            Bbs2023CborSerializer.ParseBaseProof,
+            JsonLdSelection.PartitionStatements,
+            RdfcCanonicalizer,
+            ContextResolver,
+            KnownContext,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A base proof that canonicalizes to no statements covers nothing and must be refused.");
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, result.FailureReason);
     }
 
 
@@ -206,6 +271,7 @@ internal sealed class Bbs2023ResolvingBindingTests
             Bbs2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -244,6 +310,7 @@ internal sealed class Bbs2023ResolvingBindingTests
             Bbs2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -273,6 +340,7 @@ internal sealed class Bbs2023ResolvingBindingTests
             Bbs2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -288,15 +356,134 @@ internal sealed class Bbs2023ResolvingBindingTests
     }
 
 
-    private static async Task<DataIntegritySecuredCredential> SignBaseAsync(ResolvingBbsOperations bbs, CancellationToken cancellationToken)
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#verify-derived-proof-bbs-2023">W3C VC Data Integrity
+    /// BBS Cryptosuites v1.0 §3.3.8 verifyDerivedProof</see>: createVerifyData canonicalizes the reveal
+    /// document before the mandatory hash and the BBS message list are computed. With no JSON-LD context
+    /// no property key resolves to an absolute IRI, so canonicalization yields zero statements; a proof
+    /// computed over zero statements proves nothing about any claim and must be refused rather than
+    /// accepted because the BBS check happens to pass over an empty message list.
+    /// </summary>
+    [TestMethod]
+    public async Task DerivedProofVerificationRefusesACredentialWithNoContext()
     {
-        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialJson, TestSetup.DefaultSerializationOptions)!;
+        var cancellationToken = TestContext.CancellationToken;
+        using var bbs = ResolvingBbsOperations.Generate();
+
+        //The base-proofed credential is "{}": no @context, no claims, nothing mandatory. Its BBS
+        //signature covers zero messages, so a hand-built derived proof over zero messages and zero
+        //disclosed indexes is internally consistent with it -- this reproduces a derived credential
+        //arriving at a verifier with its JSON-LD context already lost. Built through
+        //BuildVacuousBaseProofCredentialAsync because CreateBaseProofAsync now refuses to mint a base
+        //proof over "{}" (BaseProofCreationRefusesAContextlessCredential), and then through
+        //BuildVacuousDerivedCredential because DeriveProofAsync now refuses to derive from it too
+        //(DeriveRefusesACredentialWhoseRevealDocumentCanonicalizesToNothing) -- neither guard can
+        //intercept a proof hand-built the way an unguarded implementation would have produced it.
+        var signedCredential = await BuildVacuousBaseProofCredentialAsync(bbs, cancellationToken).ConfigureAwait(false);
+        var derivedCredential = BuildVacuousDerivedCredential(signedCredential, bbs);
+
+        var result = await derivedCredential.VerifyDerivedProofAsync(
+            bbs.ProofVerify,
+            Bbs2023CborSerializer.ParseDerivedProof,
+            RdfcCanonicalizer,
+            ContextResolver,
+            KnownContext,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A derived proof over a credential with no @context canonicalizes to zero statements and must be refused.");
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#verify-derived-proof-bbs-2023">W3C VC Data Integrity
+    /// BBS Cryptosuites v1.0 §3.3.8 verifyDerivedProof</see>: a derived proof that discloses no
+    /// non-mandatory statement is not thereby vacuous when its mandatory statements are non-empty -- the
+    /// mandatory hash still binds real content into the header, and the BBS proof is still a genuine
+    /// proof of possession of the issuer's signature over it. A holder who reveals only the mandatory
+    /// content, selectively disclosing nothing further, presents a proof that verifies.
+    /// </summary>
+    [TestMethod]
+    public async Task DerivedProofVerificationVerifiesDisclosureOfMandatoryContentOnly()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        using var bbs = ResolvingBbsOperations.Generate();
+
+        //Nothing beyond the mandatory /issuer pointer is requested, so every reveal statement is
+        //mandatory and the BBS message vector this proof discloses is empty. The reveal document itself
+        //is non-empty (id, type, issuer): the mandatory hash binds real content, so this is a genuine,
+        //legitimate presentation rather than the jointly-empty case the previous test refuses.
+        var signedCredential = await SignBaseAsync(bbs, cancellationToken).ConfigureAwait(false);
+        var derivedCredential = await DeriveAsync(signedCredential, bbs, new HashSet<CredentialPath>(), cancellationToken).ConfigureAwait(false);
+
+        var result = await derivedCredential.VerifyDerivedProofAsync(
+            bbs.ProofVerify,
+            Bbs2023CborSerializer.ParseDerivedProof,
+            RdfcCanonicalizer,
+            ContextResolver,
+            KnownContext,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, "A derived proof disclosing only mandatory content binds real content through the header and must verify.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#createdisclosuredata">W3C VC Data Integrity BBS
+    /// Cryptosuites v1.0 §3.3.3 createDisclosureData</see>: the reveal document createDisclosureData
+    /// builds from the disclosed pointers is what verifyDerivedProof will later canonicalize. When the
+    /// mandatory and selectively-requested pointers are both empty and the credential carries no root
+    /// "id" or "type" to fall back on, the reveal document canonicalizes to zero statements; deriving a
+    /// proof over it would only ever verify trivially, so derive refuses to mint one. The base proof is
+    /// built through BuildVacuousBaseProofCredentialAsync because CreateBaseProofAsync itself now
+    /// refuses to mint a base proof over the same "{}" credential
+    /// (BaseProofCreationRefusesAContextlessCredential): "type" is required for any VCDM 2.0 term to
+    /// resolve at all, and selectJsonLd copies "type" into every reveal unconditionally, so a real,
+    /// issuer-signed credential with disclosable content never reaches an empty reveal -- only a
+    /// credential that was already vacuous at issuance does, which is what this base proof reproduces.
+    /// </summary>
+    [TestMethod]
+    public async Task DeriveRefusesACredentialWhoseRevealDocumentCanonicalizesToNothing()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        using var bbs = ResolvingBbsOperations.Generate();
+
+        var signedCredential = await BuildVacuousBaseProofCredentialAsync(bbs, cancellationToken).ConfigureAwait(false);
+
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await DeriveAsync(signedCredential, bbs, new HashSet<CredentialPath>(), cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    private static Task<DataIntegritySecuredCredential> SignBaseAsync(ResolvingBbsOperations bbs, CancellationToken cancellationToken) =>
+        SignBaseAsync(bbs, CredentialJson, MandatoryPaths, cancellationToken);
+
+
+    private static async Task<DataIntegritySecuredCredential> SignBaseAsync(
+        ResolvingBbsOperations bbs,
+        string credentialJson,
+        IReadOnlyList<CredentialPath> mandatoryPaths,
+        CancellationToken cancellationToken)
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialJson, TestSetup.DefaultSerializationOptions)!;
 
         return await credential.CreateBaseProofAsync(
             bbs.PublicKeyBytes,
             SignerKeyId,
             ProofCreated,
-            MandatoryPaths,
+            mandatoryPaths,
             () => RandomNumberGenerator.GetBytes(32),
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
@@ -316,13 +503,20 @@ internal sealed class Bbs2023ResolvingBindingTests
     private static Task<DataIntegritySecuredCredential> DeriveAsync(
         DataIntegritySecuredCredential signedCredential,
         ResolvingBbsOperations bbs,
+        CancellationToken cancellationToken) =>
+        DeriveAsync(
+            signedCredential,
+            bbs,
+            new HashSet<CredentialPath> { CredentialPath.FromJsonPointer("/credentialSubject/degree/name") },
+            cancellationToken);
+
+
+    private static Task<DataIntegritySecuredCredential> DeriveAsync(
+        DataIntegritySecuredCredential signedCredential,
+        ResolvingBbsOperations bbs,
+        IReadOnlySet<CredentialPath> verifierRequestedPaths,
         CancellationToken cancellationToken)
     {
-        var verifierRequestedPaths = new HashSet<CredentialPath>
-        {
-            CredentialPath.FromJsonPointer("/credentialSubject/degree/name")
-        };
-
         return signedCredential.DeriveProofAsync(
             verifierRequestedPaths,
             userExclusions: null,
@@ -344,6 +538,119 @@ internal sealed class Bbs2023ResolvingBindingTests
     }
 
 
+    //Hand-builds a derived proof over zero BBS messages and zero disclosed indexes directly from a base
+    //proof that itself covers zero messages, bypassing DeriveProofAsync so the derive-side refusal this
+    //task adds cannot intercept it. The result is what a verifier would receive from a derived credential
+    //whose JSON-LD context was already lost -- exactly the wire shape DerivedProofVerificationRefusesACredentialWithNoContext
+    //exercises against the verify-side refusal.
+    private static DataIntegritySecuredCredential BuildVacuousDerivedCredential(
+        DataIntegritySecuredCredential signedCredential,
+        ResolvingBbsOperations bbs)
+    {
+        var proof = signedCredential.Proof![0];
+        using var parsedBaseProof = Bbs2023CborSerializer.ParseBaseProof(proof.ProofValue!, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+        var bbsProofBytes = bbs.ProofGen(
+            parsedBaseProof.BbsSignature,
+            parsedBaseProof.BbsHeader,
+            PresentationHeader,
+            messages: [],
+            disclosedIndexes: [],
+            BaseMemoryPool.Shared);
+
+        var derivedProofValue = Bbs2023CborSerializer.SerializeDerivedProof(
+            bbsProofBytes,
+            new Dictionary<string, string>(),
+            [],
+            [],
+            PresentationHeader,
+            TestSetup.Base64UrlEncoder);
+
+        var derivedProof = new DataIntegrityProof
+        {
+            Id = proof.Id,
+            Type = proof.Type,
+            Cryptosuite = proof.Cryptosuite,
+            Created = proof.Created,
+            VerificationMethod = proof.VerificationMethod,
+            ProofPurpose = proof.ProofPurpose,
+            ProofValue = derivedProofValue
+        };
+
+        return new DataIntegritySecuredCredential
+        {
+            Proof = [derivedProof]
+        };
+    }
+
+
+    //Hand-builds a base proof over a "{}" credential (no @context, no claims) directly, bypassing
+    //CreateBaseProofAsync so the creation-side refusal this task adds cannot intercept it. Replicates
+    //the pre-guard CreateBaseProofVerboseAsync computation: the mandatory hash and the BBS message
+    //vector are both computed over nothing, using the same real BBS signing call. The result is what
+    //an unguarded issuer implementation would have put on the wire.
+    private static async Task<DataIntegritySecuredCredential> BuildVacuousBaseProofCredentialAsync(
+        ResolvingBbsOperations bbs,
+        CancellationToken cancellationToken)
+    {
+        var proofSkeleton = new DataIntegrityProof
+        {
+            Type = CredentialConstants.DataIntegrityProofType,
+            Cryptosuite = Bbs2023CryptosuiteInfo.Instance,
+            Created = DateTimeStampFormat.Format(ProofCreated),
+            VerificationMethod = new AssertionMethod(SignerKeyId),
+            ProofPurpose = AssertionMethod.Purpose
+        };
+
+        var proofOptions = ProofOptionsDocument.FromProof(proofSkeleton, context: null);
+        var proofOptionsJson = CanonicalizationTestUtilities.SerializeProofOptions(proofOptions);
+        var proofOptionsCanonicalization = await RdfcCanonicalizer(proofOptionsJson, ContextResolver, EmptyContext, cancellationToken).ConfigureAwait(false);
+
+        using DigestValue mandatoryHash = await CryptographicKeyEvents.ComputeDigestAsync(
+            ReadOnlySequence<byte>.Empty,
+            outputByteLength: 32,
+            tag: CryptoTags.Sha256Digest,
+            pool: BaseMemoryPool.Shared,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        using DigestValue proofHash = await CryptographicKeyEvents.ComputeDigestAsync(
+            System.Text.Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
+            outputByteLength: 32,
+            tag: CryptoTags.Sha256Digest,
+            pool: BaseMemoryPool.Shared,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        var bbsHeaderBytes = new byte[proofHash.Length + mandatoryHash.Length];
+        proofHash.AsReadOnlySpan().CopyTo(bbsHeaderBytes);
+        mandatoryHash.AsReadOnlySpan().CopyTo(bbsHeaderBytes.AsSpan(proofHash.Length));
+
+        var bbsSignature = bbs.Sign(bbsHeaderBytes, messages: [], BaseMemoryPool.Shared);
+
+        var proofValue = Bbs2023CborSerializer.SerializeBaseProof(
+            bbsSignature,
+            bbsHeaderBytes,
+            bbs.PublicKeyBytes,
+            hmacKey: RandomNumberGenerator.GetBytes(32),
+            mandatoryPointers: [],
+            TestSetup.Base64UrlEncoder);
+
+        var baseProof = new DataIntegrityProof
+        {
+            Type = proofSkeleton.Type,
+            Cryptosuite = proofSkeleton.Cryptosuite,
+            Created = proofSkeleton.Created,
+            VerificationMethod = proofSkeleton.VerificationMethod,
+            ProofPurpose = proofSkeleton.ProofPurpose,
+            ProofValue = proofValue
+        };
+
+        return new DataIntegritySecuredCredential
+        {
+            Proof = [baseProof]
+        };
+    }
+
+
     private static ValueTask<CredentialVerificationResult<DataIntegritySecuredCredential>> VerifyBaseResolvingAsync(
         DataIntegritySecuredCredential credential,
         DidDocument issuerDidDocument,
@@ -356,6 +663,7 @@ internal sealed class Bbs2023ResolvingBindingTests
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,

@@ -198,7 +198,7 @@ internal sealed class SignatureValidationModelTests
         Assert.AreEqual(CertificateChainReportKind.LastBuilt, ZeroInitialized<CertificateChainReportKind>(), "An unset chain report kind must make the weaker of the two claims.");
         Assert.AreEqual(CertificateValidityModel.Shell, ZeroInitialized<CertificateValidityModel>(), "The shell model is the RFC 5280 clause 6.1 model clause 5.2.6.4 names first.");
 
-        /// <summary>Reads the value a runtime-cleared field of the enumeration type holds.</summary>
+        //Reads the value a runtime-cleared field of the enumeration type holds.
         static T ZeroInitialized<T>() where T : struct, Enum
         {
             T[] cleared = new T[1];

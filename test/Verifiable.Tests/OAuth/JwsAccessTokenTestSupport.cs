@@ -7,7 +7,7 @@ namespace Verifiable.Tests.OAuth;
 /// <summary>
 /// System.Text.Json-backed <see cref="JwsAccessTokenJsonParser"/> for the
 /// resource-server test infrastructure. Parallel of
-/// <see cref="Verifiable.Tests.OAuth.Dpop.DpopTestSupport"/> for the
+/// <see cref="Verifiable.Tests.OAuth.DpopTestSupport"/> for the
 /// access-token side.
 /// </summary>
 internal static class JwsAccessTokenTestSupport

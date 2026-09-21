@@ -16,7 +16,7 @@ namespace Verifiable.Core.Model.Common
     /// <returns>A fragment identifier (without the <c>#</c> prefix).</returns>
     /// <remarks>
     /// This generator should typically be called only when no explicit fragment is provided
-    /// in the <see cref="KeyMaterialInput"/>. Builders are responsible for checking for explicit fragments
+    /// in the <see cref="Verifiable.Core.Did.Methods.Key.KeyMaterialInput"/>. Builders are responsible for checking for explicit fragments
     /// before invoking the generator.
     /// </remarks>
     public delegate string FragmentGenerator(IBuilderState state);

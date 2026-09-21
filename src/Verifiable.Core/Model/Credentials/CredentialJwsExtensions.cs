@@ -100,7 +100,7 @@ public static class CredentialJwsExtensions
     /// Signs the credential as a JWS using an explicit <see cref="SigningDelegate"/>.
     /// The registry-resolving overload above delegates here after resolving the
     /// function via <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="privateKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// from <paramref name="privateKey"/>'s <see cref="Lumoin.Base.SensitiveData.Tag"/>.
     /// </summary>
     /// <param name="credential">The credential to sign.</param>
     /// <param name="privateKey">The private key for signing.</param>
@@ -229,7 +229,7 @@ public static class CredentialJwsExtensions
     /// explicit <see cref="VerificationDelegate"/>. The registry-resolving
     /// overload above delegates here after resolving the function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// from <paramref name="publicKey"/>'s <see cref="Lumoin.Base.SensitiveData.Tag"/>.
     /// </summary>
     /// <remarks>
     /// This is a bring-your-own-key primitive: <paramref name="publicKey"/> is a plain parameter
@@ -503,7 +503,7 @@ public static class CredentialJwsExtensions
     /// <see cref="VerificationDelegate"/>. The registry-resolving overload
     /// above delegates here after resolving the function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// from <paramref name="publicKey"/>'s <see cref="Lumoin.Base.SensitiveData.Tag"/>.
     /// </summary>
     /// <remarks>
     /// This is a bring-your-own-key primitive: <paramref name="publicKey"/> is a plain parameter

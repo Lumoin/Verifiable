@@ -3,7 +3,7 @@ namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Carries a successful token endpoint response. Transitions from
-/// <see cref="AuthorizationCodeReceived"/> to <see cref="TokenReceived"/>.
+/// <see cref="States.AuthorizationCodeReceivedState"/> to <see cref="States.TokenReceivedState"/>.
 /// </summary>
 /// <param name="AccessToken">The opaque access token.</param>
 /// <param name="TokenType">The token type (e.g., <c>Bearer</c> or <c>DPoP</c>).</param>

@@ -47,9 +47,9 @@ namespace Verifiable.Tests.DataIntegrity;
 /// </para>
 /// <para>
 /// These tests use <see cref="CanonicalizationTestUtilities.CreateTestContextResolver"/> which provides
-/// embedded context documents for deterministic, offline testing. See 
-/// <see cref="CanonicalizationTestUtilities.CreateProductionContextResolver"/> for production patterns
-/// that verify context integrity using SHA-256 hashes per the W3C Data Integrity specification.
+/// embedded context documents for deterministic, offline testing. See
+/// <see cref="ContextResolverDelegate"/> for what a production implementation of this seam owns,
+/// including verifying a resolved context's integrity per the W3C Data Integrity specification.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -110,7 +110,7 @@ internal sealed class CredentialIssuanceFlowTests
         CanonicalizationTestUtilities.CreateTestContextResolver();
 
     /// <summary>
-    /// RDFC-1.0 canonicalizer using dotNetRdf.
+    /// RDFC-1.0 canonicalizer using the first-party <see cref="CanonicalizationTestUtilities.CreateRdfcCanonicalizer"/> factory.
     /// </summary>
     /// <remarks>
     /// Implements RDF Dataset Canonicalization per W3C specification.
@@ -276,6 +276,7 @@ internal sealed class CredentialIssuanceFlowTests
             issuerDidDocument,
             RdfcCanonicalizer,
             ContextResolver,
+            signedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,
@@ -360,6 +361,7 @@ internal sealed class CredentialIssuanceFlowTests
             issuerDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            signedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,
@@ -441,6 +443,7 @@ internal sealed class CredentialIssuanceFlowTests
             issuerDidDocument,
             RdfcCanonicalizer,
             ContextResolver,
+            tamperedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,
@@ -516,6 +519,7 @@ internal sealed class CredentialIssuanceFlowTests
             issuerDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            tamperedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,

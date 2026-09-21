@@ -22,12 +22,12 @@ namespace Verifiable.JCose;
 /// <para>
 /// <strong><see cref="CBAdESProtectedHeaders"/> itself stays non-null; <see cref="CBAdESProtectedHeaders.CwtClaims"/>
 /// does not.</strong> This surface operates on an already-constructed
-/// <see cref="CBAdESProtectedHeaders"/> instance — <paramref name="headers"/> itself is refused with
+/// <see cref="CBAdESProtectedHeaders"/> instance — <c>headers</c> itself is refused with
 /// <see cref="ArgumentNullException"/> when null (below), a caller-contract violation, not a conformance
 /// judgment — but that type's own constructor no longer enforces <see cref="CBAdESProtectedHeaders.CwtClaims"/>
 /// non-null: a parsed message whose CWT Claims header (label 15) is absent entirely, or present with no
 /// <c>iat</c> member, decodes with a <see langword="null"/> <see cref="CBAdESProtectedHeaders.CwtClaims"/>
-/// rather than failing the parse (see <see cref="Verifiable.Cbor.CBAdESSignatureSerialization.ParseCBAdESSign1"/>'s
+/// rather than failing the parse (see <c>Verifiable.Cbor.CBAdESSignatureSerialization.ParseCBAdESSign1</c>'s
 /// own remarks). <see cref="Check"/> therefore reports <see cref="CBAdESCwtClaimsMissingViolation"/>
 /// (CB-6.3-10/CB-6.3-a) as a genuinely LIVE rule, reachable from untrusted wire content exactly like every
 /// other violation this method collects — not the structurally-unreachable placeholder an earlier revision of
@@ -136,15 +136,12 @@ public static class CBAdESHeaderRules
 
         return violations;
 
-        /// <summary>
-        /// Determines whether <paramref name="criticalLabels"/> contains the <see cref="CoseHeaderIntegerLabel"/>
-        /// equal to <paramref name="label"/> — record equality, per the widened
-        /// <see cref="CoseHeaderLabel"/> union (a <see cref="CoseHeaderTextLabel"/> entry never matches, since
-        /// <paramref name="label"/> is always one of this document's own integer-assigned labels).
-        /// </summary>
-        /// <param name="criticalLabels">The <c>crit</c> member's labels, or <see langword="null"/>.</param>
-        /// <param name="label">The integer label to look for.</param>
-        /// <returns><see langword="true"/> when found.</returns>
+        //Determines whether criticalLabels contains the CoseHeaderIntegerLabel
+        //equal to label — record equality, per the widened
+        //CoseHeaderLabel union (a CoseHeaderTextLabel entry never matches, since
+        //label is always one of this document's own integer-assigned labels).
+        //criticalLabels: the crit member's labels, or null. label: the integer label to look for.
+        //Returns true when found.
         static bool ContainsCriticalLabel(IReadOnlyList<CoseHeaderLabel>? criticalLabels, int label)
         {
             if(criticalLabels is null)
@@ -165,9 +162,8 @@ public static class CBAdESHeaderRules
         }
 
 
-        /// <summary>Determines whether <paramref name="candidate"/> carries a <c>sigPSt</c> element.</summary>
-        /// <param name="candidate">The decoded <c>uHeaders</c> set, or <see langword="null"/>.</param>
-        /// <returns><see langword="true"/> when a <c>sigPSt</c> element is present.</returns>
+        //Determines whether candidate (the decoded uHeaders set, or null) carries a sigPSt element.
+        //Returns true when a sigPSt element is present.
         static bool HasSignaturePolicyStore(CBAdESUnsignedHeaders? candidate)
         {
             if(candidate is null)
@@ -187,27 +183,22 @@ public static class CBAdESHeaderRules
         }
 
 
-        /// <summary>
-        /// Appends one <see cref="CBAdESMd5DigestAlgorithmViolation"/> to <paramref name="collected"/> for
-        /// every digest-algorithm-identifier surface of <paramref name="candidate"/> that names MD5
-        /// (CB-6.2.1-02).
-        /// </summary>
-        /// <param name="candidate">The signed-header-set aggregate to scan.</param>
-        /// <param name="collected">The violation list to append to.</param>
-        /// <remarks>
-        /// <see cref="CBAdESProtectedHeaders.Algorithm"/> is deliberately NOT scanned here: it is
-        /// <see langword="int"/>-only by that member's own documented design decision, and the
-        /// <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms
-        /// registry</see> has never assigned MD5 an integer identifier (verified against every identifier this
-        /// library's own <see cref="WellKnownCoseAlgorithms"/>/<see cref="AdESDigestAlgorithmIdentifier"/>
-        /// surfaces recognize) — no value <see cref="CBAdESProtectedHeaders.Algorithm"/> can hold encodes an
-        /// MD5 claim, so its hard-denylist coverage is satisfied BY CONSTRUCTION (the type cannot represent
-        /// the violation) rather than by a runtime comparison that could only ever evaluate false. Every other
-        /// surface below carries a <see cref="AdESDigestAlgorithmIdentifier"/> — the CDDL's <c>int / tstr</c>
-        /// union, whose <c>tstr</c> arm a non-conformant or malicious producer can still populate with the
-        /// literal text <c>"MD5"</c> even though IANA never registered it — so those surfaces get a real
-        /// runtime check via <see cref="IsMd5"/>.
-        /// </remarks>
+        //Appends one CBAdESMd5DigestAlgorithmViolation to collected for
+        //every digest-algorithm-identifier surface of candidate that names MD5
+        //(CB-6.2.1-02). candidate: the signed-header-set aggregate to scan. collected: the violation list to append to.
+        //
+        //CBAdESProtectedHeaders.Algorithm is deliberately NOT scanned here: it is
+        //int-only by that member's own documented design decision, and the
+        //IANA COSE Algorithms registry (https://www.iana.org/assignments/cose/cose.xhtml#algorithms)
+        //has never assigned MD5 an integer identifier (verified against every identifier this
+        //library's own WellKnownCoseAlgorithms/AdESDigestAlgorithmIdentifier
+        //surfaces recognize) — no value CBAdESProtectedHeaders.Algorithm can hold encodes an
+        //MD5 claim, so its hard-denylist coverage is satisfied BY CONSTRUCTION (the type cannot represent
+        //the violation) rather than by a runtime comparison that could only ever evaluate false. Every other
+        //surface below carries a AdESDigestAlgorithmIdentifier — the CDDL's int / tstr
+        //union, whose tstr arm a non-conformant or malicious producer can still populate with the
+        //literal text "MD5" even though IANA never registered it — so those surfaces get a real
+        //runtime check via IsMd5.
         static void CollectMd5Violations(CBAdESProtectedHeaders candidate, List<CBAdESRuleViolation> collected)
         {
             if(candidate.X5T is not null && IsMd5(candidate.X5T.HashAlgorithm))
@@ -239,13 +230,10 @@ public static class CBAdESHeaderRules
         }
 
 
-        /// <summary>
-        /// Determines whether <paramref name="identifier"/> names MD5 — the <c>tstr</c> arm compared
-        /// case-insensitively against <c>"MD5"</c>; the <c>int</c> arm never matches, since no IANA COSE
-        /// Algorithms registry entry names MD5 (see the <see cref="CollectMd5Violations"/> remarks).
-        /// </summary>
-        /// <param name="identifier">The digest-algorithm identifier to test, or <see langword="null"/>.</param>
-        /// <returns><see langword="true"/> when <paramref name="identifier"/> names MD5.</returns>
+        //Determines whether identifier names MD5 - the tstr arm compared
+        //case-insensitively against "MD5"; the int arm never matches, since no IANA COSE
+        //Algorithms registry entry names MD5 (see CollectMd5Violations above). Returns true
+        //when identifier names MD5.
         static bool IsMd5(AdESDigestAlgorithmIdentifier? identifier) => identifier switch
         {
             AdESDigestAlgorithmTextIdentifier text => string.Equals(text.Value, "MD5", StringComparison.OrdinalIgnoreCase),

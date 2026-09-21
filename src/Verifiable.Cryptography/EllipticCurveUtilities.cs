@@ -139,6 +139,7 @@ namespace Verifiable.Cryptography
         /// Decompresses a given point on the elliptic curve that is compressed on X point.
         /// </summary>
         /// <param name="compressedPoint">The X point to which the y point is compressed.</param>
+        /// <param name="curveType">The elliptic curve the compressed point lies on.</param>
         /// <returns>The y point matching the <paramref name="compressedPoint"/> on the given elliptic curve.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="compressedPoint"/> must start with 0x02 or 0x03
         /// and be either 33 (P-256), 49 (P-384) or 67 (P-521) bytes</exception>.
@@ -426,8 +427,11 @@ namespace Verifiable.Cryptography
         /// <param name="xPoint">The X point.</param>
         /// <param name="yPoint">The Y point.</param>
         /// <returns>The compressed elliptic point coordinates.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="compressedPoint"/> must start with 0x02 or 0x03
-        /// and be either 32 (P-256), 42 (P-384) or 66 (P-521) bytes</exception>.
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="xPoint"/> or <paramref name="yPoint"/> is not one of the supported curve
+        /// coordinate lengths (32/42/48/56/64/66 bytes, depending on curve).
+        /// </exception>
+        /// <exception cref="ArgumentException"><paramref name="xPoint"/> and <paramref name="yPoint"/> are not the same length.</exception>
         /// <remarks>Also see <see href="https://datatracker.ietf.org/doc/html/rfc5480">RFC 5480:
         /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>        
         public static byte[] Compress(ReadOnlySpan<byte> xPoint, ReadOnlySpan<byte> yPoint)
@@ -475,8 +479,9 @@ namespace Verifiable.Cryptography
         /// </summary>
         /// <param name="yPoint">The y parameter from which to deduce the sign.</param>
         /// <returns>The compression sign byte. Either 0x02 (positive) or 0x03 (negative)</returns>.
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="compressedPoint"/> must start with 0x02 or 0x03
-        /// and be either 32 (P-256), 42 (P-384) or 66 (P-521) bytes</exception>.
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="yPoint"/> is not one of the supported curve coordinate lengths.
+        /// </exception>
         /// <remarks>Also see <see href="https://datatracker.ietf.org/doc/html/rfc5480">RFC 5480:
         /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>        
         public static byte CompressionSignByte(ReadOnlySpan<byte> yPoint)
@@ -535,6 +540,15 @@ namespace Verifiable.Cryptography
         }
 
 
+        /// <summary>
+        /// Slices the X coordinate out of an uncompressed (0x04-prefixed) SEC1-encoded point.
+        /// </summary>
+        /// <param name="uncompressedCoordinates">The 0x04-prefixed uncompressed point.</param>
+        /// <returns>A span over the X coordinate bytes, a slice into <paramref name="uncompressedCoordinates"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="uncompressedCoordinates"/> does not start with 0x04 or is not one of the
+        /// supported uncompressed point lengths.
+        /// </exception>
         public static ReadOnlySpan<byte> SliceXCoordinate(ReadOnlySpan<byte> uncompressedCoordinates)
         {
             if(uncompressedCoordinates[0] != UncompressedCoordinateFormat)
@@ -553,6 +567,15 @@ namespace Verifiable.Cryptography
         }
 
 
+        /// <summary>
+        /// Slices the Y coordinate out of an uncompressed (0x04-prefixed) SEC1-encoded point.
+        /// </summary>
+        /// <param name="uncompressedCoordinates">The 0x04-prefixed uncompressed point.</param>
+        /// <returns>A span over the Y coordinate bytes, a slice into <paramref name="uncompressedCoordinates"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="uncompressedCoordinates"/> does not start with 0x04 or is not one of the
+        /// supported uncompressed point lengths.
+        /// </exception>
         public static ReadOnlySpan<byte> SliceYCoordinate(ReadOnlySpan<byte> uncompressedCoordinates)
         {
             if(uncompressedCoordinates[0] != UncompressedCoordinateFormat)
@@ -638,9 +661,10 @@ namespace Verifiable.Cryptography
         /// Checks if the given elliptic curve point is encoded in compressed form or not.
         /// </summary>
         /// <param name="maybeCompressedCoordinates">The point to check.</param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="compressedPoint"/> must start with 0x02 or 0x03
-        /// and be either 32 (P-256), 42 (P-384) or 66 (P-521) bytes</exception>.
+        /// <returns><see langword="true"/> when the length matches a compressed point for a supported curve.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="maybeCompressedCoordinates"/> is not one of the supported compressed point lengths.
+        /// </exception>
         public static bool IsCompressed(ReadOnlySpan<byte> maybeCompressedCoordinates)
         {
             if(maybeCompressedCoordinates.Length is not (P256CompressedByteCount

@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -62,19 +63,30 @@ public static class FederationKeyResolver
 
             string? targetKid = ReadKid(headerOfStatementToVerify);
 
-            Dictionary<string, object>? matchedJwk = TryMatchJwk(issuerStatement, targetKid);
+            Dictionary<string, object>? matchedJwk = TryMatchJwk(issuerStatement, targetKid, memoryPool);
             if(matchedJwk is null)
             {
                 return ValueTask.FromResult<PublicKeyMemory?>(null);
             }
 
-            (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
+            //A selected key still is not necessarily one the converter can build: a set of one
+            //eligible-but-malformed element (a missing kty, or missing coordinates for its kty)
+            //reaches here as a match. Refuses like every other resolution miss instead of letting
+            //the converter's exception escape into the verification pipeline.
+            try
+            {
+                (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
+                    CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
 
-            Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
+                Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
 
-            //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
-            return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(keyMaterial, tag));
+                //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
+                return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(keyMaterial, tag));
+            }
+            catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
+            {
+                return ValueTask.FromResult<PublicKeyMemory?>(null);
+            }
         };
     }
 
@@ -130,19 +142,31 @@ public static class FederationKeyResolver
                 continue;
             }
 
-            Dictionary<string, object>? matchedJwk = TryMatchJwk(statement, kid);
+            Dictionary<string, object>? matchedJwk = TryMatchJwk(statement, kid, memoryPool);
             if(matchedJwk is null)
             {
                 continue;
             }
 
-            (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
+            //A selected key still is not necessarily one the converter can build: a set of one
+            //eligible-but-malformed element (a missing kty, or missing coordinates for its kty)
+            //reaches here as a match. Refuses like every other resolution miss instead of letting
+            //the converter's exception escape into the verification pipeline; the loop continues
+            //to the next statement rather than treating this statement's malformed key as final.
+            try
+            {
+                (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
+                    CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
 
-            Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
+                Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
 
-            //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
-            return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(keyMaterial, tag));
+                //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
+                return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(keyMaterial, tag));
+            }
+            catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
+            {
+                continue;
+            }
         }
 
         return ValueTask.FromResult<PublicKeyMemory?>(null);
@@ -168,60 +192,84 @@ public static class FederationKeyResolver
 
     /// <summary>
     /// Selects the JWK from <paramref name="issuerStatement"/>'s <c>jwks</c> claim whose <c>kid</c> equals
-    /// <paramref name="targetKid"/>, returned as the mutable dictionary
-    /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> expects. <see langword="null"/> when
-    /// <paramref name="targetKid"/> is <see langword="null"/> (an absent <c>kid</c> header is malformed input per
+    /// <paramref name="targetKid"/> and whose <c>use</c> is eligible for signature verification, returned
+    /// as the mutable dictionary <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/>
+    /// expects. Re-emits the already-parsed <c>jwks</c> claim to UTF-8 JSON via
+    /// <see cref="JsonAppender"/> and composes
+    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?, ReadOnlySpan{byte})"/> on the
+    /// result — the same combinator
+    /// <see cref="Verifiable.OAuth.Server.PrivateKeyJwtClientAuthentication"/>'s client-authentication key
+    /// selection composes, so the duplicate-<c>kid</c> refusal AND the private-or-symmetric-material
+    /// refusal are shared rather than re-implemented. Selection reads the library's RE-EMISSION of the
+    /// parsed <c>jwks</c> claim, not the wire bytes of the Entity Statement: what the JWT payload
+    /// deserializer did with a duplicated or escaped member name in the original claim, before it
+    /// reached this dictionary, is outside what this selection sees.
+    /// <see langword="null"/> when <paramref name="targetKid"/> is
+    /// <see langword="null"/> (an absent <c>kid</c> header is malformed input per
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>, not a
-    /// wildcard), or when the statement carries no <c>jwks</c>, or when no key matches.
+    /// wildcard), when the statement carries no <c>jwks</c>, when no eligible key matches, when
+    /// <paramref name="targetKid"/> appears on more than one key
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see>), or when any
+    /// key in the set carries private or symmetric material.
     /// </summary>
     /// <param name="issuerStatement">The statement whose <c>jwks</c> claim supplies the candidate keys.</param>
     /// <param name="targetKid">The <c>kid</c> to match. A <see langword="null"/> value never matches — it is a resolution miss.</param>
-    /// <returns>The matched JWK as a mutable dictionary, or <see langword="null"/> when no key matches.</returns>
-    private static Dictionary<string, object>? TryMatchJwk(EntityStatement issuerStatement, string? targetKid)
+    /// <param name="memoryPool">
+    /// Pool the UTF-8 rendering of the <c>jwks</c> claim rents from. The buffer is consumed by the selection
+    /// scan and returned before this method exits, so no ownership leaves it.
+    /// </param>
+    /// <returns>The matched JWK as a mutable dictionary, or <see langword="null"/> when no key was selected.</returns>
+    private static Dictionary<string, object>? TryMatchJwk(EntityStatement issuerStatement, string? targetKid, BaseMemoryPool memoryPool)
     {
-        //Federation §3.1 makes the kid header a MUST on Entity Statement JWTs (§7 / §8.4.2 for Trust Mark and
-        //Trust Mark Status Response JWTs). An absent kid is therefore malformed input, not a wildcard: silently
-        //returning the first published key would defeat kid-pinning and let a stripped kid — or a rotated-away
-        //key that happens to sit first in the set — be mis-selected. A resolution miss is the secure answer.
-        if(targetKid is null)
-        {
-            return null;
-        }
-
         if(!issuerStatement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj)
-            || jwksObj is not IReadOnlyDictionary<string, object> jwksDict
-            || !jwksDict.TryGetValue("keys", out object? keysObj)
-            || keysObj is not IEnumerable<object> keys)
+            || jwksObj is not IReadOnlyDictionary<string, object> jwksDict)
         {
             return null;
         }
 
-        foreach(object item in keys)
+        StringBuilder builder = JsonAppender.Rent();
+        try
         {
-            if(item is not IReadOnlyDictionary<string, object> jwk)
+            JsonAppender.AppendObject(builder, jwksDict);
+
+            Encoding utf8 = Encoding.UTF8;
+            int byteCount = 0;
+            foreach(ReadOnlyMemory<char> chunk in builder.GetChunks())
             {
-                continue;
+                byteCount += utf8.GetByteCount(chunk.Span);
             }
 
-            if(jwk.TryGetValue("kid", out object? jwkKidObj)
-                && jwkKidObj is string jwkKid
-                && string.Equals(jwkKid, targetKid, StringComparison.Ordinal))
+            using IMemoryOwner<byte> jwksJson = memoryPool.Rent(byteCount);
+            Span<byte> destination = jwksJson.Memory.Span;
+            int written = 0;
+            foreach(ReadOnlyMemory<char> chunk in builder.GetChunks())
             {
-                return CopyJwk(jwk);
+                written += utf8.GetBytes(chunk.Span, destination[written..]);
             }
+
+            JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(destination[..written], targetKid, WellKnownJwkValues.UseSigUtf8);
+
+            return result.IsSelected ? CopyJwk(result.Members!) : null;
         }
-
-        return null;
+        finally
+        {
+            JsonAppender.Return(builder);
+        }
     }
 
 
-    //CryptoFormatConversions.DefaultJwkToAlgorithmConverter expects
-    //Dictionary<string, object> — copy from the read-only view rather than
-    //casting.
-    private static Dictionary<string, object> CopyJwk(IReadOnlyDictionary<string, object> source)
+    /// <summary>
+    /// Copies a selected JWK's members into the mutable dictionary
+    /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> expects — boxing each
+    /// already-string-typed member from the selection result rather than casting. The one copy
+    /// this assembly's key-selection call sites share, rather than each re-implementing it.
+    /// </summary>
+    /// <param name="source">The selected JWK's members, as a key selection result carries them.</param>
+    /// <returns>The members copied into a mutable <see cref="Dictionary{TKey, TValue}"/>.</returns>
+    internal static Dictionary<string, object> CopyJwk(IReadOnlyDictionary<string, string> source)
     {
         Dictionary<string, object> result = new(source.Count, StringComparer.Ordinal);
-        foreach(KeyValuePair<string, object> kvp in source)
+        foreach(KeyValuePair<string, string> kvp in source)
         {
             result[kvp.Key] = kvp.Value;
         }

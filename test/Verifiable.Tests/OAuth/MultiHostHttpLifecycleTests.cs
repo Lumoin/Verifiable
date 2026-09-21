@@ -81,6 +81,10 @@ internal sealed class MultiHostHttpLifecycleTests
             TestSetup.DefaultSerializationOptions);
 
 
+    /// <summary>
+    /// A wallet presents an issued credential to a separate verifier listener and reaches the accepted presentation result.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.2">Verifiable Presentations §8.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task WalletDrivesIssuanceAndPresentationAcrossTwoKestrelHosts()
     {
@@ -88,17 +92,17 @@ internal sealed class MultiHostHttpLifecycleTests
 
         //The Verifier deployment lives on the default host; the Credential Issuer
         //deployment gets its own host, state, key material, and Kestrel port.
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, VerifierCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, VerifierCapabilities).ConfigureAwait(false);
         _ = app.AddHost(IssuerHostName);
-        using VerifierKeyMaterial issuerMaterial = app.RegisterDpopClientOnHost(
+        using VerifierKeyMaterial issuerMaterial = await app.RegisterDpopClientOnHostAsync(
             IssuerHostName, IssuerClientId, IssuerClientBaseUri,
-            PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
+            PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." The Issuer mints a plain-bearer credential token over
         //HTTP; keep it within the long-lived threshold (lifetimes longer than 5 minutes are
         //considered long lived).
-        app.SetAccessTokenLifetime(issuerMaterial, TimeSpan.FromMinutes(5), IssuerHostName);
+        await app.SetAccessTokenLifetimeAsync(issuerMaterial, TimeSpan.FromMinutes(5), IssuerHostName).ConfigureAwait(false);
         string issuerTenant = issuerMaterial.Registration.TenantId.Value;
 
         //The wallet's long-lived holder key and the SD-JWT issuer trust root the
@@ -111,8 +115,8 @@ internal sealed class MultiHostHttpLifecycleTests
         using PrivateKeyMemory sdJwtIssuerPrivate = sdJwtIssuerKeys.PrivateKey;
         app.RegisterIssuerTrust(SdJwtIssuerId, sdJwtIssuerPublic);
 
-        WireIssuerSeamsState seamState = WireIssuerSeams(
-            app.Host(IssuerHostName).Server.OAuth(), sdJwtIssuerPrivate);
+        WireIssuerSeamsState seamState = await WireIssuerSeamsAsync(
+            app.Host(IssuerHostName).Server, sdJwtIssuerPrivate).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(IssuerHostName, TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer issuerHost = app.Host(IssuerHostName);
@@ -236,6 +240,7 @@ internal sealed class MultiHostHttpLifecycleTests
     /// <summary>Mutable cross-step observations the issuer seams record.</summary>
     private sealed class WireIssuerSeamsState
     {
+        /// <summary>Whether issuance verified the holder proof before minting the credential.</summary>
         public bool IsProofVerified { get; set; }
     }
 
@@ -245,52 +250,56 @@ internal sealed class MultiHostHttpLifecycleTests
     /// c_nonce minting, and §8 issuance that verifies the holder proof signature plus
     /// its c_nonce before minting the SD-JWT VC bound to the proven key.
     /// </summary>
-    private WireIssuerSeamsState WireIssuerSeams(
-        AuthorizationServerIntegration integration, PrivateKeyMemory sdJwtIssuerPrivate)
+    private async Task<WireIssuerSeamsState> WireIssuerSeamsAsync(
+        EndpointServer server, PrivateKeyMemory sdJwtIssuerPrivate)
     {
         WireIssuerSeamsState state = new();
         string? mintedNonce = null;
 
-        _ = integration.UseDefaultCredentialRequestJsonParsing();
-
-        integration.ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
-            ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
-                ? PreAuthorizedCodeDecision.Grant(EndUserSubject, WellKnownScopes.OpenId)
-                : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
-
-        integration.IssueCredentialNonceAsync = (_, _) =>
+        await TestHostShell.AlterAsync(server, integration =>
         {
-            mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
+            _ = integration.UseDefaultCredentialRequestJsonParsing();
 
-            return ValueTask.FromResult(mintedNonce);
-        };
+            integration.ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
+                ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
+                    ? PreAuthorizedCodeDecision.Grant(EndUserSubject, WellKnownScopes.OpenId)
+                    : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
 
-        integration.IssueCredentialAsync = async (request, accessTokenPayload, _, _, ct) =>
-        {
-            string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
-            (PublicKeyMemory proofKey, string? proofNonce) = ReadProof(proof);
-
-            using(proofKey)
+            integration.IssueCredentialNonceAsync = (_, _) =>
             {
-                bool isProofSignatureValid = await Jws.VerifyAsync(
-                    proof, TestSetup.Base64UrlDecoder, Pool,
-                    proofKey, ct).ConfigureAwait(false);
+                mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
 
-                if(!isProofSignatureValid
-                    || mintedNonce is null
-                    || !string.Equals(proofNonce, mintedNonce, StringComparison.Ordinal))
+                return ValueTask.FromResult(mintedNonce);
+            };
+
+            integration.IssueCredentialAsync = async (request, accessTokenPayload, _, _, ct) =>
+            {
+                string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
+                (PublicKeyMemory proofKey, string? proofNonce) = ReadProof(proof);
+
+                using(proofKey)
                 {
-                    return CredentialIssuanceDecision.Deny(CredentialRequestError.InvalidProof);
+                    bool isProofSignatureValid = await Jws.VerifyAsync(
+                        proof, TestSetup.Base64UrlDecoder, Pool,
+                        proofKey, ct).ConfigureAwait(false);
+
+                    if(!isProofSignatureValid
+                        || mintedNonce is null
+                        || !string.Equals(proofNonce, mintedNonce, StringComparison.Ordinal))
+                    {
+
+                        return CredentialIssuanceDecision.Deny(CredentialRequestError.InvalidProof);
+                    }
+
+                    state.IsProofVerified = true;
+
+                    string credential = await IssueSdJwtVcAsync(
+                        sdJwtIssuerPrivate, proof, ct).ConfigureAwait(false);
+
+                    return CredentialIssuanceDecision.Issue([credential]);
                 }
-
-                state.IsProofVerified = true;
-
-                string credential = await IssueSdJwtVcAsync(
-                    sdJwtIssuerPrivate, proof, ct).ConfigureAwait(false);
-
-                return CredentialIssuanceDecision.Issue([credential]);
-            }
-        };
+            };
+        }).ConfigureAwait(false);
 
         return state;
     }

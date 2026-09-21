@@ -74,7 +74,7 @@ public sealed record SiopRequestPrepared: FlowInput
 /// <see cref="OAuthActionExecutor"/>. Advances the flow from <see cref="States.SiopRequestPreparedState"/>
 /// to <see cref="States.SiopRequestObjectServedState"/> — the by-reference parallel of the OID4VP
 /// <c>ServerJarSigned</c> input. The signed compact JWS itself rides the
-/// <see cref="ExchangeContext"/> (the SIOP request-object slot), so the served state carries only
+/// <see cref="Verifiable.Core.ExchangeContext"/> (the SIOP request-object slot), so the served state carries only
 /// the transaction-forwarding values.
 /// </summary>
 public sealed record SiopRequestObjectSigned: FlowInput

@@ -24,7 +24,7 @@ namespace Verifiable.DidComm.OutOfBand;
 /// All serialization runs through the injected <see cref="DidCommMessageSerializer"/> /
 /// <see cref="DidCommMessageParser"/> and the base64url <see cref="EncodeDelegate"/> /
 /// <see cref="DecodeDelegate"/> over a caller-supplied <see cref="MemoryPool{T}"/>, keeping this
-/// transport-agnostic project free of <see cref="System.Text.Json"/> and of <c>System.Net</c>. The URL
+/// transport-agnostic project free of <c>System.Text.Json</c> and of <c>System.Net</c>. The URL
 /// the base64url value lands in is built with the separator trick rather than round-tripped through
 /// <see cref="System.Uri"/>, because base64url is URL-safe and needs no escaping, and the verbatim
 /// string is what the QR encoder consumes and the length validator measures.

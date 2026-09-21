@@ -16,7 +16,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// owned full proof and the non-owned derived/trimmed projection are
 /// distinct types so ownership shows up in the type system rather than in
 /// prose-only contracts. The same pattern
-/// <see cref="Verifiable.Core.SelectiveDisclosure.SdDisclosureSelection.SelectDisclosures"/>
+/// <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdDisclosureSelection.SelectDisclosures"/>
 /// uses on the SD-JWT/SD-CWT side, where the filtered output is a plain
 /// <see cref="IReadOnlyList{T}"/> of borrowed disclosure references rather
 /// than a re-wrapped owning container.
@@ -46,7 +46,7 @@ public static class MdocIssuerSignedTrimmer
     /// <summary>
     /// Returns an <see cref="MdocIssuerSignedView"/> containing only the
     /// items whose <c>[namespace, element_identifier]</c>
-    /// <see cref="Verifiable.Core.SelectiveDisclosure.CredentialPath"/> is
+    /// <see cref="Verifiable.Core.Model.SelectiveDisclosure.CredentialPath"/> is
     /// in <paramref name="selectedPaths"/>. Per-namespace ordering of
     /// retained items matches the original.
     /// </summary>
@@ -67,8 +67,7 @@ public static class MdocIssuerSignedTrimmer
         ArgumentNullException.ThrowIfNull(full);
         ArgumentNullException.ThrowIfNull(selectedPaths);
 
-        Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>> trimmed =
-            new(StringComparer.Ordinal);
+        Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>> trimmed = new(StringComparer.Ordinal);
 
         foreach(KeyValuePair<string, IReadOnlyList<MdocIssuerSignedItem>> nsEntry in full.NameSpaces)
         {

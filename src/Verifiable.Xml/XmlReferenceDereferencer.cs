@@ -17,7 +17,7 @@ namespace Verifiable.Xml;
 /// <remarks>
 /// A node-set result owns nothing: it is a view over the caller's already-open <see cref="XmlNodeTable"/>.
 /// An external-octets result owns a <see cref="PooledMemory"/> the resolver rented, which the caller of
-/// <see cref="XmlReferenceDereferencer.TryDereference"/> takes ownership of and must dispose once the
+/// <see cref="XmlReferenceDereferencer.TryDereference(XmlNodeTable, XmlReference, XmlReferenceResolver?, BaseMemoryPool, out XmlDereferenceResult, out XmlSignatureProcessingError)"/> takes ownership of and must dispose once the
 /// transform chain has consumed it.
 /// </remarks>
 internal readonly struct XmlDereferenceResult

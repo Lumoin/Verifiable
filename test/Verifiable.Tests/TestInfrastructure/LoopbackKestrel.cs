@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Logging;
@@ -8,9 +9,9 @@ namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
 /// The one place every loopback-hosted Kestrel test fixture in this repository configures its listener
-/// and its logging pipeline (<see cref="ConfigureLoopbackListener"/>, <see cref="ConfigureLoopbackLogging"/>),
+/// and its logging pipeline (<see cref="ConfigureLoopbackListener(KestrelServerOptions, X509Certificate2)"/>, <see cref="ConfigureLoopbackLogging"/>),
 /// so a box under heavy parallel test load gets timeouts sized for a loopback fixture instead of
-/// Kestrel's public-internet defaults (<see cref="Microsoft.AspNetCore.Server.Kestrel.Https.HttpsConnectionAdapterOptions.HandshakeTimeout"/>
+/// Kestrel's public-internet defaults (<c>HttpsConnectionAdapterOptions.HandshakeTimeout</c>
 /// 10 seconds, <see cref="KestrelServerLimits.RequestHeadersTimeout"/> 30 seconds,
 /// <see cref="KestrelServerLimits.KeepAliveTimeout"/> 130 seconds, and the
 /// <see cref="KestrelServerLimits.MinRequestBodyDataRate"/> / <see cref="KestrelServerLimits.MinResponseDataRate"/>
@@ -23,7 +24,7 @@ internal static class LoopbackKestrel
 {
     /// <summary>
     /// The TLS handshake budget every loopback listener presents via
-    /// <see cref="Microsoft.AspNetCore.Server.Kestrel.Https.HttpsConnectionAdapterOptions.HandshakeTimeout"/> —
+    /// <c>HttpsConnectionAdapterOptions.HandshakeTimeout</c> —
     /// long enough that a starved ThreadPool never turns a completed-but-not-yet-scheduled handshake
     /// into a closed connection.
     /// </summary>
@@ -56,7 +57,26 @@ internal static class LoopbackKestrel
     /// </summary>
     /// <param name="options">The listener's <see cref="KestrelServerOptions"/>, from <c>ConfigureKestrel</c>.</param>
     /// <param name="certificate">The self-signed leaf this listener presents, e.g. from <see cref="LoopbackTls.CreateServerCertificate"/>.</param>
-    internal static void ConfigureLoopbackListener(KestrelServerOptions options, X509Certificate2 certificate)
+    internal static void ConfigureLoopbackListener(KestrelServerOptions options, X509Certificate2 certificate) =>
+        ConfigureLoopbackListener(options, certificate, connectionMiddleware: null);
+
+
+    /// <summary>
+    /// Configures <paramref name="options"/> the same way as
+    /// <see cref="ConfigureLoopbackListener(KestrelServerOptions, X509Certificate2)"/>, additionally
+    /// installing <paramref name="connectionMiddleware"/> ahead of TLS when supplied, so a test can hold
+    /// the raw connection deterministically (e.g. on a closed gate) before the handshake even starts.
+    /// A <see langword="null"/> middleware installs nothing, leaving the pipeline identical to the
+    /// two-argument overload every other loopback host bootstrap uses.
+    /// </summary>
+    /// <param name="options">The listener's <see cref="KestrelServerOptions"/>, from <c>ConfigureKestrel</c>.</param>
+    /// <param name="certificate">The self-signed leaf this listener presents, e.g. from <see cref="LoopbackTls.CreateServerCertificate"/>.</param>
+    /// <param name="connectionMiddleware">
+    /// An optional connection gate: given the accepted <see cref="ConnectionContext"/> and the delegate
+    /// continuing to TLS and the rest of the pipeline, it decides when (or whether) that continuation runs.
+    /// </param>
+    internal static void ConfigureLoopbackListener(KestrelServerOptions options, X509Certificate2 certificate,
+        Func<ConnectionContext, Func<Task>, Task>? connectionMiddleware)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(certificate);
@@ -66,8 +86,15 @@ internal static class LoopbackKestrel
         options.Limits.RequestHeadersTimeout = RequestHeadersTimeout;
         options.Limits.KeepAliveTimeout = KeepAliveTimeout;
 
-        options.Listen(IPAddress.Loopback, port: 0,
-            listen => listen.UseHttps(certificate, https => https.HandshakeTimeout = HandshakeTimeout));
+        options.Listen(IPAddress.Loopback, port: 0, listen =>
+        {
+            if(connectionMiddleware is not null)
+            {
+                _ = listen.Use(next => context => connectionMiddleware(context, () => next(context)));
+            }
+
+            _ = listen.UseHttps(certificate, https => https.HandshakeTimeout = HandshakeTimeout);
+        });
     }
 
 

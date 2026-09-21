@@ -62,9 +62,10 @@ public delegate ValueTask SaveServerFlowStateDelegate(
 /// not an error. The dispatcher relies on this for clean retry semantics.
 /// </para>
 /// <para>
-/// OAuth code replay and refresh reuse call this with the claimed live descendant's internal
-/// flow id after walking retained rotation records. Rotation itself retires its presented
-/// record through SaveFlowStateAsync and keeps its index until ExpiresAt. This supports
+/// OAuth code replay and refresh reuse call this with the flow id of the grant's claimed live
+/// refresh record, found by one grant read rather than by walking retained rotation records.
+/// Rotation itself retires its presented record through SaveFlowStateAsync and keeps its index
+/// until ExpiresAt. This supports
 /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>'s
 /// "SHOULD revoke (when possible)" even when audited-token revocation is unavailable.
 /// </para>
@@ -127,10 +128,11 @@ public delegate ValueTask<(FlowState? State, int StepCount)> LoadServerFlowState
 /// claim itself mutating the persisted state or step count.
 /// </para>
 /// <para>
-/// Refresh rotation and family revocation share this seam. Revocation claims the loaded live
-/// refresh step before deletion; a failed claim permits one reload to follow a retired successor.
-/// Deletion must not permit a stale caller to claim the same consumed step again: implementations
-/// retain the claim or atomically reject absent and obsolete flow versions.
+/// Refresh rotation and grant revocation share this seam. Revocation claims a grant's loaded
+/// live refresh step before deletion; a failed claim permits one re-read of the grant to retry
+/// whatever it still reports live. Deletion must not permit a stale caller to claim the same
+/// consumed step again: implementations retain the claim or atomically reject absent and
+/// obsolete flow versions.
 /// </para>
 /// </remarks>
 /// <param name="tenantId">The tenant the flow belongs to.</param>

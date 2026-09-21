@@ -132,8 +132,8 @@ internal static class SiopCombinedResponseFixture
         BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         string requestHandle = await host.HandleSiopRequestPreparationAsync(

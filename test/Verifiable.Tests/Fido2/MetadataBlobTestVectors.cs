@@ -1,9 +1,11 @@
+using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.Tests.X509;
@@ -13,8 +15,9 @@ namespace Verifiable.Tests.Fido2;
 /// <summary>
 /// Shared test-vector builders for the FIDO Metadata Service BLOB verification tests: mints an
 /// independent, self-contained MDS root/signer PKI and hand-assembles compact-JWS BLOB bytes from
-/// JSON fragments, so every vector is minted fresh at test time with an independent oracle (raw
-/// <see cref="ECDsa"/>/<see cref="RSA"/>, never the library's own signing seam), per
+/// JSON fragments, so every vector is minted fresh at test time; the certificate chain is a raw
+/// <see cref="ECDsa"/>/<see cref="RSA"/> cert-factory carve-out, while the BLOB's <c>SignatureValue</c>
+/// is minted through the registered <see cref="SigningDelegate"/>, per
 /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-mds-blob">FIDO
 /// Metadata Service v3.1, section 3.1.7: Metadata BLOB</see>.
 /// </summary>
@@ -265,10 +268,9 @@ internal static class MetadataBlobTestVectors
 
 
     /// <summary>
-    /// Signs with a raw <see cref="ECDsa"/> key, producing the fixed-width IEEE P1363 encoding RFC
-    /// 7518 §3.4 requires for a JWS ES256 signature — <see cref="ECDsa.SignData(byte[], HashAlgorithmName)"/>'s
-    /// default <see cref="DSASignatureFormat.IeeeP1363"/>, deliberately NOT the ASN.1 DER encoding
-    /// the WebAuthn attestation/assertion signature wire format uses.
+    /// Signs through the registered <see cref="SigningDelegate"/> for <see cref="CryptoAlgorithm.P256"/>,
+    /// producing the fixed-width IEEE P1363 encoding RFC 7518 §3.4 requires for a JWS ES256 signature —
+    /// deliberately NOT the ASN.1 DER encoding the WebAuthn attestation/assertion signature wire format uses.
     /// </summary>
     /// <param name="key">The P-256 private key to sign with.</param>
     /// <param name="data">The bytes to sign.</param>
@@ -278,13 +280,21 @@ internal static class MetadataBlobTestVectors
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(data);
 
-        return key.SignData(data, HashAlgorithmName.SHA256);
+        byte[] exportedPrivateKey = key.ExportParameters(true).D!;
+        using IMemoryOwner<byte> privateKeyOwner = BaseMemoryPool.Shared.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
+        using Signature signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared).AsTask().GetAwaiter().GetResult().Signature;
+
+        return signature.AsReadOnlySpan().ToArray();
     }
 
 
     /// <summary>
-    /// Signs with a raw <see cref="RSA"/> key using PKCS#1 v1.5/SHA-256 — the RS256 JWS signing
-    /// algorithm, an independent oracle.
+    /// Signs through the registered <see cref="SigningDelegate"/> for <see cref="CryptoAlgorithm.RsaSha256"/>
+    /// using PKCS#1 v1.5/SHA-256 — the RS256 JWS signing algorithm.
     /// </summary>
     /// <param name="key">The RSA private key to sign with.</param>
     /// <param name="data">The bytes to sign.</param>
@@ -294,7 +304,15 @@ internal static class MetadataBlobTestVectors
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(data);
 
-        return key.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        byte[] exportedPrivateKey = key.ExportRSAPrivateKey();
+        using IMemoryOwner<byte> privateKeyOwner = BaseMemoryPool.Shared.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
+        using Signature signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared).AsTask().GetAwaiter().GetResult().Signature;
+
+        return signature.AsReadOnlySpan().ToArray();
     }
 
 

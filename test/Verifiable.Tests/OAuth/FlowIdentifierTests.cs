@@ -12,7 +12,7 @@ namespace Verifiable.Tests.OAuth;
 /// </summary>
 /// <remarks>
 /// flowId generation switched from
-/// <see cref="Guid.NewGuid"/> to <see cref="Guid.CreateVersion7"/>. v7
+/// <see cref="Guid.NewGuid"/> to <see cref="Guid.CreateVersion7(DateTimeOffset)"/>. v7
 /// GUIDs encode a 48-bit Unix-milliseconds timestamp in the high-order
 /// bits so they sort lexicographically by creation time. The test below
 /// locks in the choice — any future change that regresses to v4 GUIDs
@@ -37,6 +37,10 @@ internal sealed class FlowIdentifierTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
 
 
+    /// <summary>
+    /// Flow identifiers generated at distinct millisecond instants preserve their creation order when sorted.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9562#section-5.7">RFC 9562 §5.7</see>.
+    /// </summary>
     [TestMethod]
     public async Task Guid7FlowIdSortsLexicographicallyByGenerationTime()
     {
@@ -44,19 +48,23 @@ internal sealed class FlowIdentifierTests
 
         List<string> flowIds = [];
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(stage is StateTransitionStage transition)
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
             {
-                //Capture the flowId from the state the transition produced.
-                //The first transition of a new flow puts the flowId on After.
-                flowIds.Add(transition.After.FlowId);
-            }
-            return previousInspect(stage, ctx, ct);
-        };
+                if(stage is StateTransitionStage transition)
+                {
+                    //Capture the flowId from the state the transition produced.
+                    //The first transition of a new flow puts the flowId on After.
+                    flowIds.Add(transition.After.FlowId);
+                }
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //First PAR — flowId₁ generated at t.
         (Uri _, string _) = await host.HandleParAsync(

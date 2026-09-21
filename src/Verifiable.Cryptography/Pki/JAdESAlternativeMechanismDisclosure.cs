@@ -194,13 +194,6 @@ public sealed class JAdESAlternativeMechanismDisclosureRegistry
             throw new ArgumentException($"A disclosure is already registered for kind '{kind}'.", nameof(kind));
         }
 
-        /// <summary>
-        /// Determines whether <paramref name="candidate"/> is one of this document's own sixteen named
-        /// <c>etsiU</c> arms — the ten clause 5.3.1 kinds plus the six Annex A kinds, per
-        /// <see cref="JAdESUnsignedHeaderElement"/>'s own kind constants.
-        /// </summary>
-        /// <param name="candidate">The kind to classify.</param>
-        /// <returns><see langword="true"/> when <paramref name="candidate"/> names a profiled arm.</returns>
         static bool IsProfiledKind(string candidate) => candidate switch
         {
             JAdESUnsignedHeaderElement.SignaturePolicyStoreKind

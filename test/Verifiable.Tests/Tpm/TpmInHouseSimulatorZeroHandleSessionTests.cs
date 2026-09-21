@@ -1091,7 +1091,7 @@ internal sealed class TpmInHouseSimulatorZeroHandleSessionTests
     /// <paramref name="sessionType"/> selects the underlying TPM session's own type (HMAC by default, or POLICY
     /// for a policy companion proof); the returned <see cref="TpmSession"/> wrapper is otherwise identical either
     /// way, because its own wire math (the command/response HMAC and the parameter-encryption keystream) reads
-    /// only the session's raw handle value and negotiated <see cref="Symmetric"/> definition, never the handle's
+    /// only the session's raw handle value and negotiated <see cref="TpmtSymDef"/> definition, never the handle's
     /// type octet — an unbound, unsalted session's key is the shared Empty Buffer regardless of kind (TPM 2.0
     /// Library Part 3, clause 11.1.1: "For all session types, this command will cause initialization of the
     /// sessionKey"; Part 1, clause 18: "If the session is not being used for authorization, sessionValue is

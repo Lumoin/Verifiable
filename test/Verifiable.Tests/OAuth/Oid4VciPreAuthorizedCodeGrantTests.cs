@@ -2,13 +2,20 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Diagnostics;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
 using Verifiable.Server.Diagnostics;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -71,26 +78,29 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         const string CredentialScope = "UniversityDegree_dc_sd_jwt";
 
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." The Pre-Authorized Code grant mints a plain-bearer
         //credential token; keep it within the long-lived threshold (lifetimes longer than 5
         //minutes are considered long lived) so the §13.10 guard permits issuance.
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
         string? seenCode = null;
         string? seenTxCode = null;
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-            {
-                seenCode = code;
-                seenTxCode = txCode;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    seenCode = code;
+                    seenTxCode = txCode;
 
-                return ValueTask.FromResult(
-                    PreAuthorizedCodeDecision.Grant(OfferSubject, CredentialScope));
-            };
+                    return ValueTask.FromResult(
+                        PreAuthorizedCodeDecision.Grant(OfferSubject, CredentialScope));
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -148,8 +158,8 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     public async Task DenialsMapToTheSpecTokenErrorResponses()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
         await AssertDenialAsync(host, material,
             PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode),
@@ -181,17 +191,20 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     public async Task MissingPreAuthorizedCodeIsRejectedBeforeTheSeam()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
         bool seamCalled = false;
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-            {
-                seamCalled = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    seamCalled = true;
 
-                return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
-            };
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -212,15 +225,19 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
     /// <summary>
     /// Fail-closed: declaring the grant capability without wiring the code-validation seam
-    /// leaves the candidate absent from the chain, so the token request 404s rather than an
-    /// endpoint that would mint a token for any code string.
+    /// leaves the grant's own candidate absent from the chain, so it never mints a token for
+    /// any code string. RFC 6749 §5.2 governs what a request naming the grant's <c>grant_type</c>
+    /// gets instead: with the seam unwired THIS server does not serve
+    /// <c>pre-authorized_code</c> at all, so the token endpoint's residual refusal answers
+    /// <c>unsupported_grant_type</c> — never the host-generic 404 the absent grant candidate
+    /// alone would otherwise leave behind.
     /// </summary>
     [TestMethod]
-    public async Task GrantAbsentWhenSeamUnwired()
+    public async Task SeamUnwiredRejectsUnsupportedGrantTypeInsteadOfAbsentGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -234,8 +251,10 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(404, response.StatusCode,
-            "An unwired validation seam must leave the grant absent (fail-closed).");
+        Assert.AreEqual(400, response.StatusCode,
+            "An unwired validation seam must leave the grant's own candidate absent (fail-closed), "
+            + "but the token endpoint's residual refusal must still answer, not the host-generic 404.");
+        Assert.Contains(OAuthErrors.UnsupportedGrantType, response.Body, StringComparison.Ordinal);
     }
 
 
@@ -248,12 +267,15 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     public async Task DiscoveryAdvertisesThePreAuthorizedCodeGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -280,12 +302,15 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     public async Task DiscoveryAdvertisesAnonymousPreAuthorizedAccessWhenEnabled()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        }).ConfigureAwait(false);
 
         //The deployment opts in to anonymous access — the §12.3 advertisement matches what the
         //seam will accept. The flag is read off the per-request context the policy stage mutates.
@@ -323,12 +348,15 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     public async Task DiscoveryOmitsAnonymousPreAuthorizedAccessWhenNotEnabled()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -375,18 +403,22 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         ActivitySource.AddActivityListener(listener);
 
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
         string grantedScope = string.Join(' ',
             WellKnownScopes.OpenId, WellKnownScopes.Profile, WellKnownScopes.Email,
             WellKnownScopes.Address, WellKnownScopes.Phone);
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, grantedScope));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, grantedScope));
+        }).ConfigureAwait(false);
 
         string segment = material.Registration.TenantId.Value;
+        string handle = material.Registration.TenantHandle!.Value.Value;
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             segment,
             WellKnownEndpointNames.Oid4VciPreAuthorizedToken,
@@ -419,14 +451,14 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         //filter captured activities to this test's tenant before asserting.
         List<ActivityEvent> dropEvents = captured
             .Where(a => string.Equals(
-                a.GetTagItem(ServerTagNames.TenantId) as string, segment, StringComparison.Ordinal))
+                a.GetTagItem(ServerTagNames.TenantHandle) as string, handle, StringComparison.Ordinal))
             .SelectMany(a => a.Events)
             .Where(e => string.Equals(e.Name, OAuthEventNames.IdentityScopesDroppedForNonEndUserGrant, StringComparison.Ordinal))
             .ToList();
 
         Assert.IsGreaterThan(0, dropEvents.Count,
             $"A '{OAuthEventNames.IdentityScopesDroppedForNonEndUserGrant}' event tagged with tenant "
-            + $"'{segment}' must be emitted.");
+            + $"'{handle}' must be emitted.");
 
         string droppedScopesTagValue = dropEvents[0].Tags
             .FirstOrDefault(t => string.Equals(t.Key, OAuthEventNames.DroppedScopesTagName, StringComparison.Ordinal))
@@ -442,6 +474,556 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: "This is
+    /// applicable for all access token requests regardless of grant type." A Pre-Authorized Code
+    /// Token Request carrying a valid DPoP proof is bound the same way every other grant's token
+    /// request is — <c>token_type</c> answers <c>DPoP</c> and the issued access token's
+    /// <c>cnf.jkt</c> equals the proof key's RFC 7638 thumbprint.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentedProofBindsTheAccessTokenAndAnswersDpopTokenType()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof; the
+        //retry carrying the echoed nonce succeeds.
+        string firstProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenEndpoint, BuildPreAuthorizedFields(),
+            OutgoingHeaders.Empty.WithDpop(firstProof), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, challenge.Body);
+        string? freshNonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce);
+        Assert.IsNotNull(freshNonce, "RFC 9449 §8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+
+        string proof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: freshNonce, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(proof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, doc.RootElement.GetProperty("token_type").GetString(),
+            "A presented DPoP proof must bind the Pre-Authorized Code grant's access token the same way it binds every other grant's.");
+
+        string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        string expectedThumbprint = dpopKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
+        string wireJkt = JwtPayloadReader.ReadCnfJkt(accessToken)
+            ?? throw new AssertFailedException("Access-token JWT must carry cnf.jkt under DPoP issuance.");
+        Assert.AreEqual(expectedThumbprint, wireJkt,
+            "JWT cnf.jkt must equal the DPoP key's RFC 7638 thumbprint.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0 §13.10</see>:
+    /// "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained." A registration whose access-token lifetime exceeds the threshold is
+    /// issued a token when the request carries a valid DPoP proof, and is still refused without
+    /// one.
+    /// </summary>
+    [TestMethod]
+    public async Task LongLivedAccessTokenIsIssuedWithAProofAndRefusedWithoutOne()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(10)).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+
+        (int noProofStatus, string noProofBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, noProofStatus, noProofBody);
+        Assert.Contains(OAuthErrors.InvalidRequest, noProofBody);
+
+        Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof; the
+        //retry carrying the echoed nonce succeeds.
+        string firstProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenEndpoint, BuildPreAuthorizedFields(),
+            OutgoingHeaders.Empty.WithDpop(firstProof), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, challenge.Body);
+        string? freshNonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce);
+        Assert.IsNotNull(freshNonce, "RFC 9449 §8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+
+        string proof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: freshNonce, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        (int provenStatus, string provenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(proof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, provenStatus, provenBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 §8</see>: the
+    /// authorization server answers a nonce-less request with <c>use_dpop_nonce</c> and a
+    /// <c>DPoP-Nonce</c> header. The Pre-Authorized Code is single-use and the application's
+    /// <see cref="AuthorizationServerIntegration.ValidatePreAuthorizedCodeAsync"/> seam may consume
+    /// it, so the nonce challenge MUST run before the seam is consulted — otherwise the wallet's
+    /// retry with the same code would find it already spent.
+    /// </summary>
+    [TestMethod]
+    public async Task NonceChallengeRunsBeforeTheSeamAndTheRetryWithTheSameCodeSucceeds()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    seamInvocations++;
+
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+                };
+
+            //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; the granted
+            //scope is empty here (RFC 6749 §3.3 narrowing drops every identity scope from this
+            //grant, so ClientRecord.ScopeToAudience's openid mapping never matches). Fixed
+            //resource-server audience, matching the one ScopeToAudience already carries.
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string firstProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenEndpoint, BuildPreAuthorizedFields(),
+            OutgoingHeaders.Empty.WithDpop(firstProof), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, challenge.Body);
+        string? freshNonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce);
+        Assert.IsNotNull(freshNonce, "RFC 9449 §8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+        Assert.AreEqual(0, seamInvocations,
+            "The nonce challenge must never consume the Pre-Authorized Code — the wallet retries the same code.");
+
+        string retryProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: freshNonce, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        HttpResponseData retryResponse = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenEndpoint, BuildPreAuthorizedFields(),
+            OutgoingHeaders.Empty.WithDpop(retryProof), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, retryResponse.StatusCode, retryResponse.Body);
+        Assert.AreEqual(1, seamInvocations,
+            "The retry with the same code and the nonce must succeed and consult the seam exactly once.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>: the
+    /// proof's <c>htu</c> MUST match the request URL. A proof bound to a different endpoint is
+    /// refused before the code-validation seam is consulted.
+    /// </summary>
+    [TestMethod]
+    public async Task ProofWithWrongHtuIsRejectedWithoutConsultingTheSeam()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+        DpopProofClaims claims = new()
+        {
+            Htm = WellKnownHttpMethods.Post,
+            Htu = "https://wrong.example.test/not-the-token-endpoint",
+            Iat = TimeProvider.GetUtcNow(),
+            Jti = Guid.NewGuid().ToString("N")
+        };
+        string proof = await DpopProofConstruction.BuildAsync(
+            claims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string body, int seamInvocations) = await PostPreAuthorizedWithSeamSpyAsync(
+            host, segment, OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.Contains(OAuthErrors.InvalidDpopProof, body);
+        Assert.AreEqual(0, seamInvocations, "A proof bound to the wrong htu must never reach the code-validation seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>: the
+    /// proof's <c>htm</c> MUST match the request method. A proof minted for <c>GET</c> presented on
+    /// this <c>POST</c> token request is refused before the code-validation seam is consulted.
+    /// </summary>
+    [TestMethod]
+    public async Task ProofWithWrongHtmIsRejectedWithoutConsultingTheSeam()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+        DpopProofClaims claims = new()
+        {
+            Htm = WellKnownHttpMethods.Get,
+            Htu = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).OriginalString,
+            Iat = TimeProvider.GetUtcNow(),
+            Jti = Guid.NewGuid().ToString("N")
+        };
+        string proof = await DpopProofConstruction.BuildAsync(
+            claims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string body, int seamInvocations) = await PostPreAuthorizedWithSeamSpyAsync(
+            host, segment, OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.Contains(OAuthErrors.InvalidDpopProof, body);
+        Assert.AreEqual(0, seamInvocations, "A proof minted for the wrong HTTP method must never reach the code-validation seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 §11.1</see>: "the
+    /// authorization server SHOULD check the jti value for replay." The code-validation seam is
+    /// consulted on the jti's legitimate first use; a second presentation of that SAME jti never
+    /// reaches the seam again — the code is not re-consumed by the replay.
+    /// </summary>
+    [TestMethod]
+    public async Task ReplayedJtiIsRejectedWithoutConsultingTheSeamASecondTime()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    seamInvocations++;
+
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+                };
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+        string htu = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).OriginalString;
+        string jti = Guid.NewGuid().ToString("N");
+
+        async Task<string> BuildProofAsync(string? nonce) =>
+            await DpopProofConstruction.BuildAsync(
+                new DpopProofClaims
+                {
+                    Htm = WellKnownHttpMethods.Post,
+                    Htu = htu,
+                    Iat = TimeProvider.GetUtcNow(),
+                    Jti = jti,
+                    Nonce = nonce
+                },
+                dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof — a
+        //challenge registers no jti, so the same jti is still available for the legitimate use below.
+        string challengeProof = await BuildProofAsync(nonce: null).ConfigureAwait(false);
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment),
+            BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(challengeProof), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, challenge.Body);
+        Assert.AreEqual(0, seamInvocations, "The nonce challenge must never consult the code-validation seam.");
+        string freshNonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+            ?? throw new AssertFailedException("RFC 9449 §8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+
+        //The nonce is stateless (HMAC-signed, valid for its whole window — see
+        //DefaultDpopNonceValidation), so the SAME server nonce carries both the legitimate first
+        //use and the jti-replay presentation below.
+        string firstProof = await BuildProofAsync(freshNonce).ConfigureAwait(false);
+        (int firstStatus, string firstBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(firstProof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, firstStatus, firstBody);
+        Assert.AreEqual(1, seamInvocations, "The jti's legitimate first use must reach the seam.");
+
+        string replayProof = await BuildProofAsync(freshNonce).ConfigureAwait(false);
+        (int replayStatus, string replayBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(replayProof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, replayStatus, replayBody);
+        Assert.Contains(OAuthErrors.InvalidDpopProof, replayBody);
+        Assert.AreEqual(1, seamInvocations,
+            "A replayed jti must never reach the code-validation seam a second time — the code is not re-consumed by the replay.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: a client
+    /// whose policy profile mandates DPoP-bound access tokens
+    /// (<see cref="ClientPolicyProfiles.RequiresDpop"/>) is refused before the code-validation
+    /// seam is consulted when the request carries no proof at all.
+    /// </summary>
+    [TestMethod]
+    public async Task RegistrationRequiringDpopWithoutAProofIsRejectedWithoutConsultingTheSeam()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+
+        (int statusCode, string body, int seamInvocations) = await PostPreAuthorizedWithSeamSpyAsync(
+            host, segment, OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, body);
+        Assert.AreEqual(0, seamInvocations,
+            "A registration whose profile requires DPoP must refuse an unproven request before consulting the seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7">RFC 9449 §7</see>: a
+    /// DPoP-bound access token must be presented with a matching proof at the resource endpoint. A
+    /// token this grant bound is refused at the Credential Endpoint without a proof and accepted
+    /// with one — mirrors
+    /// <see cref="Oid4VciDpopCredentialEndpointTests.DpopBoundTokenWithValidProofIssues"/> for a
+    /// token minted by the Pre-Authorized Code grant instead of the authorization-code grant.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenBoundByThisGrantIsRefusedAtTheCredentialEndpointWithoutAProofAndAcceptedWithOne()
+    {
+        const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
+        const string IssuedCredential = "eyJhbGciOiJFUzI1NiJ9.body.sig";
+
+        await using TestHostShell host = new(TimeProvider);
+        ImmutableHashSet<CapabilityIdentifier> capabilities =
+            GrantCapabilities.Add(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, capabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        string segment = material.Registration.TenantId.Value;
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        //RFC 9449 §8: the server's single nonce policy challenges the first, nonce-less proof; the
+        //retry carrying the echoed nonce succeeds.
+        string tokenChallengeProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        HttpResponseData tokenChallenge = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment),
+            BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(tokenChallengeProof), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(400, tokenChallenge.StatusCode, tokenChallenge.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, tokenChallenge.Body);
+        string tokenNonce = tokenChallenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+            ?? throw new AssertFailedException("RFC 9449 §8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+
+        string tokenProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: tokenNonce, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        (int tokenStatus, string tokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(tokenProof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, tokenStatus, tokenBody);
+
+        using JsonDocument tokenDoc = JsonDocument.Parse(tokenBody);
+        string accessToken = tokenDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        Uri credentialUrl = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, segment));
+        HttpClient httpClient = host.Host("default").SharedHttpClient!;
+
+        using HttpResponseMessage noProofResponse = await PostCredentialRequestAsync(
+            httpClient, credentialUrl, ConfigurationId, accessToken, dpopProof: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string noProofBody = await noProofResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.BadRequest, noProofResponse.StatusCode, noProofBody);
+        Assert.Contains(OAuthErrors.UseDpopNonce, noProofBody);
+
+        string ath = await DpopProofValidator.ComputeAthAsync(
+            accessToken, TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        DpopProofClaims credentialClaims = new()
+        {
+            Htm = WellKnownHttpMethods.Post,
+            Htu = credentialUrl.ToString(),
+            Iat = TimeProvider.GetUtcNow(),
+            Jti = Guid.NewGuid().ToString("N"),
+            Ath = ath
+        };
+        string credentialProof = await DpopProofConstruction.BuildAsync(
+            credentialClaims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage provenResponse = await PostCredentialRequestAsync(
+            httpClient, credentialUrl, ConfigurationId, accessToken, credentialProof, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string provenBody = await provenResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.OK, provenResponse.StatusCode, provenBody);
+    }
+
+
+    /// <summary>Builds the minimal well-formed §6.1 Token Request form fields this file's DPoP tests share.</summary>
+    private static Dictionary<string, string> BuildPreAuthorizedFields() =>
+        new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
+            [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
+        };
+
+
+    /// <summary>
+    /// Builds a DPoP proof bound to the Pre-Authorized Code grant's token endpoint — the same URL
+    /// the authorization-code grant serves, disambiguated by <c>grant_type</c>.
+    /// </summary>
+    private async Task<string> BuildTokenProofAsync(
+        TestHostShell host, string segment, DpopKey key, string? nonce, CancellationToken cancellationToken)
+    {
+        DpopProofClaims claims = new()
+        {
+            Htm = WellKnownHttpMethods.Post,
+            Htu = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).OriginalString,
+            Iat = TimeProvider.GetUtcNow(),
+            Jti = Guid.NewGuid().ToString("N"),
+            Nonce = nonce
+        };
+
+        return await DpopProofConstruction.BuildAsync(
+            claims, key, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Wires a counting <see cref="AuthorizationServerIntegration.ValidatePreAuthorizedCodeAsync"/>
+    /// spy and posts a well-formed token request carrying <paramref name="headers"/>, returning
+    /// the response alongside how many times the seam was consulted.
+    /// </summary>
+    private static async Task<(int StatusCode, string Body, int SeamInvocations)> PostPreAuthorizedWithSeamSpyAsync(
+        TestHostShell host, string segment, OutgoingHeaders headers, CancellationToken cancellationToken)
+    {
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    seamInvocations++;
+
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+                };
+        }).ConfigureAwait(false);
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), headers, cancellationToken).ConfigureAwait(false);
+
+        return (statusCode, body, seamInvocations);
+    }
+
+
+    /// <summary>Posts a §8 Credential Request under the DPoP scheme, with or without a DPoP proof header.</summary>
+    private static async Task<HttpResponseMessage> PostCredentialRequestAsync(
+        HttpClient httpClient, Uri credentialUrl, string configurationId, string accessToken,
+        string? dpopProof, CancellationToken cancellationToken)
+    {
+        using StringContent content = new(
+            "{\"credential_configuration_id\":\"" + configurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}",
+            Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, credentialUrl) { Content = content };
+        _ = request.Headers.TryAddWithoutValidation(
+            WellKnownHttpHeaderNames.Authorization, $"DPoP {accessToken}");
+        if(dpopProof is not null)
+        {
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.DPoP, dpopProof);
+        }
+
+        return await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Wires the seam to the given <paramref name="decision"/>, dispatches a well-formed token
     /// request, and asserts the response status and error code the library mapped it to.
     /// </summary>
@@ -452,8 +1034,11 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         int expectedStatus,
         string expectedError)
     {
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) => ValueTask.FromResult(decision);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) => ValueTask.FromResult(decision);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

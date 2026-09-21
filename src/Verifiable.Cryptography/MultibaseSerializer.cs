@@ -108,7 +108,7 @@ public static class MultibaseSerializer
     /// <remarks>
     /// <para>
     /// This overload extracts the <see cref="CryptoAlgorithm"/> from the key's
-    /// <see cref="SensitiveMemory.Tag"/> and resolves the appropriate multicodec header
+    /// <see cref="Lumoin.Base.SensitiveData.Tag"/> and resolves the appropriate multicodec header
     /// via <see cref="MulticodecHeaderRegistry"/>.
     /// </para>
     /// </remarks>
@@ -226,7 +226,7 @@ public static class MultibaseSerializer
     /// <remarks>
     /// <para>
     /// This overload extracts the <see cref="CryptoAlgorithm"/> from the key's
-    /// <see cref="SensitiveMemory.Tag"/> automatically.
+    /// <see cref="Lumoin.Base.SensitiveData.Tag"/> automatically.
     /// </para>
     /// </remarks>
     public static string EncodeKey(PublicKeyMemory publicKey, EncodeDelegate encoder, BaseMemoryPool pool)

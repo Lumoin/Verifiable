@@ -24,7 +24,7 @@ namespace Verifiable.Server.Routing;
 /// <see cref="ExchangeContext"/> via the
 /// <see cref="ExchangeContextServerExtensions.SetMatchPayload"/> extension before
 /// invoking the matched endpoint's handler; the handler reads it through
-/// <see cref="ExchangeContextServerExtensions.MatchPayload"/> and pattern-matches
+/// <c>ExchangeContextServerExtensions.MatchPayload</c> and pattern-matches
 /// to the subtype it expects:
 /// </para>
 /// <code>

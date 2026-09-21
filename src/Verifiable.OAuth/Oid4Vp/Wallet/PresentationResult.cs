@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 
 /// <summary>
 /// The outcome of a successful
-/// <see cref="Oid4VpWalletClient.PresentJarAsync"/> call.
+/// <see cref="Oid4VpWalletClient.PresentJarAsync(PresentJarOptions, System.Threading.CancellationToken)"/> call.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,7 +29,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// (cross-device) or <see cref="BrowserRedirectIssued"/> (same-device when
 /// the Verifier returned a redirect URI in its HTTP 200 body); only the
 /// cross-device terminal is driven from inside
-/// <see cref="Oid4VpWalletClient.PresentJarAsync"/>.
+/// <see cref="Oid4VpWalletClient.PresentJarAsync(PresentJarOptions, System.Threading.CancellationToken)"/>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PresentationResult State={TerminalState.GetType().Name}")]

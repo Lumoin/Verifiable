@@ -18,7 +18,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// <para>
 /// The private key bytes are unwrapped from <see cref="PrivateKeyMemory"/> by the
-/// caller via <see cref="PrivateKeyMemory.WithKeyBytesAsync{TArg,TResult}"/> and must
+/// caller via <see cref="PrivateKeyMemory.WithKeyBytesAsync{TArg, TResult}(System.Func{System.ReadOnlyMemory{byte}, TArg, System.Threading.Tasks.ValueTask{TResult}}, TArg)"/> and must
 /// not be stored or referenced after the delegate returns.
 /// </para>
 /// <para>

@@ -78,8 +78,8 @@ internal sealed class SiopRequestUriFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         //=== Step 1: the RP prepares the transaction and learns the request_uri + handle. ===

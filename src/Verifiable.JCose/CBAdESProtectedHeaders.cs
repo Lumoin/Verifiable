@@ -155,21 +155,14 @@ public sealed class CBAdESProtectedHeaders: IDisposable
         CriticalLabels = criticalLabels;
         UnprofiledHeaders = unprofiledHeaders;
 
-        /// <summary>
-        /// Determines whether <paramref name="label"/> is one of the labels this aggregate already profiles as
-        /// a named member — the eight IANA COSE/RFC 9360/RFC 9597 labels this aggregate exposes as typed
-        /// properties (<c>alg</c>=1, <c>crit</c>=2, <c>content type</c>=3, <c>kid</c>=4, CWT Claims=15,
-        /// <c>x5chain</c>=33, <c>x5t</c>=34, <c>x5u</c>=35) — or one of the eight CB-AdES-specific labels
-        /// 261-268 (<see cref="CBAdESHeaderParameters"/>). <c>x5bag</c> (32,
-        /// <see cref="CoseHeaderParameters.X5Bag"/>) is deliberately NOT profiled here (CB-4.4-07):
-        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
-        /// ETSI TS 119 152-1 V1.1.1</see> never mentions <c>x5bag</c> anywhere in its text, so it is exactly the
-        /// "header parameter defined elsewhere and not further profiled by this document" case CB-4.4-07
-        /// describes — a caller carrying <c>x5bag</c> on a CB-AdES signature reaches it only through
-        /// <see cref="UnprofiledHeaders"/>, like any other label this document is silent on.
-        /// </summary>
-        /// <param name="label">The candidate label.</param>
-        /// <returns><see langword="true"/> when <paramref name="label"/> is already profiled.</returns>
+        //Determines whether label is one of the labels this aggregate already profiles as a named member —
+        //the eight IANA COSE/RFC 9360/RFC 9597 labels this aggregate exposes as typed properties (alg=1,
+        //crit=2, content type=3, kid=4, CWT Claims=15, x5chain=33, x5t=34, x5u=35) — or one of the eight
+        //CB-AdES-specific labels 261-268 (CBAdESHeaderParameters). x5bag (32, CoseHeaderParameters.X5Bag) is
+        //deliberately NOT profiled here (CB-4.4-07): ETSI TS 119 152-1 V1.1.1 never mentions x5bag anywhere
+        //in its text, so it is exactly the "header parameter defined elsewhere and not further profiled by
+        //this document" case CB-4.4-07 describes — a caller carrying x5bag on a CB-AdES signature reaches
+        //it only through UnprofiledHeaders, like any other label this document is silent on.
         static bool IsProfiledLabel(int label) => label switch
         {
             CoseHeaderParameters.Alg => true,

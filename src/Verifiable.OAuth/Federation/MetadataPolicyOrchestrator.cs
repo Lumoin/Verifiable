@@ -222,7 +222,14 @@ public static class MetadataPolicyOrchestrator
         || op.Equals(WellKnownMetadataPolicyOperators.Essential);
 
 
-    private static Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>> ReadSubjectDeclaredMetadata(TrustChain chain)
+    /// <summary>
+    /// Reads the subject's own declared <c>metadata</c> claim (<c>chain.Statements[0]</c>),
+    /// keyed by every Entity Type it declares. Shared with
+    /// <see cref="FederationEffectiveMetadataResolver"/> — internal rather than private so
+    /// <see cref="FederationEffectiveMetadataResolver.ReadDeclaredEntityTypes(TrustChain)"/> can
+    /// call it directly rather than duplicating the read.
+    /// </summary>
+    internal static Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>> ReadSubjectDeclaredMetadata(TrustChain chain)
     {
         Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>> result = [];
         if(chain.Statements.Count == 0)

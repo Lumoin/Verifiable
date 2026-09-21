@@ -107,8 +107,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider),
             credentialStatusPolicy: policy.Decide);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string primarySdJwt, PrivateKeyMemory primaryHolder, PublicKeyMemory primaryIssuer) =
             await IssuePidAsync("Erika", "Mustermann", new StatusListReference(primaryIndex, StatusListUri))
@@ -189,8 +189,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider),
             credentialStatusPolicy: policy.Decide);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string primarySdJwt, PrivateKeyMemory primaryHolder, PublicKeyMemory primaryIssuer) =
             await IssuePidAsync("Erika", "Mustermann", new StatusListReference(primaryIndex, StatusListUri))
@@ -259,8 +259,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider),
             credentialStatusPolicy: policy.Decide);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Alice", "Smith", status: null).ConfigureAwait(false);
@@ -311,8 +311,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider),
             credentialStatusPolicy: policy.Decide);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Alice", "Smith", new StatusListReference(outOfBoundsIndex, StatusListUri))
@@ -364,8 +364,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: failingResolver,
             credentialStatusPolicy: policy.Decide);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Alice", "Smith", new StatusListReference(credentialIndex, StatusListUri))
@@ -417,8 +417,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider),
             credentialStatusPolicy: policy.Decide);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Erika", "Mustermann", new StatusListReference(credentialIndex, StatusListUri))
@@ -477,8 +477,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider),
             credentialStatusPolicy: CredentialStatusPolicies.RefuseNotValid);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Alice", "Smith", new StatusListReference(credentialIndex, StatusListUri))
@@ -620,8 +620,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: countingResolver,
             credentialStatusPolicy: policy.Decide);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidWithRawStatusAsync(
@@ -699,8 +699,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: countingResolver,
             unsupportedStatusMechanisms: UnsupportedStatusMechanismDisposition.Surface);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidWithRawStatusAsync(
@@ -764,8 +764,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         await using TestHostShell app = new(
             TimeProvider, resolveVerifiedStatusListToken: countingResolver);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Alice", "Smith", status: null).ConfigureAwait(false);
@@ -820,8 +820,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         await using TestHostShell app = new(
             TimeProvider, resolveVerifiedStatusListToken: countingResolver);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Alice", "Smith", new StatusListReference(credentialIndex, StatusListUri))
@@ -878,8 +878,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         await using TestHostShell app = new(
             TimeProvider, resolveVerifiedStatusListToken: countingResolver);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidWithRawStatusAsync(SdJwtVpFixture.NegativeIndexStatusObject(StatusListUri))
@@ -937,8 +937,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         await using TestHostShell app = new(
             TimeProvider, resolveVerifiedStatusListToken: countingResolver);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidWithRawStatusAsync(SdJwtVpFixture.EmptyStatusObject()).ConfigureAwait(false);
@@ -991,8 +991,8 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         await using TestHostShell app = new(
             TimeProvider, resolveVerifiedStatusListToken: countingResolver);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync("Alice", "Smith", new StatusListReference(0, StatusListUri)).ConfigureAwait(false);

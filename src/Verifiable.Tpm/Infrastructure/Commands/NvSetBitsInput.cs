@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// <para>
 /// <c>bits</c> is a plain <c>UINT64</c>, not a sized TPM2B, so TPM 2.0 Library Part 1, clause 18.1 makes it
-/// ineligible for parameter encryption: <see cref="FirstCommandParameterIsEncryptable"/> stays at its default
+/// ineligible for parameter encryption: <see cref="Verifiable.Tpm.Infrastructure.ITpmCommandInput.FirstCommandParameterIsEncryptable"/> stays at its default
 /// <see langword="false"/> by the specification's own rule, and the executor refuses a decrypt session for this
 /// command client-side.
 /// </para>

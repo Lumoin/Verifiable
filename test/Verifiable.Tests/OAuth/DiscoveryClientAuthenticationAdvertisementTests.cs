@@ -53,8 +53,8 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task DefaultNoneDeclarationEmitsNoneMethodAndNoSigningAlgMember()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -94,16 +94,23 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task PrivateKeyJwtDeclarationEmitsBothMembersWithRegistryNamesInDeclarationOrder()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported =
-            [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-        oauth.ClientAssertionSigningAlgorithmsSupported =
-            [WellKnownJwaValues.Es256, WellKnownJwaValues.Rs256];
-        oauth.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(true);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+
+
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported =
+                [WellKnownJwaValues.Es256, WellKnownJwaValues.Rs256];
+
+
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -139,15 +146,22 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task DeclarationIncludingRs256EmitsRs256()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported =
-            [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-        oauth.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Rs256];
-        oauth.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(true);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+
+
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Rs256];
+
+
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -176,17 +190,21 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task ValidateThrowsWhenNonNoneMethodDeclaredWithoutCredentialValidator()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported =
-            [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-        oauth.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
-        oauth.ValidateClientCredentialsAsync = null;
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
 
-        InvalidOperationException ex =
-            Assert.ThrowsExactly<InvalidOperationException>(oauth.Validate);
+
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
+
+
+            candidateIntegration.ValidateClientCredentialsAsync = null;
+        }).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.Contains(
             nameof(AuthorizationServerIntegration.ValidateClientCredentialsAsync),
@@ -208,18 +226,22 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task ValidateThrowsWhenPrivateKeyJwtDeclaredWithEmptyAlgorithmSet()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported =
-            [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-        oauth.ClientAssertionSigningAlgorithmsSupported = [];
-        oauth.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(true);
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
 
-        InvalidOperationException ex =
-            Assert.ThrowsExactly<InvalidOperationException>(oauth.Validate);
+
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [];
+
+
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.Contains(
             nameof(AuthorizationServerIntegration.ClientAssertionSigningAlgorithmsSupported),
@@ -241,18 +263,22 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task ValidateThrowsWhenClientSecretJwtDeclaredWithEmptyAlgorithmSet()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported =
-            [ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretJwt];
-        oauth.ClientAssertionSigningAlgorithmsSupported = [];
-        oauth.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(true);
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretJwt];
 
-        InvalidOperationException ex =
-            Assert.ThrowsExactly<InvalidOperationException>(oauth.Validate);
+
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [];
+
+
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.Contains(
             nameof(AuthorizationServerIntegration.ClientAssertionSigningAlgorithmsSupported),
@@ -273,18 +299,22 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task ValidateThrowsWhenAlgorithmSetContainsNone()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported =
-            [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-        oauth.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.None];
-        oauth.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(true);
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
 
-        InvalidOperationException ex =
-            Assert.ThrowsExactly<InvalidOperationException>(oauth.Validate);
+
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.None];
+
+
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.Contains(
             "none",
@@ -307,14 +337,14 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task ValidateThrowsWhenMethodSetIsEmpty()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported = [];
-
-        InvalidOperationException ex =
-            Assert.ThrowsExactly<InvalidOperationException>(oauth.Validate);
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported = [];
+        }).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.Contains(
             nameof(AuthorizationServerIntegration.ClientAuthenticationMethodsSupported),
@@ -339,13 +369,19 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
         ImmutableHashSet<CapabilityIdentifier> discoveryOnly = ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, discoveryOnly);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, discoveryOnly).ConfigureAwait(false);
 
         AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.ClientAuthenticationMethodsSupported =
-            [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-        oauth.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+
+
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) => ValueTask.FromResult(false);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -379,12 +415,15 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task ContributionDuplicatingBaseMemberFailsTheDocumentRequest(string duplicatedName)
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        host.Server.OAuth().ContributeDiscoveryFieldsAsync = (_, _, _) =>
-            ValueTask.FromResult(new DiscoveryDocumentContribution(
-                [new DiscoveryStringArrayField(duplicatedName, ["shadow-value"])]));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeDiscoveryFieldsAsync = (_, _, _) =>
+                ValueTask.FromResult(new DiscoveryDocumentContribution(
+                    [new DiscoveryStringArrayField(duplicatedName, ["shadow-value"])]));
+        }).ConfigureAwait(false);
 
         InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             async () => await DispatchDiscoveryAsync(host, material).ConfigureAwait(false))
@@ -409,13 +448,16 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
     public async Task ContributionWithFreshNameMergesAfterBaseSet()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         const string freshName = "urn:example:custom_advertisement_field";
-        host.Server.OAuth().ContributeDiscoveryFieldsAsync = (_, _, _) =>
-            ValueTask.FromResult(new DiscoveryDocumentContribution(
-                [new DiscoveryStringField(freshName, "custom-value")]));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeDiscoveryFieldsAsync = (_, _, _) =>
+                ValueTask.FromResult(new DiscoveryDocumentContribution(
+                    [new DiscoveryStringField(freshName, "custom-value")]));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -454,8 +496,8 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
             WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
 
         ServerHttpResponse withoutResolver = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -471,9 +513,12 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
 
         //Discovery emission only checks the resolver seam for non-null-ness; a
         //throwing lambda proves the document request never fetches a client document.
-        host.Server.OAuth().ResolveClientMetadataAsync = (uri, context, ct) =>
-            throw new NotImplementedException(
-                "Discovery emission checks ResolveClientMetadataAsync for non-null-ness only.");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveClientMetadataAsync = (uri, context, ct) =>
+                throw new NotImplementedException(
+                    "Discovery emission checks ResolveClientMetadataAsync for non-null-ness only.");
+        }).ConfigureAwait(false);
 
         ServerHttpResponse withResolver = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);

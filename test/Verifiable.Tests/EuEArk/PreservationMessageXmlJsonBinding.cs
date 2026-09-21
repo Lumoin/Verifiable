@@ -769,6 +769,8 @@ public static class PreservationMessageXmlJsonBinding
             }
 
             case PreservationMessageKind.NotEvaluated:
+            case PreservationMessageKind.DeletePreservationObjectRequest:
+            case PreservationMessageKind.DeletePreservationObjectResponse:
             default:
                 missing = "a message of no kind has no particles";
 

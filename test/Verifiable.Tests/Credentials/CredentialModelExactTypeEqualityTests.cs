@@ -2,6 +2,7 @@ using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.StatusList;
 
 namespace Verifiable.Tests.Credentials;
 
@@ -521,6 +522,45 @@ internal sealed class CredentialModelExactTypeEqualityTests
 
         var otherBase = new CredentialStatus { Id = baseStatus.Id, Type = baseStatus.Type };
         AssertEquality(baseStatus, otherBase);
+    }
+
+
+    /// <summary>
+    /// Proves <see cref="CredentialStatus.Equals(CredentialStatus?)"/> and
+    /// <see cref="CredentialStatus.GetHashCode"/> cover <see cref="CredentialStatus.StatusSize"/>,
+    /// <see cref="CredentialStatus.StatusMessage"/> and <see cref="CredentialStatus.StatusReference"/>:
+    /// two entries alike in every other member but one of those three are unequal, and two entries
+    /// whose message and reference lists hold the same values in the same order are equal with equal
+    /// hash codes.
+    /// </summary>
+    [TestMethod]
+    public void CredentialStatusEqualityCoversSizeMessagesAndReference()
+    {
+        static CredentialStatus Build(int? size, IReadOnlyList<BitstringStatusMessage>? messages, IReadOnlyList<string>? references) => new()
+        {
+            Id = "https://example.com/status#1",
+            Type = "BitstringStatusListEntry",
+            StatusPurpose = "message",
+            StatusListIndex = "94567",
+            StatusListCredential = "https://example.com/credentials/status/8",
+            StatusSize = size,
+            StatusMessage = messages,
+            StatusReference = references
+        };
+
+        IReadOnlyList<BitstringStatusMessage> messages = [new("0x0", "pending_review"), new("0x1", "accepted")];
+        IReadOnlyList<BitstringStatusMessage> sameMessages = [new("0x0", "pending_review"), new("0x1", "accepted")];
+        IReadOnlyList<BitstringStatusMessage> otherMessages = [new("0x0", "pending_review"), new("0x1", "rejected")];
+        IReadOnlyList<string> references = ["https://example.org/status-dictionary/"];
+
+        CredentialStatus status = Build(1, messages, references);
+        AssertEquality(status, Build(1, sameMessages, ["https://example.org/status-dictionary/"]));
+
+        Assert.IsFalse(status.Equals(Build(2, messages, references)), "A different statusSize makes the entries unequal.");
+        Assert.IsFalse(status.Equals(Build(1, otherMessages, references)), "A different statusMessage list makes the entries unequal.");
+        Assert.IsFalse(status.Equals(Build(1, messages, ["https://example.org/other/"])), "A different statusReference list makes the entries unequal.");
+        Assert.IsFalse(status.Equals(Build(1, null, references)), "An absent statusMessage list differs from a present one.");
+        Assert.IsTrue(status != Build(null, messages, references), "The inequality operator follows the same members.");
     }
 
 

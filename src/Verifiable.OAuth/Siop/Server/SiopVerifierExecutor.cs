@@ -184,7 +184,7 @@ public static class SiopVerifierExecutor
         //application skin to serve, and emits the served input that steps the PDA forward.
         executor.Register<SignSiopRequestObject>(async (action, context, cancellationToken) =>
         {
-            EndpointServer server = context.Server!;
+            EndpointServer server = context.RequestServer!;
             var oauth = server.OAuth();
 
             TenantId tenantId = context.TenantId
@@ -310,7 +310,7 @@ public static class SiopVerifierExecutor
                 //free-standing executor primitive — exercised with a bare ExchangeContext and no
                 //server-backed store — has no store to consult, the same no-store-not-Required
                 //proceed JtiReplayGuard itself applies.
-                EndpointServer? server = context.Server;
+                EndpointServer? server = context.RequestServer;
                 TenantId? tenantId = context.TenantId;
                 if(server is not null && tenantId is not null)
                 {
@@ -455,6 +455,9 @@ public static class SiopVerifierExecutor
                     base64UrlEncoder,
                     pool,
                     saltReuseSeam,
+                    parseX5c: null,
+                    resolveTrustedAuthorityEvidence: null,
+                    context,
                     cancellationToken).ConfigureAwait(false);
             }
             catch(FormatException exception)
@@ -559,7 +562,7 @@ public static class SiopVerifierExecutor
             //decryption private key off the server, validates the JWE enc header against the advertised
             //set BEFORE any cryptographic operation, decrypts to recover the inner compact id_token
             //JWS, then runs the shared §11.1 + §11.2 validation on it.
-            EndpointServer server = context.Server!;
+            EndpointServer server = context.RequestServer!;
             var oauth = server.OAuth();
 
             if(oauth.Cryptography.DecryptionKeyResolver is null)
@@ -608,6 +611,20 @@ public static class SiopVerifierExecutor
 
             using IMemoryOwner<byte> headerBytes = base64UrlDecoder(
                 action.EncryptedIdToken.AsSpan(0, firstDot).ToString(), pool);
+
+            //RFC 7516 §4: gate the peeked header for well-formedness — a repeated "enc" would otherwise
+            //let this allowlist check see a different value than the one JweParsing's authoritative parse
+            //later rejects the message for, diverging on which occurrence the two readers acted on.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(headerBytes.Memory.Span))
+            {
+                return new SiopFlowFailed
+                {
+                    Reason = "The Self-Issued ID Token JWE protected header is not well-formed JSON, or "
+                        + "contains a duplicate Header Parameter name.",
+                    FailedAt = timeProvider.GetUtcNow(),
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
+                };
+            }
 
             string? enc = JwkJsonReader.ExtractStringValue(headerBytes.Memory.Span, "enc"u8);
 

@@ -19,7 +19,7 @@ namespace Verifiable.Keri;
 /// <para>
 /// Each <see cref="KeriKelEvent"/> carries only its own serialization bytes and proofs; the typed
 /// <see cref="KeriKeyEvent"/> (its <see cref="KeriKeyEvent.Prefix"/>, signing keys, and anchor list) is decoded
-/// HERE, from those bytes, via <paramref name="events"/>'s own <see cref="KeriEventFieldMapDecoder"/> — never
+/// HERE, from those bytes, via <c>events</c>'s own <see cref="KeriEventFieldMapDecoder"/> — never
 /// taken from a caller-supplied object independent of the bytes. This closes the same class of hazard a public
 /// method accepting a caller-built <c>LogEntry</c> would reopen: an event's <see cref="KeriKeyEvent.Prefix"/> is
 /// bound to its own serialization the moment it is read, and the replayer's SAID check (over the same bytes) then

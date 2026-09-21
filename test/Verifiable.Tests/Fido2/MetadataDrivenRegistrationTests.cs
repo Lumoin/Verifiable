@@ -70,7 +70,7 @@ internal sealed class MetadataDrivenRegistrationTests
         Justification = "The matched entry's disposal is subsumed by the enclosing MetadataBlob's Dispose() (a MetadataBlobPayload disposes every entry it owns), called in this method's finally block; disposing the entry a second time would be redundant, not a leak.")]
     public async Task VerifiedBlobEntryTrustAnchorsDriveASuccessfulCertifiedRegistration()
     {
-        using RegistrationFixture fixture = CreateRegistrationFixture(WellKnownAuthenticatorStatuses.FidoCertified);
+        using RegistrationFixture fixture = await CreateRegistrationFixture(WellKnownAuthenticatorStatuses.FidoCertified).ConfigureAwait(false);
 
         //Wires the serial-number resolve/persist pair under Required so this capstone also proves the
         //jti persist-after-accept analog fires, end to end, on the ceremony's accepted path — the
@@ -128,7 +128,7 @@ internal sealed class MetadataDrivenRegistrationTests
         Justification = "The matched entry's disposal is subsumed by the enclosing MetadataBlob's Dispose() (a MetadataBlobPayload disposes every entry it owns), called in this method's finally block; disposing the entry a second time would be redundant, not a leak.")]
     public async Task RevokedBlobEntryStopsAtTheStatusGateBeforeChainValidation()
     {
-        using RegistrationFixture fixture = CreateRegistrationFixture(WellKnownAuthenticatorStatuses.Revoked);
+        using RegistrationFixture fixture = await CreateRegistrationFixture(WellKnownAuthenticatorStatuses.Revoked).ConfigureAwait(false);
 
         MetadataBlobResult blobResult = await VerifyBlobAsync(fixture.BlobBytes, fixture.MdsRootPki);
         _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(blobResult);
@@ -159,7 +159,7 @@ internal sealed class MetadataDrivenRegistrationTests
     [TestMethod]
     public async Task TamperedBlobNeverYieldsTrustAnchors()
     {
-        using RegistrationFixture fixture = CreateRegistrationFixture(WellKnownAuthenticatorStatuses.FidoCertified);
+        using RegistrationFixture fixture = await CreateRegistrationFixture(WellKnownAuthenticatorStatuses.FidoCertified).ConfigureAwait(false);
         byte[] tamperedBlobBytes = MetadataBlobTestVectors.TamperSignatureSegment(fixture.BlobBytes);
 
         MetadataBlobResult blobResult = await VerifyBlobAsync(tamperedBlobBytes, fixture.MdsRootPki);
@@ -264,7 +264,7 @@ internal sealed class MetadataDrivenRegistrationTests
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of every minted certificate/key transfers to the returned RegistrationFixture, which the caller disposes.")]
-    private static RegistrationFixture CreateRegistrationFixture(string status)
+    private static async Task<RegistrationFixture> CreateRegistrationFixture(string status)
     {
         Guid aaguid = Guid.NewGuid();
 
@@ -294,7 +294,7 @@ internal sealed class MetadataDrivenRegistrationTests
         byte[] clientDataJsonBytes = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, ValidChallenge, ValidOrigin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJsonBytes, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorDataBytes, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(attestationLeafKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(attestationLeafKey, toBeSigned).ConfigureAwait(false);
 
         byte[] attStmtCbor = EncodePackedAttStmt(WellKnownCoseAlgorithms.Es256, signature, [attestationLeafCertificate.RawData]);
         byte[] attestationObjectBytes = EncodeAttestationObject(WellKnownWebAuthnAttestationFormats.Packed, attStmtCbor, authenticatorDataBytes);

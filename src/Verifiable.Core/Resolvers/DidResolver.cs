@@ -65,6 +65,29 @@ public sealed class DidResolver
     /// When resolution fails, <see cref="DidResolutionResult.IsSuccessful"/> is <see langword="false"/>
     /// and <see cref="DidResolutionMetadata.Error"/> carries an RFC 9457 problem details object.
     /// </returns>
+    /// <remarks>
+    /// <para>
+    /// DID Resolution's output contract requires the resolved document's own <c>id</c> to be string-equal to
+    /// the requested DID (<see href="https://www.w3.org/TR/did-resolution/#dfn-diddocument">the <c>didDocument</c>
+    /// output value</see>). One case departs from the letter of that rule: a method whose own specification
+    /// resolves several names to one document — did:webvh, whose Read algorithm matches the requested DID
+    /// against ANY verified version's top-level <c>id</c>, so a moved DID's old name resolves to its CURRENT
+    /// document (see <see cref="Verifiable.Core.Did.Methods.WebVh.WebVhDidResolver"/>'s <c>Build</c> remarks for
+    /// the full did:webvh reasoning). This dispatcher honors that ONLY on the method's own verified statement:
+    /// a differing document <c>id</c> is accepted if and only if <see cref="DidDocumentMetadata.EquivalentId"/>
+    /// ordinally contains the requested DID AND the document <c>id</c> parses to the SAME DID method as the
+    /// requested DID, mirroring DID Resolution's own constraint that "each <c>equivalentId</c> value MUST be
+    /// produced by, and a form of, the same DID method as the <c>id</c> property value" (
+    /// <see href="https://www.w3.org/TR/did-resolution/#did-document-metadata">DID Resolution,
+    /// <c>equivalentId</c></see>). No method name is special-cased here: any method that populates
+    /// <c>EquivalentId</c> takes on the guarantee the specification requires of it. Every other differing
+    /// <c>id</c> — no <c>EquivalentId</c> at all, an <c>EquivalentId</c> of another method, or one that simply
+    /// does not name the requested DID — is refused as <see cref="DidResolutionErrors.InvalidDidDocument"/>,
+    /// with a <see cref="DidProblemDetails.Detail"/> naming both identifiers so the caller can see what
+    /// mismatched without raising an exception. <c>alsoKnownAs</c> plays no part in this check anywhere: it is
+    /// the DID controller's own unverified claim, never a method's verified statement.
+    /// </para>
+    /// </remarks>
     public async ValueTask<DidResolutionResult> ResolveAsync(
         string did,
         ExchangeContext context,
@@ -122,18 +145,36 @@ public sealed class DidResolver
             return result;
         }
 
-        //Step 5.3 (MUST): "The value of id in the resolved DID document MUST be string equal to the DID that
-        //was resolved." A mismatch means the method resolver returned a document for a different DID, so fail
-        //closed rather than surface a document the caller did not ask for. The spec names no error for this; the
-        //returned document is malformed, so invalidDidDocument is the precise signal (distinct from the
-        //internalError raised above for an execution exception). Only enforced when an id is present — the
-        //wrong-DID document is the defect this guards against.
+        //DID Resolution's definition of the didDocument output value (a rule of the function's output, not a
+        //numbered algorithm step): "The value of id in the resolved DID document MUST be string equal to the DID
+        //that was resolved". A
+        //mismatch is accepted ONLY when the method's own result guarantees the requested DID is an equivalent of
+        //the returned document — see this method's <remarks> for the full reasoning. Every other mismatch means
+        //the method resolver returned a document for a different DID with no such guarantee, so fail closed
+        //rather than surface a document the caller did not ask for; invalidDidDocument is the precise signal
+        //(distinct from the internalError raised above for an execution exception). Only enforced when an id is
+        //present — the wrong-DID document is the defect this guards against.
         if(result.IsSuccessful
             && result.Kind == DidResolutionKind.Document
             && result.Document is { Id: { } resolvedDocumentId }
             && !string.Equals(resolvedDocumentId.ToString(), did, StringComparison.Ordinal))
         {
-            return DidResolutionResult.Failure(DidResolutionErrors.InvalidDidDocument);
+            //A conforming method's equivalentId "MUST be produced by, and a form of, the same DID method as the
+            //id property value" (DID Resolution, equivalentId), so the requested DID's own method (parsed above)
+            //must match the resolved document id's method too — the guarantee never reaches across methods, and
+            //no method name is special-cased: any method that sets EquivalentId takes on this responsibility.
+            bool isGuaranteedEquivalent = ContainsOrdinal(result.DocumentMetadata.EquivalentId, did)
+                && DidUrl.TryParseAbsolute(resolvedDocumentId.ToString(), out DidUrl? resolvedDocumentDid)
+                && string.Equals(resolvedDocumentDid.Method, methodName, StringComparison.Ordinal);
+
+            if(!isGuaranteedEquivalent)
+            {
+                return DidResolutionResult.Failure(new DidProblemDetails(
+                    DidErrorTypes.InvalidDidDocument,
+                    Title: "Invalid DID document",
+                    Detail: $"The resolved document's id '{resolvedDocumentId}' is not the requested DID '{did}', "
+                        + $"and the method's metadata does not list '{did}' as an equivalent identifier of the same method."));
+            }
         }
 
         //Apply expandRelativeUrls post-processing when the option is enabled and a document
@@ -315,6 +356,32 @@ public sealed class DidResolver
 
         //Apply fragment dereferencing on the resolved document.
         return DereferenceFragment(resolution.Document!, parsed.Fragment, resolution.DocumentMetadata, options.VerificationRelationship);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="did"/> is present in <paramref name="equivalentId"/> by ordinal string equality —
+    /// the membership test DID Resolution's <c>equivalentId</c> guarantee is checked against; a value differing
+    /// only by letter case is not a match.
+    /// </summary>
+    /// <param name="equivalentId">A method result's declared equivalent identifiers, or <see langword="null"/>.</param>
+    /// <param name="did">The requested DID to look for.</param>
+    /// <returns><see langword="true"/> when <paramref name="equivalentId"/> contains <paramref name="did"/> ordinally.</returns>
+    private static bool ContainsOrdinal(IReadOnlyList<string>? equivalentId, string did)
+    {
+        if(equivalentId is null)
+        {
+            return false;
+        }
+
+        foreach(string candidate in equivalentId)
+        {
+            if(string.Equals(candidate, did, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

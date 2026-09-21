@@ -130,7 +130,7 @@ public sealed record PAdESSignedDocument
 /// <strong>No CMS <c>signing-time</c> attribute.</strong> PA-6.3-T13 gives the CMS <c>signing-time</c> attribute
 /// cardinality <c>0</c> at every baseline level ("shall not be present") because ISO 32000-1's own <c>M</c> entry
 /// already carries the claimed signing time (PA-6.3-T12/g) — PA-4.1-04's anti-redundancy rule resolved concretely
-/// for PAdES. This surface always calls <see cref="CAdESSignatureCreation.SignAsync"/> with
+/// for PAdES. This surface always calls <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/> with
 /// <c>shouldIncludeSigningTimeAttribute: false</c>, an additive extension of that shipped surface (RP-3) rather than a
 /// re-modeling of its attribute assembly.
 /// </para>

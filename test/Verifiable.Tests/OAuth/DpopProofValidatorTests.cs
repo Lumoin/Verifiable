@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth.Dpop;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -37,6 +38,71 @@ internal sealed class DpopProofValidatorTests
             DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Es256,
                 TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             result.JwkThumbprint);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>: "The JOSE
+    /// Header of a DPoP JWT MUST contain at least the following parameters: ... typ ... alg ... jwk"
+    /// and "The payload of a DPoP proof MUST contain at least the following claims: ... jti ... htm
+    /// ... htu ... iat". A proof built with <see cref="DpopJwsPartSerializerJson.Default"/> validates
+    /// through <see cref="DpopProofValidator"/>, and its header and claims carry exactly those
+    /// members — no more, no fewer — when no nonce or access token is in flight.
+    /// </summary>
+    [TestMethod]
+    public async Task DefaultSerializerProofValidatesAndCarriesExactlyTheRfc9449Members()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+        DpopProofClaims claims = BuildClaims();
+
+        string proof = await DpopProofConstruction.BuildAsync(
+            claims,
+            key,
+            TestSetup.Base64UrlEncoder,
+            DpopJwsPartSerializerJson.Default,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"A proof built with the default serializer must validate; got {result.FailureReason}.");
+
+        string[] parts = proof.Split('.');
+        Assert.HasCount(3, parts);
+
+        HashSet<string> headerMembers = MemberNames(parts[0]);
+        HashSet<string> payloadMembers = MemberNames(parts[1]);
+
+        HashSet<string> expectedHeaderMembers = new(StringComparer.Ordinal)
+        {
+            WellKnownJoseHeaderNames.Typ, WellKnownJwkMemberNames.Alg, WellKnownJoseHeaderNames.Jwk
+        };
+        HashSet<string> expectedPayloadMembers = new(StringComparer.Ordinal)
+        {
+            WellKnownJwtClaimNames.Jti, WellKnownJwtClaimNames.Htm, WellKnownJwtClaimNames.Htu, WellKnownJwtClaimNames.Iat
+        };
+
+        Assert.IsTrue(expectedHeaderMembers.SetEquals(headerMembers),
+            $"The header must carry exactly typ, alg, jwk; got [{string.Join(", ", headerMembers)}].");
+        Assert.IsTrue(expectedPayloadMembers.SetEquals(payloadMembers),
+            $"The payload must carry exactly jti, htm, htu, iat; got [{string.Join(", ", payloadMembers)}].");
+    }
+
+
+    //Decodes a base64url JWS segment and returns the set of its top-level JSON member names.
+    private static HashSet<string> MemberNames(string base64UrlSegment)
+    {
+        using System.Buffers.IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(base64UrlSegment, BaseMemoryPool.Shared);
+        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(bytes.Memory);
+
+        HashSet<string> names = new(StringComparer.Ordinal);
+        foreach(System.Text.Json.JsonProperty property in document.RootElement.EnumerateObject())
+        {
+            _ = names.Add(property.Name);
+        }
+
+        return names;
     }
 
 
@@ -369,10 +435,10 @@ internal sealed class DpopProofValidatorTests
         DpopProofClaims claims,
         Func<IReadOnlyDictionary<string, object>, IReadOnlyDictionary<string, object>> headerTransform)
     {
-        DpopJwsPartSerializer customSerializer = DpopTestSupport.Serializer with
+        DpopJwsPartSerializer customSerializer = DpopJwsPartSerializerJson.Default with
         {
             SerializeHeader = header =>
-                headerTransform(DpopTestSupport.SerializeHeader(header))
+                headerTransform(DpopJwsPartSerializerJson.Default.SerializeHeader(header))
         };
 
         return await DpopProofConstruction.BuildAsync(

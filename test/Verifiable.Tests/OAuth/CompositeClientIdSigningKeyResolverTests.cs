@@ -72,7 +72,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
         Federation.MintedChain mintedChain =
             await Federation.FederationTestRing.BuildDirectChainAsync(
                 verifierNode, anchorNode, now, now.AddHours(1),
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Compose a JAR.
         string clientIdWithPrefix = $"{WellKnownClientIdPrefixes.OpenIdFederation}:{VerifierClientId}";

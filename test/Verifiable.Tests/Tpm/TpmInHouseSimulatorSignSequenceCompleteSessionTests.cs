@@ -3,6 +3,8 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -1506,14 +1508,11 @@ internal sealed class TpmInHouseSimulatorSignSequenceCompleteSessionTests
             using SignSequenceCompleteResponse completed = result.Value;
             Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_RSASSA, completed.SignatureAlgorithm, "The framed TPMT_SIGNATURE must select the RSASSA member.");
 
-            using var rsa = RSA.Create();
-            rsa.ImportParameters(new RSAParameters
-            {
-                Modulus = key.OutPublic.PublicArea.Unique.GetRsaModulus().ToArray(),
-                Exponent = [0x01, 0x00, 0x01]
-            });
+            ReadOnlyMemory<byte> modulus = key.OutPublic.PublicArea.Unique.GetRsaModulusMemory();
+            VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.RsaSha256, Purpose.Verification);
+            (bool isVerified, _) = await verify(wholeMessage, completed.Signature.RsaSignature.AsReadOnlyMemory(), modulus, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(
-                rsa.VerifyData(wholeMessage, completed.Signature.RsaSignature.Buffer.ToArray(), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1),
+                isVerified,
                 "The session-authorized RSASSA signature must verify against the whole accumulated message under the exported modulus.");
         }
         finally

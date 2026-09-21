@@ -218,7 +218,7 @@ internal sealed class CtapPinUvAuthProtocolTests
 
     /// <summary>
     /// Protocol two's <c>kdf(Z)</c> derives its HMAC-key and AES-key halves as intermediate,
-    /// raw pooled buffers (each returned by a <see cref="Cryptography.Hkdf.DeriveAsync"/> call)
+    /// raw pooled buffers (each returned by a <see cref="Hkdf.DeriveAsync"/> call)
     /// before copying both into the final 64-byte shared secret. Those two intermediate buffers
     /// must be cleared before they return to the pool, exactly like every other raw intermediate
     /// this call graph rents (<c>Hkdf.ExtractAsync</c>'s PRK, <c>Hkdf.ExpandAsync</c>'s chain

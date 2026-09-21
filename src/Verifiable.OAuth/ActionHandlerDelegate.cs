@@ -1,5 +1,4 @@
 using Verifiable.Core;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth;
 
@@ -18,11 +17,11 @@ namespace Verifiable.OAuth;
 /// <para>
 /// The handler reaches the <see cref="EndpointServer"/> instance for key
 /// resolvers, encoder delegates, and other server configuration via
-/// <see cref="ExchangeContextServerExtensions.Server"/> on
+/// <c>context.RequestServer</c> on
 /// <paramref name="context"/>; the dispatcher places the active server on the
 /// context at entry. Read from the appropriate group:
-/// <c>context.Server!.Cryptography.SigningKeyResolver</c>,
-/// <c>context.Server!.Codecs.Encoder</c>, and so on.
+/// <c>context.RequestServer!.OAuth().Cryptography.SigningKeyResolver</c>,
+/// <c>context.RequestServer!.OAuth().Codecs.Encoder</c>, and so on.
 /// </para>
 /// </remarks>
 /// <typeparam name="TAction">The concrete action type this handler processes.</typeparam>

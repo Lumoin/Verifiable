@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Jarm;
 /// The JWT is signed (JARM §2.2; this primitive does not produce the optional
 /// sign-then-encrypt Nested JWT — FAPI 2.0 Message Signing §6.1 recommends against
 /// response encryption). Signing flows through
-/// <see cref="JwtSigningExtensions.SignAsync"/> with the JWS <c>alg</c> derived from
+/// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> with the JWS <c>alg</c> derived from
 /// the signing key's <see cref="Tag"/> — the same JCose composition as ID Token and
 /// JAR signing.
 /// </para>

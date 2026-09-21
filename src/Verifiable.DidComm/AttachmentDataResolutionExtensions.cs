@@ -149,7 +149,12 @@ public static class AttachmentDataResolutionExtensions
     /// multibase prefix (<c>z</c> = base58btc, <c>u</c> = base64url, <c>m</c> = base64, <c>f</c> = base16) is
     /// stripped and dispatched, and an unprefixed string is treated as raw base58btc (the DIDComm / IPFS
     /// <c>Qm…</c> convention); any other leading character fails closed as
-    /// <see cref="AttachmentResolutionError.MalformedHash"/>.
+    /// <see cref="AttachmentResolutionError.MalformedHash"/>. A <c>links</c> fetch reports the response's
+    /// <see cref="HttpCacheFreshness"/> on <see cref="AttachmentResolutionResult.Freshness"/>: an application
+    /// that stores the resolved payload stores it for that reported lifetime, since "A cache MUST NOT
+    /// generate a stale response unless it is disconnected or doing so is explicitly permitted by the client
+    /// or origin server" (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111
+    /// §4.2.4</see>) — this library stores nothing itself.
     /// </remarks>
     public static async ValueTask<AttachmentResolutionResult> ResolveAsync(
         this AttachmentData attachmentData,
@@ -394,7 +399,7 @@ public static class AttachmentDataResolutionExtensions
             IMemoryOwner<byte> owned = memoryPool.Rent(body.Length);
             body.CopyTo(owned.Memory.Span);
 
-            return AttachmentResolutionResult.ResolvedFetched(owned, body.Length, target);
+            return AttachmentResolutionResult.ResolvedFetched(owned, body.Length, target, HttpCacheFreshness.Compute(response));
         }
 
         //No link verified. If not one link was even contacted (every absolute link was denied by policy, or
@@ -419,6 +424,8 @@ public static class AttachmentDataResolutionExtensions
     {
         HashVerification.UnsupportedAlgorithm => AttachmentResolutionError.UnsupportedHashAlgorithm,
         HashVerification.MalformedHash => AttachmentResolutionError.MalformedHash,
+        HashVerification.Match => AttachmentResolutionError.HashMismatch,
+        HashVerification.Mismatch => AttachmentResolutionError.HashMismatch,
         _ => AttachmentResolutionError.HashMismatch
     };
 

@@ -271,7 +271,7 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// <see cref="CBAdESSignatureAugmentation.AddSignatureTimestampAsync"/> appends exactly one <c>sigTst</c>
     /// element encapsulating exactly one genuine, correctly-bound RFC 3161 token (CB-6.3-c), which the
     /// independent BouncyCastle validator accepts under the authority's own certificate, and which the shipped
-    /// level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> reports valid at level B-T.
+    /// level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, CancellationToken)"/> reports valid at level B-T.
     /// </summary>
     [TestMethod]
     public async Task AddSignatureTimestampAsync_AppendsOneConformantSigTst_VerifiesIndependentlyAndValidatesAtLevelBT()
@@ -332,7 +332,7 @@ internal sealed class CBAdESSignatureAugmentationTests
 
 
     /// <summary>
-    /// A leak regression: a pre-existing leak reproduced elsewhere in the suite — the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> SUCCESS path must return
+    /// A leak regression: a pre-existing leak reproduced elsewhere in the suite — the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, CancellationToken)"/> SUCCESS path must return
     /// every pooled carrier it rents when the protected headers carry <c>x5t</c>. A single genuine
     /// <c>sigTst</c> instance (no <c>arcTst</c>) validated at the declared level <see cref="AdESBaselineLevel.BB"/>
     /// — below <see cref="AdESBaselineLevel.BT"/>, so neither the cumulative-<c>sigTst</c>-count check nor the
@@ -1469,7 +1469,7 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// <summary>
     /// Byte-preservation regression (a): a hand-assembled signature whose <c>refs</c> element carries an
     /// <c>ocspId.producedAt</c> with a SUB-SECOND, non-<c>Z</c>-offset <c>tdate</c> (legal per Annex A CDDL
-    /// <c>#6.0(tstr)</c>, but a form <see cref="CBAdESSerialization.WriteTDate"/> can never itself PRODUCE,
+    /// <c>#6.0(tstr)</c>, but a form <c>CBAdESSerialization.WriteTDate</c> can never itself PRODUCE,
     /// since that writer always forces whole-second, <c>Z</c>-suffixed output) survives
     /// <see cref="CBAdESSignatureAugmentation.AddSignatureTimestampAsync"/> -- an operation with nothing to do
     /// with <c>refs</c> at all -- byte-identical, and the <c>rfsTst</c> element already covering it still
@@ -2675,7 +2675,7 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// Hand-assembles (independent <see cref="CborWriter"/>, never any writer this library ships) a <c>refs</c>
     /// <c>UHeaderInstance</c> (Annex A.1.1) carrying exactly one OCSP revocation reference, whose
     /// <c>ocspId.producedAt</c> is the caller-supplied RFC 3339 string verbatim -- deliberately bypassing
-    /// <see cref="CBAdESSerialization.WriteTDate"/>'s whole-second/forced-<c>Z</c> writer so the fixture can
+    /// <c>CBAdESSerialization.WriteTDate</c>'s whole-second/forced-<c>Z</c> writer so the fixture can
     /// carry a form that writer can never itself produce.
     /// </summary>
     /// <param name="producedAtRfc3339">The <c>ocspId.producedAt</c> RFC 3339 string to write verbatim.</param>

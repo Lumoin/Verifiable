@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Foundation;
 /// <summary>
 /// One gate per standing house rule, each a source-text scan over every <c>.cs</c> file under <c>src/</c>
 /// and/or <c>test/</c> from a located repository root, each failing by listing <c>file:line</c> rather than
-/// by any reflection over the loaded type system. The fourteen rules: banner-divider comments, planning-process
+/// by any reflection over the loaded type system. The seventeen rules: banner-divider comments, planning-process
 /// vocabulary, the spec-line shorthand, and internal coordination-process pointers are one four-way scan
 /// (<see cref="SourceHygieneScanner"/>, proven live by <see cref="ScannerReportsEmbeddedSamplesWithFileAndLineShape"/>'s
 /// embedded samples); production code threads its caller's memory pool
@@ -29,7 +29,15 @@ namespace Verifiable.Tests.Foundation;
 /// (<see cref="PrivateGetOrInitOnlyPropertiesArePascalCaseNeverACamelCaseOrUnderscoreSurvivor"/>); a comment
 /// or doc comment naming a bundled TPM 2.0 reference-implementation source file names the reference
 /// FUNCTION it mirrors, in <c>src/**</c>, and names no such file at all, function or none, in <c>test/**</c>
-/// (<see cref="SourceNamesTheReferenceFunctionNeverTheBareReferenceFileAlone"/>). Runs on a clean clone: the
+/// (<see cref="SourceNamesTheReferenceFunctionNeverTheBareReferenceFileAlone"/>); a <c>[TestMethod]</c>
+/// whose own body carries no statement at all runs, passes, and proves nothing, so this fails the build by
+/// name and line instead of shipping a test that only looks like coverage
+/// (<see cref="TestMethodsHaveANonEmptyBody"/>); no line starts with a <c>#region</c> or
+/// <c>#endregion</c> directive (<see cref="SourceTreeHasNoRegionDirectives"/>); the BouncyCastle provider
+/// never constructs a platform AEAD cipher directly
+/// (<see cref="BouncyCastleProviderNeverConstructsAPlatformAeadCipher"/>); and a test is bounded by
+/// <see cref="TestContext.CancellationToken"/> alone, never a fixed wall-clock budget or a blocking wait on a
+/// task (<see cref="TestsAreBoundedByTestContextAloneNeverAFixedWallClockBudgetOrABlockingTaskWait"/>). Runs on a clean clone: the
 /// root is located by walking up from <see cref="AppContext.BaseDirectory"/> to the directory containing
 /// <c>Verifiable.slnx</c>, no environment variable or hardcoded path involved.
 /// </summary>
@@ -173,6 +181,10 @@ internal sealed class SourceHygieneTests
         string sectionLNumberLine = "// see " + "§" + "2.1 L237-242 for detail";
         string preFixLine = "// describes the " + "pre" + "-fix state of a repair here";
         string postFixLine = "// describes the " + "post" + "-fix state of a repair here";
+        string thisLaneLine = "// out of " + "this" + " lane" + " entirely, with no nearby identifier";
+        string laneScopeLine = "// beyond the " + "lane" + "'s scope" + " for this change";
+        string briefStepCitationLine = "// documented " + "per" + " \"The Change\" " + "step" + " 2";
+        string theBriefLine = "// see " + "the" + " brief" + " for the originating request";
         string[] sampleLines =
         [
             "namespace Sample;",
@@ -257,11 +269,15 @@ internal sealed class SourceHygieneTests
             bareRHyphenLine,
             preFixLine,
             postFixLine,
+            thisLaneLine,
+            laneScopeLine,
+            briefStepCitationLine,
+            theBriefLine,
         ];
 
         IReadOnlyList<SourceHygieneViolation> violations = SourceHygieneScanner.ScanLines("Sample.cs", sampleLines);
 
-        Assert.HasCount(79, violations);
+        Assert.HasCount(83, violations);
         Assert.IsTrue(violations.All(static v => v.FilePath == "Sample.cs"));
         Assert.Contains(static v => v.LineNumber == 3 && v.Kind == SourceHygieneViolationKind.BannerDivider, violations);
         Assert.Contains(static v => v.LineNumber == 4 && v.Kind == SourceHygieneViolationKind.PlanningVocabulary, violations);
@@ -339,9 +355,9 @@ internal sealed class SourceHygieneTests
         //second line of each pair (73, 75) carries no violation of its own, proving the join — not a
         //coincidental single-line match — is what fired.
         Assert.Contains(static v => v.LineNumber == 72 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
-        Assert.HasCount(0, violations.Where(static v => v.LineNumber == 73));
+        Assert.IsEmpty(violations.Where(static v => v.LineNumber == 73));
         Assert.Contains(static v => v.LineNumber == 74 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
-        Assert.HasCount(0, violations.Where(static v => v.LineNumber == 75));
+        Assert.IsEmpty(violations.Where(static v => v.LineNumber == 75));
         Assert.Contains(static v => v.LineNumber == 76 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 76));
         Assert.Contains(static v => v.LineNumber == 77 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
@@ -391,6 +407,14 @@ internal sealed class SourceHygieneTests
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 71));
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 72));
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 74));
+        Assert.Contains(static v => v.LineNumber == 83 && v.Kind == SourceHygieneViolationKind.PlanningVocabulary, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 83));
+        Assert.Contains(static v => v.LineNumber == 84 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 84));
+        Assert.Contains(static v => v.LineNumber == 85 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 85));
+        Assert.Contains(static v => v.LineNumber == 86 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 86));
 
         foreach(SourceHygieneViolation violation in violations)
         {
@@ -464,9 +488,9 @@ internal sealed class SourceHygieneTests
     private static IReadOnlyDictionary<string, int> ProductionPoolHardcodeAllowlist { get; } = new Dictionary<string, int>();
 
     /// <summary>
-    /// Matches the demonstrative pronoun immediately followed by <see cref="TpmSlice"/>'s own noun — a
+    /// Matches the demonstrative pronoun immediately followed by <see cref="Verifiable.Tpm.Infrastructure.TpmSlice"/>'s own noun — a
     /// labeled byte range within a buffer — regardless of which sense it is used in. Deliberately narrower
-    /// than every other <see cref="InternalProvenancePointerPattern"/> alternative: it is the SHAPE
+    /// than every other <see cref="SourceHygieneScanner.InternalProvenancePointerPattern"/> alternative: it is the SHAPE
     /// <see cref="BareSliceNounAllowlist"/> exempts, so a match on this pattern is what qualifies a hit for
     /// that exemption, never the file alone. Built without a literal contiguous occurrence of its own two
     /// matched words (separated by <c>\s+</c> rather than a literal space) so this pattern's own definition
@@ -476,11 +500,11 @@ internal sealed class SourceHygieneTests
 
     /// <summary>
     /// The standing record of every line where <see cref="BareSliceNounShapePattern"/>'s shape — the
-    /// demonstrative pronoun immediately followed by <see cref="TpmSlice"/>'s own noun — appears in its
+    /// demonstrative pronoun immediately followed by <see cref="Verifiable.Tpm.Infrastructure.TpmSlice"/>'s own noun — appears in its
     /// ordinary grammatical sense (the type "is empty", or a member "extracts" one "from a buffer"), never
-    /// the build-stage sense <see cref="InternalProvenancePointerPattern"/>'s bare alternative for that
+    /// the build-stage sense <see cref="SourceHygieneScanner.InternalProvenancePointerPattern"/>'s bare alternative for that
     /// two-word shape exists to catch. Keyed by (file, line text): the exemption covers only a hit whose own
-    /// line matches this specific shape, so a different <see cref="InternalProvenancePointerPattern"/>
+    /// line matches this specific shape, so a different <see cref="SourceHygieneScanner.InternalProvenancePointerPattern"/>
     /// alternative firing in the same file is never exempted by riding on this record's file. This list only
     /// shrinks and must never gain an entry.
     /// </summary>
@@ -590,6 +614,83 @@ internal sealed class SourceHygieneTests
     }
 
     /// <summary>
+    /// Matches a line constructing a platform AEAD cipher directly — <c>new AesGcm(</c>,
+    /// <c>new AesCcm(</c>, or <c>new ChaCha20Poly1305(</c> from <see cref="System.Security.Cryptography"/> —
+    /// rather than routing through BouncyCastle's own managed implementation. <see cref="RandomNumberGenerator"/>
+    /// and <see cref="CryptographicException"/> never match: the pattern anchors on the literal <c>new</c>
+    /// keyword immediately followed by one of the three platform cipher type names and an opening parenthesis.
+    /// </summary>
+    private static Regex PlatformAeadCipherConstructionPattern { get; } = new(
+        @"new\s+(AesGcm|AesCcm|ChaCha20Poly1305)\(", RegexOptions.Compiled);
+
+    /// <summary>
+    /// The standing record of every <c>src/Verifiable.BouncyCastle/**</c> line still constructing a platform
+    /// AEAD cipher directly instead of BouncyCastle's own managed implementation — a platform cipher type is
+    /// unavailable on hosts without OS-backed support (a browser-wasm runtime, for one), so a provider under
+    /// this namespace must never reach for one. The record is empty: every cipher this provider exposes is
+    /// backed by BouncyCastle's own AEAD implementation. This list only shrinks and must never gain an entry.
+    /// </summary>
+    private static IReadOnlyDictionary<string, int> PlatformAeadCipherConstructionAllowlist { get; } = new Dictionary<string, int>();
+
+    /// <summary>
+    /// A cipher under <c>src/Verifiable.BouncyCastle</c> is backed by BouncyCastle's own managed AEAD
+    /// implementation, never a platform-backed <see cref="System.Security.Cryptography.AesGcm"/>,
+    /// <see cref="System.Security.Cryptography.AesCcm"/>, or <see cref="System.Security.Cryptography.ChaCha20Poly1305"/>:
+    /// a host without OS-backed AES-GCM support (a browser-wasm runtime, for one) has no platform cipher to
+    /// resolve. <see cref="PlatformAeadCipherConstructionAllowlist"/> is the standing record of every site
+    /// still constructing one directly; it is empty and must never gain an entry.
+    /// </summary>
+    [TestMethod]
+    public void BouncyCastleProviderNeverConstructsAPlatformAeadCipher()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+
+        AssertNoUnrecordedOrGrownSites(
+            repositoryRoot,
+            "src/Verifiable.BouncyCastle",
+            PlatformAeadCipherConstructionPattern,
+            SourceHygieneViolationKind.PlatformAeadCipherConstruction,
+            PlatformAeadCipherConstructionAllowlist,
+            "use BouncyCastle's own managed AEAD cipher instead of a platform-backed one");
+    }
+
+    /// <summary>
+    /// Proves <see cref="PlatformAeadCipherConstructionPattern"/> actually fires: run here over an embedded
+    /// sample (never a repository file) carrying one construction site of each of the three platform cipher
+    /// types alongside a <see cref="RandomNumberGenerator"/> call and a thrown <see cref="CryptographicException"/>,
+    /// the result must report exactly the three cipher-construction lines and neither of the other two.
+    /// </summary>
+    [TestMethod]
+    public void PlatformAeadCipherScannerReportsEmbeddedSamplesAndSparesNonCipherLines()
+    {
+        string[] sampleLines =
+        [
+            "namespace Sample;",
+            "",
+            "internal static class SampleCipher",
+            "{",
+            "    private static void Encrypt()",
+            "    {",
+            "        RandomNumberGenerator.Fill(ivOwner.Memory.Span);",
+            "        using var aesGcm = new AesGcm(key, TagLength);",
+            "        using var aesCcm = new AesCcm(key);",
+            "        using var chaCha = new ChaCha20Poly1305(key);",
+            "        throw new CryptographicException(\"tag mismatch\");",
+            "    }",
+            "}",
+        ];
+
+        IReadOnlyList<SourceHygieneViolation> violations = SourceHygieneScanner.ScanCodeLinesForPattern(
+            "Sample.cs", sampleLines, PlatformAeadCipherConstructionPattern, SourceHygieneViolationKind.PlatformAeadCipherConstruction);
+
+        Assert.HasCount(3, violations);
+        Assert.Contains(static v => v.LineNumber == 8, violations);
+        Assert.Contains(static v => v.LineNumber == 9, violations);
+        Assert.Contains(static v => v.LineNumber == 10, violations);
+        Assert.DoesNotContain(static v => v.LineNumber is 7 or 11, violations);
+    }
+
+    /// <summary>
     /// A unit test proves its performance cost by counting a discrete operation (a pool rental, a
     /// comparison, a list entry) it can derive from the production code; it never asserts a loose wall-clock
     /// ceiling against a <see cref="System.Diagnostics.Stopwatch"/>. <see cref="StopwatchStartNewAllowlist"/>
@@ -617,6 +718,146 @@ internal sealed class SourceHygieneTests
             SourceHygieneViolationKind.ElapsedTimeAssertion,
             ElapsedTimeAssertionAllowlist,
             "assert the counted quantity instead of the timer's elapsed value");
+    }
+
+    /// <summary>Matches a <c>CancelAfter(TimeSpan)</c> call; see <see cref="SourceHygieneViolationKind.CancelAfterWallClockBudget"/>.</summary>
+    private static Regex CancelAfterWallClockPattern { get; } = new(@"\.CancelAfter\(", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Matches a <see cref="System.Threading.CancellationTokenSource"/> constructed from a single bare
+    /// <see cref="TimeSpan"/> factory call with no second, <see cref="TimeProvider"/>-typed argument — the
+    /// two-argument constructor a test drives from its own fake clock is a distinct shape this pattern does
+    /// not match, since the closing parenthesis it requires sits immediately after the <c>TimeSpan</c>
+    /// expression, before any comma.
+    /// </summary>
+    private static Regex SystemClockCancellationTokenSourcePattern { get; } = new(
+        @"new\s+CancellationTokenSource\(\s*TimeSpan\.\w+\([^()]*\)\s*\)|CancellationTokenSource\s+\w+\s*=\s*new\(\s*TimeSpan\.\w+\([^()]*\)\s*\)",
+        RegexOptions.Compiled);
+
+    /// <summary>Matches <c>WaitAsync(TimeSpan…)</c>; see <see cref="SourceHygieneViolationKind.WaitAsyncFixedTimeSpanBudget"/>.</summary>
+    private static Regex WaitAsyncTimeSpanPattern { get; } = new(@"\.WaitAsync\(TimeSpan\.", RegexOptions.Compiled);
+
+    /// <summary>Matches <see cref="Task.Delay(TimeSpan)"/> or <see cref="Thread.Sleep(TimeSpan)"/>.</summary>
+    private static Regex TaskDelayOrThreadSleepPattern { get; } = new(@"Task\.Delay\(|Thread\.Sleep\(", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Matches a blocking wait on a <see cref="Task"/>'s own continuation, <c>.GetAwaiter().GetResult()</c> —
+    /// the shape that risks the thread-pool starvation a fixed wall-clock budget elsewhere then reports as a
+    /// hang under load. A synchronous callback that must pause for a signal blocks on a non-<see cref="Task"/>
+    /// synchronization primitive such as <see cref="System.Threading.ManualResetEventSlim"/> instead, which
+    /// this pattern does not match.
+    /// </summary>
+    private static Regex BlockingGetResultPattern { get; } = new(@"\.GetAwaiter\(\)\.GetResult\(\)", RegexOptions.Compiled);
+
+    /// <summary>The standing record of every <c>test/**</c> <see cref="CancelAfterWallClockPattern"/> site. Empty: no test in the tree bounds itself by the real system clock this way. This list only shrinks and must never gain an entry.</summary>
+    private static IReadOnlyDictionary<string, int> CancelAfterWallClockAllowlist { get; } = new Dictionary<string, int>();
+
+    /// <summary>The standing record of every <c>test/**</c> <see cref="SystemClockCancellationTokenSourcePattern"/> site. Empty: no test in the tree constructs a single-argument, system-clock-bound <see cref="System.Threading.CancellationTokenSource"/> this way. This list only shrinks and must never gain an entry.</summary>
+    private static IReadOnlyDictionary<string, int> SystemClockCancellationTokenSourceAllowlist { get; } = new Dictionary<string, int>();
+
+    /// <summary>
+    /// The standing record of every <c>test/**</c> <see cref="WaitAsyncTimeSpanPattern"/> site: the single
+    /// occurrence in <c>DidCommSocketSessionTests.cs</c>, part of the tree's remaining wall-clock-budget
+    /// residue outside the class this gate was written to close
+    /// (<see cref="Verifiable.Tests.OAuth.LiveServerAlterationTests"/> at zero). This list only shrinks and
+    /// must never gain an entry.
+    /// </summary>
+    private static IReadOnlyDictionary<string, int> WaitAsyncTimeSpanAllowlist { get; } = new Dictionary<string, int>
+    {
+        ["test/Verifiable.Tests/DidComm/DidCommSocketSessionTests.cs"] = 1,
+    };
+
+    /// <summary>
+    /// The standing record of every <c>test/**</c> <see cref="TaskDelayOrThreadSleepPattern"/> site: the
+    /// remaining wall-clock residue outside the class this gate was written to close
+    /// (<see cref="Verifiable.Tests.OAuth.LiveServerAlterationTests"/> at zero). This list only shrinks and
+    /// must never gain an entry.
+    /// </summary>
+    private static IReadOnlyDictionary<string, int> TaskDelayOrThreadSleepAllowlist { get; } = new Dictionary<string, int>
+    {
+        ["test/Verifiable.Tests/Assessment/ClaimIssuerTests.cs"] = 1,
+        ["test/Verifiable.Tests/Assessment/RegulatoryRetrievalTests.cs"] = 1,
+        ["test/Verifiable.Tests/DidComm/DidCommSocketSessionTests.cs"] = 1,
+        ["test/Verifiable.Tests/TestInfrastructure/LoopbackKestrelTests.cs"] = 1,
+    };
+
+    /// <summary>
+    /// The standing record of every <c>test/**</c> <see cref="BlockingGetResultPattern"/> site: the
+    /// remaining thread-blocking residue outside the class this gate was written to close
+    /// (<see cref="Verifiable.Tests.OAuth.LiveServerAlterationTests"/> at zero, where every such site is
+    /// either awaited or moved onto a <see cref="System.Threading.ManualResetEventSlim"/> the fixed production
+    /// delegate it runs under can still call synchronously). This list only shrinks and must never gain an
+    /// entry.
+    /// </summary>
+    private static IReadOnlyDictionary<string, int> BlockingGetResultAllowlist { get; } = new Dictionary<string, int>
+    {
+        ["test/Verifiable.Tests/Apdu/CardVerifiableCertificateMinter.cs"] = 2,
+        ["test/Verifiable.Tests/Cryptography/XAdESRealWireEndToEndTests.cs"] = 1,
+        ["test/Verifiable.Tests/Cryptography/XAdESSignatureFactsTests.cs"] = 6,
+        ["test/Verifiable.Tests/DidComm/DidCommRoutingForwardTests.cs"] = 1,
+        ["test/Verifiable.Tests/DidComm/DidCommSocketSessionTests.cs"] = 2,
+        ["test/Verifiable.Tests/Fido2/MetadataBlobTestVectors.cs"] = 2,
+        ["test/Verifiable.Tests/Resolver/WebPlusUpdateRulePropertyTests.cs"] = 1,
+        ["test/Verifiable.Tests/TestInfrastructure/SyntheticPassportFactory.cs"] = 1,
+        ["test/Verifiable.Tests/Xml/XmlSignatureInteropCorpusGenerator.cs"] = 1,
+    };
+
+    /// <summary>
+    /// A test is bounded by <see cref="TestContext.CancellationToken"/> alone — MSTest owns the timeout — and
+    /// by nothing else: never a fixed wall-clock budget (<see cref="CancelAfterWallClockPattern"/>, a
+    /// <see cref="System.Threading.CancellationTokenSource"/> built from the real clock via
+    /// <see cref="SystemClockCancellationTokenSourcePattern"/>, or a <c>WaitAsync(TimeSpan…)</c> verdict via
+    /// <see cref="WaitAsyncTimeSpanPattern"/>), never <see cref="Task.Delay(TimeSpan)"/> or
+    /// <see cref="Thread.Sleep(TimeSpan)"/> (<see cref="TaskDelayOrThreadSleepPattern"/>), and never a blocking
+    /// wait on a task (<see cref="BlockingGetResultPattern"/>). Time-dependent production behaviour is driven
+    /// through the injected <see cref="TimeProvider"/> instead. Each allowlist above is the remaining
+    /// residue outside <see cref="Verifiable.Tests.OAuth.LiveServerAlterationTests"/>, which this gate holds at
+    /// zero; each shrinks and none may grow.
+    /// </summary>
+    [TestMethod]
+    public void TestsAreBoundedByTestContextAloneNeverAFixedWallClockBudgetOrABlockingTaskWait()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+
+        AssertNoUnrecordedOrGrownSites(
+            repositoryRoot,
+            "test",
+            CancelAfterWallClockPattern,
+            SourceHygieneViolationKind.CancelAfterWallClockBudget,
+            CancelAfterWallClockAllowlist,
+            "bound the test by TestContext.CancellationToken instead of a fixed CancelAfter budget");
+
+        AssertNoUnrecordedOrGrownSites(
+            repositoryRoot,
+            "test",
+            SystemClockCancellationTokenSourcePattern,
+            SourceHygieneViolationKind.SystemClockCancellationTokenSourceConstruction,
+            SystemClockCancellationTokenSourceAllowlist,
+            "construct the CancellationTokenSource from the injected fake clock instead of the real system clock");
+
+        AssertNoUnrecordedOrGrownSites(
+            repositoryRoot,
+            "test",
+            WaitAsyncTimeSpanPattern,
+            SourceHygieneViolationKind.WaitAsyncFixedTimeSpanBudget,
+            WaitAsyncTimeSpanAllowlist,
+            "await under TestContext.CancellationToken instead of a fixed WaitAsync(TimeSpan) budget");
+
+        AssertNoUnrecordedOrGrownSites(
+            repositoryRoot,
+            "test",
+            TaskDelayOrThreadSleepPattern,
+            SourceHygieneViolationKind.WallClockDelayOrSleep,
+            TaskDelayOrThreadSleepAllowlist,
+            "advance the injected fake clock instead of sleeping or delaying on the real one");
+
+        AssertNoUnrecordedOrGrownSites(
+            repositoryRoot,
+            "test",
+            BlockingGetResultPattern,
+            SourceHygieneViolationKind.BlockingGetResultOnATask,
+            BlockingGetResultAllowlist,
+            "await the task, or block a fixed-signature synchronous callback on a ManualResetEventSlim, instead of blocking on the task's own awaiter and result");
     }
 
     /// <summary>
@@ -697,7 +938,7 @@ internal sealed class SourceHygieneTests
     /// compiler-generated backing field accepts assignment only from a constructor of the declaring type,
     /// never from another member's accessor), or an <c>init</c> accessor assigns it through a computed
     /// re-mapping the auto-property syntax cannot express; a <c>lock</c> target is a third reason — a
-    /// get-only auto-property returns the same instance every read today, but nothing stops a later edit
+    /// get-only auto-property returns the same instance on every read, but nothing stops a later edit
     /// from turning its initializer into an expression body that re-mints one per read and silently destroys
     /// mutual exclusion, so a monitor or <see cref="System.Threading.Lock"/> object stays a field. Every other
     /// value in the tree is exposed through a get-only property or, for a compile-time literal nothing
@@ -719,7 +960,6 @@ internal sealed class SourceHygieneTests
         ("src/Verifiable.Cryptography/CryptographicKeyEvents.cs", "private readonly object gate = new();"),
         ("src/Verifiable.OAuth/Dpop/DpopKey.cs", "private readonly object thumbprintLock = new();"),
         ("src/Verifiable.OAuth/Server/Keys/InProcessKeySet.cs", "private readonly Lock transitionLock = new();"),
-        ("src/Verifiable.OAuth/Server/AuthorizationServerIntegration.cs", "private readonly object gate = new();"),
         ("src/Verifiable.Tpm/TpmVirtualDevice.cs", "private readonly Lock gate = new();"),
         ("src/Verifiable.Tpm/TpmRecorder.cs", "private readonly Lock recorderLock = new();"),
         ("src/Verifiable.Tpm/TpmDevice.cs", "private readonly Lock observerLock = new();"),
@@ -823,6 +1063,48 @@ internal sealed class SourceHygieneTests
             SourceHygieneViolationKind.LowercasePrivatePropertyName,
             LowercasePrivatePropertyNameAllowlist,
             "expose the property in PascalCase instead of a lowercase or underscore-prefixed name");
+    }
+
+    /// <summary>
+    /// A <c>#region</c> or <c>#endregion</c> preprocessor directive: the directive keyword as the first
+    /// token on the line, optionally preceded only by whitespace. Anchored at line start, so this
+    /// pattern's own definition — which never itself begins a line with the directive keyword — cannot
+    /// read as a live occurrence of the shape it detects.
+    /// </summary>
+    private static Regex RegionDirectivePattern { get; } = new(@"^\s*#(?:region|endregion)\b", RegexOptions.Compiled);
+
+    /// <summary>
+    /// The standing record of every <c>#region</c>/<c>#endregion</c> directive in <c>src/**</c> or
+    /// <c>test/**</c>. Kept empty: the directive never earns a place in this codebase, so any occurrence
+    /// is caught here directly rather than left to reappear.
+    /// </summary>
+    private static IReadOnlyList<(string FilePath, string LineText)> RegionDirectiveAllowlist { get; } = [];
+
+    /// <summary>
+    /// No <c>#region</c> or <c>#endregion</c> directive appears anywhere in <c>src/**</c> or
+    /// <c>test/**</c>; <see cref="RegionDirectiveAllowlist"/> is the standing record — kept empty — of
+    /// every site still carrying one.
+    /// </summary>
+    [TestMethod]
+    public void SourceTreeHasNoRegionDirectives()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+
+        AssertNoUnrecordedOrGrownLineTextSites(
+            repositoryRoot,
+            "src",
+            RegionDirectivePattern,
+            SourceHygieneViolationKind.RegionDirective,
+            RegionDirectiveAllowlist,
+            "delete the directive instead of grouping code with it");
+
+        AssertNoUnrecordedOrGrownLineTextSites(
+            repositoryRoot,
+            "test",
+            RegionDirectivePattern,
+            SourceHygieneViolationKind.RegionDirective,
+            RegionDirectiveAllowlist,
+            "delete the directive instead of grouping code with it");
     }
 
     /// <summary>
@@ -1173,12 +1455,14 @@ internal sealed class SourceHygieneTests
     /// standing in for a spec-derived test or a source scan: an import of <c>System.Reflection</c>, a
     /// <c>BindingFlags</c> value, a <c>GetProperties</c>/<c>GetFields</c>/<c>GetMethods</c>/<c>GetMethod</c>/
     /// <c>GetConstructors</c>/<c>GetMembers</c> call, <c>Assembly.GetTypes</c>, a <c>GetCustomAttribute</c>
-    /// call, <c>Activator.CreateInstance</c>, or a <c>typeof(...).GetProperty(</c>/<c>typeof(...).GetField(</c>
-    /// lookup. Every alternative but two carries an escaped dot or parenthesis of its own, which already keeps
-    /// this pattern's own definition from reading as a live occurrence of the shape it detects (the disk text
-    /// has a literal backslash where the shape it matches has none); the two bare-word alternatives with no
-    /// punctuation to escape (<c>BindingFlags</c>, <c>GetCustomAttribute</c>) are assembled from fragments for
-    /// the same reason.
+    /// call, <c>Activator.CreateInstance</c>, a <c>typeof(...).GetProperty(</c>/<c>typeof(...).GetField(</c>
+    /// lookup, the namespace written out fully qualified (<c>System.Reflection.</c>), its <c>global::</c>-prefixed
+    /// form, or a <c>using</c> alias that targets the namespace — none of which are a spelling change that
+    /// escapes the ban, since every one of them still reaches the same runtime type system. Every alternative
+    /// but two carries an escaped dot or parenthesis of its own, which already keeps this pattern's own
+    /// definition from reading as a live occurrence of the shape it detects (the disk text has a literal
+    /// backslash where the shape it matches has none); the two bare-word alternatives with no punctuation to
+    /// escape (<c>BindingFlags</c>, <c>GetCustomAttribute</c>) are assembled from fragments for the same reason.
     /// </summary>
     private static Regex ReflectionOverTheTypeSystemPattern { get; } = new(
         @"using System\.Reflection" +
@@ -1193,17 +1477,20 @@ internal sealed class SourceHygieneTests
         "|" + "GetCustom" + "Attribute" +
         "|" + @"Activator\.CreateInstance" +
         "|" + @"typeof\([^)]+\)\.GetProperty\(" +
-        "|" + @"typeof\([^)]+\)\.GetField\(",
+        "|" + @"typeof\([^)]+\)\.GetField\(" +
+        "|" + @"global::System\.Reflection" +
+        "|" + @"System\.Reflection\." +
+        "|" + @"using\s+\S+\s*=\s*System\.Reflection\b",
         RegexOptions.Compiled);
 
     /// <summary>
     /// The standing record of every <c>test/**</c> line still reaching into the runtime type system by
     /// reflection instead of proving its case directly or as a source scan of the declaring file's own text.
-    /// Each entry is one of MSTest's own test-infrastructure contracts: <see cref="FilesDataAttribute"/> and
-    /// the <c>IgnoreIfAttribute</c> of <see cref="PlatformTestAttributes"/> implement <c>ITestDataSource</c>,
+    /// Each entry is one of MSTest's own test-infrastructure contracts: <see cref="Verifiable.Tests.TestInfrastructure.FilesDataAttribute"/> and
+    /// <see cref="Verifiable.Tests.TestInfrastructure.IgnoreIfAttribute"/> implement <c>ITestDataSource</c>,
     /// whose <c>GetData</c>/<c>GetDisplayName</c> members are handed a <c>MethodInfo</c> by MSTest itself;
     /// <c>Oid4VpSchemeFormatMatrixTests.MatrixDisplayName</c> takes the same <c>MethodInfo</c> parameter
-    /// <c>DynamicDataAttribute.DynamicDataDisplayName</c> requires; and <see cref="ConditionalTestMethodAttribute"/>
+    /// <c>DynamicDataAttribute.DynamicDataDisplayName</c> requires; and <see cref="Verifiable.Tests.TestInfrastructure.ConditionalTestMethodAttribute"/>
     /// walks a test's declaring-type hierarchy for a class-level skip attribute because MSTest's own
     /// <c>ITestMethod</c> exposes only a method's own attributes, never its declaring type's — each reason is
     /// also recorded on the member itself. No <c>src/**</c> line reaches this pattern at all: production code
@@ -1453,6 +1740,131 @@ internal sealed class SourceHygieneTests
     }
 
     /// <summary>
+    /// Scans <paramref name="lines"/> for a <c>[TestMethod]</c>-attributed method whose own body — the text
+    /// between its opening and closing brace, both on their own line in this tree's Allman brace style —
+    /// carries no statement at all: every line in between is blank or a <c>//</c> comment. The opening brace
+    /// is the first line, scanning forward from the attribute, whose trimmed text is exactly <c>{</c>, which
+    /// finds the method's own brace regardless of how many lines its signature spans (a wrapped parameter
+    /// list, an attribute repeated above it). The closing brace is then the first line after that whose
+    /// trimmed text is exactly <c>}</c> — possibly a NESTED block's own closing brace rather than the
+    /// method's, when the body is not empty; that ambiguity never produces a false positive, because
+    /// whatever construct opened that nested block (an <c>if</c>, a <c>using</c>, a bare block) is itself
+    /// non-blank, non-comment text already sitting inside the scanned region, so the region is already known
+    /// non-empty before which closing brace was found could matter. Only a method whose scanned region is
+    /// blank and comment lines throughout is reported.
+    /// </summary>
+    private static List<(int LineNumber, string LineText)> FindEmptyTestMethodBodies(string[] lines)
+    {
+        List<(int, string)> hits = [];
+
+        for(int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+        {
+            if(lines[lineIndex].Trim() != "[TestMethod]")
+            {
+                continue;
+            }
+
+            int signatureLineIndex = lineIndex + 1;
+            while(signatureLineIndex < lines.Length && lines[signatureLineIndex].TrimStart().StartsWith('[', StringComparison.Ordinal))
+            {
+                signatureLineIndex++;
+            }
+
+            if(signatureLineIndex >= lines.Length)
+            {
+                continue;
+            }
+
+            int openBraceLineIndex = signatureLineIndex;
+            while(openBraceLineIndex < lines.Length && lines[openBraceLineIndex].Trim() != "{")
+            {
+                openBraceLineIndex++;
+            }
+
+            if(openBraceLineIndex >= lines.Length)
+            {
+                continue;
+            }
+
+            int closeBraceLineIndex = openBraceLineIndex + 1;
+            while(closeBraceLineIndex < lines.Length && lines[closeBraceLineIndex].Trim() != "}")
+            {
+                closeBraceLineIndex++;
+            }
+
+            if(closeBraceLineIndex >= lines.Length)
+            {
+                continue;
+            }
+
+            bool hasNoStatements = true;
+            for(int bodyLineIndex = openBraceLineIndex + 1; bodyLineIndex < closeBraceLineIndex; bodyLineIndex++)
+            {
+                string bodyLine = lines[bodyLineIndex].Trim();
+                if(bodyLine.Length > 0 && !bodyLine.StartsWith("//", StringComparison.Ordinal))
+                {
+                    hasNoStatements = false;
+                    break;
+                }
+            }
+
+            if(hasNoStatements)
+            {
+                hits.Add((signatureLineIndex + 1, lines[signatureLineIndex].Trim()));
+            }
+        }
+
+        return hits;
+    }
+
+    /// <summary>
+    /// The standing record of every <c>[TestMethod]</c> whose own body carries no statement at all.
+    /// <see cref="FindEmptyTestMethodBodies"/> is the scan; this list is empty and must stay empty — a test
+    /// that runs, passes, and asserts nothing, under a name claiming a normative constraint, is a defect
+    /// this test catches directly rather than a to-do the allowlist quietly grows to cover.
+    /// </summary>
+    private static IReadOnlyList<(string FilePath, string LineText)> EmptyTestMethodBodyAllowlist { get; } = [];
+
+    /// <summary>
+    /// A <c>[TestMethod]</c> proves its case: <see cref="FindEmptyTestMethodBodies"/> fails the build, naming
+    /// the file and the method's own declaration line, on any method whose body between its opening and
+    /// closing brace contains no statement at all — the exact shape an unfinished stub, or a rewrite that
+    /// hollowed out a test without removing it, leaves behind. Deliberately narrower than "no assertion": a
+    /// test may legitimately prove its point by expecting an exception (the <c>try</c>/<c>catch</c> or the
+    /// call that throws is itself a statement) or by a framework assertion this text scan does not
+    /// recognise as one, so a rule guessing at "no assertion" would be disabled by its first false positive;
+    /// a body with literally zero statements is unambiguous. Scoped to the literal <c>[TestMethod]</c>
+    /// attribute rather than every attribute derived from it (a platform-conditional skip attribute, for
+    /// instance), since the defect this rule closes is a plain MSTest method that runs unconditionally and
+    /// proves nothing; a derived attribute already carries its own stated skip reason at its own use site.
+    /// <see cref="EmptyTestMethodBodyAllowlist"/> is the standing record — empty, and it only ever shrinks.
+    /// </summary>
+    [TestMethod]
+    public void TestMethodsHaveANonEmptyBody()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        IReadOnlyList<string> files = SourceHygieneScanner.EnumerateSourceFilesUnder(repositoryRoot, "test");
+        List<(string FilePath, int LineNumber, string LineText)> hits = [];
+
+        foreach(string filePath in files)
+        {
+            string relativePath = Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
+            string[] lines = File.ReadAllLines(filePath);
+
+            hits.AddRange(FindEmptyTestMethodBodies(lines).Select(hit => (relativePath, hit.LineNumber, hit.LineText)));
+        }
+
+        List<string> failures = [];
+        AssertLineTextHitsMatchAllowlistExactly(
+            hits,
+            EmptyTestMethodBodyAllowlist,
+            "give the test method a body that proves its case with at least one statement",
+            failures);
+
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
     /// Scans every <c>.cs</c> file under <paramref name="topLevelDirectory"/> for <paramref name="pattern"/>
     /// on code lines only, then checks the result against <paramref name="allowlist"/> three ways: a file
     /// not on the list carrying at least one site fails naming <c>file:line</c>; an allowlisted file
@@ -1610,6 +2022,167 @@ internal sealed class SourceHygieneTests
         }
     }
 
+    /// <summary>The capability-identifier catalog files this repository ships, relative to its root.</summary>
+    private static string[] CapabilityIdentifierCatalogFiles { get; } =
+    [
+        "src/Verifiable.OAuth/Server/WellKnownCapabilityIdentifiers.cs",
+        "src/Verifiable.OAuth/Federation/WellKnownFederationCapabilityIdentifiers.cs",
+        "src/Verifiable.Vcalm/WellKnownVcalmCapabilities.cs",
+        "src/Verifiable.WebFinger/WellKnownWebFingerCapabilityIdentifiers.cs",
+    ];
+
+    /// <summary>
+    /// Matches a capability catalog's own <c>public static CapabilityIdentifier &lt;Name&gt; { get; }</c>
+    /// property declaration, one per line, capturing the declared name.
+    /// </summary>
+    private static Regex CapabilityIdentifierPropertyPattern { get; } = new(
+        @"^\s*public static CapabilityIdentifier (\w+) \{ get; \}", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Matches a capability catalog's hand-kept backing list — the <c>ResolutionSource.Sources</c>-shaped
+    /// <c>private static IReadOnlyList&lt;CapabilityIdentifier&gt;</c> property whose collection-expression
+    /// initializer is the <c>All</c> view's own content — capturing every name between its brackets, however
+    /// many source lines the initializer spans.
+    /// </summary>
+    private static Regex CapabilityIdentifierHandKeptListPattern { get; } = new(
+        @"private static IReadOnlyList<CapabilityIdentifier>\s+\w+\s*\{\s*get;\s*\}\s*=\s*\[(?<members>[^\]]*)\]",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Every declared <c>CapabilityIdentifier</c> property, as (name, one-based declaration line), found by
+    /// <see cref="CapabilityIdentifierPropertyPattern"/> over <paramref name="lines"/> in declaration order.
+    /// </summary>
+    private static List<(string Name, int LineNumber)> FindDeclaredCapabilityIdentifiers(IReadOnlyList<string> lines)
+    {
+        List<(string Name, int LineNumber)> declared = [];
+
+        for(int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+        {
+            Match match = CapabilityIdentifierPropertyPattern.Match(lines[lineIndex]);
+
+            if(match.Success)
+            {
+                declared.Add((match.Groups[1].Value, lineIndex + 1));
+            }
+        }
+
+        return declared;
+    }
+
+    /// <summary>
+    /// Every name inside the hand-kept backing list <see cref="CapabilityIdentifierHandKeptListPattern"/>
+    /// finds in <paramref name="lines"/>'s joined text, trimmed, in the list's own order. Empty when the file
+    /// carries no such list.
+    /// </summary>
+    private static List<string> FindHandKeptCapabilityIdentifierListMembers(IReadOnlyList<string> lines)
+    {
+        string fileText = string.Join("\n", lines);
+        Match match = CapabilityIdentifierHandKeptListPattern.Match(fileText);
+
+        if(!match.Success)
+        {
+            return [];
+        }
+
+        return match.Groups["members"].Value
+            .Split(',')
+            .Select(static token => token.Trim())
+            .Where(static token => token.Length > 0)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Every completeness failure for one capability catalog's text: a declared property absent from the
+    /// hand-kept list fails naming that property's own declaration line, and a list entry no property
+    /// declares fails naming the file — the same two-way check
+    /// <see cref="CapabilityIdentifierCatalogsEnumerateEveryDeclaredIdentifier"/> runs over the shipped
+    /// catalogs and <see cref="CapabilityCatalogScannerReportsAnEmbeddedMissingEntry"/> proves live over an
+    /// embedded sample.
+    /// </summary>
+    private static List<string> FindCapabilityIdentifierCatalogCompletenessFailures(string relativePath, IReadOnlyList<string> lines)
+    {
+        List<(string Name, int LineNumber)> declared = FindDeclaredCapabilityIdentifiers(lines);
+        List<string> listed = FindHandKeptCapabilityIdentifierListMembers(lines);
+        HashSet<string> listedSet = [.. listed];
+        HashSet<string> declaredSet = [.. declared.Select(static entry => entry.Name)];
+        List<string> failures = [];
+
+        foreach((string name, int lineNumber) in declared)
+        {
+            if(!listedSet.Contains(name))
+            {
+                failures.Add($"{relativePath}:{lineNumber}: {name} is declared but missing from the catalog's hand-kept list.");
+            }
+        }
+
+        foreach(string name in listed)
+        {
+            if(!declaredSet.Contains(name))
+            {
+                failures.Add($"{relativePath}: the hand-kept list names {name}, which no CapabilityIdentifier property declares.");
+            }
+        }
+
+        return failures;
+    }
+
+    /// <summary>
+    /// Every <c>CapabilityIdentifier</c> property a capability catalog declares is named in that same file's
+    /// hand-kept <c>All</c>-backing list, and the list names nothing else — the enumeration
+    /// <c>WellKnownCapabilityIdentifiers.All</c> and its three siblings expose so an operator-typed
+    /// capability URN can be checked against a complete set instead of a hand-copied one that drifts.
+    /// </summary>
+    [TestMethod]
+    public void CapabilityIdentifierCatalogsEnumerateEveryDeclaredIdentifier()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        List<string> failures = [];
+
+        foreach(string relativePath in CapabilityIdentifierCatalogFiles)
+        {
+            string[] lines = File.ReadAllLines(Path.Join(repositoryRoot, relativePath));
+            failures.AddRange(FindCapabilityIdentifierCatalogCompletenessFailures(relativePath, lines));
+        }
+
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// Proves <see cref="FindCapabilityIdentifierCatalogCompletenessFailures"/> actually fires: run here over
+    /// an embedded sample catalog (never a repository file) whose hand-kept list omits one of its two
+    /// declared properties, the result must name that property's own declaration line and nothing else.
+    /// </summary>
+    [TestMethod]
+    public void CapabilityCatalogScannerReportsAnEmbeddedMissingEntry()
+    {
+        string[] sampleLines =
+        [
+            "namespace Sample;",
+            "",
+            "public static class SampleCapabilities",
+            "{",
+            "    public static CapabilityIdentifier First { get; } =",
+            "        CapabilityIdentifier.Create(\"urn:sample:first\");",
+            "",
+            "    public static CapabilityIdentifier Second { get; } =",
+            "        CapabilityIdentifier.Create(\"urn:sample:second\");",
+            "",
+            "    private static IReadOnlyList<CapabilityIdentifier> RegisteredIdentifiers { get; } =",
+            "    [",
+            "        First",
+            "    ];",
+            "",
+            "    public static IReadOnlyList<CapabilityIdentifier> All => RegisteredIdentifiers;",
+            "}",
+        ];
+
+        List<string> failures = FindCapabilityIdentifierCatalogCompletenessFailures("Sample.cs", sampleLines);
+
+        Assert.HasCount(1, failures);
+        Assert.IsTrue(failures[0].StartsWith("Sample.cs:8:", StringComparison.Ordinal));
+        Assert.IsTrue(failures[0].Contains("Second", StringComparison.Ordinal));
+    }
+
 }
 
 /// <summary>One offending line: which file, which line, and which pattern class it tripped.</summary>
@@ -1665,6 +2238,27 @@ internal enum SourceHygieneViolationKind
 
     /// <summary>A comment naming a bundled TPM 2.0 reference-implementation source/header file with no reference function alongside it in <c>src/**</c>, or naming one at all in <c>test/**</c>.</summary>
     BareReferenceSourceFile,
+
+    /// <summary>A line in <c>src/**</c> or <c>test/**</c> whose first non-whitespace text is a <c>#region</c> or <c>#endregion</c> directive.</summary>
+    RegionDirective,
+
+    /// <summary>A <c>src/Verifiable.BouncyCastle/**</c> line constructing a platform AEAD cipher directly instead of BouncyCastle's own managed implementation.</summary>
+    PlatformAeadCipherConstruction,
+
+    /// <summary>A <c>test/**</c> line calling <c>CancelAfter(TimeSpan)</c>, which runs against the real system clock with no <see cref="TimeProvider"/> overload to drive it from a fake one.</summary>
+    CancelAfterWallClockBudget,
+
+    /// <summary>A <c>test/**</c> line constructing a <see cref="System.Threading.CancellationTokenSource"/> from a bare <see cref="TimeSpan"/> with no second <see cref="TimeProvider"/> argument, the real system clock rather than a fake one.</summary>
+    SystemClockCancellationTokenSourceConstruction,
+
+    /// <summary>A <c>test/**</c> line calling <c>WaitAsync(TimeSpan, …)</c>, bounding an awaited task by a fixed real-time span instead of by the test's own cancellation alone.</summary>
+    WaitAsyncFixedTimeSpanBudget,
+
+    /// <summary>A <c>test/**</c> line calling <see cref="Task.Delay(TimeSpan)"/> or <see cref="Thread.Sleep(TimeSpan)"/>.</summary>
+    WallClockDelayOrSleep,
+
+    /// <summary>A <c>test/**</c> line blocking a thread on a <see cref="Task"/>'s own continuation via <c>.GetAwaiter().GetResult()</c> rather than awaiting it.</summary>
+    BlockingGetResultOnATask,
 }
 
 /// <summary>
@@ -1725,7 +2319,7 @@ internal static class SourceHygieneScanner
     /// specification anchor; ALSO a section-symbol clause number followed by an internal rendering's
     /// own line-number citation — a section anchor must name the section only, never a rendering's
     /// line range. Built from character fragments (including the sample below, in
-    /// <see cref="ScannerReportsEmbeddedSamplesWithFileAndLineShape"/>) so this file's own pattern
+    /// <see cref="SourceHygieneTests.ScannerReportsEmbeddedSamplesWithFileAndLineShape"/>) so this file's own pattern
     /// definition and its firing sample never read as the shorthand they describe.
     /// </summary>
     private static Regex SpecLineShorthandPattern { get; } = new(
@@ -1748,10 +2342,19 @@ internal static class SourceHygieneScanner
     /// than banning the bare word. Built from split fragments below so this file does not flag itself.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Also bans the hyphenated adjective pair describing a repair's before-state and after-state (the word
     /// "pre" or "post" immediately followed by a hyphen and "fix"), collision-checked against the full
     /// current tree: zero legitimate hits, since the unhyphenated compound-noun form ("prefix"/"postfix",
     /// ordinary computer-science terms) is a distinct word shape the word-boundary anchor does not touch.
+    /// </para>
+    /// <para>
+    /// Also bans the demonstrative pronoun immediately followed by the work-item noun a coordinated set of
+    /// changes is organized into, the same shape the two pre-existing alternatives above ban for the wave
+    /// and the arc nouns: a full-tree collision check found zero legitimate hits — the noun appears
+    /// elsewhere only as an unrelated domain term (a network or traffic path), never immediately preceded
+    /// by that demonstrative.
+    /// </para>
     /// </remarks>
     private static Regex PlanningVocabularyPattern { get; } = new(
         @"\bfix[- ]?spec\b" +
@@ -1761,6 +2364,7 @@ internal static class SourceHygieneScanner
         "|" + @"\bcarried" + "-in\\b" +
         "|" + @"\bthis\s+wave\b" +
         "|" + @"\bthis\s+arc\b" +
+        "|" + @"\bthis\s+" + "lane" + @"\b" +
         "|" + @"\bpre" + "-fix\\b" +
         "|" + @"\bpost" + "-fix\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -1813,7 +2417,7 @@ internal static class SourceHygieneScanner
     /// The review-agent citation is narrowed to a preceding-word-plus-citation shape rather than the bare
     /// word: an unanchored bare form of just that citation word collides with this file's own
     /// fragment-assembled sample construction — the standalone single-word literal
-    /// <see cref="ScannerReportsEmbeddedSamplesWithFileAndLineShape"/> builds its dash-form sample line
+    /// <see cref="SourceHygieneTests.ScannerReportsEmbeddedSamplesWithFileAndLineShape"/> builds its dash-form sample line
     /// from — so gating the bare word would make this class flag itself.
     /// </para>
     /// <para>
@@ -1897,6 +2501,20 @@ internal static class SourceHygieneScanner
     /// <c>TPM_RC_REFERENCE_</c> prefix by an underscore, so no word boundary ever precedes its own digit and
     /// the three single-digit alternatives never reach it.
     /// </para>
+    /// <para>
+    /// Three further shapes are banned, each collision-checked against the full current tree with zero
+    /// legitimate hits: the work-item noun's own possessive immediately followed by "scope" (paralleling
+    /// the two possessive alternatives already banned above for the stage and the wave nouns, and the
+    /// comment-anchored possessive-plus-scope alternative already banned for the slice noun; the noun added
+    /// here occurs elsewhere only as an unrelated domain term, never in that possessive-plus-scope shape); a quoted
+    /// citation of a capitalized work-packet section name followed by a numbered step — "per", a double
+    /// quote, one or more capitalized words, the closing quote, "step", and a digit — naming a coordinated
+    /// document's own numbered instruction rather than a specification anchor (the bare word "per" is
+    /// otherwise ordinary citation prose throughout this tree, quoting specification text directly, so only
+    /// this full quoted-and-numbered shape is banned); and the definite article immediately followed by the
+    /// noun this class's own remarks use to describe a work packet, naming that packet directly in prose
+    /// rather than stating what the code IS in spec terms.
+    /// </para>
     /// </remarks>
     private static Regex InternalProvenancePointerPattern { get; } = new(
         @"\b" + "wave" + @"(cb|ep|pin|cm|bio|lb|nv|ext|close|xades|jades|pades|[0-9])[a-z0-9]*\b" +
@@ -1969,7 +2587,10 @@ internal static class SourceHygieneScanner
         "|" + @"^\s*//.*\d{4}-\d{2}-\d{2} (ruling|adjudication|decision)\b" +
         "|" + @"^\s*//.*\bthe S\d\b" +
         "|" + @"^\s*//.*\bS\d/S\d\b" +
-        "|" + @"^\s*//.*,\s*S\d\b",
+        "|" + @"^\s*//.*,\s*S\d\b" +
+        "|" + @"\b" + "lane" + @"'s\s+scope\b" +
+        "|" + @"\bper\s+" + "\"" + @"[A-Z][A-Za-z ]*" + "\"" + @"\s+step\s+\d+\b" +
+        "|" + @"\bthe\s+" + "brief" + @"\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static IReadOnlyList<string> EnumerateSourceFiles(string repositoryRoot)
@@ -2243,3 +2864,4 @@ internal static class SourceHygieneScanner
         return trimmed.TrimStart();
     }
 }
+

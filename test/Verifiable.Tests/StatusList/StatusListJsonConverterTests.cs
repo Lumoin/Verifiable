@@ -54,8 +54,7 @@ internal sealed class StatusListJsonConverterTests
     public TestContext TestContext { get; set; } = null!;
 
 
-    private static JsonSerializerOptions CreateOptions() =>
-        new JsonSerializerOptions().ApplyVerifiableDefaults();
+    private static JsonSerializerOptions CreateOptions() => TestSetup.DefaultSerializationOptions;
 
 
     [TestMethod]

@@ -434,6 +434,32 @@ internal sealed class CredentialPublicKeyCtap2OrderTests
             CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => reader.ReadInt64(),
             CborReaderState.ByteString => reader.ReadByteStringMemory().Length,
             CborReaderState.Boolean => reader.ReadBoolean() ? 1 : 0,
+            CborReaderState.TextString => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.TextString} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.StartArray => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.StartArray} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.StartMap => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.StartMap} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.Tag => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.Tag} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.Null => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.Null} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.Undefined => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.Undefined} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.SimpleValue => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.SimpleValue} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.HalfPrecisionFloat => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.HalfPrecisionFloat} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.SinglePrecisionFloat => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.SinglePrecisionFloat} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.DoublePrecisionFloat => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.DoublePrecisionFloat} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.EndArray => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.EndArray} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.EndMap => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.EndMap} is outside the shapes CredentialPublicKeyCborWriter emits."),
+            CborReaderState.Finished => throw new InvalidOperationException(
+                $"A COSE_Key value in reader state {CborReaderState.Finished} is outside the shapes CredentialPublicKeyCborWriter emits."),
             CborReaderState state => throw new InvalidOperationException(
                 $"A COSE_Key value in reader state {state} is outside the shapes CredentialPublicKeyCborWriter emits.")
         };

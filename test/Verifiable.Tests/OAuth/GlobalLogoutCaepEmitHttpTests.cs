@@ -128,52 +128,59 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
         //revoking, composes a CAEP session-revoked SET about the revoked subject and
         //pushes it to the Receiver over real HTTP.
         await using TestHostShell op = new(TimeProvider);
-        using VerifierKeyMaterial material = op.RegisterClient(GtrClientId, GtrClientBaseUri, GtrCapabilities);
+        using VerifierKeyMaterial material = await op.RegisterClientAsync(GtrClientId, GtrClientBaseUri, GtrCapabilities).ConfigureAwait(false);
 
         using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(receiver.Certificate);
-        op.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
-        _ = op.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
-        op.Server.OAuth().RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
+        await TestHostShell.AlterAsync(op.Server, candidateIntegration =>
         {
-            //CAEP 1.0 §3.1 + Interop Profile: a session-revoked event carrying a non-empty
-            //reason_admin is the conformant transmitter shape.
-            var sessionRevoked = new CaepSessionRevokedEvent
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+
+
+            _ = candidateIntegration.UseDefaultGlobalTokenRevocationJsonParsing();
+
+
+            candidateIntegration.RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
             {
-                Common = new CaepEventClaims
+                //CAEP 1.0 §3.1 + Interop Profile: a session-revoked event carrying a non-empty
+                //reason_admin is the conformant transmitter shape.
+                var sessionRevoked = new CaepSessionRevokedEvent
                 {
-                    EventTimestamp = TimeProvider.GetUtcNow(),
-                    InitiatingEntity = CaepInitiatingEntityValues.Admin,
-                    ReasonAdmin = new Dictionary<string, string>(StringComparer.Ordinal)
+                    Common = new CaepEventClaims
                     {
-                        ["en"] = "Global token revocation."
+                        EventTimestamp = TimeProvider.GetUtcNow(),
+                        InitiatingEntity = CaepInitiatingEntityValues.Admin,
+                        ReasonAdmin = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["en"] = "Global token revocation."
+                        }
                     }
-                }
+                };
+
+                //Compose the SET from the existing primitives — the application's own seam,
+                //the SET's sub_id is the very subject the revocation named.
+                string set = await SecurityEventTokenIssuance.IssueAsync(
+                    OpIssuer,
+                    [ReceiverAudience],
+                    jwtId: Guid.NewGuid().ToString("N"),
+                    issuedAt: TimeProvider.GetUtcNow(),
+                    [sessionRevoked.ToSecurityEvent()],
+                    opPrivate,
+                    TestSetup.Base64UrlEncoder,
+                    SecurityEventTestJson.HeaderSerializer,
+                    SecurityEventTestJson.PayloadSerializer,
+                    Pool,
+                    signingKeyId: "op-key-1",
+                    subjectId: subId,
+                    cancellationToken: ct).ConfigureAwait(false);
+
+                using StringContent content = new(set, Encoding.UTF8, WellKnownMediaTypes.Application.SecEventJwt);
+                using HttpResponseMessage push = await transmitterClient.PostAsync(
+                    new Uri(receiver.BaseAddress, "/ssf/push"), content, ct).ConfigureAwait(false);
+                Assert.AreEqual(202, (int)push.StatusCode, "The Receiver must accept the session-revoked SET.");
+
+                return GlobalTokenRevocationOutcome.Initiated;
             };
-
-            //Compose the SET from the existing primitives — the application's own seam,
-            //the SET's sub_id is the very subject the revocation named.
-            string set = await SecurityEventTokenIssuance.IssueAsync(
-                OpIssuer,
-                [ReceiverAudience],
-                jwtId: Guid.NewGuid().ToString("N"),
-                issuedAt: TimeProvider.GetUtcNow(),
-                [sessionRevoked.ToSecurityEvent()],
-                opPrivate,
-                TestSetup.Base64UrlEncoder,
-                SecurityEventTestJson.HeaderSerializer,
-                SecurityEventTestJson.PayloadSerializer,
-                Pool,
-                signingKeyId: "op-key-1",
-                subjectId: subId,
-                cancellationToken: ct).ConfigureAwait(false);
-
-            using StringContent content = new(set, Encoding.UTF8, WellKnownMediaTypes.Application.SecEventJwt);
-            using HttpResponseMessage push = await transmitterClient.PostAsync(
-                new Uri(receiver.BaseAddress, "/ssf/push"), content, ct).ConfigureAwait(false);
-            Assert.AreEqual(202, (int)push.StatusCode, "The Receiver must accept the session-revoked SET.");
-
-            return GlobalTokenRevocationOutcome.Initiated;
-        };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await op.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

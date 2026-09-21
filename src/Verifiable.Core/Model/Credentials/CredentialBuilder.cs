@@ -130,7 +130,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
 
     /// <summary>
     /// The Data Integrity proof signing configuration applied by
-    /// <see cref="BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>.
+    /// <see cref="BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, ExchangeContext?, CancellationToken)"/>.
     /// Set via
     /// <see cref="CredentialBuilderExtensions.WithDataIntegritySigning(CredentialBuilder, DataIntegritySigningConfig)"/>.
     /// </summary>
@@ -140,7 +140,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
     /// non-signing
     /// <see cref="BuildAsync(Issuer, IEnumerable{CredentialSubjectInput}, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>
     /// path does not consult this field; the field is read only by
-    /// <see cref="BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>.
+    /// <see cref="BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, ExchangeContext?, CancellationToken)"/>.
     /// </para>
     /// <para>
     /// Setting this field directly is permitted but
@@ -424,6 +424,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
     /// <param name="credentialId">
     /// Optional identifier for the credential. If not specified, one will be generated.
     /// </param>
+    /// <param name="context">The per-operation exchange context threaded into the signing delegate, or <see langword="null"/> for none.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>
     /// A <see cref="VerifiableCredential"/> with a Data Integrity proof embedded

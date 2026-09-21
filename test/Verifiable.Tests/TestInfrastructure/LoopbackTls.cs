@@ -9,8 +9,8 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// The one home for the loopback HTTPS machinery every Kestrel-hosted test fixture in this repository
 /// shares: minting an ephemeral, in-memory self-signed server certificate for an
 /// <c>https://127.0.0.1:{port}</c> listener (<see cref="CreateServerCertificate"/>), and building the
-/// byte-exact pinned <see cref="HttpClient"/> that dials it (<see cref="CreatePinnedHandler"/>,
-/// <see cref="CreatePinnedHttpClient"/>). <see cref="X509Certificate2"/> here is TLS transport
+/// byte-exact pinned <see cref="HttpClient"/> that dials it (<see cref="CreatePinnedHandler(X509Certificate2)"/>,
+/// <see cref="CreatePinnedHttpClient(X509Certificate2, Uri?)"/>). <see cref="X509Certificate2"/> here is TLS transport
 /// infrastructure for test hosts, not project cryptography — it never touches the
 /// <c>Verifiable.Cryptography</c> key-material surface.
 /// </summary>

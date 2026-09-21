@@ -143,8 +143,8 @@ internal sealed class VcalmIssuerEndpointTests
         IssuerContext ctx = await RegisterIssuerAsync(app, alsoVerifier: true).ConfigureAwait(false);
 
         //Wire the verification seams so the issued credential can be POSTed straight to
-        ///credentials/verify on the same tenant (the registration already allows both roles).
-        WireVerificationSeam(app);
+        //credentials/verify on the same tenant (the registration already allows both roles).
+        await WireVerificationSeamAsync(app).ConfigureAwait(false);
 
         string issueBody = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:roundtrip-1", SerializeCredential);
         using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody, expectedStatus: 201).ConfigureAwait(false);
@@ -389,7 +389,7 @@ internal sealed class VcalmIssuerEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         IssuerContext ctx = await RegisterIssuerAsync(app, secondDescriptor: true, alsoVerifier: true).ConfigureAwait(false);
-        WireVerificationSeam(app);
+        await WireVerificationSeamAsync(app).ConfigureAwait(false);
 
         string body = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:multiproof-1", SerializeCredential);
         using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 201).ConfigureAwait(false);
@@ -616,8 +616,9 @@ internal sealed class VcalmIssuerEndpointTests
     }
 
 
-    //Registers a tenant with the VcalmIssuer capability and wires the issue parse seam, the Data
-    //Integrity signing configuration (one or two eddsa-rdfc-2022 descriptors), and the storage seams.
+    /// <summary>
+    /// Registers and configures the issuer used by the credential-issuance endpoint cases.
+    /// </summary>
     private async Task<IssuerContext> RegisterIssuerAsync(
         TestHostShell app,
         bool secondDescriptor = false,
@@ -637,11 +638,14 @@ internal sealed class VcalmIssuerEndpointTests
         string verificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
         string issuerDid = issuerDidDocument.Id!.ToString();
 
-        VerifierKeyMaterial hostMaterial = app.RegisterClient(
-            ClientId, ClientBaseUri, alsoVerifier ? IssuerAndVerifierCapabilities : IssuerCapabilities);
+        VerifierKeyMaterial hostMaterial = await app.RegisterClientAsync(
+            ClientId, ClientBaseUri, alsoVerifier ? IssuerAndVerifierCapabilities : IssuerCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(IssuerKeyMaterial.Wrapping(hostMaterial));
 
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         ImmutableArray<VcalmProofDescriptor>.Builder descriptors = ImmutableArray.CreateBuilder<VcalmProofDescriptor>();
         descriptors.Add(BuildDescriptor(material.SigningPrivateKey, verificationMethodId));
@@ -652,37 +656,50 @@ internal sealed class VcalmIssuerEndpointTests
             descriptors.Add(BuildDescriptor(material.SigningPrivateKey, verificationMethodId));
         }
 
-        app.Server.Vcalm().VcalmCredentialIssuance = new VcalmCredentialIssuance
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            ConfiguredIssuer = issuerDid,
-            SigningDescriptors = descriptors.ToImmutable(),
-            ExistingProofHandling = existingProofHandling,
-            SupportsMandatoryPointers = false,
-            MemoryPool = Pool
-        };
-
-        app.Server.Vcalm().StoreVcalmIssuedCredentialAsync = (credentialId, json, _, _) =>
-        {
-            CredentialStore[credentialId] = new VcalmStoredCredential { VerifiableCredentialJson = json };
-
-            return ValueTask.CompletedTask;
-        };
-
-        app.Server.Vcalm().LoadVcalmIssuedCredentialAsync = (credentialId, _, _) =>
-            ValueTask.FromResult(CredentialStore.GetValueOrDefault(credentialId));
-
-        app.Server.Vcalm().DeleteVcalmIssuedCredentialAsync = (credentialId, _, _) =>
-        {
-            if(!CredentialStore.TryGetValue(credentialId, out VcalmStoredCredential? existing) || existing.IsDeleted)
+            candidateIntegration.VcalmCredentialIssuance = new VcalmCredentialIssuance
             {
-                return ValueTask.FromResult(false);
-            }
+                ConfiguredIssuer = issuerDid,
+                SigningDescriptors = descriptors.ToImmutable(),
+                ExistingProofHandling = existingProofHandling,
+                SupportsMandatoryPointers = false,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
 
-            //§3.2.3 soft delete (the 202 default): retain a tombstone so the §3.2.2 GET answers 410.
-            CredentialStore[credentialId] = existing with { IsDeleted = true };
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.StoreVcalmIssuedCredentialAsync = (credentialId, json, _, _) =>
+            {
+                CredentialStore[credentialId] = new VcalmStoredCredential { VerifiableCredentialJson = json };
 
-            return ValueTask.FromResult(true);
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadVcalmIssuedCredentialAsync = (credentialId, _, _) =>
+                ValueTask.FromResult(CredentialStore.GetValueOrDefault(credentialId));
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.DeleteVcalmIssuedCredentialAsync = (credentialId, _, _) =>
+            {
+                if(!CredentialStore.TryGetValue(credentialId, out VcalmStoredCredential? existing) || existing.IsDeleted)
+                {
+
+                    return ValueTask.FromResult(false);
+                }
+
+                //§3.2.3 soft delete (the 202 default): retain a tombstone so the §3.2.2 GET answers 410.
+                CredentialStore[credentialId] = existing with { IsDeleted = true };
+
+                return ValueTask.FromResult(true);
+            };
+        }).ConfigureAwait(false);
 
         return new IssuerContext(hostMaterial.Registration.TenantId.Value, issuerDid, verificationMethodId, material);
     }
@@ -690,21 +707,25 @@ internal sealed class VcalmIssuerEndpointTests
 
     //Wires the Data Integrity verification seams so an issued credential can be POSTed to
     ///credentials/verify in the round-trip tests (the registration already allows both roles).
-    private static void WireVerificationSeam(TestHostShell app)
+    private static async Task WireVerificationSeamAsync(TestHostShell app)
     {
-        app.Server.Vcalm().VcalmCredentialVerification = new VcalmCredentialVerification
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Resolver = KeyDidResolverSeam,
-            Canonicalize = RdfcCanonicalizer,
-            ContextResolver = ContextResolver,
-            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-            SerializeCredential = SerializeCredential,
-            SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
-            SerializeProofOptions = SerializeProofOptions,
-            Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            MemoryPool = Pool
-        };
+            candidateIntegration.VcalmCredentialVerification = new VcalmCredentialVerification
+            {
+                Resolver = KeyDidResolverSeam,
+                Canonicalize = RdfcCanonicalizer,
+                ContextResolver = ContextResolver,
+                KnownContext = VcalmWireFixtures.CredentialKnownContext,
+                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                SerializeCredential = SerializeCredential,
+                SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
+                SerializeProofOptions = SerializeProofOptions,
+                Decoder = TestSetup.Base58Decoder,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
     }
 
 

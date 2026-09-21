@@ -3,25 +3,19 @@ using System.Diagnostics;
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
-/// Single source of truth for the durations and clock-skew tolerance the
-/// Authorization Server applies when issuing artifacts (PAR responses, JARs,
-/// authorization codes, access tokens, ID tokens) and validating timing claims
-/// on inbound material.
+/// Deployment defaults for artifact lifetimes and inbound timing tolerances.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Policy decisions about timing live here, not in endpoint code. Every site
-/// that previously read a literal duration — for example
-/// <c>now.AddSeconds(60)</c> — reads the corresponding property on
-/// <see cref="EndpointServer.Timings"/> instead. The library does not
-/// embed timing literals anywhere outside this type and its consumers.
+/// Built-in policy profiles define request lifetimes independently. Clock skew and key-binding
+/// timing derive from this record; token producers apply registration overrides where defined.
+/// An admitted request retains this immutable record through its captured authorization wiring.
+/// A timing alteration affects subsequent admissions.
 /// </para>
 /// <para>
-/// Per-registration overrides remain available where applicable. Token
-/// producers consult <see cref="ClientRecord"/> first via
-/// <c>GetTokenLifetime</c> and fall back to the corresponding entry on this
-/// policy when no override is set. This keeps the deployment-wide default in
-/// one place while letting individual clients tighten or loosen lifetimes.
+/// Built-in access-token and ID-token producers consult registration overrides through
+/// <c>GetTokenLifetime</c> and otherwise use their own one-hour default. Profile-specific
+/// request lifetimes are resolved through policy independently of this record.
 /// </para>
 /// <para>
 /// Defaults are aligned with the most demanding profile the library supports
@@ -158,8 +152,8 @@ public sealed record TimingPolicy
     /// <remarks>
     /// <para>
     /// Both directions: a JAR observed before its <c>nbf</c> is accepted if
-    /// the gap is within <see cref="ClockSkewTolerance"/>; a JAR observed
-    /// after its <c>exp</c> is accepted if the gap is within
+    /// the interval is within <see cref="ClockSkewTolerance"/>; a JAR observed
+    /// after its <c>exp</c> is accepted if the interval is within
     /// <see cref="ClockSkewTolerance"/>. Validators that consume timing claims
     /// — wallet-side JAR validation, server-side request-object validation,
     /// token validation — read this value rather than embedding their own.

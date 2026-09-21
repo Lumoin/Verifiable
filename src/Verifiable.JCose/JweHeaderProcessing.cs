@@ -65,15 +65,16 @@ public static class JweHeaderProcessing
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithm);
         ArgumentNullException.ThrowIfNull(understoodCriticalExtensions);
 
-        if(JwkJsonReader.HasDuplicateTopLevelKeys(headerJson))
+        if(!JwkJsonReader.IsWellFormedJsonDocument(headerJson))
         {
             //RFC 7516 §4 ("The Header Parameter names within the JOSE Header MUST be unique") and §5.2
             //step 4. The library reads each parameter by first occurrence; without this gate a header
-            //repeating "alg" would be processed with the first value while a last-value JSON parser
-            //elsewhere would disagree — the validate-one/act-on-another divergence this check closes.
+            //repeating "alg" — at the top level or nested inside an "epk"/"jwk" object — would be
+            //processed with the first value while a last-value JSON parser elsewhere would disagree —
+            //the validate-one/act-on-another divergence this check closes.
             throw new FormatException(
-                "JWE protected header contains duplicate Header Parameter names, which MUST be "
-                + "unique (RFC 7516 §4 / §5.2 step 4).");
+                "JWE protected header is not a well-formed JSON object, or contains a duplicate Header "
+                + "Parameter name, which MUST be unique (RFC 7516 §4 / §5.2 step 4).");
         }
 
         RejectForbiddenAlgorithm(algorithm);

@@ -109,4 +109,20 @@ public static class WellKnownVcalmCapabilities
     /// </summary>
     public static CapabilityIdentifier VcalmCoordinator { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:vcalm:coordinator");
+
+
+    /// <summary>The hand-kept list behind <see cref="All"/>: every identifier this class declares, in declaration order.</summary>
+    private static IReadOnlyList<CapabilityIdentifier> RegisteredIdentifiers { get; } =
+    [
+        VcalmVerifier,
+        VcalmIssuer,
+        VcalmStatus,
+        VcalmHolder,
+        VcalmExchange,
+        VcalmAdministration,
+        VcalmCoordinator
+    ];
+
+    /// <summary>Gets every <see cref="CapabilityIdentifier"/> this class declares, in declaration order.</summary>
+    public static IReadOnlyList<CapabilityIdentifier> All => RegisteredIdentifiers;
 }

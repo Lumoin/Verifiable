@@ -20,7 +20,7 @@ namespace Verifiable.Cbor.Ctap;
 /// needed, mirroring <see cref="CtapGetInfoResponseCborWriter"/>'s convention. <c>keyAgreement</c>'s
 /// nested COSE_Key reuses <see cref="CredentialPublicKeyCborWriter"/> — CTAP 2.3 §6.5.5's own
 /// constraint that this COSE_Key "MUST contain the optional alg parameter and MUST NOT contain any
-/// other optional parameters" is enforced by <see cref="Authenticator.Automata.CtapPinUvAuthProtocol.GetPublicKey"/>,
+/// other optional parameters" is enforced by <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapPinUvAuthProtocol.GetPublicKey"/>,
 /// which is the only production caller that ever builds the <see cref="CoseKey"/> this writer emits.
 /// </remarks>
 public static class CtapClientPinResponseCborWriter

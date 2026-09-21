@@ -19,12 +19,12 @@ namespace Verifiable.Core.Transport;
 /// NOT change the order of these field line values when forwarding a message" — the set never reorders a
 /// name's received values. "[A] sender MUST NOT generate multiple field lines with the same name in a
 /// message … unless that field's definition allows multiple field line values to be recombined as a
-/// comma-separated list" — enforced by <see cref="Builder.Add(string, string)"/>, which throws on a second
+/// comma-separated list" — enforced by <see cref="HttpHeaderSet.Builder.Add(string, string)"/>, which throws on a second
 /// line for a name already present; a caller that knows the field allows a list uses
-/// <see cref="Builder.AddValues(string, IReadOnlyList{string})"/> instead. RFC 9110 §5.3 also records that
+/// <see cref="HttpHeaderSet.Builder.AddValues(string, System.Collections.Generic.IReadOnlyList{string})"/> instead. RFC 9110 §5.3 also records that
 /// <c>Set-Cookie</c> violates this rule in practice (it appears as repeated field lines that are not a
-/// comma-separated list) — a caller composing <c>Set-Cookie</c> uses <see cref="AddValues"/>/<see cref="WithValues"/>,
-/// never <see cref="Add"/>/<see cref="With"/>.
+/// comma-separated list) — a caller composing <c>Set-Cookie</c> uses <see cref="Builder.AddValues"/>/<see cref="WithValues"/>,
+/// never <see cref="Builder.Add"/>/<see cref="With"/>.
 /// </para>
 /// <para>
 /// A known header name is stored under its canonical spelling

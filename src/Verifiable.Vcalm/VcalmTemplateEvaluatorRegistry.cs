@@ -14,7 +14,7 @@ namespace Verifiable.Vcalm;
 /// <remarks>
 /// <para>
 /// <c>Verifiable.Vcalm</c> ships NO <c>jsonata</c> evaluator: JSONata evaluation requires a real
-/// engine, and this library takes no reference to one (not to <c>Lumoin.Veritas.Jsonata</c>, not to
+/// engine, and this library takes no reference to one (not to <c>the application.Jsonata</c>, not to
 /// any in-repo substitute). A deployment registers the engine of its choice for
 /// <see cref="JsonataTemplateType"/> through <see cref="Register"/>; a template whose type has no
 /// registered evaluator is refused (fail-closed) by <see cref="Evaluate"/> rather than evaluated by a
@@ -34,7 +34,7 @@ namespace Verifiable.Vcalm;
 /// concern, configured on the engine itself.
 /// </para>
 /// </remarks>
-public sealed class VcalmTemplateEvaluatorRegistry
+public sealed class VcalmTemplateEvaluatorRegistry: WiringComponent
 {
     /// <summary>
     /// The §3.6.1 template type whose body is JSONata: <c>jsonata</c>. The only template type VCALM
@@ -48,14 +48,27 @@ public sealed class VcalmTemplateEvaluatorRegistry
     public const string LiteralTemplateType = "literal";
 
 
-    private Dictionary<string, VcalmTemplateEvaluator> Evaluators { get; }
+    /// <summary>The application operations keyed by their declared mechanism type.</summary>
+    private Dictionary<string, VcalmTemplateEvaluator> Evaluators { get; set; }
+
 
     /// <summary>
     /// The size bounds this registry enforces around every registered evaluator's inputs and output.
     /// Settable so a deployment can size them for its own workflows; defaults to
     /// <see cref="VcalmTemplateLimits"/>'s sensible defaults.
     /// </summary>
-    public VcalmTemplateLimits Limits { get; set; } = new();
+    public VcalmTemplateLimits Limits
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    } = new();
 
 
     /// <summary>
@@ -74,17 +87,22 @@ public sealed class VcalmTemplateEvaluatorRegistry
 
     /// <summary>
     /// Registers (or supersedes) the evaluator for a template type. A deployment calls this with a
-    /// real JSONata engine (for example <c>Lumoin.Veritas.Jsonata</c>) for
+    /// real JSONata engine (for example <c>the application.Jsonata</c>) for
     /// <see cref="JsonataTemplateType"/> to make <c>jsonata</c> templates evaluable.
     /// </summary>
     /// <param name="templateType">The §3.6.1 template type the evaluator handles.</param>
     /// <param name="evaluator">The evaluator to register for the type.</param>
     public void Register(string templateType, VcalmTemplateEvaluator evaluator)
     {
-        ArgumentException.ThrowIfNullOrEmpty(templateType);
-        ArgumentNullException.ThrowIfNull(evaluator);
+        lock(MutationLock)
+        {
+            EnsureMutable();
+            ArgumentException.ThrowIfNullOrEmpty(templateType);
+            ArgumentNullException.ThrowIfNull(evaluator);
 
-        Evaluators[templateType] = evaluator;
+            Evaluators[templateType] = evaluator;
+
+        }
     }
 
 
@@ -133,9 +151,10 @@ public sealed class VcalmTemplateEvaluatorRegistry
         {
             //VCALM 1.0 §3.6.1: credentialTemplates[].type selects the evaluation mechanism a workflow
             //step's issueRequest relies on. An unregistered type is a mechanism this instance cannot
-            //honour, so the step fails closed rather than being evaluated by a substitute.
+            //honour, so the step fails closed rather than being evaluated by a substitute. The
+            //client-supplied type is not repeated back: the caller's own request already names it.
             return VcalmTemplateEvaluationResult.Failure(
-                $"No credential-template evaluator is registered for the template type '{template.TemplateType}'.");
+                "No credential-template evaluator is registered for the requested template type.");
         }
 
         int templateByteCount = Encoding.UTF8.GetByteCount(template.Template);
@@ -199,6 +218,16 @@ public sealed class VcalmTemplateEvaluatorRegistry
 
         return PooledMemory.FromBytes(utf8, pool, BufferTags.Json);
     }
+
+
+    /// <summary>Copies mechanism membership into an independent alteration candidate.</summary>
+    protected override WiringComponent CloneCore()
+    {
+        VcalmTemplateEvaluatorRegistry copy = (VcalmTemplateEvaluatorRegistry)base.CloneCore();
+        copy.Evaluators = new(Evaluators, StringComparer.Ordinal);
+
+        return copy;
+    }
 }
 
 
@@ -212,12 +241,14 @@ public sealed record VcalmTemplateEvaluationResult
     /// <summary>Whether the evaluation succeeded (a registered evaluator ran within the configured bounds).</summary>
     public required bool IsSuccess { get; init; }
 
+
     /// <summary>
     /// The rendered credential body on success, owned by the caller, who must dispose it. Also
     /// <see langword="null"/> on success when the evaluation itself produced no result (JSONata
     /// <c>undefined</c>), and always <see langword="null"/> on failure.
     /// </summary>
     public PooledMemory? Rendered { get; init; }
+
 
     /// <summary>The failure detail, populated only when <see cref="IsSuccess"/> is <see langword="false"/>.</summary>
     public string? FailureDetail { get; init; }
@@ -231,4 +262,6 @@ public sealed record VcalmTemplateEvaluationResult
     /// <summary>Creates a failed result carrying the refusal detail.</summary>
     public static VcalmTemplateEvaluationResult Failure(string detail) =>
         new() { IsSuccess = false, FailureDetail = detail };
+
+
 }

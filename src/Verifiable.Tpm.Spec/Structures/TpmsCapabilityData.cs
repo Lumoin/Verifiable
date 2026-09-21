@@ -214,6 +214,19 @@ public sealed class TpmsCapabilityData: IDisposable
 
                 break;
             }
+            case TpmCapConstants.TPM_CAP_ALGS:
+            case TpmCapConstants.TPM_CAP_HANDLES:
+            case TpmCapConstants.TPM_CAP_COMMANDS:
+            case TpmCapConstants.TPM_CAP_PP_COMMANDS:
+            case TpmCapConstants.TPM_CAP_AUDIT_COMMANDS:
+            case TpmCapConstants.TPM_CAP_PCRS:
+            case TpmCapConstants.TPM_CAP_PCR_PROPERTIES:
+            case TpmCapConstants.TPM_CAP_ECC_CURVES:
+            case TpmCapConstants.TPM_CAP_AUTH_POLICIES:
+            case TpmCapConstants.TPM_CAP_ACT:
+            case TpmCapConstants.TPM_CAP_PUB_KEYS:
+            case TpmCapConstants.TPM_CAP_SPDM_SESSION_INFO:
+            case TpmCapConstants.TPM_CAP_VENDOR_PROPERTY:
             default:
             {
                 throw new NotSupportedException($"Writing TPMS_CAPABILITY_DATA for capability '{Capability}' is not supported.");
@@ -233,6 +246,19 @@ public sealed class TpmsCapabilityData: IDisposable
     {
         TpmCapConstants.TPM_CAP_TPM_PROPERTIES =>
             sizeof(uint) + sizeof(uint) + ((TpmProperties?.Count ?? 0) * (sizeof(uint) + sizeof(uint))),
+        TpmCapConstants.TPM_CAP_ALGS => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_HANDLES => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_COMMANDS => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_PP_COMMANDS => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_AUDIT_COMMANDS => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_PCRS => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_PCR_PROPERTIES => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_ECC_CURVES => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_AUTH_POLICIES => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_ACT => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_PUB_KEYS => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_SPDM_SESSION_INFO => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
+        TpmCapConstants.TPM_CAP_VENDOR_PROPERTY => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported."),
         _ => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported.")
     };
 
@@ -257,6 +283,12 @@ public sealed class TpmsCapabilityData: IDisposable
             TpmCapConstants.TPM_CAP_PCRS => ParsePcrSelection(ref reader, capability, pool),
             TpmCapConstants.TPM_CAP_TPM_PROPERTIES => ParseTpmProperties(ref reader, capability),
             TpmCapConstants.TPM_CAP_ECC_CURVES => ParseEccCurves(ref reader, capability),
+            TpmCapConstants.TPM_CAP_PCR_PROPERTIES => throw new NotSupportedException($"Capability '{capability}' is not supported."),
+            TpmCapConstants.TPM_CAP_AUTH_POLICIES => throw new NotSupportedException($"Capability '{capability}' is not supported."),
+            TpmCapConstants.TPM_CAP_ACT => throw new NotSupportedException($"Capability '{capability}' is not supported."),
+            TpmCapConstants.TPM_CAP_PUB_KEYS => throw new NotSupportedException($"Capability '{capability}' is not supported."),
+            TpmCapConstants.TPM_CAP_SPDM_SESSION_INFO => throw new NotSupportedException($"Capability '{capability}' is not supported."),
+            TpmCapConstants.TPM_CAP_VENDOR_PROPERTY => throw new NotSupportedException($"Capability '{capability}' is not supported."),
             _ => throw new NotSupportedException($"Capability '{capability}' is not supported.")
         };
     }

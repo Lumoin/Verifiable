@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// <para>
 /// The content is not secret key material, so this carrier holds no
-/// <see cref="Verifiable.Cryptography.SensitiveMemory"/> tag; it follows the hand-rolled pooled shape of
+/// <c>Verifiable.Cryptography.SensitiveMemory</c> tag; it follows the hand-rolled pooled shape of
 /// <see cref="Tpm2bName"/> and <see cref="Tpm2bData"/>.
 /// </para>
 /// <para>

@@ -19,7 +19,7 @@ namespace Verifiable.Server.Pipeline;
 /// supports for that registration and request, and the contributed
 /// endpoints are concatenated in the order their producing builders
 /// contribute them. The chain itself is constructed by
-/// <see cref="BuildForRequest"/>.
+/// <see cref="BuildForRequestAsync"/>.
 /// </para>
 /// <para>
 /// <strong>Walking the chain.</strong>
@@ -59,7 +59,7 @@ namespace Verifiable.Server.Pipeline;
 /// reads. Configuration changes flow through
 /// the host configuration swap, which atomically
 /// publishes a new <see cref="ServerConfiguration"/>; subsequent calls to
-/// <see cref="BuildForRequest"/> derive new chains from the new
+/// <see cref="BuildForRequestAsync"/> derive new chains from the new
 /// configuration's <see cref="ServerConfiguration.EndpointBuilders"/>.
 /// </para>
 /// </remarks>
@@ -70,9 +70,28 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
 
 
     /// <summary>
+    /// The <see cref="EndpointCandidate.Name"/> of every candidate a builder produced for the
+    /// request this chain was built for, that the per-request capability filter in
+    /// <see cref="BuildForRequestAsync"/> then removed. Empty for a chain built by the public
+    /// constructor, which takes endpoints already filtered by its caller.
+    /// </summary>
+    public IReadOnlyList<string> CapabilityFilteredCandidateNames { get; }
+
+
+    /// <summary>
+    /// The <see cref="EndpointCandidate.Name"/> of every candidate that survived the per-request
+    /// capability filter in <see cref="BuildForRequestAsync"/> but whose
+    /// <see cref="ServerIntegration.ResolveEndpointUriAsync"/> call answered <see langword="null"/>.
+    /// Empty for a chain built by the public constructor, which takes endpoints already resolved by
+    /// its caller.
+    /// </summary>
+    public IReadOnlyList<string> UnresolvedUriCandidateNames { get; }
+
+
+    /// <summary>
     /// An empty <see cref="EndpointChain"/>.
     /// </summary>
-    public static EndpointChain Empty { get; } = new(Array.Empty<ServerEndpoint>());
+    public static EndpointChain Empty { get; } = new(Array.Empty<ServerEndpoint>(), Array.Empty<string>(), Array.Empty<string>());
 
 
     /// <summary>
@@ -89,12 +108,16 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         Endpoints = endpoints.ToArray();
+        CapabilityFilteredCandidateNames = Array.Empty<string>();
+        UnresolvedUriCandidateNames = Array.Empty<string>();
     }
 
 
-    private EndpointChain(ServerEndpoint[] endpoints)
+    private EndpointChain(ServerEndpoint[] endpoints, string[] capabilityFilteredCandidateNames, string[] unresolvedUriCandidateNames)
     {
         Endpoints = endpoints;
+        CapabilityFilteredCandidateNames = capabilityFilteredCandidateNames;
+        UnresolvedUriCandidateNames = unresolvedUriCandidateNames;
     }
 
 
@@ -108,24 +131,27 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// produced <see cref="EndpointCandidate"/> instances by capability
     /// membership, and asks
     /// the endpoint-URI resolution seam
-    /// for each survivor's absolute URL. Candidates with no resolvable URL
-    /// are dropped silently. Surviving candidates are projected to
-    /// <see cref="ServerEndpoint"/> records with the resolved URI attached.
+    /// for each survivor's absolute URL. A candidate with no resolvable URL is dropped from the
+    /// chain and its name recorded in <see cref="UnresolvedUriCandidateNames"/>. Surviving
+    /// candidates are projected to <see cref="ServerEndpoint"/> records with the resolved URI
+    /// attached.
     /// </summary>
     /// <remarks>
     /// <para>
+    /// Admitted RequestServer keeps builders, URI operations and family reads on one wiring view.
+    /// Direct helper callers do not acquire admission through this method.
     /// The chain is fresh per request — the same registration may produce
     /// different chains in different requests when a builder gates on
     /// context or when <c>ResolveCapabilitiesAsync</c> attenuates
     /// capabilities based on CAEP/RISC signals or other per-request state.
     /// </para>
     /// <para>
-    /// <see cref="ExchangeContextServerExtensions.Server"/> on
+    /// <c>RequestServer</c> on
     /// <paramref name="context"/> must be set before this call; the
     /// dispatcher places it on the context at
     /// dispatch entry. Callers
-    /// driving the chain outside the dispatcher must call
-    /// <see cref="ExchangeContextServerExtensions.SetServer"/> themselves.
+    /// driving the chain outside admission use a supplied Server fallback and must call
+    /// <see cref="Verifiable.Server.ExchangeContextServerExtensions.SetServer"/> themselves.
     /// </para>
     /// </remarks>
     /// <param name="registration">
@@ -135,7 +161,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <param name="context">
     /// The per-request context, carrying the active
     /// <see cref="EndpointServer"/> via
-    /// <see cref="ExchangeContextServerExtensions.Server"/>, the typed
+    /// <c>RequestServer</c>, the typed
     /// <see cref="IncomingRequest"/> envelope, resolved
     /// registration, and any application-supplied
     /// request-scoped state.
@@ -151,7 +177,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="ExchangeContextServerExtensions.Server"/> on
+    /// Thrown when <c>RequestServer</c> on
     /// <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
     public static async ValueTask<EndpointChain> BuildForRequestAsync(
@@ -162,9 +188,9 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
-        EndpointServer server = context.Server
+        EndpointServer server = context.RequestServer
             ?? throw new InvalidOperationException(
-                "context.Server must be set before BuildForRequestAsync. "
+                "context.RequestServer must be set before BuildForRequestAsync. "
                 + "DispatchAsync sets this at entry; callers that drive the "
                 + "chain outside the dispatcher must call context.SetServer "
                 + "before invoking this method.");
@@ -185,6 +211,8 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
         context.SetResolvedCapabilities(allowedCapabilities);
 
         List<ServerEndpoint> resolved = [];
+        List<string> capabilityFiltered = [];
+        List<string> unresolvedUri = [];
         foreach(EndpointBuilderDelegate builder in builders)
         {
             IReadOnlyList<EndpointCandidate> candidates = await builder(
@@ -192,13 +220,23 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
 
             foreach(EndpointCandidate candidate in candidates)
             {
-                if(!allowedCapabilities.Contains(candidate.Capability)) { continue; }
+                if(!allowedCapabilities.Contains(candidate.Capability))
+                {
+                    capabilityFiltered.Add(candidate.Name);
+
+                    continue;
+                }
 
                 Uri? uri = await server.Integration.ResolveEndpointUriAsync!(
                     candidate.Name, registration, context, cancellationToken)
                     .ConfigureAwait(false);
 
-                if(uri is null) { continue; }
+                if(uri is null)
+                {
+                    unresolvedUri.Add(candidate.Name);
+
+                    continue;
+                }
 
                 resolved.Add(new ServerEndpoint
                 {
@@ -210,16 +248,18 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
                     MatchesRequest = candidate.MatchesRequest,
                     BuildInputAsync = candidate.BuildInputAsync,
                     BuildResponse = candidate.BuildResponse,
+                    BeforeCorrelationAsync = candidate.BeforeCorrelationAsync,
                     ExtractCorrelationKey = candidate.ExtractCorrelationKey,
                     DiscoveryMetadataKey = candidate.DiscoveryMetadataKey,
                     HandleNotFoundError = candidate.HandleNotFoundError,
                     HandleNotFoundErrorDescription = candidate.HandleNotFoundErrorDescription,
+                    MissingCorrelationKeyErrorDescription = candidate.MissingCorrelationKeyErrorDescription,
                     ResolvedUri = uri
                 });
             }
         }
 
-        return new EndpointChain(resolved.ToArray());
+        return new EndpointChain(resolved.ToArray(), capabilityFiltered.ToArray(), unresolvedUri.ToArray());
     }
 
 

@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>cpHash and rpHash for session HMAC computation.</description></item>
 /// </list>
 /// <para>
-/// <strong>Empty digests:</strong> Use <see cref="CreateEmpty"/> to obtain a shared
+/// <strong>Empty digests:</strong> Use <see cref="Empty"/> to obtain a shared
 /// empty instance backed by <see cref="EmptyMemoryOwner"/>. This avoids pool allocations
 /// for zero-length buffers.
 /// </para>

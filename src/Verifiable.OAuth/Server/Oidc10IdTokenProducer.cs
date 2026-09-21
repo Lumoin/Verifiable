@@ -46,7 +46,7 @@ namespace Verifiable.OAuth.Server;
 /// contribution into this payload before signing.
 /// </para>
 /// <para>
-/// Consumed indirectly via <see cref="TokenProducer.Oidc10IdToken"/>.
+/// Consumed indirectly via <c>TokenProducer.Oidc10IdToken</c>.
 /// </para>
 /// </remarks>
 internal static class Oidc10IdTokenProducer

@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Server;
 /// gate. Signs with <see cref="KeyUsageContext.AccessTokenIssuance"/>.
 /// </para>
 /// <para>
-/// Consumed indirectly via <see cref="TokenProducer.Rfc9068AccessToken"/>.
+/// Consumed indirectly via <c>TokenProducer.Rfc9068AccessToken</c>.
 /// </para>
 /// <para>
 /// <strong>Audience resolution.</strong> RFC 9068 §2.2 mandates the <c>aud</c>
@@ -140,6 +140,11 @@ internal static class Rfc9068AccessTokenProducer
     }
 
 
+    /// <summary>
+    /// Builds a signed access token with the admitted issuer, audience policy and signing resources.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>:
+    /// "The JWT access token MUST include the following claims."
+    /// </summary>
     private static async ValueTask<TokenProducerOutput> BuildAsync(
         IssuanceContext context,
         KeyId signingKeyId,
@@ -149,9 +154,9 @@ internal static class Rfc9068AccessTokenProducer
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithm);
 
-        EndpointServer server = context.Context.Server
+        EndpointServer server = context.Context.RequestServer
             ?? throw new InvalidOperationException(
-                "IssuanceContext.Context.Server must be set before "
+                "IssuanceContext.Context.RequestServer must be set before "
                 + nameof(Rfc9068AccessTokenProducer) + "." + nameof(BuildAsync) + ".");
         var oauth = server.OAuth();
 

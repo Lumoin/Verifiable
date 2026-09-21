@@ -36,8 +36,8 @@ namespace Verifiable.Tests.Jose
         /// <summary>
         /// Tests that all well-known JWA algorithms are recognized.
         /// </summary>
-        /// <param name="algorithm">The algorithm to test.</param>
-        /// <param name="algorithmCheck">The function that checks if the algorithm is recognized.</param>
+        /// <param name="correctAlgorithm">The algorithm to test.</param>
+        /// <param name="isCorrectAlgorithm">The function that checks if the algorithm is recognized.</param>
         [TestMethod]
         [DynamicData(nameof(GetJwaAlgorithms))]
         public void JwaAlgorithmComparesCorrectly(string correctAlgorithm, Func<string, bool> isCorrectAlgorithm)

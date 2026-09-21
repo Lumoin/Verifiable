@@ -1,5 +1,6 @@
 using CsCheck;
 using Verifiable.Apdu;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -42,7 +43,7 @@ internal sealed class ApduTlvPropertyTests
     /// </summary>
     [TestMethod]
     public void TlvWalkRejectsMalformedInputOnlyWithInvalidOperationException() =>
-        GenTlvBytes.Sample(WalksOrThrowsInvalidOperation);
+        GenTlvBytes.Sample(WalksOrThrowsInvalidOperation, threads: CsCheckSampling.Threads);
 
 
     //Runs the TLV walk and reports whether it completed or threw the documented exception; any other exception

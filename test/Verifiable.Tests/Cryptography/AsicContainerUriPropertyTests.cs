@@ -2,6 +2,7 @@ using CsCheck;
 using System.Globalization;
 using System.Text;
 using Verifiable.Cryptography.Pki;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -77,7 +78,7 @@ internal sealed class AsicContainerUriPropertyTests
             AsicContainerUriResolution resolution = AsicContainerUri.Resolve(reference);
 
             return resolution.IsResolved && string.Equals(resolution.EntryName, entryName, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -107,7 +108,7 @@ internal sealed class AsicContainerUriPropertyTests
             }
 
             return true;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -134,7 +135,7 @@ internal sealed class AsicContainerUriPropertyTests
             return resolution.IsResolved
                 ? AsicZipEntryNaming.Validate(resolution.EntryName, NameBound) == AsicZipEntryNameStatus.Accepted
                 : resolution.EntryName is null;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -159,7 +160,7 @@ internal sealed class AsicContainerUriPropertyTests
             return fromWritten.IsResolved
                 && fromFullyEscaped.IsResolved
                 && string.Equals(fromWritten.EntryName, fromFullyEscaped.EntryName, StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
 
         //Writes the maximally escaped spelling of an entry name, leaving only the path separator as itself.
         static string EscapeEveryOctet(string entryName)

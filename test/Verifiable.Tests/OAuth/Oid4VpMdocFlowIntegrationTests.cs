@@ -28,7 +28,7 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="MdocVpFixture"/>, which the scheme × format matrix
 /// (<see cref="Oid4VpSchemeFormatMatrixTests"/>) also drives against every
 /// client-id scheme. This test pins the remaining axis the matrix does not: a
-/// <see cref="TestHostShell.RegisterClient"/> verifier (the
+/// <see cref="TestHostShell.RegisterClientAsync"/> verifier (the
 /// <see cref="PolicyProfile.Oid4VpVerifier"/> registration path) resolved via the
 /// pinned-key resolver rather than a client-id scheme.
 /// </para>
@@ -57,7 +57,7 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
 
     /// <summary>
     /// <see cref="VerifierClientId"/> as a <see cref="Uri"/>, the shape
-    /// <see cref="TestHostShell.RegisterClient"/> requires for verifier registration.
+    /// <see cref="TestHostShell.RegisterClientAsync"/> requires for verifier registration.
     /// </summary>
     private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
@@ -87,8 +87,8 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
         TestHostShell app = run.App;
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //Build the HTTP-backed wallet first — this starts the Kestrel listener and aligns
         //the verifier registration's IssuerUri + ResponseUri to the Kestrel base, so the
@@ -201,8 +201,8 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
     private async Task<FlowState> DriveFlowAsync(FormatRun run, PreparedDcqlQuery query)
     {
         TestHostShell app = run.App;
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         TransactionNonce nonce = new($"nonce-mdoc-ta-{Guid.NewGuid():N}");
         (Uri requestUri, string parHandle) = await app.HandleParAsync(

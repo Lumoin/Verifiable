@@ -10,6 +10,7 @@ using System.Text.Json;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.Fido2;
@@ -103,7 +104,7 @@ internal sealed class Fido2CliTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        using PackedFixture fixture = CreatePackedRegistrationFixture();
+        using PackedFixture fixture = await CreatePackedRegistrationFixture().ConfigureAwait(false);
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", fixture.AttestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", fixture.ClientDataJsonBytes);
         string trustAnchorPath = WriteTempFile("attestation-root.der", fixture.AttestationRootCertificate.RawData);
@@ -129,7 +130,7 @@ internal sealed class Fido2CliTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        using PackedFixture fixture = CreatePackedRegistrationFixture();
+        using PackedFixture fixture = await CreatePackedRegistrationFixture().ConfigureAwait(false);
 
         //Cert-factory: CertificateRequest-based X.509 CA minting needs a real ECDsa key.
         using ECDsa mdsRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -301,7 +302,7 @@ internal sealed class Fido2CliTests
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
         string signaturePath = WriteTempFile("signature.bin", signature);
@@ -345,7 +346,7 @@ internal sealed class Fido2CliTests
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
         string signaturePath = WriteTempFile("signature.bin", signature);
@@ -386,7 +387,15 @@ internal sealed class Fido2CliTests
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = credentialKey.SignData(toBeSigned, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        byte[] exportedCredentialPrivateKey = credentialKey.ExportRSAPrivateKey();
+        using IMemoryOwner<byte> credentialPrivateKeyOwner = BaseMemoryPool.Shared.Rent(exportedCredentialPrivateKey.Length, AllocationKind.Pinned);
+        exportedCredentialPrivateKey.CopyTo(credentialPrivateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedCredentialPrivateKey);
+
+        SigningDelegate signAssertion = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
+        (Signature assertionSignature, _) = await signAssertion(credentialPrivateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using Signature disposableAssertionSignature = assertionSignature;
+        byte[] signature = assertionSignature.AsReadOnlySpan().ToArray();
 
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
         string signaturePath = WriteTempFile("signature.bin", signature);
@@ -428,7 +437,7 @@ internal sealed class Fido2CliTests
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
         signature[^1] ^= 0xFF;
 
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
@@ -630,7 +639,9 @@ internal sealed class Fido2CliTests
         //exercised against a value it did not produce.
         byte[] effectiveRpIdHash = rpIdHash ?? SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
         //Opaque random credential identifier — a junk payload, not key material.
-        byte[] credentialId = RandomNumberGenerator.GetBytes(16);
+        FillEntropyDelegate fillEntropy = RandomNumberGenerator.Fill;
+        byte[] credentialId = new byte[16];
+        fillEntropy(credentialId);
         byte[] coseKeyCbor = credentialPublicKeyCbor ?? MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, coseKeyCbor);
         byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
@@ -649,46 +660,66 @@ internal sealed class Fido2CliTests
     /// ES256 credential, and the real wire <c>authData</c>/<c>clientDataJSON</c>/<c>attestationObject</c>
     /// bytes — mirrors <c>MetadataDrivenRegistrationTests</c>'s own fixture shape.
     /// </summary>
-    private static PackedFixture CreatePackedRegistrationFixture()
+    private static async Task<PackedFixture> CreatePackedRegistrationFixture()
     {
         Guid aaguid = Guid.NewGuid();
 
         //Cert-factory: CertificateRequest-based X.509 CA minting needs a real ECDsa key.
-        ECDsa attestationRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        X509Certificate2 attestationRootCertificate = Fido2AttestationTestVectors.CreateSelfSignedCa("CN=Test Fido2CliTests Attestation Root", attestationRootKey);
-        //Cert-factory (leaf) and independent oracle: also signs the packed attStmt below, which the
-        //CLI verifies against the leaf certificate's public key.
-        ECDsa attestationLeafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        X509Certificate2 attestationLeafCertificate = Fido2AttestationTestVectors.CreateLeafAttestationCertificate(
-            attestationRootCertificate, attestationLeafKey, isCertificateAuthority: false,
-            Fido2AttestationTestVectors.RequiredOrganizationalUnit, aaguidExtensionValue: null);
+        ECDsa? attestationRootKey = null;
+        X509Certificate2? attestationRootCertificate = null;
+        ECDsa? attestationLeafKey = null;
+        X509Certificate2? attestationLeafCertificate = null;
+        try
+        {
+            attestationRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            attestationRootCertificate = Fido2AttestationTestVectors.CreateSelfSignedCa("CN=Test Fido2CliTests Attestation Root", attestationRootKey);
+            //Cert-factory (leaf) and independent oracle: also signs the packed attStmt below, which the
+            //CLI verifies against the leaf certificate's public key.
+            attestationLeafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            attestationLeafCertificate = Fido2AttestationTestVectors.CreateLeafAttestationCertificate(
+                attestationRootCertificate, attestationLeafKey, isCertificateAuthority: false,
+                Fido2AttestationTestVectors.RequiredOrganizationalUnit, aaguidExtensionValue: null);
 
-        //The WebAuthn credential key itself is embedded as a public key only — it never signs
-        //anything in this fixture, so it is mere fixture material sourced from the project's
-        //key-material provider rather than a freshly minted framework key.
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> credentialKeyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
-        credentialKeyMaterial.PrivateKey.Dispose();
-        using PublicKeyMemory credentialPublicKeyMaterial = credentialKeyMaterial.PublicKey;
-        CoseKey credentialPublicKey = BuildP256CoseKey(credentialPublicKeyMaterial, WellKnownCoseAlgorithms.Es256);
-        //Opaque random credential identifier — a junk payload, not key material.
-        byte[] credentialId = RandomNumberGenerator.GetBytes(16);
-        //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
-        //exercised against a value it did not produce.
-        byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
+            //The WebAuthn credential key itself is embedded as a public key only — it never signs
+            //anything in this fixture, so it is mere fixture material sourced from the project's
+            //key-material provider rather than a freshly minted framework key.
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> credentialKeyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
+            credentialKeyMaterial.PrivateKey.Dispose();
+            using PublicKeyMemory credentialPublicKeyMaterial = credentialKeyMaterial.PublicKey;
+            CoseKey credentialPublicKey = BuildP256CoseKey(credentialPublicKeyMaterial, WellKnownCoseAlgorithms.Es256);
+            //Opaque random credential identifier — a junk payload, not key material.
+            byte[] credentialId = RandomNumberGenerator.GetBytes(16);
+            //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
+            //exercised against a value it did not produce.
+            byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
 
-        byte[] credentialPublicKeyCbor = MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
-        byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKeyCbor);
-        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialData);
-        byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, Challenge, Origin);
-        using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
-        byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(attestationLeafKey, toBeSigned);
+            byte[] credentialPublicKeyCbor = MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
+            byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKeyCbor);
+            byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
+            byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialData);
+            byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, Challenge, Origin);
+            using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
+            byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
+            byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(attestationLeafKey, toBeSigned).ConfigureAwait(false);
 
-        byte[] attStmtCbor = EncodePackedAttStmt(WellKnownCoseAlgorithms.Es256, signature, [attestationLeafCertificate.RawData]);
-        byte[] attestationObjectBytes = EncodeAttestationObject(WellKnownWebAuthnAttestationFormats.Packed, attStmtCbor, authenticatorData);
+            byte[] attStmtCbor = EncodePackedAttStmt(WellKnownCoseAlgorithms.Es256, signature, [attestationLeafCertificate.RawData]);
+            byte[] attestationObjectBytes = EncodeAttestationObject(WellKnownWebAuthnAttestationFormats.Packed, attStmtCbor, authenticatorData);
 
-        return new PackedFixture(aaguid, attestationObjectBytes, clientDataJson, attestationRootCertificate, attestationLeafCertificate, attestationLeafKey, attestationRootKey);
+            PackedFixture fixture = new(aaguid, attestationObjectBytes, clientDataJson, attestationRootCertificate, attestationLeafCertificate, attestationLeafKey, attestationRootKey);
+            attestationRootCertificate = null;
+            attestationLeafCertificate = null;
+            attestationLeafKey = null;
+            attestationRootKey = null;
+
+            return fixture;
+        }
+        finally
+        {
+            attestationLeafCertificate?.Dispose();
+            attestationLeafKey?.Dispose();
+            attestationRootCertificate?.Dispose();
+            attestationRootKey?.Dispose();
+        }
     }
 
 

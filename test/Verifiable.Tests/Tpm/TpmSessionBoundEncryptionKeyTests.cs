@@ -21,7 +21,7 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// The oracle is independent in the same sense as <see cref="TpmParameterEncryptionExecutorTests"/>'s: the
 /// expected session key is derived here by driving <see cref="Kdfa"/> by hand, the expected authorization HMAC
-/// by driving <see cref="CryptographicKeyEvents.ComputeHmacAsync"/> by hand over a data buffer assembled here,
+/// by driving <see cref="CryptographicKeyEvents.ComputeHmacAsync(System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, int, Lumoin.Base.Tag, Lumoin.Base.BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, System.Threading.CancellationToken)"/> by hand over a data buffer assembled here,
 /// and the expected ciphertext by driving <see cref="TpmParameterEncryption.XorAsync"/> by hand with the command
 /// direction's nonce order — while the session under test reaches the same values through its own code paths.
 /// The caller nonce each comparison needs is read back off the serialized <c>TPMS_AUTH_COMMAND</c> the session
@@ -585,7 +585,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
     }
 
     /// <summary>
-    /// Applies XOR obfuscation by hand over a copy of <paramref name="source"/> (TPM 2.0 Library Part 1, clause
+    /// Applies XOR obfuscation by hand over a copy of <paramref name="data"/> (TPM 2.0 Library Part 1, clause
     /// 19.2). The transform is self-inverse, so one routine serves both directions; the direction lives entirely
     /// in which nonce the caller passes as <paramref name="nonceNewer"/>.
     /// </summary>

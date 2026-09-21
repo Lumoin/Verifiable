@@ -11,15 +11,15 @@ namespace Verifiable.Tpm;
 /// high-level operations into typed command/response pairs. The flow is:
 /// </para>
 /// <list type="number">
-///   <item><description>Create typed input struct (e.g., <see cref="GetRandomInput"/>).</description></item>
-///   <item><description>Serialize to bytes via <see cref="TpmBufferBuilder"/>.</description></item>
-///   <item><description>Submit raw bytes via <see cref="TpmDevice.Submit"/>.</description></item>
-///   <item><description>Parse response via <see cref="TpmBufferParser"/>.</description></item>
-///   <item><description>Return typed output struct (e.g., <see cref="GetRandomOutput"/>).</description></item>
+///   <item><description>Create typed input struct (e.g., <see cref="Infrastructure.Commands.GetRandomInput"/>).</description></item>
+///   <item><description>Serialize to bytes via <see cref="TpmWriter"/>.</description></item>
+///   <item><description>Submit raw bytes via <see cref="TpmDevice.SubmitAsync"/>.</description></item>
+///   <item><description>Parse response via <see cref="TpmReader"/>.</description></item>
+///   <item><description>Return typed output struct (e.g., <see cref="Infrastructure.Commands.GetRandomResponse"/>).</description></item>
 /// </list>
 /// <para>
-/// <b>Error handling:</b> If the TPM returns an error response code, a
-/// <see cref="TpmCommandException"/> is thrown containing the command and response codes.
+/// <b>Error handling:</b> If the TPM returns an error response code, the result carries that code as a
+/// <c>TpmError</c> on <see cref="TpmResult{T}"/> rather than throwing.
 /// </para>
 /// <para>
 /// <b>Memory:</b> <see cref="TpmDevice"/> carries the <see cref="BaseMemoryPool"/> its extension verbs rent
@@ -29,8 +29,8 @@ namespace Verifiable.Tpm;
 /// </para>
 /// </remarks>
 /// <seealso cref="TpmDevice"/>
-/// <seealso cref="TpmBufferBuilder"/>
-/// <seealso cref="TpmBufferParser"/>
+/// <seealso cref="TpmWriter"/>
+/// <seealso cref="TpmReader"/>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
 public static class TpmDeviceExtensions
 {

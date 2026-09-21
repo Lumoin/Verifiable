@@ -28,14 +28,14 @@ namespace Verifiable.OAuth.Oid4Vp;
 ///   </description></item>
 ///   <item><description>
 ///     The trust anchor certificate MUST NOT be included in the <c>x5c</c> header
-///     — it is supplied out-of-band on the <see cref="ExchangeContext"/>.
+///     — it is supplied out-of-band on the <see cref="Verifiable.Core.ExchangeContext"/>.
 ///   </description></item>
 /// </list>
 /// <para>
 /// The hash algorithm and base64url encoding are supplied as delegates so the
 /// platform driver owns the cryptography; OID4VP 1.0 §5.9.3 fixes the algorithm to
-/// SHA-256, so the application MUST wire a SHA-256 implementation for
-/// <paramref name="hashFunction"/>.
+/// SHA-256, so the application MUST wire a SHA-256 implementation for the
+/// <c>hashFunction</c> delegate.
 /// </para>
 /// </remarks>
 public static class X509HashKeyResolver

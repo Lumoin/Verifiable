@@ -128,7 +128,7 @@ internal sealed class WebFingerQueryConstructionTests
         Uri many = WebFingerClient.ComputeQueryUri(
             "example.com", "acct:alice@example.com", ["urn:example:a", "urn:example:b", "urn:example:c"]);
 
-        Assert.HasCount(0, RelValues(zero), "Absent rel filters MUST still yield a well-formed URI with zero rel occurrences.");
+        Assert.IsEmpty(RelValues(zero), "Absent rel filters MUST still yield a well-formed URI with zero rel occurrences.");
         Assert.HasCount(1, RelValues(one));
         Assert.HasCount(3, RelValues(many));
     }
@@ -185,7 +185,7 @@ internal sealed class WebFingerQueryConstructionTests
 
 
     /// <summary>
-    /// WF-2: the query is issued to the supplied <paramref name="host"/> verbatim — both in the common case
+    /// WF-2: the query is issued to the supplied host verbatim — both in the common case
     /// where the caller passes the resource's own host, and when the caller explicitly supplies a DIFFERENT
     /// host (an out-of-band override, per §4's "SHOULD query the host, unless … out-of-band information").
     /// </summary>
@@ -251,3 +251,4 @@ internal sealed class WebFingerQueryConstructionTests
         return result;
     }
 }
+

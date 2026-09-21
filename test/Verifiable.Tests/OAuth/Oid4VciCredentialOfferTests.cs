@@ -236,6 +236,25 @@ internal sealed class Oid4VciCredentialOfferTests
 
 
     /// <summary>
+    /// §4.1.1 <c>credential_issuer</c> (REQUIRED): "The URL of the Credential Issuer". An offer whose
+    /// <c>credential_issuer</c> is no URI reference at all (a scheme with no authority) is rejected
+    /// with the parser's own <see cref="ArgumentException"/> naming the member.
+    /// </summary>
+    [TestMethod]
+    public void CredentialIssuerThatIsNotAUrlIsRejected()
+    {
+        string offerJson =
+            "{\"credential_issuer\":\"http://\",\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}";
+
+        ArgumentException error = Assert.ThrowsExactly<ArgumentException>(
+            () => CredentialOfferSerializer.FromJson(offerJson),
+            "§4.1.1: credential_issuer is the URL of the Credential Issuer.");
+
+        Assert.Contains("credential_issuer", error.Message, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
     /// §4.1.2: the by-value deep link carries the URL-encoded offer JSON under
     /// <c>credential_offer</c>, decoding back to exactly <see cref="CredentialOfferSerializer.ToJson"/>.
     /// </summary>

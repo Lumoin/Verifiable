@@ -20,7 +20,7 @@ namespace Verifiable.Core.Resolvers;
 /// The composition is the analogue of an application host wiring its dependency graph: a deployment (or
 /// a test harness) supplies the concrete delegates and gets back a resolver that dispatches across
 /// <c>did:key</c>, <c>did:web</c>, <c>did:cheqd</c> and <c>did:peer</c>. Additional methods are appended
-/// through <paramref name="additionalMethods"/> rather than by editing this type, so new methods
+/// through the composition call's own additional-methods argument rather than by editing this type, so new methods
 /// (for example <c>did:webvh</c> or <c>did:ebsi</c>) register without touching the standard set.
 /// </para>
 /// </remarks>

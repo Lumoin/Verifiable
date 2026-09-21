@@ -55,10 +55,31 @@ namespace Verifiable.Tests.ValidationRules
         }
 
 
+        /// <summary>
+        /// The <c>did:key</c> <see href="https://w3c-ccg.github.io/did-method-key/#document-creation-algorithm">
+        /// document creation algorithm</see> builds each verification method identifier by concatenating the
+        /// DID with a hash character and a fragment (<c>{did}#{fragment}</c>). A verification method identifier
+        /// carrying no hash character at all has no fragment to compare against the DID's own key portion, so
+        /// <see cref="KeyDidValidationRules.ValidateFragmentIdentifierRepetitionAsync"/> must reject it.
+        /// </summary>
         [TestMethod]
-        public void KeyDidVerificationMethodMustContainHashtag()
+        public async Task KeyDidVerificationMethodMustContainHashtag()
         {
+            const string DocumentId = "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp";
 
+            var keyDid = new DidDocument
+            {
+                Id = new KeyDidMethod(DocumentId),
+                VerificationMethod =
+                [
+                    new VerificationMethod { Id = DocumentId, Type = "Ed25519VerificationKey2020" }
+                ]
+            };
+
+            var claims = await KeyDidValidationRules.ValidateFragmentIdentifierRepetitionAsync(keyDid, cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.HasCount(1, claims);
+            Assert.AreEqual(ClaimOutcome.Failure, claims[0].Outcome);
         }
 
 

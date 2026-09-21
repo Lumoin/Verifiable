@@ -16,6 +16,10 @@ namespace Verifiable.Server.Pipeline;
 /// </remarks>
 internal static class ServerContextKeys
 {
+    /// <summary>The fixed wiring view retained from admission through lease disposal.</summary>
+    public static string RequestServerKey { get; } = "server.request_wiring";
+
+
     /// <summary>Key for the capability of the matched endpoint. Value type: <see cref="CapabilityIdentifier"/>.</summary>
     public const string CapabilityKey = "server.capability";
 

@@ -2,6 +2,7 @@ using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
+using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
@@ -103,7 +104,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             Assert.IsTrue(mcAuthenticatorData.Flags.ExtensionDataIncluded, "a granted hmac-secret mc request must set the ED flag, on the wire.");
             IReadOnlyList<Fido2ExtensionOutput> mcOutputs = AuthenticatorExtensionOutputsCborReader.Read(mcAuthenticatorData.Extensions);
             Assert.IsTrue(
-                DecodeCborBoolean(FindOutput(mcOutputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecret)),
+                await DecodeHmacSecretSupportedAsync(FindOutput(mcOutputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecret), pool, cancellationToken).ConfigureAwait(false),
                 "the mc authData must carry \"hmac-secret\": true, on the wire.");
             credentialIdBytes = mcAuthenticatorData.AttestedCredentialData!.CredentialId.AsReadOnlySpan().ToArray();
         }
@@ -271,10 +272,11 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             Assert.IsTrue(mcAuthenticatorData.Flags.ExtensionDataIncluded, "a paired hmac-secret-mc mint must set the ED flag, on the wire.");
             IReadOnlyList<Fido2ExtensionOutput> mcOutputs = AuthenticatorExtensionOutputsCborReader.Read(mcAuthenticatorData.Extensions);
             Assert.IsTrue(
-                DecodeCborBoolean(FindOutput(mcOutputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecret)),
+                await DecodeHmacSecretSupportedAsync(FindOutput(mcOutputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecret), pool, cancellationToken).ConfigureAwait(false),
                 "the mc authData must also carry \"hmac-secret\": true alongside its own \"hmac-secret-mc\" output, on the wire.");
 
-            byte[] mcCiphertext = DecodeCborByteString(FindOutput(mcOutputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecretMc));
+            byte[] mcCiphertext = await DecodeHmacSecretEncryptedOutputAsync(
+                FindOutput(mcOutputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecretMc), WellKnownWebAuthnExtensionIdentifiers.HmacSecretMc, pool, cancellationToken).ConfigureAwait(false);
             mcDecrypted = await mcSession.DecryptHmacSecretOutputAsync(mcCiphertext, cancellationToken).ConfigureAwait(false);
             credentialIdBytes = mcAuthenticatorData.AttestedCredentialData!.CredentialId.AsReadOnlySpan().ToArray();
         }
@@ -462,7 +464,8 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
         IReadOnlyList<Fido2ExtensionOutput> outputs = AuthenticatorExtensionOutputsCborReader.Read(authenticatorData.Extensions);
-        byte[] ciphertext = DecodeCborByteString(FindOutput(outputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecret));
+        byte[] ciphertext = await DecodeHmacSecretEncryptedOutputAsync(
+            FindOutput(outputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecret), WellKnownWebAuthnExtensionIdentifiers.HmacSecret, pool, cancellationToken).ConfigureAwait(false);
         byte[] decrypted = await session.DecryptHmacSecretOutputAsync(ciphertext, cancellationToken).ConfigureAwait(false);
 
         return (decrypted, ciphertext);
@@ -563,12 +566,31 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     }
 
 
-    /// <summary>Decodes a CBOR boolean item's value (the wire form <see cref="AuthenticatorExtensionOutputsCborReader"/> hands back, still type-prefixed).</summary>
-    private static bool DecodeCborBoolean(ReadOnlyMemory<byte> encoded) =>
-        new CborReader(encoded, CborOptions.Ctap2Canonical).ReadBoolean();
+    /// <summary>
+    /// Decodes an <c>hmac-secret</c> authenticator extension output's still-encoded boolean through
+    /// <see cref="HmacSecretExtensionProcessor.ProcessRegistrationOutput"/> and returns the claim's
+    /// <see cref="HmacSecretSupportedContext.Supported"/> value.
+    /// </summary>
+    private static async Task<bool> DecodeHmacSecretSupportedAsync(ReadOnlyMemory<byte> encoded, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        var request = new ExtensionOutputProcessingRequest(WellKnownWebAuthnExtensionIdentifiers.HmacSecret, clientOutputJson: null, encoded, pool);
+        List<Claim> claims = await HmacSecretExtensionProcessor.ProcessRegistrationOutput(request, cancellationToken).ConfigureAwait(false);
+
+        return ((HmacSecretSupportedContext)claims[0].Context).Supported;
+    }
 
 
-    /// <summary>Decodes a CBOR byte-string item's raw content bytes (the wire form <see cref="AuthenticatorExtensionOutputsCborReader"/> hands back, still type/length-prefixed).</summary>
-    private static byte[] DecodeCborByteString(ReadOnlyMemory<byte> encoded) =>
-        new CborReader(encoded, CborOptions.Ctap2Canonical).ReadByteString();
+    /// <summary>
+    /// Decodes an <c>hmac-secret</c>/<c>hmac-secret-mc</c> authenticator extension output's
+    /// still-encoded value through <see cref="HmacSecretExtensionProcessor.ProcessAssertionOutput"/>
+    /// and returns the claim's <see cref="HmacSecretEncryptedOutputContext.EncryptedOutput"/> as a
+    /// private copy.
+    /// </summary>
+    private static async Task<byte[]> DecodeHmacSecretEncryptedOutputAsync(ReadOnlyMemory<byte> encoded, string identifier, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        var request = new ExtensionOutputProcessingRequest(identifier, clientOutputJson: null, encoded, pool);
+        List<Claim> claims = await HmacSecretExtensionProcessor.ProcessAssertionOutput(request, cancellationToken).ConfigureAwait(false);
+
+        return ((HmacSecretEncryptedOutputContext)claims[0].Context).EncryptedOutput.ToArray();
+    }
 }

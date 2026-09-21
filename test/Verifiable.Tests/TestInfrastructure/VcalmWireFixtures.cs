@@ -15,6 +15,14 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 internal static class VcalmWireFixtures
 {
+    /// <summary>The known <c>@context</c> a verifier checks <see cref="BuildCredential"/>'s output against.</summary>
+    internal static Context CredentialKnownContext { get; } =
+        Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
+
+    /// <summary>The known <c>@context</c> a verifier checks <see cref="SerializeUnproofedPresentation"/>'s output against.</summary>
+    internal static Context PresentationKnownContext { get; } = Context.FromIris(Context.Credentials20);
+
+
     /// <summary>Builds the fixed "ExampleAlumniCredential" test credential.</summary>
     /// <param name="issuerDid">The issuer DID.</param>
     /// <param name="credentialId">The credential's <c>id</c>, or <see langword="null"/> to omit it.</param>

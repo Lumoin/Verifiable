@@ -43,6 +43,10 @@ internal sealed class FederationEntityConfigurationEndpointTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
+    /// <summary>
+    /// Serves an entity configuration alongside the registration's other metadata endpoints.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-9.2">Federation §9.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task FullConfigurationServesAllWellKnownsSideBySide()
     {
@@ -65,12 +69,12 @@ internal sealed class FederationEntityConfigurationEndpointTests
         const string ClientId = "https://verifier.example.com";
         Uri verifierBaseUri = new("https://verifier.example.com");
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial verifierKeys = await app.RegisterFederationCapableClientAsync(
             ClientId,
             verifierBaseUri,
             federationEntityId,
             federationKeys,
-            capabilities);
+            capabilities).ConfigureAwait(false);
 
         //Wire the federation-metadata contribution: publish an
         //openid_relying_party metadata block that lists the verifier's JAR
@@ -78,24 +82,27 @@ internal sealed class FederationEntityConfigurationEndpointTests
         //configuration; the test pulls the JAR signing public key off the
         //already-registered VerifierKeyMaterial so chain validation paths
         //downstream can use it.
-        app.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            Dictionary<string, object> openIdRelyingPartyMetadata = new(StringComparer.Ordinal)
+            candidateIntegration.ContributeFederationMetadataAsync = (_, _, _) =>
             {
-                ["jwks"] = BuildJwksWithSingleEcKey(
-                    verifierKeys.SigningPublicKey,
-                    verifierKeys.SigningKeyId.Value),
-                ["client_name"] = "Full-configuration verifier"
-            };
-
-            return ValueTask.FromResult(new FederationEntityConfigurationContribution
-            {
-                Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+                Dictionary<string, object> openIdRelyingPartyMetadata = new(StringComparer.Ordinal)
                 {
-                    [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty] = openIdRelyingPartyMetadata
-                }
-            });
-        };
+                    ["jwks"] = BuildJwksWithSingleEcKey(
+                        verifierKeys.SigningPublicKey,
+                        verifierKeys.SigningKeyId.Value),
+                    ["client_name"] = "Full-configuration verifier"
+                };
+
+                return ValueTask.FromResult(new FederationEntityConfigurationContribution
+                {
+                    Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+                    {
+                        [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty] = openIdRelyingPartyMetadata
+                    }
+                });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -160,12 +167,12 @@ internal sealed class FederationEntityConfigurationEndpointTests
         const string ClientId = "https://p384-verifier.example.com";
         Uri baseUri = new("https://p384-verifier.example.com");
 
-        using VerifierKeyMaterial keys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial keys = await app.RegisterFederationCapableClientAsync(
             ClientId,
             baseUri,
             federationEntityId,
             federationKeys,
-            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode));
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -213,8 +220,8 @@ internal sealed class FederationEntityConfigurationEndpointTests
         const string ClientId = "https://op.example.com";
         Uri baseUri = new("https://op.example.com");
 
-        using VerifierKeyMaterial keys = app.RegisterFederationCapableClient(
-            ClientId, baseUri, federationEntityId, federationKeys, capabilities);
+        using VerifierKeyMaterial keys = await app.RegisterFederationCapableClientAsync(
+            ClientId, baseUri, federationEntityId, federationKeys, capabilities).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -236,6 +243,10 @@ internal sealed class FederationEntityConfigurationEndpointTests
     }
 
 
+    /// <summary>
+    /// Preserves application-contributed client registration types in provider metadata.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-5.1.3">Federation §5.1.3</see>.
+    /// </summary>
     [TestMethod]
     public async Task ApplicationContributedRegistrationTypesAreNotOverwritten()
     {
@@ -256,25 +267,28 @@ internal sealed class FederationEntityConfigurationEndpointTests
         const string ClientId = "https://op2.example.com";
         Uri baseUri = new("https://op2.example.com");
 
-        using VerifierKeyMaterial keys = app.RegisterFederationCapableClient(
-            ClientId, baseUri, federationEntityId, federationKeys, capabilities);
+        using VerifierKeyMaterial keys = await app.RegisterFederationCapableClientAsync(
+            ClientId, baseUri, federationEntityId, federationKeys, capabilities).ConfigureAwait(false);
 
-        app.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            Dictionary<string, object> openIdProviderMetadata = new(StringComparer.Ordinal)
+            candidateIntegration.ContributeFederationMetadataAsync = (_, _, _) =>
             {
-                [WellKnownFederationClaimNames.ClientRegistrationTypesSupported] =
-                    new List<object> { WellKnownFederationRegistrationTypeValues.Explicit }
-            };
-
-            return ValueTask.FromResult(new FederationEntityConfigurationContribution
-            {
-                Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+                Dictionary<string, object> openIdProviderMetadata = new(StringComparer.Ordinal)
                 {
-                    [WellKnownEntityTypeIdentifiers.OpenIdProvider] = openIdProviderMetadata
-                }
-            });
-        };
+                    [WellKnownFederationClaimNames.ClientRegistrationTypesSupported] =
+                        new List<object> { WellKnownFederationRegistrationTypeValues.Explicit }
+                };
+
+                return ValueTask.FromResult(new FederationEntityConfigurationContribution
+                {
+                    Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+                    {
+                        [WellKnownEntityTypeIdentifiers.OpenIdProvider] = openIdProviderMetadata
+                    }
+                });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -321,6 +335,10 @@ internal sealed class FederationEntityConfigurationEndpointTests
     }
 
 
+    /// <summary>
+    /// Emits each tenant's entity identity and verifies its configuration with that tenant's key.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1.1">Federation §3.1.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task PerTenantFederationConfigurationsAreIndependent()
     {
@@ -342,46 +360,49 @@ internal sealed class FederationEntityConfigurationEndpointTests
         Uri aliceEntityId = new("https://alice.example.com");
         Uri bobEntityId = new("https://bob.example.com");
 
-        using VerifierKeyMaterial aliceKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial aliceKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://alice.example.com",
             baseUri: new Uri("https://alice.example.com"),
             federationEntityId: aliceEntityId,
             federationSigningKeyPair: aliceFederationKeys,
-            baseCapabilities: baselineCapabilities);
+            baseCapabilities: baselineCapabilities).ConfigureAwait(false);
 
-        using VerifierKeyMaterial bobKeys = app.RegisterFederationCapableClient(
+        using VerifierKeyMaterial bobKeys = await app.RegisterFederationCapableClientAsync(
             clientId: "https://bob.example.com",
             baseUri: new Uri("https://bob.example.com"),
             federationEntityId: bobEntityId,
             federationSigningKeyPair: bobFederationKeys,
-            baseCapabilities: baselineCapabilities);
+            baseCapabilities: baselineCapabilities).ConfigureAwait(false);
 
         //Per-tenant metadata contribution dispatches on the requested
         //registration — Alice and Bob get different organization_name
         //claims. This proves queries flow through the AS pipeline at
         //request time and that mutation is per-call.
-        app.Server.OAuth().ContributeFederationMetadataAsync = (registration, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            string organizationName = string.Equals(
-                registration.FederationEntityId?.ToString(),
-                aliceEntityId.ToString(),
-                StringComparison.Ordinal)
-                    ? "Alice Verifier Co."
-                    : "Bob Verifier Inc.";
-
-            Dictionary<string, object> federationEntityMetadata = new(StringComparer.Ordinal)
+            candidateIntegration.ContributeFederationMetadataAsync = (registration, _, _) =>
             {
-                ["organization_name"] = organizationName
-            };
+                string organizationName = string.Equals(
+                    registration.FederationEntityId?.ToString(),
+                    aliceEntityId.ToString(),
+                    StringComparison.Ordinal)
+                        ? "Alice Verifier Co."
+                        : "Bob Verifier Inc.";
 
-            return ValueTask.FromResult(new FederationEntityConfigurationContribution
-            {
-                Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+                Dictionary<string, object> federationEntityMetadata = new(StringComparer.Ordinal)
                 {
-                    [WellKnownEntityTypeIdentifiers.FederationEntity] = federationEntityMetadata
-                }
-            });
-        };
+                    ["organization_name"] = organizationName
+                };
+
+                return ValueTask.FromResult(new FederationEntityConfigurationContribution
+                {
+                    Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
+                    {
+                        [WellKnownEntityTypeIdentifiers.FederationEntity] = federationEntityMetadata
+                    }
+                });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");

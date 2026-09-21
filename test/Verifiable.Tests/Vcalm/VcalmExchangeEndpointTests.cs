@@ -119,7 +119,7 @@ internal sealed class VcalmExchangeEndpointTests
     public async Task CreateExchangeYields201PendingState()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterExchange(app);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         using JsonDocument created = await CreateExchangeAsync(app, segment, "{}").ConfigureAwait(false);
         JsonElement root = created.RootElement;
@@ -142,7 +142,7 @@ internal sealed class VcalmExchangeEndpointTests
     public async Task GetExchangeProtocolsReturnsVcapiUrl()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterExchange(app);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -166,7 +166,7 @@ internal sealed class VcalmExchangeEndpointTests
     public async Task GetProtocolsOfUnknownExchangeYields404()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterExchange(app);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeProtocolsAsync(
             segment, "urn:uuid:never-created", [], TestContext.CancellationToken).ConfigureAwait(false);
@@ -187,7 +187,7 @@ internal sealed class VcalmExchangeEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterExchange(app, holder);
+        string segment = await RegisterExchangeAsync(app, holder).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -259,7 +259,7 @@ internal sealed class VcalmExchangeEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterExchange(app, holder);
+        string segment = await RegisterExchangeAsync(app, holder).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -314,7 +314,7 @@ internal sealed class VcalmExchangeEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterExchange(app, holder);
+        string segment = await RegisterExchangeAsync(app, holder).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -357,7 +357,7 @@ internal sealed class VcalmExchangeEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterExchange(app, holder);
+        string segment = await RegisterExchangeAsync(app, holder).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -390,7 +390,7 @@ internal sealed class VcalmExchangeEndpointTests
     public async Task GetStateOfUnknownExchangeYields404()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterExchange(app);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
             segment, "GET", "urn:uuid:never-created", jsonBody: null, [], TestContext.CancellationToken).ConfigureAwait(false);
@@ -408,7 +408,7 @@ internal sealed class VcalmExchangeEndpointTests
     public async Task ParticipateWithUnknownMemberYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterExchange(app);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -428,7 +428,7 @@ internal sealed class VcalmExchangeEndpointTests
     public async Task CreateExchangeWithNonJsonContentTypeYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterExchange(app);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         byte[] bytes = Encoding.UTF8.GetBytes("{}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
@@ -449,7 +449,7 @@ internal sealed class VcalmExchangeEndpointTests
     public async Task ParticipateAfterExpiryIsRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = RegisterExchange(app);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         //Create an exchange that expires one minute from now.
         string expires = TimeProvider.GetUtcNow().AddMinutes(1).ToString("o");
@@ -469,75 +469,95 @@ internal sealed class VcalmExchangeEndpointTests
 
     //Registers a tenant with the VcalmExchange capability and wires the exchange seams (the parsers,
     //the exchange-id -> flow-id resolver over the host's flow store, and the step-decision logic).
-    private string RegisterExchange(TestHostShell app)
+    private async Task<string> RegisterExchangeAsync(TestHostShell app)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, ExchangeCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, ExchangeCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        WireExchangeSeams(app, holder: null);
+        await WireExchangeSeamsAsync(app, holder: null).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }
 
 
-    private string RegisterExchange(TestHostShell app, HolderSigningContext holder)
+    private async Task<string> RegisterExchangeAsync(TestHostShell app, HolderSigningContext holder)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, ExchangeAndHolderCapabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, ExchangeAndHolderCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        WireExchangeSeams(app, holder);
+        await WireExchangeSeamsAsync(app, holder).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }
 
 
-    private static void WireExchangeSeams(TestHostShell app, HolderSigningContext? holder)
+    /// <summary>
+    /// Installs the workflow and exchange delegates used by the endpoint cases.
+    /// </summary>
+    private static async Task WireExchangeSeamsAsync(TestHostShell app, HolderSigningContext? holder)
     {
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         //§3.6.4 / §3.6.6: resolve the exchange id to its flow id by scanning the host's flow store for
         //the exchange flow state carrying the id (the production deployment keys a secondary index; the
         //test host already keys exchangeId -> flowId in SaveFlowStateAsync, but the read seam can derive
         //it from the flow store the shell exposes).
-        app.Server.Vcalm().ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
-            ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
+                ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        }).ConfigureAwait(false);
 
         //§3.6.5 step logic: on the empty initiating message request a DID Authentication presentation;
         //the holder's POSTed verifiablePresentation is verified by the engine (the AcceptPresentation
         //path the engine drives once it sees a presentation), and any later message completes.
-        app.Server.Vcalm().ResolveVcalmExchangeStepAsync = (exchangeId, message, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            if(message.VerifiablePresentation is not null)
+            candidateIntegration.ResolveVcalmExchangeStepAsync = (exchangeId, message, _, _) =>
             {
-                //A presented presentation is verified-and-accepted by the engine directly; the decision
-                //is only consulted for non-presentation messages.
-                return ValueTask.FromResult(VcalmExchangeStepDecision.AcceptPresentation("did-auth"));
-            }
+                if(message.VerifiablePresentation is not null)
+                {
+                    //A presented presentation is verified-and-accepted by the engine directly; the decision
+                    //is only consulted for non-presentation messages.
 
-            return ValueTask.FromResult(
-                VcalmExchangeStepDecision.RequestPresentation("did-auth", DidAuthQueryJson, domain: "exchange.verifier.test"));
-        };
+                    return ValueTask.FromResult(VcalmExchangeStepDecision.AcceptPresentation("did-auth"));
+                }
+
+                return ValueTask.FromResult(
+                    VcalmExchangeStepDecision.RequestPresentation("did-auth", DidAuthQueryJson, domain: "exchange.verifier.test"));
+            };
+        }).ConfigureAwait(false);
 
         if(holder is not null)
         {
             //The engine verifies the holder's presentation against the bound challenge / domain using
             //the §3.3.2 presentation-verify configuration (eddsa-jcs-2022 over the JCS canonicalizer and
             //the did:key resolver).
-            app.Server.Vcalm().VcalmExchangeVerification = new VcalmCredentialVerification
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
             {
-                Resolver = KeyDidResolverSeam,
-                Canonicalize = JcsCanonicalizer,
-                ContextResolver = null,
-                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-                SerializeCredential = SerializeCredential,
-                SerializePresentation = SerializePresentation,
-                SerializeProofOptions = SerializeProofOptions,
-                Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-                MemoryPool = Pool
-            };
+                candidateIntegration.VcalmExchangeVerification = new VcalmCredentialVerification
+                {
+                    Resolver = KeyDidResolverSeam,
+                    Canonicalize = JcsCanonicalizer,
+                    ContextResolver = null,
+                    KnownContext = Context.FromIris(Context.Credentials20),
+                    DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                    SerializeCredential = SerializeCredential,
+                    SerializePresentation = SerializePresentation,
+                    SerializeProofOptions = SerializeProofOptions,
+                    Decoder = TestSetup.Base58Decoder,
+                    ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                    MemoryPool = Pool
+                };
+            }).ConfigureAwait(false);
 
-            app.Server.Vcalm().VcalmPresentationSigning = holder.Signing;
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.VcalmPresentationSigning = holder.Signing;
+            }).ConfigureAwait(false);
         }
     }
 

@@ -103,7 +103,8 @@ public static class WebPlusDidResolver
 
 
     /// <summary>
-    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the BLAKE3-default <see cref="Build"/> overload.
+    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the BLAKE3-default
+    /// <see cref="Build(OutboundTransportDelegate, WebPlusDidDocumentParser, WebPlusUpdateRuleParser, WebPlusProofExtractor, WebPlusJcsCanonicalizer, WebPlusDocumentDeserializer, EncodeDelegate, DecodeDelegate, DecodeDelegate, BaseMemoryPool, TimeProvider)"/> overload.
     /// </summary>
     /// <returns>The registered digest delegate.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no <see cref="ComputeDigestDelegate"/> is registered.</exception>
@@ -399,7 +400,8 @@ public static class WebPlusDidResolver
             //queried on a deactivated DID still returns its DIDDoc with deactivated:true (handled above).
             if(isDeactivated)
             {
-                return DidResolutionResult.SuccessDeactivated(metadata, contentType: DidDocumentMediaType);
+                return DidResolutionResult.SuccessDeactivated(
+                    metadata, contentType: DidDocumentMediaType, freshness: HttpCacheFreshness.Compute(microledgerResponse));
             }
 
             DidDocument? document;
@@ -424,7 +426,8 @@ public static class WebPlusDidResolver
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
-            return DidResolutionResult.Success(document, metadata, contentType: DidDocumentMediaType);
+            return DidResolutionResult.Success(
+                document, metadata, contentType: DidDocumentMediaType, freshness: HttpCacheFreshness.Compute(microledgerResponse));
         };
     }
 

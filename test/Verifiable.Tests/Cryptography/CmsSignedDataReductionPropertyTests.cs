@@ -88,7 +88,7 @@ internal sealed class CmsSignedDataReductionPropertyTests
             worlds[sample.worldIndex],
             sample.signerSelector % signerCounts[sample.worldIndex],
             sample.attributeCount,
-            sample.valueLength));
+            sample.valueLength), threads: CsCheckSampling.Threads);
     }
 
 
@@ -122,7 +122,7 @@ internal sealed class CmsSignedDataReductionPropertyTests
             worlds[sample.worldIndex],
             sample.attributeCount,
             sample.valueLength,
-            sample.removalMask));
+            sample.removalMask), threads: CsCheckSampling.Threads);
     }
 
 

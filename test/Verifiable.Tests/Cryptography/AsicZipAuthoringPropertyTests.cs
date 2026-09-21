@@ -43,7 +43,7 @@ internal sealed class AsicZipAuthoringPropertyTests
             using PooledMemory second = AsicZipAuthoring.Write(context, BaseMemoryPool.Shared);
 
             return first.AsReadOnlySpan().SequenceEqual(second.AsReadOnlySpan());
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -84,7 +84,7 @@ internal sealed class AsicZipAuthoringPropertyTests
             }
 
             return true;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -109,7 +109,7 @@ internal sealed class AsicZipAuthoringPropertyTests
                 AsicZipStructureOracle.MediaTypeAtOffset38(written.AsReadOnlySpan()),
                 context.MediaType,
                 StringComparison.Ordinal);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

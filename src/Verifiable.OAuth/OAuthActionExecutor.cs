@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Foundation.Automata;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth;
 
@@ -30,17 +29,27 @@ namespace Verifiable.OAuth;
 /// <see cref="FlowState.NextAction"/> property.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("OAuthActionExecutor({handlers.Count} handlers)")]
-public sealed class OAuthActionExecutor
+[DebuggerDisplay("OAuthActionExecutor({Handlers.Count} handlers)")]
+public sealed class OAuthActionExecutor: WiringComponent
 {
-    //Keyed by the concrete OAuthAction subtype. Each value is a delegate
-    //that accepts the action as OAuthAction and downcasts internally.
-    private Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> Handlers { get; } = [];
+    /// <summary>Handlers keyed by their concrete action type and adapted to the common action shape.</summary>
+    private Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> Handlers { get; set; } = [];
+
+
+    /// <summary>Copies registered handlers into an independent alteration candidate.</summary>
+    protected override WiringComponent CloneCore()
+    {
+        OAuthActionExecutor copy = (OAuthActionExecutor)base.CloneCore();
+        copy.Handlers = new(Handlers);
+
+        return copy;
+    }
 
 
     /// <summary>
     /// Registers a handler for a specific <see cref="OAuthAction"/> subtype.
     /// </summary>
+    /// <remarks>Serving registration requires an alteration candidate; a live call throws a named configuration fault.</remarks>
     /// <typeparam name="TAction">The concrete action type this handler processes.</typeparam>
     /// <param name="handler">
     /// The handler delegate. Receives the action already downcast to
@@ -52,18 +61,37 @@ public sealed class OAuthActionExecutor
     public void Register<TAction>(ActionHandlerDelegate<TAction> handler)
         where TAction : OAuthAction
     {
-        ArgumentNullException.ThrowIfNull(handler);
-
-        //Wrap the typed delegate so the dictionary stores a uniform signature.
-        //The downcast is safe because ExecuteAsync dispatches by typeof(action).
-        if(!Handlers.TryAdd(
-            typeof(TAction),
-            (action, context, ct) => handler((TAction)action, context, ct)))
+        lock(MutationLock)
         {
-            throw new ArgumentException(
-                $"A handler is already registered for '{typeof(TAction).Name}'.",
-                nameof(handler));
+            EnsureMutable();
+            ArgumentNullException.ThrowIfNull(handler);
+
+            //Wrap the typed delegate so the dictionary stores a uniform signature.
+            //The downcast is safe because ExecuteAsync dispatches by typeof(action).
+            if(!Handlers.TryAdd(
+                typeof(TAction),
+                (action, context, ct) => handler((TAction)action, context, ct)))
+            {
+                throw new ArgumentException(
+                    $"A handler is already registered for '{typeof(TAction).Name}'.",
+                    nameof(handler));
+            }
         }
+    }
+
+
+    /// <summary>Whether a handler is registered for <typeparamref name="TAction"/>.</summary>
+    /// <remarks>
+    /// Lets an endpoint that only sometimes needs a specific action fail closed with a graceful
+    /// response before invoking <see cref="ExecuteAsync"/>, rather than letting its unhandled-action
+    /// <see cref="InvalidOperationException"/> propagate out of a candidate composition that validated
+    /// successfully but never wired this handler.
+    /// </remarks>
+    /// <typeparam name="TAction">The concrete action type to check.</typeparam>
+    public bool IsRegistered<TAction>() where TAction : OAuthAction
+    {
+
+        return Handlers.ContainsKey(typeof(TAction));
     }
 
 
@@ -75,7 +103,7 @@ public sealed class OAuthActionExecutor
     /// <param name="context">
     /// The per-request context bag. Handlers reach the active
     /// <see cref="EndpointServer"/> via
-    /// <see cref="ExchangeContextServerExtensions.Server"/>.
+    /// <c>ExchangeContextServerExtensions.RequestServer</c>.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="InvalidOperationException">

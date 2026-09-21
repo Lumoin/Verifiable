@@ -16,7 +16,7 @@ namespace Verifiable.Server;
 /// instances rather than mutating in place. Configuration changes happen by
 /// constructing a new <see cref="ServerConfiguration"/> (which carries a new
 /// <see cref="EndpointBuilderSet"/>) and applying it via
-/// <see cref="EndpointServer.ApplyConfiguration"/>.
+/// the candidate in <see cref="EndpointServer.RequestAlterationAsync"/>.
 /// </para>
 /// <para>
 /// The set composes naturally: <c>WellKnownEndpointBuilders.OAuth20</c>
@@ -33,12 +33,13 @@ namespace Verifiable.Server;
 /// The set is fully immutable. A single instance is safe for concurrent
 /// reads. Configuration mutation happens through atomic reference swaps on
 /// <see cref="EndpointServer.Configuration"/>, never by mutating an
-/// existing set.
+/// existing set. Builder delegate targets remain application-owned and require synchronization.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EndpointBuilderSet Count={Count}")]
 public sealed class EndpointBuilderSet: IReadOnlyList<EndpointBuilderDelegate>
 {
+    /// <summary>The ordered snapshot copied by the constructor so caller array edits cannot change membership.</summary>
     private EndpointBuilderDelegate[] Builders { get; }
 
 
@@ -58,12 +59,19 @@ public sealed class EndpointBuilderSet: IReadOnlyList<EndpointBuilderDelegate>
     /// during chain assembly.
     /// </param>
     /// <exception cref="System.ArgumentNullException">
-    /// Thrown when <paramref name="builders"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="builders"/>, or one of its members, is <see langword="null"/>.
     /// </exception>
     public EndpointBuilderSet(IEnumerable<EndpointBuilderDelegate> builders)
     {
         ArgumentNullException.ThrowIfNull(builders);
         Builders = builders.ToArray();
+        for(int i = 0; i < Builders.Length; i++)
+        {
+            if(Builders[i] is null)
+            {
+                throw new ArgumentNullException(nameof(builders), $"EndpointBuilderSet cannot carry a null builder at index {i}.");
+            }
+        }
     }
 
 
@@ -82,6 +90,7 @@ public sealed class EndpointBuilderSet: IReadOnlyList<EndpointBuilderDelegate>
     /// The number of builders in the set.
     /// </summary>
     public int Count => Builders.Length;
+
 
     /// <summary>
     /// The builder at the given position.
@@ -106,7 +115,9 @@ public sealed class EndpointBuilderSet: IReadOnlyList<EndpointBuilderDelegate>
         {
             next[i] = Builders[i];
         }
+
         next[Builders.Length] = builder;
+
         return new EndpointBuilderSet(next);
     }
 
@@ -125,10 +136,13 @@ public sealed class EndpointBuilderSet: IReadOnlyList<EndpointBuilderDelegate>
         ArgumentNullException.ThrowIfNull(other);
         if(other.Count == 0)
         {
+
             return this;
         }
+
         if(Count == 0)
         {
+
             return other;
         }
 
@@ -137,16 +151,19 @@ public sealed class EndpointBuilderSet: IReadOnlyList<EndpointBuilderDelegate>
         {
             next[i] = Builders[i];
         }
+
         for(int j = 0; j < other.Builders.Length; j++)
         {
             next[Builders.Length + j] = other.Builders[j];
         }
+
         return new EndpointBuilderSet(next);
     }
 
 
     /// <inheritdoc/>
     public IEnumerator<EndpointBuilderDelegate> GetEnumerator() => ((IEnumerable<EndpointBuilderDelegate>)Builders).GetEnumerator();
+
 
     /// <inheritdoc/>
     IEnumerator IEnumerable.GetEnumerator() => Builders.GetEnumerator();

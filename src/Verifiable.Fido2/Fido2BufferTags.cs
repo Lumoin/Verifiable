@@ -19,7 +19,7 @@ public static class Fido2BufferTags
 {
     /// <summary>
     /// Buffer kind for the <c>largeBlob</c> extension's decoded <c>blob</c> payload bytes — a
-    /// <see cref="System.Text.Json"/>-allocated array wrapped rather than copied, per
+    /// <c>System.Text.Json</c>-allocated array wrapped rather than copied, per
     /// <see cref="TaggedMemory{T}"/>'s own convention.
     /// </summary>
     /// <remarks>
@@ -417,4 +417,42 @@ public static class Fido2BufferTags
     /// <see cref="AndroidKeyAttestationStatementKind"/>.
     /// </summary>
     public static Tag AndroidKeyAttestationStatementPayload { get; } = Tag.Create(AndroidKeyAttestationStatementKind);
+
+    /// <summary>
+    /// Buffer kind for a <c>prf</c> extension evaluation salt — one of
+    /// <see cref="Fido2PrfValues.First"/>/<see cref="Fido2PrfValues.Second"/>, the relying party's own
+    /// input bytes, not a secret.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication Level 3,
+    /// section 10.1.4: Pseudo-random function extension (prf)</see>.
+    /// </remarks>
+    public static BufferKind PrfValueKind { get; } = BufferKind.Create(1038);
+
+    /// <summary>
+    /// Tag for a <c>prf</c> extension evaluation salt, carrying <see cref="PrfValueKind"/>.
+    /// </summary>
+    public static Tag PrfValue { get; } = Tag.Create(PrfValueKind);
+
+    /// <summary>
+    /// Buffer kind for one decoded <c>prf</c> extension result — <c>results.first</c> or
+    /// <c>results.second</c>, the pseudo-random function's 32-byte secret output that
+    /// <c>Verifiable.Json.PrfResultsJsonReader</c> decodes straight into pooled memory.
+    /// Distinct from <see cref="PrfValueKind"/>, which tags the relying party's OWN evaluation
+    /// salts: this kind tags the authenticator's SECRET output, never the caller's own input.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication Level 3,
+    /// section 10.1.4: Pseudo-random function extension (prf)</see>.
+    /// </remarks>
+    public static BufferKind PrfResultKind { get; } = BufferKind.Create(1039);
+
+    /// <summary>
+    /// Tag for one decoded <c>prf</c> extension result, carrying <see cref="PrfResultKind"/>. Used
+    /// on the <see cref="Verifiable.Cryptography.SymmetricKeyMemory"/> carriers
+    /// <see cref="Fido2PrfResults.First"/> and <see cref="Fido2PrfResults.Second"/> hold, so a
+    /// debugger or an audit trail can tell a PRF secret apart from any other pooled buffer this
+    /// layer tags.
+    /// </summary>
+    public static Tag PrfResult { get; } = Tag.Create(PrfResultKind);
 }

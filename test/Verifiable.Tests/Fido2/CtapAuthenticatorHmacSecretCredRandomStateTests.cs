@@ -18,7 +18,7 @@ namespace Verifiable.Tests.Fido2;
 /// </summary>
 /// <remarks>
 /// CredRandom is never echoed on any response (
-/// <see cref="CtapAuthenticatorTransitions.BuildCredentialEnumerationResponse"/>'s documented omission
+/// <c>CtapAuthenticatorTransitions.BuildCredentialEnumerationResponse</c>'s documented omission
 /// of it despite echoing <c>largeBlobKey</c>), so decoding wire bytes alone cannot observe it — unlike
 /// <see cref="CtapAuthenticatorLargeBlobKeyExtensionTests"/>'s wire-only convention, this file subscribes
 /// to <see cref="CtapAuthenticatorSimulator"/>'s <see cref="TraceEntry{TState, TInput}.StateAfter"/>

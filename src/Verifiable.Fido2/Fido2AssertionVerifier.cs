@@ -192,6 +192,9 @@ public static class Fido2AssertionVerifier
     /// <paramref name="clientDataHash"/> and fills it with their concatenation — the bytes the
     /// assertion signature covers.
     /// </summary>
+    /// <param name="authenticatorData">The authenticator data bytes, placed first in the concatenation.</param>
+    /// <param name="clientDataHash">The client data hash, placed after <paramref name="authenticatorData"/>.</param>
+    /// <param name="pool">Memory pool the returned owner is rented from.</param>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
     private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {

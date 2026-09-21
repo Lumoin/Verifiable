@@ -44,7 +44,7 @@ public static class VcalmStatusEndpoints
     {
         List<EndpointCandidate> candidates = [];
 
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmStatus))
         {
             //§C.3 is the §1.3 binding status-service MUST; it materializes only when the parse seam
@@ -78,7 +78,11 @@ public static class VcalmStatusEndpoints
     };
 
 
-    //§C.3 POST /credentials/status — the §1.3 binding status-service MUST.
+    /// <summary>
+    /// Builds the endpoint for §C.3 POST /credentials/status.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildUpdateStatus() =>
         new()
         {
@@ -92,7 +96,7 @@ public static class VcalmStatusEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -137,6 +141,7 @@ public static class VcalmStatusEndpoints
                 ServerHttpResponse response = outcome switch
                 {
                     VcalmStatusUpdateOutcome.Updated => ServerHttpResponse.Ok(),
+                    VcalmStatusUpdateOutcome.NotFound => ServerHttpResponse.NotFound(),
                     _ => ServerHttpResponse.NotFound()
                 };
 
@@ -148,7 +153,11 @@ public static class VcalmStatusEndpoints
         };
 
 
-    //§C.1 POST /status-lists (a MAY).
+    /// <summary>
+    /// Builds the endpoint for §C.1 POST /status-lists.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildCreateStatusList() =>
         new()
         {
@@ -162,7 +171,7 @@ public static class VcalmStatusEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -196,7 +205,11 @@ public static class VcalmStatusEndpoints
         };
 
 
-    //§C.2 GET /status-lists/{id} (a MAY).
+    /// <summary>
+    /// Builds the endpoint for §C.2 GET /status-lists/{id}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildGetStatusList() =>
         new()
         {
@@ -211,7 +224,7 @@ public static class VcalmStatusEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 string? statusListId = ExtractStatusListId(context);

@@ -299,8 +299,8 @@ public static class CoseSerialization
     /// </para>
     /// <para>
     /// <strong>Payload: detached-aware via <see cref="CoseSignMessage.IsDetachedPayload"/>.</strong>
-    /// RFC 9052 §4.1's <c>payload : bstr / nil</c> is written as the CBOR <c>nil</c> sentinel when
-    /// <paramref name="message"/> reports a detached payload, and as a <c>bstr</c> (verbatim, including a
+    /// RFC 9052 §4.1's <c>payload : bstr / nil</c> is written as the CBOR <c>nil</c> sentinel when the
+    /// <c>message</c> reports a detached payload, and as a <c>bstr</c> (verbatim, including a
     /// genuinely zero-length attached payload) otherwise — the same producer-side distinction
     /// <c>CBAdESSignatureSerialization.SerializeCBAdESSign1</c> makes explicit via its own <c>payloadIsDetached</c>
     /// parameter for <c>COSE_Sign1</c>; this generic, non-CBAdES-specific <c>COSE_Sign</c> substrate has no
@@ -353,13 +353,9 @@ public static class CoseSerialization
         return new EncodedCoseSign(owner, CryptoTags.CoseEncodedSign);
 
 
-        /// <summary>
-        /// Writes a COSE unprotected-header map (empty when <paramref name="header"/> is
-        /// <see langword="null"/> or empty) — the shape every layer of COSE_Sign (body and
-        /// every signer) shares, per RFC 9052 §3's <c>Headers</c> CDDL group.
-        /// </summary>
-        /// <param name="writer">The CBOR writer positioned to write the map.</param>
-        /// <param name="header">The unprotected header map, or <see langword="null"/>.</param>
+        //Writes a COSE unprotected-header map to writer (empty when header is null or empty) — the
+        //shape every layer of COSE_Sign (body and every signer) shares, per RFC 9052 §3's Headers
+        //CDDL group.
         static void WriteUnprotectedHeaderMap(CborWriter writer, IReadOnlyDictionary<int, object>? header)
         {
             if(header is not null && header.Count > 0)
@@ -505,13 +501,9 @@ public static class CoseSerialization
         }
 
 
-        /// <summary>
-        /// Reads a COSE unprotected-header map — the shape every layer of COSE_Sign (body
-        /// and every signer) shares, per RFC 9052 §3's <c>Headers</c> CDDL group. Fails
-        /// closed on an indefinite-length map (RFC 9052 §9 requires definite lengths).
-        /// </summary>
-        /// <param name="reader">The CBOR reader positioned at the map.</param>
-        /// <returns>The decoded map, or <see langword="null"/> when empty.</returns>
+        //Reads a COSE unprotected-header map from reader, returning null when empty — the shape every
+        //layer of COSE_Sign (body and every signer) shares, per RFC 9052 §3's Headers CDDL group.
+        //Fails closed on an indefinite-length map (RFC 9052 §9 requires definite lengths).
         static Dictionary<int, object>? ReadUnprotectedHeaderMap(CborReader reader)
         {
             int? mapLength = reader.ReadStartMap();
@@ -764,12 +756,9 @@ public static class CoseSerialization
         }
 
 
-        /// <summary>
-        /// Reads a COSE unprotected-header map for a countersignature's own COSE_Signature
-        /// shape — the same <c>Headers</c> CDDL group every COSE layer shares (RFC 9052 §3).
-        /// </summary>
-        /// <param name="mapReader">The CBOR reader positioned at the map.</param>
-        /// <returns>The decoded map, or <see langword="null"/> when empty.</returns>
+        //Reads a COSE unprotected-header map from mapReader for a countersignature's own
+        //COSE_Signature shape, returning null when empty — the same Headers CDDL group every COSE
+        //layer shares (RFC 9052 §3).
         static Dictionary<int, object>? ReadCounterSignatureUnprotectedHeaderMap(CborReader mapReader)
         {
             int? mapLength = mapReader.ReadStartMap();
@@ -908,12 +897,8 @@ public static class CoseSerialization
         return new EncodedCoseCounterSignature(owner, CryptoTags.CoseEncodedCounterSignature);
 
 
-        /// <summary>
-        /// Writes a COSE unprotected-header map for a countersignature's own COSE_Signature
-        /// shape (empty when <paramref name="header"/> is <see langword="null"/> or empty).
-        /// </summary>
-        /// <param name="writer">The CBOR writer positioned to write the map.</param>
-        /// <param name="header">The unprotected header map, or <see langword="null"/>.</param>
+        //Writes a COSE unprotected-header map to writer for a countersignature's own COSE_Signature
+        //shape (empty when header is null or empty).
         static void WriteCounterSignatureUnprotectedHeaderMap(CborWriter writer, IReadOnlyDictionary<int, object>? header)
         {
             if(header is not null && header.Count > 0)

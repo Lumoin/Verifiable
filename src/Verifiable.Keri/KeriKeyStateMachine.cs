@@ -143,7 +143,7 @@ public static class KeriKeyStateMachine
     /// next-key commitments, and backers are replaced and the sequence advances. This is the apply step a key
     /// event log replayer runs once the rotation's signatures and pre-rotation commitments have already been
     /// verified in its proof-validation step; it needs no digest seam. Callers that have not separately verified
-    /// pre-rotation MUST use <see cref="Rotate"/> instead.
+    /// pre-rotation MUST use <see cref="RotateAsync"/> instead.
     /// </summary>
     /// <param name="state">The current key state.</param>
     /// <param name="rotation">The rotation event to roll forward.</param>

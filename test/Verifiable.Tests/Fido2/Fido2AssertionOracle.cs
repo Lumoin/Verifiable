@@ -14,7 +14,7 @@ namespace Verifiable.Tests.Fido2;
 /// <summary>
 /// A minted WebAuthn L3 §7.2 authentication assertion's wire-shaped output: the raw
 /// <c>authData</c> and <c>clientDataJSON</c> bytes, and the detached signature over their
-/// transcript. Owns the pooled <see cref="Cryptography.Signature"/>; dispose to release it.
+/// transcript. Owns the pooled <see cref="Verifiable.Cryptography.Signature"/>; dispose to release it.
 /// </summary>
 /// <remarks>
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web Authentication

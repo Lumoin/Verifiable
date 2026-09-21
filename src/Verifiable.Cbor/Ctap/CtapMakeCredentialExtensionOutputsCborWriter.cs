@@ -22,9 +22,9 @@ namespace Verifiable.Cbor.Ctap;
 /// <c>hmac-secret</c>'s name prefix, purely because it is the longest key. Writing the four slots in
 /// exactly this fixed order whenever each is present is sufficient to satisfy the canonical sort rule —
 /// no run-time sort is needed, mirroring <see cref="CtapGetInfoResponseCborWriter"/>'s own fixed-order
-/// convention. When only <paramref name="credProtect"/>/<paramref name="minPinLength"/> are non-null, the
+/// convention. When only <c>credProtect</c>/<c>minPinLength</c> are non-null, the
 /// emitted bytes are BYTE-IDENTICAL to a plain two-slot encoding of just those two values —
-/// <paramref name="hmacSecret"/>/<paramref name="hmacSecretMc"/> contribute no map entry
+/// <c>hmacSecret</c>/<c>hmacSecretMc</c> contribute no map entry
 /// when absent, so their presence in this four-slot signature never perturbs the two-slot case's bytes.
 /// </para>
 /// <para>

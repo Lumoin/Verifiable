@@ -40,8 +40,8 @@ internal sealed class TokenIntrospectionJwtResponseTests
     public async Task SignedResponseCarriesRfc7662MembersInsideTokenIntrospectionClaim()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterSigningCapableResourceServer(host);
-        WireActiveToken(host);
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
+        await WireActiveTokenAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchIntrospectionAsync(
             host, material, acceptJwt: true).ConfigureAwait(false);
@@ -96,28 +96,32 @@ internal sealed class TokenIntrospectionJwtResponseTests
     public async Task SignedResponseCarriesAuthorizationDetailsInsideTheClaim()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterSigningCapableResourceServer(host);
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(new TokenIntrospectionResult
-            {
-                IsActive = true,
-                Scope = "credential",
-                AuthorizationDetails =
-                [
-                    new AuthorizationDetail
-                    {
-                        Type = "openid_credential",
-                        ExtensionData = new Dictionary<string, string>(StringComparer.Ordinal)
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult
+                {
+                    IsActive = true,
+                    Scope = "credential",
+                    AuthorizationDetails =
+                    [
+                        new AuthorizationDetail
                         {
-                            ["credential_configuration_id"] = "\"UniversityDegree_dc_sd_jwt\"",
-                            ["credential_identifiers"] = "[\"CivilEngineeringDegree-2026\"]"
+                            Type = "openid_credential",
+                            ExtensionData = new Dictionary<string, string>(StringComparer.Ordinal)
+                            {
+                                ["credential_configuration_id"] = "\"UniversityDegree_dc_sd_jwt\"",
+                                ["credential_identifiers"] = "[\"CivilEngineeringDegree-2026\"]"
+                            }
                         }
-                    }
-                ]
-            });
+                    ]
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchIntrospectionAsync(
             host, material, acceptJwt: true).ConfigureAwait(false);
@@ -138,15 +142,23 @@ internal sealed class TokenIntrospectionJwtResponseTests
     }
 
 
+    /// <summary>
+    /// An inactive-token introspection claim contains only active set to false.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9701#section-4">RFC 9701 §4</see>.
+    /// </summary>
     [TestMethod]
     public async Task InactiveTokenDisclosesOnlyActiveFalseInsideTheClaim()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterSigningCapableResourceServer(host);
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchIntrospectionAsync(
             host, material, acceptJwt: true).ConfigureAwait(false);
@@ -173,9 +185,9 @@ internal sealed class TokenIntrospectionJwtResponseTests
     {
         await using TestHostShell host = new(TimeProvider);
         //A baseline registration WITHOUT an IntrospectionResponseSigning key.
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, IntrospectionCapabilities);
-        WireActiveToken(host);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await WireActiveTokenAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchIntrospectionAsync(
             host, material, acceptJwt: true).ConfigureAwait(false);
@@ -189,8 +201,8 @@ internal sealed class TokenIntrospectionJwtResponseTests
     public async Task PlainJsonRemainsTheDefaultWithoutTheAcceptHeader()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterSigningCapableResourceServer(host);
-        WireActiveToken(host);
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
+        await WireActiveTokenAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchIntrospectionAsync(
             host, material, acceptJwt: false).ConfigureAwait(false);
@@ -212,10 +224,10 @@ internal sealed class TokenIntrospectionJwtResponseTests
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
 
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, capabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, capabilities).ConfigureAwait(false);
         //The fail-closed candidate gate keeps the introspection endpoint off the chain
         //until its seams are wired; the chain presence is what the advertisement keys on.
-        WireActiveToken(host);
+        await WireActiveTokenAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse unkeyed = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(200, unkeyed.StatusCode, unkeyed.Body);
@@ -224,7 +236,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
             unkeyed.Body,
             "Without a response-signing key the algorithms must not be advertised.");
 
-        EnableIntrospectionSigning(host, material);
+        await EnableIntrospectionSigningAsync(host, material).ConfigureAwait(false);
 
         ServerHttpResponse keyed = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(200, keyed.StatusCode, keyed.Body);
@@ -235,39 +247,46 @@ internal sealed class TokenIntrospectionJwtResponseTests
     }
 
 
-    private static VerifierKeyMaterial RegisterSigningCapableResourceServer(TestHostShell host)
+    private static async Task<VerifierKeyMaterial> RegisterSigningCapableResourceServerAsync(TestHostShell host)
     {
-        VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, IntrospectionCapabilities);
-        EnableIntrospectionSigning(host, material);
+        VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await EnableIntrospectionSigningAsync(host, material).ConfigureAwait(false);
 
         return material;
     }
 
 
-    private static void EnableIntrospectionSigning(TestHostShell host, VerifierKeyMaterial material)
+    private static async Task EnableIntrospectionSigningAsync(TestHostShell host, VerifierKeyMaterial material)
     {
-        host.UpdateSigningKeys(
+        await host.UpdateSigningKeysAsync(
             material.Registration.TenantId.Value,
             material.Registration.SigningKeys.ToImmutableDictionary().Add(
                 KeyUsageContext.IntrospectionResponseSigning,
-                new SigningKeySet { Current = [material.SigningKeyId] }));
+                new SigningKeySet { Current = [material.SigningKeyId] })).ConfigureAwait(false);
     }
 
 
-    private static void WireActiveToken(TestHostShell host)
+    /// <summary>
+    /// Installs an active-token introspection result through a requested alteration.
+    /// </summary>
+    private static async Task WireActiveTokenAsync(TestHostShell host)
     {
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(new TokenIntrospectionResult
-            {
-                IsActive = true,
-                Scope = "read write",
-                TokenType = "Bearer",
-                Subject = "Z5O3upPC88QrAjx00dis",
-                JwtId = "token-jti-1"
-            });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult
+                {
+                    IsActive = true,
+                    Scope = "read write",
+                    TokenType = "Bearer",
+                    Subject = "Z5O3upPC88QrAjx00dis",
+                    JwtId = "token-jti-1"
+                });
+        }).ConfigureAwait(false);
     }
 
 

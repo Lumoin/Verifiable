@@ -205,14 +205,10 @@ public sealed class CBAdESAlternativeMechanismDisclosureRegistry
             throw new ArgumentException($"A disclosure is already registered for label '{label}'.", nameof(label));
         }
 
-        /// <summary>
-        /// Determines whether <paramref name="candidate"/> is one of this document's own ten profiled
-        /// <c>UHeaderInstance</c> arms — Table 8's seven (labels <c>1</c>-<c>7</c>) plus the RFC 9338
-        /// counter-signature pair (<c>11</c>/<c>12</c>) and the RFC 9360 <c>x5chain</c> arm (<c>33</c>), per
-        /// <see cref="CBAdESUnsignedHeaderElement"/>'s own label constants.
-        /// </summary>
-        /// <param name="candidate">The label to classify.</param>
-        /// <returns><see langword="true"/> when <paramref name="candidate"/> names a profiled arm.</returns>
+        //Determines whether candidate is one of this document's own ten profiled UHeaderInstance arms —
+        //Table 8's seven (labels 1-7) plus the RFC 9338 counter-signature pair (11/12) and the RFC 9360
+        //x5chain arm (33), per CBAdESUnsignedHeaderElement's own label constants; true when candidate
+        //names a profiled arm.
         static bool IsProfiledLabel(CBAdESUnsignedHeaderElementLabel candidate) => candidate switch
         {
             CBAdESUnsignedHeaderElementIntegerLabel

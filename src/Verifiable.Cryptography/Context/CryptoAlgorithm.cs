@@ -497,6 +497,23 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm Blake3 { get; } = new CryptoAlgorithm(33);
 
 
+    /// <summary>
+    /// XChaCha20-Poly1305, the AEAD construction with a 256-bit key, a 192-bit nonce, and a
+    /// 128-bit tag defined by
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-xchacha-03">draft-irtf-cfrg-xchacha-03</see>
+    /// over the ChaCha20-Poly1305 construction in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8439">RFC 8439</see>.
+    /// </summary>
+    /// <remarks>
+    /// Identifies symmetric key material and the values produced under it. The <see cref="Purpose"/>
+    /// component of a <see cref="Tag"/> distinguishes the role of the bytes. A content key derived
+    /// through a key agreement is labelled by the agreement's own identifier instead (see
+    /// <see cref="CryptoTags.Xc20pCek"/> for the X25519 ECDH-ES case); this identifier names a key
+    /// that reaches its holder by no key agreement. The numeric identifier follows Blake3 (33).
+    /// </remarks>
+    public static CryptoAlgorithm XChaCha20Poly1305 { get; } = new CryptoAlgorithm(34);
+
+
     private static List<CryptoAlgorithm> RegisteredAlgorithms { get; } = [Rsa2048];
 
 
@@ -682,6 +699,7 @@ public static class CryptoAlgorithmNames
         var a when a == CryptoAlgorithm.Aes128.Algorithm => nameof(CryptoAlgorithm.Aes128),
         var a when a == CryptoAlgorithm.RsaIso9796d2.Algorithm => nameof(CryptoAlgorithm.RsaIso9796d2),
         var a when a == CryptoAlgorithm.Blake3.Algorithm => nameof(CryptoAlgorithm.Blake3),
+        var a when a == CryptoAlgorithm.XChaCha20Poly1305.Algorithm => nameof(CryptoAlgorithm.XChaCha20Poly1305),
         _ => $"Custom: ('{algorithm}')."
     };
 }

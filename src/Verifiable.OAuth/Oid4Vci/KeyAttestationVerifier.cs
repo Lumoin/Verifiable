@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -19,7 +20,7 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// parsed with <see cref="KeyAttestationParser"/>, the Wallet-Provider key is resolved through the
 /// shared <see cref="Oid4VciHeaderKeyResolution"/> (the same §F.1 <c>jwk</c>/<c>x5c</c>/<c>kid</c>
 /// machinery the <c>jwt</c> key-proof validator uses), and the signature is checked with
-/// <see cref="Jws.VerifyAsync"/>. The Wallet-Provider trust anchors remain the application's seam: the
+/// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>. The Wallet-Provider trust anchors remain the application's seam: the
 /// <c>x5c</c> chain validates to <c>ExchangeContext.X509TrustAnchors</c> and the <c>kid</c> mode is
 /// dereferenced by <see cref="Oid4VciHeaderKeyResolution.ResolveKidKeyDelegate"/>.
 /// </para>
@@ -204,6 +205,14 @@ public static class KeyAttestationVerifier
             using IMemoryOwner<byte> headerOwner = base64UrlDecoder(segments[0], memoryPool);
             ReadOnlySpan<byte> header = headerOwner.Memory.Span;
 
+            //RFC 7515 §4: gate the header for well-formedness — a repeated "alg"/"kid"/"jwk"/"x5c" at any
+            //nesting depth — before extracting any of them, so the key-material selection below never
+            //runs against a first occurrence while a duplicate second occurrence goes unnoticed.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(header))
+            {
+                return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Malformed);
+            }
+
             alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
             hasJwk = JwkJsonReader.ContainsKey(header, WellKnownJoseHeaderNames.JwkUtf8);
             hasKid = JwkJsonReader.ContainsKey(header, KidHeaderUtf8);
@@ -313,13 +322,186 @@ public static class KeyAttestationVerifier
     }
 
 
-    //Adapts the public Wallet-Provider key resolver to the shared resolver's neutral kid-delegate type.
-    //The two share a signature; this is a delegate-to-delegate retarget, not a captured-data closure.
+    /// <summary>
+    /// Checks a verified attestation's <c>key_storage</c> and <c>user_authentication</c> assurance
+    /// arrays against the Credential Issuer's own accepted-value constraints.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-D.1">OID4VCI
+    /// 1.0 Appendix D.1</see> defines the two constraints as "OPTIONAL. A non-empty array of case
+    /// sensitive strings that assert the attack potential resistance of the key storage component" (and,
+    /// for <c>user_authentication</c>, "of the user authentication methods allowed to access the private
+    /// keys") "attested in the <c>attested_keys</c> parameter".
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">§12.2.4</see>
+    /// states the metadata-side mirror of that same array as "a non-empty array... accepted by the
+    /// Credential Issuer" — a constraint is therefore a MEMBERSHIP SET: the check is satisfied when at
+    /// least one attested value is a member of the accepted set, never an ordering between values, and
+    /// an absent or empty constraint constrains nothing.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-D.2">Appendix
+    /// D.2</see> defines four ISO 18045 attack-potential values (<c>iso_18045_high</c>,
+    /// <c>iso_18045_moderate</c>, <c>iso_18045_enhanced-basic</c>, <c>iso_18045_basic</c>) and states
+    /// "ecosystems may define their own values" — a non-ISO value is "RECOMMENDED" to be a URL, compared
+    /// the same way, by ordinal string equality.
+    /// </summary>
+    /// <param name="attestation">The already-verified attestation whose <c>KeyStorageJson</c> and <c>UserAuthenticationJson</c> arrays are checked.</param>
+    /// <param name="acceptedKeyStorageValues">The Credential Issuer's <c>key_storage</c> accepted-value set, or <see langword="null"/>/empty when unconstrained.</param>
+    /// <param name="acceptedUserAuthenticationValues">The Credential Issuer's <c>user_authentication</c> accepted-value set, or <see langword="null"/>/empty when unconstrained.</param>
+    /// <param name="pool">Memory pool for the scratch buffer the attested arrays are read through.</param>
+    /// <returns>
+    /// A result whose <see cref="KeyAttestationVerificationResult.IsValid"/> is <see langword="true"/>
+    /// when both constraints are satisfied (or unconstrained), or a failure naming
+    /// <see cref="KeyAttestationVerificationFailureReason.KeyStorageConstraintUnsatisfied"/>,
+    /// <see cref="KeyAttestationVerificationFailureReason.UserAuthenticationConstraintUnsatisfied"/>, or
+    /// <see cref="KeyAttestationVerificationFailureReason.AssuranceConstraintValuesMalformed"/>.
+    /// </returns>
+    public static KeyAttestationVerificationResult CheckAssuranceConstraints(
+        KeyAttestation attestation,
+        IReadOnlyCollection<string>? acceptedKeyStorageValues,
+        IReadOnlyCollection<string>? acceptedUserAuthenticationValues,
+        BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(attestation);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        AssuranceConstraintOutcome keyStorageOutcome = CheckAssuranceConstraint(attestation.KeyStorageJson, acceptedKeyStorageValues, pool);
+        if(keyStorageOutcome == AssuranceConstraintOutcome.Malformed)
+        {
+            return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.AssuranceConstraintValuesMalformed);
+        }
+
+        if(keyStorageOutcome == AssuranceConstraintOutcome.Unsatisfied)
+        {
+            return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.KeyStorageConstraintUnsatisfied);
+        }
+
+        AssuranceConstraintOutcome userAuthenticationOutcome = CheckAssuranceConstraint(attestation.UserAuthenticationJson, acceptedUserAuthenticationValues, pool);
+        if(userAuthenticationOutcome == AssuranceConstraintOutcome.Malformed)
+        {
+            return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.AssuranceConstraintValuesMalformed);
+        }
+
+        if(userAuthenticationOutcome == AssuranceConstraintOutcome.Unsatisfied)
+        {
+            return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.UserAuthenticationConstraintUnsatisfied);
+        }
+
+        return KeyAttestationVerificationResult.Success(attestation);
+    }
+
+
+    /// <summary>
+    /// The three-way outcome one assurance array's membership check can reach, folded into the caller's
+    /// closed <see cref="KeyAttestationVerificationFailureReason"/> vocabulary at the call site.
+    /// </summary>
+    private enum AssuranceConstraintOutcome
+    {
+        /// <summary>An unconstrained check, or a constraint at least one attested value is a member of.</summary>
+        Satisfied,
+
+        /// <summary>A non-empty constraint no attested value is a member of.</summary>
+        Unsatisfied,
+
+        /// <summary>A constrained attestation array that does not read as a JSON array of strings.</summary>
+        Malformed
+    }
+
+
+    /// <summary>
+    /// An absent or empty constraint constrains nothing (Appendix D.1's "non-empty array... accepted by
+    /// the Credential Issuer" — an empty or missing array is not a constraint). A present, non-empty
+    /// constraint is satisfied by ordinal-equality membership (Appendix D.2 sets no order between
+    /// values); a constrained attestation array that does not read as a JSON array of strings answers
+    /// <see cref="AssuranceConstraintOutcome.Malformed"/> rather than a silent
+    /// <see cref="AssuranceConstraintOutcome.Unsatisfied"/>, since the membership question could not be
+    /// asked at all.
+    /// </summary>
+    /// <param name="attestedArrayJson">The attestation's verbatim <c>key_storage</c> or <c>user_authentication</c> array text, or <see langword="null"/> when absent.</param>
+    /// <param name="acceptedValues">The Credential Issuer's accepted-value set for this array, or <see langword="null"/>/empty when unconstrained.</param>
+    /// <param name="pool">Memory pool for the scratch buffer the attested array is read through.</param>
+    /// <returns>The membership outcome for this one array.</returns>
+    private static AssuranceConstraintOutcome CheckAssuranceConstraint(string? attestedArrayJson, IReadOnlyCollection<string>? acceptedValues, BaseMemoryPool pool)
+    {
+        if(acceptedValues is null || acceptedValues.Count == 0)
+        {
+            return AssuranceConstraintOutcome.Satisfied;
+        }
+
+        List<string>? attestedValues = ExtractStringArrayElements(attestedArrayJson, pool);
+        if(attestedValues is null)
+        {
+            return AssuranceConstraintOutcome.Malformed;
+        }
+
+        HashSet<string> acceptedSet = new(acceptedValues, StringComparer.Ordinal);
+        foreach(string attestedValue in attestedValues)
+        {
+            if(acceptedSet.Contains(attestedValue))
+            {
+                return AssuranceConstraintOutcome.Satisfied;
+            }
+        }
+
+        return AssuranceConstraintOutcome.Unsatisfied;
+    }
+
+
+    /// <summary>The synthetic single-property key <see cref="ExtractStringArrayElements"/> wraps a bare attested array under.</summary>
+    private static ReadOnlySpan<byte> AssuranceArrayWrapperKeyUtf8 => "v"u8;
+
+    /// <summary>The bytes that open the one-property wrapper object, up to and including the colon after its key.</summary>
+    private static ReadOnlySpan<byte> AssuranceArrayWrapperPrefixUtf8 => "{\"v\":"u8;
+
+    /// <summary>The byte that closes the one-property wrapper object.</summary>
+    private static ReadOnlySpan<byte> AssuranceArrayWrapperSuffixUtf8 => "}"u8;
+
+
+    /// <summary>
+    /// Reads every string element of a verbatim attested assurance array. <see cref="KeyAttestation.KeyStorageJson"/>
+    /// and <see cref="KeyAttestation.UserAuthenticationJson"/> hold the BARE JSON array text (e.g.
+    /// <c>["iso_18045_moderate"]</c>), never an object, while
+    /// <see cref="JwkJsonReader.ExtractStringArrayProperty"/> walks exactly this shape but
+    /// locates its array by an object property key. The bare array is therefore wrapped in a
+    /// one-property object under <see cref="AssuranceArrayWrapperKeyUtf8"/> before that existing,
+    /// unmodified reader walks it — reusing the shipped span-based array-of-strings walker rather than
+    /// writing a second one. The wrapper is composed in a buffer rented from <paramref name="pool"/>.
+    /// </summary>
+    /// <param name="arrayJson">The verbatim bare JSON array text, or <see langword="null"/>/empty when absent.</param>
+    /// <param name="pool">Memory pool the wrapper buffer is rented from.</param>
+    /// <returns>The decoded string elements in array order, or <see langword="null"/> when absent or not a well-formed string array.</returns>
+    private static List<string>? ExtractStringArrayElements(string? arrayJson, BaseMemoryPool pool)
+    {
+        if(string.IsNullOrEmpty(arrayJson))
+        {
+            return null;
+        }
+
+        ReadOnlySpan<byte> prefix = AssuranceArrayWrapperPrefixUtf8;
+        ReadOnlySpan<byte> suffix = AssuranceArrayWrapperSuffixUtf8;
+        int arrayByteCount = Encoding.UTF8.GetByteCount(arrayJson);
+        int wrappedLength = prefix.Length + arrayByteCount + suffix.Length;
+
+        using IMemoryOwner<byte> wrappedOwner = pool.Rent(wrappedLength);
+        Span<byte> wrapped = wrappedOwner.Memory.Span[..wrappedLength];
+        prefix.CopyTo(wrapped);
+        _ = Encoding.UTF8.GetBytes(arrayJson, wrapped[prefix.Length..]);
+        suffix.CopyTo(wrapped[(prefix.Length + arrayByteCount)..]);
+
+        return JwkJsonReader.ExtractStringArrayProperty(wrapped, AssuranceArrayWrapperKeyUtf8);
+    }
+
+
+    /// <summary>
+    /// Adapts the public Wallet-Provider key resolver to the shared resolver's neutral kid-delegate
+    /// type. The two share a signature; this is a delegate-to-delegate retarget, not a captured-data
+    /// closure.
+    /// </summary>
+    /// <param name="resolve">The public delegate to adapt, or <see langword="null"/> when the <c>kid</c> mode is unsupported.</param>
+    /// <returns>The adapted delegate, or <see langword="null"/> when <paramref name="resolve"/> is <see langword="null"/>.</returns>
     private static Oid4VciHeaderKeyResolution.ResolveKidKeyDelegate? Adapt(ResolveWalletProviderKeyDelegate? resolve) =>
         resolve is null ? null : new Oid4VciHeaderKeyResolution.ResolveKidKeyDelegate(resolve.Invoke);
 
 
-    //Maps the shared header-key resolver's neutral status to the attestation verification failure reason.
+    /// <summary>Maps the shared header-key resolver's neutral status to the attestation verification failure reason.</summary>
+    /// <param name="status">The shared resolver's outcome status.</param>
+    /// <returns>The corresponding <see cref="KeyAttestationVerificationFailureReason"/>.</returns>
     private static KeyAttestationVerificationFailureReason MapResolutionFailure(HeaderKeyResolutionStatus status) =>
         status switch
         {
@@ -329,6 +511,7 @@ public static class KeyAttestationVerifier
             //private key material; it is an invalid key reference here too.
             HeaderKeyResolutionStatus.JwkContainsPrivateKey => KeyAttestationVerificationFailureReason.InvalidKeyReference,
             HeaderKeyResolutionStatus.InvalidKeyReference => KeyAttestationVerificationFailureReason.InvalidKeyReference,
+            HeaderKeyResolutionStatus.Resolved => KeyAttestationVerificationFailureReason.InvalidKeyReference,
 
             _ => KeyAttestationVerificationFailureReason.InvalidKeyReference
         };

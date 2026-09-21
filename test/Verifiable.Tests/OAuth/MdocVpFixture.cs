@@ -415,7 +415,7 @@ internal static class MdocVpFixture
             MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
-                validationTime: tp.GetUtcNow(),
+                timeProvider: tp,
                 pool: Pool),
             ExtractTrustedAuthorityEvidence);
 
@@ -540,7 +540,7 @@ internal static class MdocVpFixture
     /// <summary>Copies a public key into a freshly rented buffer, so the resolution owns an independently disposable carrier.</summary>
     /// <param name="source">The key to clone.</param>
     /// <param name="pool">The pool the clone's buffer is rented from.</param>
-    /// <returns>The cloned key, carrying <paramref name="source"/>'s own <see cref="PublicKeyMemory.Tag"/>.</returns>
+    /// <returns>The cloned key, carrying <paramref name="source"/>'s own <see cref="Lumoin.Base.SensitiveData.Tag"/>.</returns>
     public static PublicKeyMemory ClonePublicKey(PublicKeyMemory source, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> bytes = source.AsReadOnlySpan();

@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.2">OID4VP 1.0 §8.2</see>.
 /// Sibling to <see cref="ResponsePosted"/> (which carries the encrypted
 /// <c>direct_post.jwt</c> JWE); the two inputs let the PDA's
-/// <see cref="VerifierJarServedState"/> dispatch on
+/// <see cref="Verifiable.OAuth.Oid4Vp.Server.States.VerifierJarServedState"/> dispatch on
 /// <see cref="AuthorizationRequestObject.ResponseMode"/> at response time.
 /// </summary>
 /// <remarks>

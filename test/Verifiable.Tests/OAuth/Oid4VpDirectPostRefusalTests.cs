@@ -20,6 +20,7 @@ using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
+using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
@@ -91,8 +92,8 @@ internal sealed class Oid4VpDirectPostRefusalTests
     public async Task AnUnsatisfiedQueryIsRefusedAsInvalidRequestWithAGenericDescription()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string parHandle, string compactJwe, PublicKeyMemory issuerPublicKey) = await DriveWalletToResponsePostAsync(
             app, verifierKeys, CreateQueryRequestingAnAbsentClaim(), status: null,
@@ -140,8 +141,8 @@ internal sealed class Oid4VpDirectPostRefusalTests
     public async Task AnUndecodableEncryptedResponseIsRefusedAsInvalidRequestNotServerError()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -191,8 +192,8 @@ internal sealed class Oid4VpDirectPostRefusalTests
     public async Task AnUnparseableVpTokenIsRefusedAsInvalidRequestNotServerError()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -240,8 +241,8 @@ internal sealed class Oid4VpDirectPostRefusalTests
     public async Task ASdJwtWhoseIssuerPayloadIsNotJsonIsRefusedAsInvalidRequestNotServerError()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -308,8 +309,8 @@ internal sealed class Oid4VpDirectPostRefusalTests
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
         TestHostShell app = run.App;
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         async ValueTask<Oid4VpPresentationSet> corruptingProduce(Oid4VpPresentationContext context, CancellationToken cancellationToken)
         {
@@ -393,8 +394,8 @@ corruptingProduce,
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
         TestHostShell app = run.App;
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         async ValueTask<Oid4VpPresentationSet> produceWithoutApu(Oid4VpPresentationContext context, CancellationToken cancellationToken)
         {
@@ -510,8 +511,8 @@ truncateProtectedHeader,
             SdCwtVpVerificationSeams seams = SdCwtVpFixture.BuildSeams(issuerKeys.PublicKey);
 
             await using TestHostShell app = new(TimeProvider, sdCwtSeams: seams);
-            using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-                VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+            using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+                VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
             (Uri _, string parHandle) = await app.HandleParAsync(
                 verifierKeys,
@@ -574,8 +575,8 @@ truncateProtectedHeader,
 
         await using TestHostShell app = new(
             TimeProvider, resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider));
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string parHandle, string compactJwe, PublicKeyMemory issuerPublicKey) = await DriveWalletToResponsePostAsync(
             app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(),
@@ -638,8 +639,8 @@ truncateProtectedHeader,
             TimeProvider,
             resolveVerifiedStatusListToken: StatusListFixtures.ResolverFor(StatusListUri, statusList, TimeProvider),
             credentialStatusPolicy: CredentialStatusPolicies.RefuseNotValid);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string parHandle, string compactJwe, PublicKeyMemory issuerPublicKey) = await DriveWalletToResponsePostAsync(
             app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(),
@@ -710,8 +711,8 @@ truncateProtectedHeader,
     public async Task AVerifiedPresentationIsAnsweredTwoHundredWithAJsonObject()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string parHandle, string compactJwe, PublicKeyMemory issuerPublicKey) = await DriveWalletToResponsePostAsync(
             app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(), status: null,
@@ -755,8 +756,8 @@ truncateProtectedHeader,
         Uri sameDeviceRedirectUri = new("https://verifier.example.com/complete?session=1f0c1c1d7a5b4e2f9a8c0d3b6e5f4a2c");
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string parHandle, string compactJwe, PublicKeyMemory issuerPublicKey) = await DriveWalletToResponsePostAsync(
             app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(), status: null,
@@ -797,8 +798,8 @@ truncateProtectedHeader,
     public async Task AWalletAuthorizationErrorResponseIsRecordedAndAnsweredTwoHundred()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -850,8 +851,8 @@ truncateProtectedHeader,
         const string walletErrorDescription = "The End-User declined to present the requested credential.";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -897,8 +898,8 @@ truncateProtectedHeader,
         Uri sameDeviceRedirectUri = new("https://verifier.example.com/complete?session=9b3d7e6c5a4f2108d3c7b6a59e8f4d21");
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -942,8 +943,8 @@ truncateProtectedHeader,
     public async Task AnErrorPostWithoutStateIsNotProcessedAsAnAuthorizationErrorResponse()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -979,8 +980,8 @@ truncateProtectedHeader,
     public async Task APostCarryingNeitherAPresentationNorAnErrorIsNotProcessed()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -1017,8 +1018,8 @@ truncateProtectedHeader,
     public async Task AStateTheResponseEndpointCannotClassifyIsAnsweredServerError()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         ExchangeContext context = [];
         context.SetTenantId(verifierKeys.Registration.TenantId);
@@ -1132,8 +1133,8 @@ truncateProtectedHeader,
     public async Task AnOversizedEncryptedResponseIsRefusedAsInvalidRequestNotServerError()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -1191,8 +1192,8 @@ truncateProtectedHeader,
             "https://verifier.example.com/complete?session=%22x%22%20%5Cy", UriKind.Absolute);
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string parHandle, string compactJwe, PublicKeyMemory issuerPublicKey) = await DriveWalletToResponsePostAsync(
             app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(), status: null,
@@ -1235,8 +1236,8 @@ truncateProtectedHeader,
         const string ErrorWithQuote = "access_denied\"";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -1283,8 +1284,8 @@ truncateProtectedHeader,
         string overLongErrorDescription = new('a', 1025);
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
@@ -1316,6 +1317,332 @@ truncateProtectedHeader,
 
         _ = Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
             "A malformed Wallet error POST is rejected before it reaches VerifierWalletErrorReceivedState.");
+    }
+
+
+    /// <summary>
+    /// A verifier processes one Authorization Response per transaction: once <c>direct_post.jwt</c> has
+    /// carried a presentation to <see cref="PresentationVerifiedState"/>, the flow is no longer in
+    /// <see cref="VerifierJarServedState"/> or <see cref="VerifierParReceivedState"/> — the only two
+    /// states <c>BuildOid4VpDirectPost</c> accepts a POST from — so a second, later response for the
+    /// SAME <c>state</c> is refused, and the FIRST presentation's verified result is left exactly as it
+    /// was rather than being replaced. This rule is stated in plain words rather than an
+    /// OpenID4VP 1.0 quotation.
+    /// </summary>
+    [TestMethod]
+    public async Task ASecondEncryptedResponseForTheSameStateIsRefusedAndTheFirstVerifiedResultStands()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        (string parHandle, string firstCompactJwe, PublicKeyMemory firstIssuerKey) = await DriveWalletToResponsePostAsync(
+            app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(), status: null,
+            nonce: "nonce-secondpost-encrypted-first").ConfigureAwait(false);
+        using PublicKeyMemory issuerKey1 = firstIssuerKey;
+
+        (int firstStatusCode, string _, string? _) = await app.PostDirectPostFormAsync(
+            verifierKeys.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.Response, firstCompactJwe),
+                new(OAuthRequestParameterNames.State, parHandle)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, firstStatusCode,
+            "OID4VP 1.0 §8.2: the first presentation for this transaction is a successfully processed Authorization Response.");
+
+        PresentationVerifiedState firstVerified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+
+        TimeProvider.Advance(TimeSpan.FromSeconds(1));
+
+        //A second, well-formed but different Authorization Response — a SEPARATE transaction's own
+        //genuine encrypted response — posted with the FIRST transaction's own state, so the refusal is
+        //proved against a shape a conformant Wallet actually produces, not mere garbage a shape check
+        //would reject for an unrelated reason.
+        (string _, string secondCompactJwe, PublicKeyMemory secondIssuerKey) = await DriveWalletToResponsePostAsync(
+            app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(), status: null,
+            nonce: "nonce-secondpost-encrypted-second").ConfigureAwait(false);
+        using PublicKeyMemory issuerKey2 = secondIssuerKey;
+
+        (int secondStatusCode, string secondBody, string? secondContentType) = await app.PostDirectPostFormAsync(
+            verifierKeys.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.Response, secondCompactJwe),
+                new(OAuthRequestParameterNames.State, parHandle)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, secondStatusCode,
+            "A verifier processes one response per transaction: a second, later response for the same state cannot replace the first result.");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, secondContentType,
+            "The RFC 6749 §4.1.2.1 error object is a JSON body.");
+
+        (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(secondBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
+            "The state guard refuses a second response as invalid_request, the same class as any other malformed direct_post POST.");
+        Assert.AreEqual("Flow not in expected state for direct_post.", wireDescription,
+            "The state guard's own fixed wire sentence names the refused condition.");
+
+        PresentationVerifiedState stateAfterSecondPost = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+        Assert.AreEqual(firstVerified.VerifiedAt, stateAfterSecondPost.VerifiedAt,
+            "The refused second POST left the flow's verified result exactly as the first presentation produced it — no re-verification occurred.");
+    }
+
+
+    /// <summary>
+    /// The unencrypted sibling of
+    /// <see cref="ASecondEncryptedResponseForTheSameStateIsRefusedAndTheFirstVerifiedResultStands"/>: once
+    /// the plaintext <c>direct_post</c> path has carried a presentation to
+    /// <see cref="PresentationVerifiedState"/>, a second response for the SAME <c>state</c> is refused
+    /// the same way, and the FIRST presentation's verified result stands.
+    /// </summary>
+    [TestMethod]
+    public async Task ASecondUnencryptedResponseForTheSameStateIsRefusedAndTheFirstVerifiedResultStands()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        (string firstSerializedSdJwt, PrivateKeyMemory firstHolderKey, PublicKeyMemory firstIssuerKey) =
+            await SdJwtVpFixture.IssuePidCredentialWithClaimsAsync(
+                TimeProvider, "Alice", "Smith", IssuerId, IssuerKeyId, Pool, status: null,
+                TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey1 = firstHolderKey;
+        using PublicKeyMemory issuerKey1 = firstIssuerKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey1);
+
+        Oid4VpWalletClient firstWalletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
+            verifierKeys, firstSerializedSdJwt, holderKey1, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri firstRequestUri, string firstParHandle) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-secondpost-unencrypted-first"),
+            DcqlFixtures.PidFamilyNamePrepared(),
+            transactionData: null,
+            jarAdditionalHeaderClaims: null,
+            responseMode: WellKnownResponseModes.DirectPost,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage firstJarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(firstRequestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = firstJarResponse.EnsureSuccessStatusCode();
+        string firstCompactJar = await firstJarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PresentationResult firstResult = await firstWalletClient.PresentJarAsync(
+            new PresentJarOptions
+            {
+                CompactJar = firstCompactJar,
+                RequestUri = firstRequestUri,
+                ExpectedVerifierClientId = VerifierClientId,
+                FlowId = $"wallet-secondpost-unencrypted-first-{Guid.NewGuid():N}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = Assert.IsInstanceOfType<ResponseSent>(firstResult.TerminalState,
+            "The Wallet's own PDA reaches ResponseSent after the first, successfully processed unencrypted direct_post POST.");
+
+        PresentationVerifiedState firstVerified = (PresentationVerifiedState)app.GetFlowState(firstParHandle).State;
+
+        TimeProvider.Advance(TimeSpan.FromSeconds(1));
+
+        //A second, wholly separate transaction's own successful vp_token — a well-formed Authorization
+        //Response the Wallet genuinely produced, just not for the FIRST transaction — reposted under the
+        //FIRST transaction's own state.
+        (string secondSerializedSdJwt, PrivateKeyMemory secondHolderKey, PublicKeyMemory secondIssuerKey) =
+            await SdJwtVpFixture.IssuePidCredentialWithClaimsAsync(
+                TimeProvider, "Bob", "Jones", IssuerId, IssuerKeyId, Pool, status: null,
+                TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey2 = secondHolderKey;
+        using PublicKeyMemory issuerKey2 = secondIssuerKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey2);
+
+        Oid4VpWalletClient secondWalletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
+            verifierKeys, secondSerializedSdJwt, holderKey2, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri secondRequestUri, string secondParHandle) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-secondpost-unencrypted-second"),
+            DcqlFixtures.PidFamilyNamePrepared(),
+            transactionData: null,
+            jarAdditionalHeaderClaims: null,
+            responseMode: WellKnownResponseModes.DirectPost,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage secondJarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(secondRequestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = secondJarResponse.EnsureSuccessStatusCode();
+        string secondCompactJar = await secondJarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PresentationResult secondResult = await secondWalletClient.PresentJarAsync(
+            new PresentJarOptions
+            {
+                CompactJar = secondCompactJar,
+                RequestUri = secondRequestUri,
+                ExpectedVerifierClientId = VerifierClientId,
+                FlowId = $"wallet-secondpost-unencrypted-second-{Guid.NewGuid():N}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = Assert.IsInstanceOfType<ResponseSent>(secondResult.TerminalState,
+            "The second transaction's own presentation is genuinely well-formed — verified on its own transaction.");
+        Assert.AreNotEqual(firstParHandle, secondParHandle,
+            "The second transaction's vp_token was produced under its own, different state.");
+
+        (int misroutedStatusCode, string misroutedBody, string? misroutedContentType) = await app.PostDirectPostFormAsync(
+            verifierKeys.Registration.TenantId.Value,
+            [
+                new(AuthorizationResponseParameters.VpToken, secondResult.PostedResponseArtifact),
+                new(OAuthRequestParameterNames.State, firstParHandle)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, misroutedStatusCode,
+            "A verifier processes one response per transaction: a second, later response for the same state cannot replace the first result.");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, misroutedContentType,
+            "The RFC 6749 §4.1.2.1 error object is a JSON body.");
+
+        (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(misroutedBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
+            "The state guard refuses a second response as invalid_request, the same class as any other malformed direct_post POST.");
+        Assert.AreEqual("Flow not in expected state for direct_post.", wireDescription,
+            "The state guard's own fixed wire sentence names the refused condition.");
+
+        PresentationVerifiedState stateAfterMisroutedPost = (PresentationVerifiedState)app.GetFlowState(firstParHandle).State;
+        Assert.AreEqual(firstVerified.VerifiedAt, stateAfterMisroutedPost.VerifiedAt,
+            "The refused second POST left the flow's verified result exactly as the first presentation produced it — no re-verification occurred.");
+    }
+
+
+    /// <summary>
+    /// A wallet ERROR post for a transaction that already reached
+    /// <see cref="PresentationVerifiedState"/> is refused the same way as a second presentation: the
+    /// flow is no longer in one of the two states the Response URI accepts a POST from, so the
+    /// Authorization Error Response never overwrites the FIRST presentation's verified result.
+    /// </summary>
+    [TestMethod]
+    public async Task AWalletErrorPostAfterAVerifiedPresentationIsRefusedAndTheVerifiedResultStands()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        (string parHandle, string compactJwe, PublicKeyMemory issuerPublicKey) = await DriveWalletToResponsePostAsync(
+            app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(), status: null,
+            nonce: "nonce-secondpost-error-after-verified").ConfigureAwait(false);
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+
+        (int firstStatusCode, string _, string? _) = await app.PostDirectPostFormAsync(
+            verifierKeys.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.Response, compactJwe),
+                new(OAuthRequestParameterNames.State, parHandle)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, firstStatusCode,
+            "OID4VP 1.0 §8.2: the presentation is a successfully processed Authorization Response.");
+
+        PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+
+        TimeProvider.Advance(TimeSpan.FromSeconds(1));
+
+        (int errorStatusCode, string errorBody, string? errorContentType) = await app.PostDirectPostFormAsync(
+            verifierKeys.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.Error, OAuthErrors.AccessDenied),
+                new(OAuthRequestParameterNames.State, parHandle)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, errorStatusCode,
+            "A verifier processes one response per transaction: a Wallet error POST after a verified presentation cannot replace the result.");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, errorContentType,
+            "The RFC 6749 §4.1.2.1 error object is a JSON body.");
+
+        (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(errorBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
+            "The state guard refuses the error POST as invalid_request, the same class as any other malformed direct_post POST.");
+        Assert.AreEqual("Flow not in expected state for direct_post.", wireDescription,
+            "The state guard's own fixed wire sentence names the refused condition.");
+
+        PresentationVerifiedState stateAfterErrorPost = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+        Assert.AreEqual(verified.VerifiedAt, stateAfterErrorPost.VerifiedAt,
+            "The refused Wallet error POST left the flow's verified result exactly as the presentation produced it — the Wallet error was never recorded.");
+    }
+
+
+    /// <summary>
+    /// The reverse of
+    /// <see cref="AWalletErrorPostAfterAVerifiedPresentationIsRefusedAndTheVerifiedResultStands"/>: once
+    /// a transaction has recorded a Wallet's Authorization Error Response on
+    /// <see cref="VerifierWalletErrorReceivedState"/>, a presentation for the SAME <c>state</c> is
+    /// refused the same way, and the recorded error stands.
+    /// </summary>
+    [TestMethod]
+    public async Task APresentationPostAfterAWalletErrorIsRefusedAndTheRecordedErrorStands()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        (Uri _, string errorParHandle) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-secondpost-presentation-after-error"),
+            DcqlFixtures.PidFamilyNamePrepared(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = await app.HandleJarRequestAsync(
+            verifierKeys, errorParHandle, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int errorStatusCode, string _, string? _) = await app.PostDirectPostFormAsync(
+            verifierKeys.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.Error, OAuthErrors.AccessDenied),
+                new(OAuthRequestParameterNames.State, errorParHandle)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, errorStatusCode,
+            "OID4VP 1.0 §8.2: a successfully processed Authorization Error Response MUST be answered with HTTP 200.");
+
+        VerifierWalletErrorReceivedState recorded = ReadWalletErrorState(app, errorParHandle);
+
+        TimeProvider.Advance(TimeSpan.FromSeconds(1));
+
+        //A wholly separate transaction's own genuine, valid presentation — reposted under the
+        //error-recorded transaction's own state.
+        (string _, string laterCompactJwe, PublicKeyMemory laterIssuerKey) = await DriveWalletToResponsePostAsync(
+            app, verifierKeys, DcqlFixtures.PidFamilyNamePrepared(), status: null,
+            nonce: "nonce-secondpost-presentation-after-error-source").ConfigureAwait(false);
+        using PublicKeyMemory issuerKey = laterIssuerKey;
+
+        (int misroutedStatusCode, string misroutedBody, string? misroutedContentType) = await app.PostDirectPostFormAsync(
+            verifierKeys.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.Response, laterCompactJwe),
+                new(OAuthRequestParameterNames.State, errorParHandle)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, misroutedStatusCode,
+            "A verifier processes one response per transaction: a presentation for a transaction that already recorded a Wallet error cannot replace that record.");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, misroutedContentType,
+            "The RFC 6749 §4.1.2.1 error object is a JSON body.");
+
+        (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(misroutedBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
+            "The state guard refuses the misrouted presentation as invalid_request, the same class as any other malformed direct_post POST.");
+        Assert.AreEqual("Flow not in expected state for direct_post.", wireDescription,
+            "The state guard's own fixed wire sentence names the refused condition.");
+
+        VerifierWalletErrorReceivedState stateAfterMisroutedPost = ReadWalletErrorState(app, errorParHandle);
+        Assert.AreEqual(recorded.ReceivedAt, stateAfterMisroutedPost.ReceivedAt,
+            "The refused presentation left the recorded Wallet error exactly as it was — no re-processing occurred.");
+        Assert.AreEqual(recorded.Error, stateAfterMisroutedPost.Error,
+            "The refused presentation did not overwrite the Wallet error code the transaction already recorded.");
     }
 
 

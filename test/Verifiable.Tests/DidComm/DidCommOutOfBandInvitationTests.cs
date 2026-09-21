@@ -30,7 +30,7 @@ internal sealed class DidCommOutOfBandInvitationTests
 
     /// <summary>
     /// The DIDComm v2.1 §Example Out-of-Band Message Encoding base64url vector decodes — through the
-    /// test base64url decoder and <see cref="DidCommPlaintextExtensions.UnpackPlaintext"/> — into an
+    /// test base64url decoder and <see cref="DidCommPlaintextExtensions.UnpackPlaintext(ReadOnlySpan{byte}, DidCommMessageParser)"/> — into an
     /// invitation whose type / id / from / body / attachments match the spec example by property
     /// (order-independent — the JSON key order is non-normative).
     /// </summary>
@@ -49,7 +49,7 @@ internal sealed class DidCommOutOfBandInvitationTests
         Assert.IsNotNull(invitation.Body);
         Assert.AreEqual("", invitation.GetOutOfBandGoalCode());
         Assert.AreEqual("", invitation.GetOutOfBandGoal());
-        Assert.HasCount(0, invitation.GetOutOfBandAccept());
+        Assert.IsEmpty(invitation.GetOutOfBandAccept());
 
         //attachments: a single request-0 attachment of application/json with data.json the placeholder.
         Assert.IsNotNull(invitation.Attachments);
@@ -433,3 +433,4 @@ internal sealed class DidCommOutOfBandInvitationTests
         Assert.IsNull(result.Invitation);
     }
 }
+

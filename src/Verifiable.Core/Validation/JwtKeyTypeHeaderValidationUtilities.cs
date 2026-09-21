@@ -3,6 +3,10 @@ using Verifiable.JCose;
 
 namespace Verifiable.Core.Validation;
 
+/// <summary>
+/// JWT header claim checks shared across the library's validation pipelines, independent of the
+/// key-type-specific checks in <see cref="JwtKeyTypeHeaderValidationUtilities"/>.
+/// </summary>
 public static class DefaultJwtValidationClaims
 {
     /// <summary>
@@ -39,6 +43,10 @@ public static class DefaultJwtValidationClaims
 }
 
 
+/// <summary>
+/// Validates a JWT header's key-type-specific claims (<c>kty</c>, <c>crv</c>, <c>x</c>, <c>y</c>, RSA
+/// modulus/exponent) per RFC 7517/RFC 7518, dispatching on <c>kty</c> to the matching key-family check.
+/// </summary>
 public static class JwtKeyTypeHeaderValidationUtilities
 {
     private static List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> AlgCrvPairs { get; } =
@@ -117,6 +125,15 @@ public static class JwtKeyTypeHeaderValidationUtilities
     }
 
 
+    /// <summary>
+    /// Validates the elliptic-curve-specific JWT header fields (<c>crv</c>, <c>x</c>, optionally <c>y</c>)
+    /// and, when present, that <c>alg</c> is a valid pairing for <c>crv</c> per RFC 7518 §6.2.1.
+    /// </summary>
+    /// <param name="jwtHeaders">JWT headers as a dictionary of key-value pairs.</param>
+    /// <param name="algCrvPairs">The algorithm/curve pairings this key type accepts.</param>
+    /// <param name="isEcAlgRequired">Whether a missing or empty <c>alg</c> is itself a failure.</param>
+    /// <param name="isYCoordinateMandatory">Whether the <c>y</c> field is required (cleared for curves that omit it).</param>
+    /// <returns>The claims recorded for the EC-specific checks.</returns>
     public static List<Claim> ValidateEc(
         Dictionary<string, object> jwtHeaders,
         List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairs,
@@ -184,6 +201,12 @@ public static class JwtKeyTypeHeaderValidationUtilities
     }
 
 
+    /// <summary>
+    /// Validates the RSA-specific JWT header fields: that <c>e</c> and <c>n</c> are present and that
+    /// <c>n</c>'s Base64Url-encoded length matches a 2048- or 4096-bit modulus.
+    /// </summary>
+    /// <param name="jwtHeaders">JWT headers as a dictionary of key-value pairs.</param>
+    /// <returns>The claims recorded for the RSA-specific checks.</returns>
     public static List<Claim> ValidateRsa(Dictionary<string, object> jwtHeaders)
     {
         ArgumentNullException.ThrowIfNull(jwtHeaders);
@@ -219,6 +242,14 @@ public static class JwtKeyTypeHeaderValidationUtilities
     }
 
 
+    /// <summary>
+    /// Validates the OKP (octet key pair)-specific JWT header fields (<c>crv</c>, <c>x</c>) and, when
+    /// present, that <c>alg</c> is a valid pairing for <c>crv</c> per RFC 8037 §3.1.
+    /// </summary>
+    /// <param name="jwtHeaders">JWT headers as a dictionary of key-value pairs.</param>
+    /// <param name="algCrvPairs">The algorithm/curve pairings this key type accepts.</param>
+    /// <param name="isOkpAlgRequired">Whether a missing or empty <c>alg</c> is itself a failure.</param>
+    /// <returns>The claims recorded for the OKP-specific checks.</returns>
     public static List<Claim> ValidateOkp(Dictionary<string, object> jwtHeaders, List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairs, bool isOkpAlgRequired = false)
     {
         ArgumentNullException.ThrowIfNull(jwtHeaders);

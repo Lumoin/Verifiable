@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.Server.States;
@@ -11,6 +14,7 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Introspection;
+using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -21,8 +25,8 @@ namespace Verifiable.Tests.OAuth;
 /// Real-wire capstone for the Authorization Code + PAR + PKCE family: every
 /// leg — PAR, the browser's authorize GET, the callback, token exchange, refresh, and revocation —
 /// crosses a real loopback socket, composed via <see cref="TestHostShell.CreateOAuthClientAndRegistrationAsync"/>
-/// and <see cref="AuthCodeClient.StartParAsync"/> / <see cref="AuthCodeClient.HandleCallbackAsync"/> /
-/// <see cref="AuthCodeClient.ExchangeTokenAsync"/> exactly as <see cref="IdJagGrantTests"/> and
+/// and <see cref="AuthCodeClient.StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, IReadOnlyList{string}?, CancellationToken)"/> / <see cref="AuthCodeClient.HandleCallbackAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/> /
+/// <see cref="AuthCodeClient.ExchangeTokenAsync(ClientRegistration, string, CancellationToken)"/> exactly as <see cref="IdJagGrantTests"/> and
 /// <see cref="HttpWireFidelityTests"/> compose the HTTP-backed factory. <see cref="AuthCodeFlowTests"/>
 /// keeps the hand-mocked delegate as unit coverage; this class never calls it.
 /// </summary>
@@ -55,7 +59,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
     /// <summary>
     /// <see cref="ClientId"/> as a <see cref="Uri"/>, the shape
-    /// <see cref="TestHostShell.RegisterDpopClient"/> requires for client registration.
+    /// <see cref="TestHostShell.RegisterDpopClientAsync"/> requires for client registration.
     /// </summary>
     private static Uri ClientBaseUri { get; } = new(ClientId);
 
@@ -97,13 +101,17 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task FullJourneyReachesTokenRefreshAndRevocation()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().RevokeTokenAsync = static (_, _, _, _, _) =>
-            ValueTask.CompletedTask;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.RevokeTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.CompletedTask;
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -161,8 +169,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task WrongPkceVerifierAtTokenExchangeIsInvalidGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -200,123 +208,88 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>: "If the
-    /// 'code_challenge_method' from Section 4.3 was 'plain' ... code_verifier == code_challenge."
-    /// A <c>plain</c>-method journey under <see cref="PolicyProfile.Rfc6749WithPkce"/> (which
-    /// resolves <see cref="PkceMethodSet.S256AndPlain"/>) completes PAR -> authorize -> token over
-    /// the real wire — the client SDK is S256-only, so <see cref="RawAuthCodeWirePushers"/> drives
-    /// this wire shape directly.
-    /// </summary>
-    [TestMethod]
-    public async Task PlainPkceJourneyCompletesUnderRfc6749WithPkce()
-    {
-        await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        string segment = material.Registration.TenantId.Value;
-
-        //RFC 7636 §4.6: under "plain", code_verifier == code_challenge — no hashing.
-        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-        string code = await DriveRawParAndAuthorizeAsync(
-            host, segment, pkce.EncodedVerifier, WellKnownCodeChallengeMethods.Plain,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        (int TokenStatusCode, string TokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
-            host, segment,
-            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(200, TokenStatusCode,
-            $"A plain PKCE journey under the RFC 6749 + RFC 7636 baseline policy must complete. Body={TokenBody}");
-    }
-
-
-    /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>'s plain
-    /// comparison is exact: a plain-issued code presented with a verifier that does not equal the
-    /// challenge captured at PAR time fails <c>invalid_grant</c>, exactly as the S256 branch fails
-    /// on a digest mismatch.
-    /// </summary>
-    [TestMethod]
-    public async Task PlainPkceWrongVerifierAtTokenExchangeIsInvalidGrant()
-    {
-        await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        string segment = material.Registration.TenantId.Value;
-
-        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-        string code = await DriveRawParAndAuthorizeAsync(
-            host, segment, pkce.EncodedVerifier, WellKnownCodeChallengeMethods.Plain,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        (int TokenStatusCode, string TokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
-            host, segment,
-            RawAuthCodeWirePushers.BuildTokenFields(
-                ClientId, code, "wrong0000000000000000000000000000000000000", RedirectUri.OriginalString),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(400, TokenStatusCode, TokenBody);
-        Assert.Contains(OAuthErrors.InvalidGrant, TokenBody, StringComparison.Ordinal);
-    }
-
-
-    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.1">RFC 7636 §4.1</see>:
-    /// "code-verifier = 43*128unreserved" — a verifier under 43 characters is refused
-    /// <c>invalid_grant</c> even when it is byte-identical to the persisted <c>plain</c>
-    /// challenge. A literal comparison alone would accept it (<c>plain</c> compares the
-    /// presented verifier to the challenge with no hashing), so this proves the length check
-    /// runs and rejects before that comparison, not merely that a mismatched verifier fails.
+    /// "code-verifier = 43*128unreserved" — a 42-character verifier is refused even when its S256
+    /// digest would match, and answers identically whether the presented <c>code</c> names a live
+    /// grant or one that was never issued: this grammar check runs at the token endpoint's
+    /// pre-correlation step, before any stored code is looked up.
     /// </summary>
     [TestMethod]
     public async Task TooShortCodeVerifierAtTokenExchangeIsInvalidGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        //A 42-character value: one short of RFC 7636 §4.1's 43-character minimum. Used as BOTH
-        //the plain code_challenge and, at redemption, the presented code_verifier — under a bare
-        //literal comparison the two are identical and PKCE would incorrectly verify.
-        string tooShortVerifier = new('a', 42);
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         string code = await DriveRawParAndAuthorizeAsync(
-            host, segment, tooShortVerifier, WellKnownCodeChallengeMethods.Plain,
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        (int TokenStatusCode, string TokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        string tooShortVerifier = new('a', 42);
+
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment,
             RawAuthCodeWirePushers.BuildTokenFields(
                 ClientId, code, tooShortVerifier, RedirectUri.OriginalString),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(400, TokenStatusCode, TokenBody);
-        Assert.Contains(OAuthErrors.InvalidGrant, TokenBody, StringComparison.Ordinal);
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, "code-never-issued-by-this-host", tooShortVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, LiveBody, StringComparison.Ordinal);
+        Assert.AreEqual(UnknownStatusCode, LiveStatusCode);
+        Assert.AreEqual(UnknownBody, LiveBody,
+            "A code_verifier outside RFC 7636 §4.1's grammar must answer identically whether or "
+            + "not the named code exists.");
+
+        //The malformed presentation left the live code unconsumed: it still redeems with the
+        //correctly-shaped verifier the challenge was actually computed from.
+        (int RedeemedStatusCode, string RedeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RedeemedStatusCode, RedeemedBody);
+
+        //The matching-digest leg: the stored challenge is computed FROM the too-short verifier
+        //itself, so a direct comparison would match — proving the refusal is the grammar check
+        //alone, independent of the digest, and that it runs before any digest is ever compared.
+        string matchingChallenge = await RawAuthCodeWirePushers.ComputeAuthorizationCodeHashAsync(tooShortVerifier)
+            .ConfigureAwait(false);
+        string matchingDigestCode = await DriveRawParAndAuthorizeAsync(
+            host, segment, matchingChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int MatchingDigestStatusCode, string MatchingDigestBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, matchingDigestCode, tooShortVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, MatchingDigestStatusCode, MatchingDigestBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, MatchingDigestBody, StringComparison.Ordinal);
     }
 
 
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.1">RFC 7636 §4.1</see>:
-    /// "unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"" — a verifier of the correct length
-    /// but containing a character outside this set is refused <c>invalid_grant</c> even though
-    /// it is byte-identical to the persisted <c>plain</c> challenge, proving the character-set
-    /// check runs independently of the length check and of the literal comparison.
+    /// "unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"" — a plus sign is refused even when the S256 digest matches.
     /// </summary>
     [TestMethod]
     public async Task CodeVerifierWithDisallowedCharacterAtTokenExchangeIsInvalidGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        //43 characters — RFC 7636 §4.1's minimum length — but the trailing '+' is outside
-        //"unreserved". Used as BOTH the plain code_challenge and, at redemption, the presented
-        //code_verifier, so a bare literal comparison would accept it.
         string verifierWithDisallowedCharacter = new string('a', 42) + "+";
+        string challenge = await RawAuthCodeWirePushers.ComputeAuthorizationCodeHashAsync(verifierWithDisallowedCharacter).ConfigureAwait(false);
         string code = await DriveRawParAndAuthorizeAsync(
-            host, segment, verifierWithDisallowedCharacter, WellKnownCodeChallengeMethods.Plain,
+            host, segment, challenge, WellKnownCodeChallengeMethods.S256,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         (int TokenStatusCode, string TokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -331,23 +304,978 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
-    /// draft-16 §7.5.2</see>: "The plain code challenge method, defined in [RFC7636], is
-    /// explicitly forbidden in OAuth 2.1." Under the strict <see cref="PolicyProfile.Fapi20"/>
-    /// default (<see cref="PkceMethodSet.S256Only"/>), a PAR request naming <c>plain</c> is
-    /// refused over the real wire before any code is ever issued.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>
+    /// forbids plain. A storage-corrupted method must fail the persisted-method verification of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>, even
+    /// when comparing the verifier directly would succeed — answering the same body a code that
+    /// was never issued does, per <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC
+    /// 6749 §5.2</see>'s <c>invalid_grant</c>, never text of its own.
     /// </summary>
     [TestMethod]
-    public async Task PlainPkceRefusedAtParUnderS256OnlyDefault()
+    public async Task PersistedPlainPkceMethodAtTokenExchangeIsInvalidGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState).Key;
+        (FlowState state, int stepCount) = hosted.FlowStates[flowId];
+        ServerCodeIssuedState issued = Assert.IsInstanceOfType<ServerCodeIssuedState>(state);
+        hosted.FlowStates[flowId] = (issued with
+        {
+            CodeChallengeMethod = WellKnownCodeChallengeMethods.Plain,
+            CodeChallenge = pkce.EncodedVerifier
+        }, stepCount);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
+        Assert.Contains("The authorization code is unknown, expired, or already used.", Body, StringComparison.Ordinal);
+
+        //Discriminators: the seeded record's StepCount is unchanged by the refusal, and a record
+        //whose persisted method is S256 still redeems — so this test can still fail on the wrong
+        //code, not merely on any 400.
+        Assert.AreEqual(stepCount, hosted.FlowStates[flowId].StepCount,
+            "The collapsed refusal must not consume the seeded record.");
+        hosted.FlowStates[flowId] = (issued, stepCount);
+        (int RedeemedStatusCode, string RedeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RedeemedStatusCode, RedeemedBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>
+    /// forbids plain. An unknown storage-corrupted method must fail the persisted-method verification of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>, even
+    /// when S256 hashing the verifier would succeed — answering the same body a code that was
+    /// never issued does, per <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC
+    /// 6749 §5.2</see>'s <c>invalid_grant</c>, never text of its own.
+    /// </summary>
+    [TestMethod]
+    public async Task PersistedUnknownPkceMethodAtTokenExchangeIsInvalidGrant()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState).Key;
+        (FlowState state, int stepCount) = hosted.FlowStates[flowId];
+        ServerCodeIssuedState issued = Assert.IsInstanceOfType<ServerCodeIssuedState>(state);
+        hosted.FlowStates[flowId] = (issued with
+        {
+            CodeChallengeMethod = "unknown"
+        }, stepCount);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
+        Assert.Contains("The authorization code is unknown, expired, or already used.", Body, StringComparison.Ordinal);
+
+        //Discriminators: the seeded record's StepCount is unchanged by the refusal, and a record
+        //whose persisted method is S256 still redeems — so this test can still fail on the wrong
+        //code, not merely on any 400.
+        Assert.AreEqual(stepCount, hosted.FlowStates[flowId].StepCount,
+            "The collapsed refusal must not consume the seeded record.");
+        hosted.FlowStates[flowId] = (issued, stepCount);
+        (int RedeemedStatusCode, string RedeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RedeemedStatusCode, RedeemedBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>: the
+    /// authorization server recomputes the digest of the presented <c>code_verifier</c> and
+    /// compares it to the persisted <c>code_challenge</c>. A well-formed verifier whose digest does
+    /// NOT match answers the SAME body as a code that was never issued —
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>'s
+    /// <c>invalid_grant</c> — because a caller who could tell the two apart would have proven the
+    /// code exists from the digest compare alone, with no verifier at all.
+    /// </summary>
+    [TestMethod]
+    public async Task WrongButWellFormedCodeVerifierAnswersTheSameBodyForAnUnknownAndALiveCodeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState state
+            && state.CodeChallenge == pkce.EncodedChallenge).Key;
+        int stepCountBefore = hosted.FlowStates[flowId].StepCount;
+
+        string wrongButWellFormedVerifier = new('a', 64);
+
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, wrongButWellFormedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, "code-never-issued-by-this-host", wrongButWellFormedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, LiveBody, StringComparison.Ordinal);
+        Assert.AreEqual(UnknownStatusCode, LiveStatusCode);
+        Assert.AreEqual(UnknownBody, LiveBody,
+            "A well-formed but wrong code_verifier must answer identically whether or not the named code exists.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "A failed PKCE digest compare must not consume the live code.");
+
+        //Discriminator: the live code is unconsumed and still redeems with the correct verifier.
+        (int RedeemedStatusCode, string RedeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RedeemedStatusCode, RedeemedBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>: a
+    /// token-request <c>resource</c> outside the code's own granted set is a refusal reachable
+    /// only once the caller has already proven possession of the code's own secret — the matching
+    /// <c>code_verifier</c> digest
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>) — so it
+    /// keeps its own <c>invalid_target</c> body instead of the endpoint's not-found constant; an
+    /// UNKNOWN code, which no caller has proven possession of, answers that constant instead. The
+    /// two bodies are DIFFERENT by design: a caller reaching the granted-set refusal already knows
+    /// the code exists, so the endpoint's own text tells it nothing an oracle would leak.
+    /// </summary>
+    [TestMethod]
+    public async Task ResourceOutsideTheGrantedSetKeepsItsOwnBodyForAPossessionProvenCallerAtCodeRedemptionAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        const string GrantedResource = "https://rs.example.com/";
+        const string UngrantedResource = "https://other-rs.example.com/";
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken, resource: GrantedResource).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState state
+            && state.CodeChallenge == pkce.EncodedChallenge).Key;
+        int stepCountBefore = hosted.FlowStates[flowId].StepCount;
+
+        Dictionary<string, string> liveFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+        liveFields[OAuthRequestParameterNames.Resource] = UngrantedResource;
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, liveFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> unknownFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, "code-never-issued-by-this-host", pkce.EncodedVerifier, RedirectUri.OriginalString);
+        unknownFields[OAuthRequestParameterNames.Resource] = UngrantedResource;
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, unknownFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.Contains(OAuthErrors.InvalidTarget, LiveBody, StringComparison.Ordinal);
+        Assert.AreEqual(400, UnknownStatusCode, UnknownBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, UnknownBody, StringComparison.Ordinal);
+        Assert.AreNotEqual(UnknownBody, LiveBody,
+            "A possession-proven caller's granted-set refusal must keep its own body, distinct from the not-found constant an unknown code answers.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "A resource outside the granted set must not consume the live code.");
+
+        //Discriminator: the live code is unconsumed and still redeems with a resource inside the set.
+        Dictionary<string, string> redeemFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+        redeemFields[OAuthRequestParameterNames.Resource] = GrantedResource;
+        (int RedeemedResourceStatusCode, string RedeemedResourceBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, redeemFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RedeemedResourceStatusCode, RedeemedResourceBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-6">RFC 9396 §6</see>: a
+    /// token-request <c>authorization_details</c> narrowed to a <c>credential_configuration_id</c>
+    /// the code's own grant never authorized is a refusal reachable only once the caller has
+    /// already proven possession of the code's own secret — the matching <c>code_verifier</c>
+    /// digest (<see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>)
+    /// — so it keeps its own <c>invalid_authorization_details</c> body instead of the endpoint's
+    /// not-found constant; an UNKNOWN code, which no caller has proven possession of, answers that
+    /// constant instead. The two bodies are DIFFERENT by design: a caller reaching the narrowing
+    /// refusal already knows the code exists, so the endpoint's own text tells it nothing an
+    /// oracle would leak.
+    /// </summary>
+    [TestMethod]
+    public async Task NarrowedAuthorizationDetailsBeyondTheGrantKeepsItsOwnBodyForAPossessionProvenCallerAtCodeRedemptionAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequestedCredentials(details));
+        }).ConfigureAwait(false);
+
+        const string GrantedConfigurationId = "UniversityDegree_dc_sd_jwt";
+        const string UnauthorizedConfigurationId = "org.iso.18013.5.1.mDL";
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken,
+            authorizationDetails: SingleAuthorizationDetail(GrantedConfigurationId)).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState state
+            && state.CodeChallenge == pkce.EncodedChallenge).Key;
+        int stepCountBefore = hosted.FlowStates[flowId].StepCount;
+
+        Dictionary<string, string> liveFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+        liveFields[OAuthRequestParameterNames.AuthorizationDetails] = SingleAuthorizationDetail(UnauthorizedConfigurationId);
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, liveFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> unknownFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, "code-never-issued-by-this-host", pkce.EncodedVerifier, RedirectUri.OriginalString);
+        unknownFields[OAuthRequestParameterNames.AuthorizationDetails] = SingleAuthorizationDetail(UnauthorizedConfigurationId);
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, unknownFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.Contains(OAuthErrors.InvalidAuthorizationDetails, LiveBody, StringComparison.Ordinal);
+        Assert.AreEqual(400, UnknownStatusCode, UnknownBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, UnknownBody, StringComparison.Ordinal);
+        Assert.AreNotEqual(UnknownBody, LiveBody,
+            "A possession-proven caller's narrowing refusal must keep its own body, distinct from the not-found constant an unknown code answers.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "The narrowing refusal must not consume the live code.");
+
+        //Discriminator: the live code is unconsumed and still redeems with the granted configuration.
+        Dictionary<string, string> redeemFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+        redeemFields[OAuthRequestParameterNames.AuthorizationDetails] = SingleAuthorizationDetail(GrantedConfigurationId);
+        (int RedeemedDetailsStatusCode, string RedeemedDetailsBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, redeemFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RedeemedDetailsStatusCode, RedeemedDetailsBody);
+    }
+
+
+    /// <summary>
+    /// The refresh-grant twin of
+    /// <see cref="ResourceOutsideTheGrantedSetKeepsItsOwnBodyForAPossessionProvenCallerAtCodeRedemptionAsync"/>
+    /// — <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>'s
+    /// granted-set compare at REFRESH is a refusal reachable only once the caller has already
+    /// proven possession by presenting the bound client's own identity
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>), so it
+    /// keeps its own <c>invalid_target</c> body instead of the endpoint's not-found constant; an
+    /// UNKNOWN refresh token, which no caller has proven possession of, answers that constant
+    /// instead. The two bodies are DIFFERENT by design.
+    /// </summary>
+    [TestMethod]
+    public async Task ResourceOutsideTheGrantedSetKeepsItsOwnBodyForAPossessionProvenCallerAtRefreshAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        const string GrantedResource = "https://rs.example.com/";
+        const string UngrantedResource = "https://other-rs.example.com/";
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken, resource: GrantedResource).ConfigureAwait(false);
+        (int TokenStatusCode, string TokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, TokenStatusCode, TokenBody);
+        using JsonDocument tokenDoc = JsonDocument.Parse(TokenBody);
+        string refreshToken = tokenDoc.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerRefreshTokenIssuedState).Key;
+        int stepCountBefore = hosted.FlowStates[flowId].StepCount;
+
+        Dictionary<string, string> liveFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken);
+        liveFields[OAuthRequestParameterNames.Resource] = UngrantedResource;
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, liveFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> unknownFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(
+            ClientId, "refresh-token-never-issued-by-this-host");
+        unknownFields[OAuthRequestParameterNames.Resource] = UngrantedResource;
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, unknownFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.Contains(OAuthErrors.InvalidTarget, LiveBody, StringComparison.Ordinal);
+        Assert.AreEqual(400, UnknownStatusCode, UnknownBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, UnknownBody, StringComparison.Ordinal);
+        Assert.AreNotEqual(UnknownBody, LiveBody,
+            "A possession-proven caller's granted-set refusal must keep its own body, distinct from the not-found constant an unknown refresh token answers.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "A resource outside the granted set must not consume the live refresh token.");
+
+        //Discriminator: the live refresh token is unconsumed and still refreshes with a resource
+        //inside the set.
+        Dictionary<string, string> redeemFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken);
+        redeemFields[OAuthRequestParameterNames.Resource] = GrantedResource;
+        (int RefreshedResourceStatusCode, string RefreshedResourceBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, redeemFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RefreshedResourceStatusCode, RefreshedResourceBody);
+    }
+
+
+    /// <summary>
+    /// The refresh-grant twin of
+    /// <see cref="NarrowedAuthorizationDetailsBeyondTheGrantKeepsItsOwnBodyForAPossessionProvenCallerAtCodeRedemptionAsync"/>
+    /// — <see href="https://www.rfc-editor.org/rfc/rfc9396#section-6">RFC 9396 §6</see>'s
+    /// narrowing-against-grant compare at REFRESH is a refusal reachable only once the caller has
+    /// already proven possession by presenting the bound client's own identity
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>), so it
+    /// keeps its own <c>invalid_authorization_details</c> body instead of the endpoint's not-found
+    /// constant; an UNKNOWN refresh token, which no caller has proven possession of, answers that
+    /// constant instead. The two bodies are DIFFERENT by design.
+    /// </summary>
+    [TestMethod]
+    public async Task NarrowedAuthorizationDetailsBeyondTheGrantKeepsItsOwnBodyForAPossessionProvenCallerAtRefreshAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequestedCredentials(details));
+        }).ConfigureAwait(false);
+
+        const string GrantedConfigurationId = "UniversityDegree_dc_sd_jwt";
+        const string UnauthorizedConfigurationId = "org.iso.18013.5.1.mDL";
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken,
+            authorizationDetails: SingleAuthorizationDetail(GrantedConfigurationId)).ConfigureAwait(false);
+        (int TokenStatusCode, string TokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, TokenStatusCode, TokenBody);
+        using JsonDocument tokenDoc = JsonDocument.Parse(TokenBody);
+        string refreshToken = tokenDoc.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerRefreshTokenIssuedState).Key;
+        int stepCountBefore = hosted.FlowStates[flowId].StepCount;
+
+        Dictionary<string, string> liveFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken);
+        liveFields[OAuthRequestParameterNames.AuthorizationDetails] = SingleAuthorizationDetail(UnauthorizedConfigurationId);
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, liveFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> unknownFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(
+            ClientId, "refresh-token-never-issued-by-this-host");
+        unknownFields[OAuthRequestParameterNames.AuthorizationDetails] = SingleAuthorizationDetail(UnauthorizedConfigurationId);
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, unknownFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.Contains(OAuthErrors.InvalidAuthorizationDetails, LiveBody, StringComparison.Ordinal);
+        Assert.AreEqual(400, UnknownStatusCode, UnknownBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, UnknownBody, StringComparison.Ordinal);
+        Assert.AreNotEqual(UnknownBody, LiveBody,
+            "A possession-proven caller's narrowing refusal must keep its own body, distinct from the not-found constant an unknown refresh token answers.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "The narrowing refusal must not consume the live refresh token.");
+
+        //Discriminator: the live refresh token is unconsumed and still refreshes with the granted
+        //configuration.
+        Dictionary<string, string> redeemFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken);
+        redeemFields[OAuthRequestParameterNames.AuthorizationDetails] = SingleAuthorizationDetail(GrantedConfigurationId);
+        (int RefreshedDetailsStatusCode, string RefreshedDetailsBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, redeemFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RefreshedDetailsStatusCode, RefreshedDetailsBody);
+    }
+
+
+    /// <summary>
+    /// A grant covering every requested configuration, with a deterministic per-configuration
+    /// dataset identifier — the decision seam
+    /// <see cref="NarrowedAuthorizationDetailsBeyondTheGrantKeepsItsOwnBodyForAPossessionProvenCallerAtCodeRedemptionAsync"/>
+    /// and its refresh twin wire so a correctly-scoped request still mints
+    /// <c>credential_identifiers</c>.
+    /// </summary>
+    private static CredentialAuthorizationDecision GrantAllRequestedCredentials(
+        IReadOnlyList<CredentialAuthorizationDetail> details)
+    {
+        List<GrantedCredentialAuthorization> granted = [];
+        foreach(CredentialAuthorizationDetail detail in details)
+        {
+            granted.Add(new GrantedCredentialAuthorization
+            {
+                CredentialConfigurationId = detail.CredentialConfigurationId!,
+                CredentialIdentifiers = [$"{detail.CredentialConfigurationId}-dataset-1"]
+            });
+        }
+
+        return CredentialAuthorizationDecision.Grant(granted);
+    }
+
+
+    /// <summary>
+    /// A single <c>openid_credential</c> <c>authorization_details</c> entry naming
+    /// <paramref name="configurationId"/> — the minimal RFC 9396 §5.1.1 shape the narrowing tests
+    /// push and present at the token/refresh endpoint.
+    /// </summary>
+    private static string SingleAuthorizationDetail(string configurationId) =>
+        "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + configurationId + "\"}]";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> "issued
+    /// to another client" and <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC
+    /// 6749 §4.1.3</see>'s <c>redirect_uri</c> comparison: a code record whose stored client or
+    /// redirect differs from what a legitimate first presentation would ever produce — the shape a
+    /// store fault or a legacy record could produce — answers the SAME body as a code that was
+    /// never issued, never a distinct text of its own: a caller who reaches a distinguishable
+    /// answer has already proven the code exists.
+    /// </summary>
+    [TestMethod]
+    public async Task CodeSeededWithAnotherClientOrRedirectAnswersTheSameBodyForAnUnknownAndALiveCodeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        const string HostileStoredClientId = "https://attacker.example.com";
+
+        //Leg 1: the stored record names a client the registration never was.
+        {
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            string code = await DriveRawParAndAuthorizeAsync(
+                host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState state
+                && state.CodeChallenge == pkce.EncodedChallenge).Key;
+            (FlowState state, int stepCount) = hosted.FlowStates[flowId];
+            ServerCodeIssuedState issued = Assert.IsInstanceOfType<ServerCodeIssuedState>(state);
+            hosted.FlowStates[flowId] = (issued with { ClientId = HostileStoredClientId }, stepCount);
+
+            (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment,
+                RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment,
+                RawAuthCodeWirePushers.BuildTokenFields(
+                    ClientId, "code-never-issued-by-this-host-1", pkce.EncodedVerifier, RedirectUri.OriginalString),
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(400, LiveStatusCode, LiveBody);
+            Assert.AreEqual(UnknownStatusCode, LiveStatusCode);
+            Assert.AreEqual(UnknownBody, LiveBody,
+                "A code stored bound to another client must answer identically to a code that was never issued.");
+            Assert.AreEqual(stepCount, hosted.FlowStates[flowId].StepCount,
+                "The refusal must not consume the seeded record.");
+        }
+
+        //Leg 2: the stored record names a redirect_uri the client never presented at PAR time.
+        {
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            string code = await DriveRawParAndAuthorizeAsync(
+                host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState state
+                && state.CodeChallenge == pkce.EncodedChallenge).Key;
+            (FlowState state, int stepCount) = hosted.FlowStates[flowId];
+            ServerCodeIssuedState issued = Assert.IsInstanceOfType<ServerCodeIssuedState>(state);
+            hosted.FlowStates[flowId] = (issued with { RedirectUri = new Uri("https://stale.example.com/callback") }, stepCount);
+
+            (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment,
+                RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment,
+                RawAuthCodeWirePushers.BuildTokenFields(
+                    ClientId, "code-never-issued-by-this-host-2", pkce.EncodedVerifier, RedirectUri.OriginalString),
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(400, LiveStatusCode, LiveBody);
+            Assert.AreEqual(UnknownStatusCode, LiveStatusCode);
+            Assert.AreEqual(UnknownBody, LiveBody,
+                "A code stored bound to a stale redirect_uri must answer identically to a code that was never issued.");
+            Assert.AreEqual(stepCount, hosted.FlowStates[flowId].StepCount,
+                "The refusal must not consume the seeded record.");
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>'s
+    /// <c>invalid_grant</c> covers a code that has "already been redeemed": a SECOND valid replay
+    /// of a code the FIRST valid replay already revoked reaches the same early exit an unknown code
+    /// answers with, never text of its own.
+    /// </summary>
+    [TestMethod]
+    public async Task SecondValidReplayAfterRevocationAnswersTheSameBodyForAnUnknownAndTheRevokedCodeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int FirstStatusCode, string FirstBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, FirstStatusCode, FirstBody);
+
+        //FIRST replay: a valid presentation of the redeemed code — revokes the grant and
+        //persists RevokedAt.
+        (int FirstReplayStatusCode, string FirstReplayBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, FirstReplayStatusCode, FirstReplayBody);
+
+        //SECOND replay: with RevokedAt set — the site under test — compared against a code that
+        //was never issued, presented with the same well-formed verifier.
+        (int SecondReplayStatusCode, string SecondReplayBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, "code-never-issued-by-this-host", pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, SecondReplayStatusCode, SecondReplayBody);
+        Assert.AreEqual(UnknownStatusCode, SecondReplayStatusCode);
+        Assert.AreEqual(UnknownBody, SecondReplayBody,
+            "A code already revoked by an earlier valid replay must answer identically to a code that was never issued.");
+    }
+
+
+    /// <summary>
+    /// A code correlation key resolving to a <see cref="ServerTokenIssuedState"/> missing its
+    /// binding fields (the refresh-rotation shape of that record type, which a code correlation
+    /// key never legitimately resolves to — the code and refresh-token index spaces are disjoint)
+    /// answers the same body a code that was never issued does, never distinct text of its own.
+    /// </summary>
+    [TestMethod]
+    public async Task ReplayResolvingToATerminalStateMissingItsBindingFieldsAnswersTheSameBodyForAnUnknownAndALiveCodeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int FirstStatusCode, string FirstBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, FirstStatusCode, FirstBody);
+
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerTokenIssuedState).Key;
+        (FlowState state, int stepCount) = hosted.FlowStates[flowId];
+        ServerTokenIssuedState issued = Assert.IsInstanceOfType<ServerTokenIssuedState>(state);
+        hosted.FlowStates[flowId] = (issued with
+        {
+            ClientId = null,
+            RedirectUri = null,
+            CodeChallenge = null,
+            CodeChallengeMethod = null
+        }, stepCount);
+
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, "code-never-issued-by-this-host", pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.AreEqual(UnknownStatusCode, LiveStatusCode);
+        Assert.AreEqual(UnknownBody, LiveBody,
+            "A replay resolving to a terminal state missing its binding fields must answer identically to a code that was never issued.");
+    }
+
+
+    /// <summary>
+    /// A code correlation key resolving to a record of a type the token endpoint never produces or
+    /// consumes for a code grant (the shape a store fault could produce) answers the same body a
+    /// code that was never issued does, never distinct text of its own.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenEndpointHandleResolvingToAWronglyTypedRecordAnswersTheSameBodyForAnUnknownAndALiveCodeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        string flowId = hosted.FlowStates.Single(pair => pair.Value.State is ServerCodeIssuedState state
+            && state.CodeChallenge == pkce.EncodedChallenge).Key;
+        int stepCount = hosted.FlowStates[flowId].StepCount;
+
+        //A separately pushed PAR gives a genuine ParRequestReceivedState — a record type the code
+        //correlation key could never legitimately resolve to. Seeded directly, the shape a
+        //corrupted store could produce.
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        (int ParStatusCode, string ParBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, ParStatusCode, ParBody);
+        using JsonDocument parDoc = JsonDocument.Parse(ParBody);
+        string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
+        string parFlowId = hosted.RequestUriTokenIndex[TestHostShell.ExtractRequestUriToken(new Uri(requestUri))];
+        FlowState wronglyTypedState = hosted.FlowStates[parFlowId].State;
+
+        hosted.FlowStates[flowId] = (wronglyTypedState, stepCount);
+
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, "code-never-issued-by-this-host", pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, LiveStatusCode, LiveBody);
+        Assert.AreEqual(UnknownStatusCode, LiveStatusCode);
+        Assert.AreEqual(UnknownBody, LiveBody,
+            "A code correlation key resolving to a wrongly-typed record must answer identically to a code that was never issued.");
+    }
+
+
+    /// <summary>
+    /// A plain request receives an error redirect after client and destination validation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
+    /// "the authorization server informs the client by adding the following parameters to the
+    /// query component of the redirection URI using the "application/x-www-form-urlencoded" format".
+    /// The state is "The exact value received from the client."
+    /// </summary>
+    [TestMethod]
+    public async Task PlainPkceRefusedAtDirectAuthorizeUnderRfc6749WithPkce()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         Dictionary<string, string> parFields = new(StringComparer.Ordinal)
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.Plain,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = "pkce state + & = ?"
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string query = string.Join("&", parFields.Select(pair =>
+            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment) + "?" + query);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, (int)response.StatusCode, body);
+        Uri location = response.Headers.Location!;
+        Assert.IsNotNull(location, "A validated redirect URI receives the authorization error.");
+        Dictionary<string, string> parameters = location.Query.TrimStart('?').Split('&')
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(parts => Uri.UnescapeDataString(parts[0]),
+                parts => Uri.UnescapeDataString(parts[1].Replace('+', ' ')), StringComparer.Ordinal);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, parameters["error"], "The unsupported method error is invalid_request.");
+        Assert.AreEqual("pkce state + & = ?", parameters["state"], "The authorization error echoes the exact state.");
+        Assert.AreEqual("only the S256 code challenge method is supported", parameters["error_description"],
+            "The error describes the supported transformation.");
+    }
+
+
+    /// <summary>
+    /// A plain request receives an error redirect after client and destination validation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
+    /// "the authorization server informs the client by adding the following parameters to the
+    /// query component of the redirection URI using the "application/x-www-form-urlencoded" format".
+    /// The state is "The exact value received from the client."
+    /// </summary>
+    [TestMethod]
+    public async Task PlainPkceRefusedAtDirectAuthorizeBeforeParPolicy()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.Plain,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = "pkce state + & = ?"
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string query = string.Join("&", parFields.Select(pair =>
+            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment) + "?" + query);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, (int)response.StatusCode, body);
+        Uri location = response.Headers.Location!;
+        Assert.IsNotNull(location, "A validated redirect URI receives the authorization error.");
+        Dictionary<string, string> parameters = location.Query.TrimStart('?').Split('&')
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(parts => Uri.UnescapeDataString(parts[0]),
+                parts => Uri.UnescapeDataString(parts[1].Replace('+', ' ')), StringComparer.Ordinal);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, parameters["error"], "The unsupported method error is invalid_request.");
+        Assert.AreEqual("pkce state + & = ?", parameters["state"], "The authorization error echoes the exact state.");
+        Assert.AreEqual("only the S256 code challenge method is supported", parameters["error_description"],
+            "The error describes the supported transformation.");
+    }
+
+
+    /// <summary>
+    /// An absent method requests the refused plain transformation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">§4.4.1</see> requires
+    /// "authorization error response with "error" value set to "invalid_request"."
+    /// </summary>
+    [TestMethod]
+    public async Task AbsentPkceMethodRefusedAtDirectAuthorizeUnderRfc6749WithPkce()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = "pkce state + & = ?"
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string query = string.Join("&", parFields.Select(pair =>
+            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment) + "?" + query);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, (int)response.StatusCode, body);
+        Uri location = response.Headers.Location!;
+        Assert.IsNotNull(location, "A validated redirect URI receives the authorization error.");
+        Dictionary<string, string> parameters = location.Query.TrimStart('?').Split('&')
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(parts => Uri.UnescapeDataString(parts[0]),
+                parts => Uri.UnescapeDataString(parts[1].Replace('+', ' ')), StringComparer.Ordinal);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, parameters["error"], "The unsupported method error is invalid_request.");
+        Assert.AreEqual("pkce state + & = ?", parameters["state"], "The authorization error echoes the exact state.");
+        Assert.AreEqual("only the S256 code challenge method is supported", parameters["error_description"],
+            "The error describes the supported transformation.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>:
+    /// "response_type: REQUIRED." <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1.1">§3.1.1</see>:
+    /// "If an authorization request is missing the "response_type" parameter... the
+    /// authorization server MUST return an error response as described in Section 4.1.2.1."
+    /// A validated destination receives the error redirect rather than an implicit
+    /// <c>code</c> grant.
+    /// </summary>
+    [TestMethod]
+    public async Task AbsentResponseTypeRefusedAtDirectAuthorizeUnderRfc6749WithPkce()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = "response_type state + & = ?"
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string query = string.Join("&", parFields.Select(pair =>
+            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment) + "?" + query);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, (int)response.StatusCode, body);
+        Uri location = response.Headers.Location!;
+        Assert.IsNotNull(location, "A validated redirect URI receives the authorization error.");
+        Dictionary<string, string> parameters = location.Query.TrimStart('?').Split('&')
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(parts => Uri.UnescapeDataString(parts[0]),
+                parts => Uri.UnescapeDataString(parts[1].Replace('+', ' ')), StringComparer.Ordinal);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, parameters["error"], "A missing response_type is invalid_request.");
+        Assert.AreEqual("response_type state + & = ?", parameters["state"], "The authorization error echoes the exact state.");
+        Assert.AreEqual("Missing response_type.", parameters["error_description"],
+            "The error names the missing required parameter.");
+    }
+
+
+    /// <summary>
+    /// An invalid client or destination receives a direct refusal per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
+    /// "MUST NOT automatically redirect the user-agent to the invalid redirection URI".
+    /// </summary>
+    [TestMethod]
+    public async Task PlainPkceWithInvalidRedirectUriDoesNotRedirect()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.Plain,
+            [OAuthRequestParameterNames.RedirectUri] = "https://unregistered.example/cb",
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = "pkce state + & = ?"
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string query = string.Join("&", parFields.Select(pair =>
+            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment) + "?" + query);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "An invalid client or redirect URI must not receive a redirect.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>:
+    /// "The plain code challenge method, defined in [RFC7636], is explicitly forbidden in OAuth 2.1."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">RFC 7636 §4.4.1</see>
+    /// requires <c>invalid_request</c> for this unsupported transformation.
+    /// </summary>
+    [TestMethod]
+    public async Task PlainPkceRefusedAtParUnderRfc6749WithPkce()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.Plain,
@@ -359,7 +1287,111 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, StatusCode, Body);
-        Assert.Contains(OAuthErrors.InvalidRequest, Body, StringComparison.Ordinal);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", Body, StringComparison.Ordinal);
+        Assert.Contains("only the S256 code challenge method is supported", Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// An absent method requests the refused plain transformation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
+    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">§4.4.1</see> requires
+    /// "authorization error response with "error" value set to "invalid_request"."
+    /// </summary>
+    [TestMethod]
+    public async Task AbsentPkceMethodRefusedAtParUnderRfc6749WithPkce()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", Body, StringComparison.Ordinal);
+        Assert.Contains("only the S256 code challenge method is supported", Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>: the PAR
+    /// body carries the same authorization request parameters, so
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>'s
+    /// "response_type: REQUIRED" applies. A missing parameter is answered directly per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.3">RFC 9126 §2.3</see> — PAR has
+    /// no redirect leg of its own.
+    /// </summary>
+    [TestMethod]
+    public async Task AbsentResponseTypeRefusedAtParUnderRfc6749WithPkce()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", Body, StringComparison.Ordinal);
+        Assert.Contains("Missing response_type.", Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>:
+    /// "The plain code challenge method, defined in [RFC7636], is explicitly forbidden in OAuth 2.1."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">RFC 7636 §4.4.1</see>
+    /// requires <c>invalid_request</c> for this unsupported transformation.
+    /// </summary>
+    [TestMethod]
+    public async Task PlainPkceRefusedAtParUnderS256OnlyDefault()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.Plain,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", Body, StringComparison.Ordinal);
+        Assert.Contains("only the S256 code challenge method is supported", Body, StringComparison.Ordinal);
     }
 
 
@@ -375,8 +1407,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task S256IssuedCodeVerifiedAgainstPersistedMethodNotRequest()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -404,8 +1436,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task UnknownAuthorizationCodeAtTokenEndpointIsInvalidGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -433,8 +1465,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task MissingCodeVerifierOnALiveCodeMatchesTheUnknownCodeResponse()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -481,8 +1513,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task NonAsciiCodeMatchesTheUnknownCodeResponse()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
@@ -512,7 +1544,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <c>invalid_grant</c> covers "expired." A genuinely issued code presented after its
     /// persisted <c>ExpiresAt</c> has passed (the injected <see cref="FakeTimeProvider"/> advanced
     /// past it) fails <c>invalid_grant</c> AT THE SERVER — driven with
-    /// <see cref="RawAuthCodeWirePushers"/> rather than <see cref="AuthCodeClient.ExchangeTokenAsync"/>
+    /// <see cref="RawAuthCodeWirePushers"/> rather than <see cref="AuthCodeClient.ExchangeTokenAsync(ClientRegistration, string, CancellationToken)"/>
     /// so the assertion exercises the server's own refusal, not the client SDK's own separate
     /// local-expiry guard. The policy that governs a PAR-issued code's <c>ExpiresAt</c> is the
     /// 600-second authorization-code lifetime
@@ -526,8 +1558,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ExpiredAuthorizationCodeAtTokenExchangeIsInvalidGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -573,8 +1605,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ParIssuedCodeRedeemsAfterRequestUriLifetimeElapses()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -619,8 +1651,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task MissingCodeParameterAtTokenEndpointIsInvalidRequestWithOAuthBody()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -631,6 +1663,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         Assert.AreEqual(400, StatusCode, Body);
         Assert.Contains(OAuthErrors.InvalidRequest, Body, StringComparison.Ordinal);
+
+        using JsonDocument doc = JsonDocument.Parse(Body);
+        Assert.AreEqual("Missing code.", doc.RootElement.GetProperty("error_description").GetString(),
+            "RFC 6749 §5.2's invalid_request names the missing required parameter, in the style of "
+            + "this endpoint's own 'Missing grant_type.' refusal, rather than the host-generic "
+            + "'Cannot determine correlation key.'");
     }
 
 
@@ -654,11 +1692,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         const string ResourceB = "https://contacts.example.com/";
 
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -779,13 +1820,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ConcurrentAuthorizeRequestsForTheSameRequestUriYieldExactlyOneIssuedCode()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         Dictionary<string, string> parFields = new(StringComparer.Ordinal)
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -865,8 +1907,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ConcurrentTokenRedemptionOfSameCodeYieldsExactlyOneSuccess()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -876,6 +1918,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = host.Host("default");
+
+        //This test forces same-version claim contention on the code's own live record: with the
+        //per-grant ordering gate on, the second request would never enter the library while the
+        //first is held at LoadFlowStateAsync below.
+        hosted.IsOrderingRequestsPerGrant = false;
         string segment = material.Registration.TenantId.Value;
 
         string flowId = await DriveParAuthorizeAndCallbackAsync(
@@ -891,20 +1938,24 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         int arrivedAtLiveState = 0;
         TaskCompletionSource releaseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         LoadServerFlowStateDelegate originalLoad = host.Server.OAuth().LoadFlowStateAsync!;
-        host.Server.OAuth().LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
-            if(state is ServerCodeIssuedState)
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
             {
-                if(Interlocked.Increment(ref arrivedAtLiveState) == ConcurrentRequests)
+                (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+                if(state is ServerCodeIssuedState)
                 {
-                    _ = releaseGate.TrySetResult();
-                }
-                await releaseGate.Task.ConfigureAwait(false);
-            }
+                    if(Interlocked.Increment(ref arrivedAtLiveState) == ConcurrentRequests)
+                    {
+                        _ = releaseGate.TrySetResult();
+                    }
 
-            return (state, stepCount);
-        };
+                    await releaseGate.Task.ConfigureAwait(false);
+                }
+
+                return (state, stepCount);
+            };
+        }).ConfigureAwait(false);
 
         Task<(int StatusCode, string Body)>[] redemptions = [.. Enumerable.Range(0, ConcurrentRequests)
             .Select(_ => RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -938,25 +1989,30 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ValidReplayOfRedeemedCodeIsInvalidGrantAndRevokesTheIssuedAccessToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection).ConfigureAwait(false);
 
         HashSet<string> revokedJtis = new(StringComparer.Ordinal);
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().RevokeIssuedTokenAsync = (tokenIdentifier, tokenType, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            _ = revokedJtis.Add(tokenIdentifier);
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
 
-            return ValueTask.CompletedTask;
-        };
-        host.Server.OAuth().IntrospectTokenAsync = (token, hint, _, _, _) =>
-        {
-            using JsonDocument payload = DecodePayload(token);
-            string jti = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Jti).GetString()!;
+            candidateIntegration.RevokeIssuedTokenAsync = (tokenIdentifier, tokenType, _, _, _) =>
+            {
+                _ = revokedJtis.Add(tokenIdentifier);
 
-            return ValueTask.FromResult(new TokenIntrospectionResult { IsActive = !revokedJtis.Contains(jti) });
-        };
+                return ValueTask.CompletedTask;
+            };
+
+            candidateIntegration.IntrospectTokenAsync = (token, hint, _, _, _) =>
+            {
+                using JsonDocument payload = DecodePayload(token);
+                string jti = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Jti).GetString()!;
+
+                return ValueTask.FromResult(new TokenIntrospectionResult { IsActive = !revokedJtis.Contains(jti) });
+            };
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1012,19 +2068,18 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>'s
     /// SHOULD-revoke on a code replay reaches the grant's CURRENT refresh token even when that
-    /// token has already rotated at least once since the code was redeemed:
-    /// <see cref="ServerTokenIssuedState.RefreshFlowId"/> names the code-issued refresh record,
-    /// which by the time of the replay is itself already retired (carrying a
-    /// <see cref="ServerTokenIssuedState.SuccessorRefreshFlowId"/> link) rather than a live
-    /// <see cref="ServerRefreshTokenIssuedState"/> — the replay handler must walk that link to the
-    /// family's live end rather than deleting only that immediate, already-dead record.
+    /// token has already rotated at least once since the code was redeemed: the code-issued
+    /// refresh record has itself already retired into a <see cref="ServerTokenIssuedState"/> by
+    /// the time of the replay, and revocation must still reach the grant's live
+    /// <see cref="ServerRefreshTokenIssuedState"/> rather than stopping at that immediate,
+    /// already-dead record.
     /// </summary>
     [TestMethod]
     public async Task ValidReplayAfterTheRefreshTokenHasAlreadyRotatedRevokesTheCurrentSuccessorAsync()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1047,15 +2102,15 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
         string codeIssuedRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        //A single legitimate rotation BEFORE the replay — the code's own RefreshFlowId now names
-        //an already-retired record, not the family's live refresh token.
-        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        //A single legitimate rotation BEFORE the replay — the code's own refresh record is now an
+        //already-retired record, not the family's live refresh token.
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, codeIssuedRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        Assert.AreEqual(200, StatusCode, Body);
         string currentRefreshToken;
         string currentAccessToken;
-        using(JsonDocument rotationDoc = JsonDocument.Parse(rotation.Body))
+        using(JsonDocument rotationDoc = JsonDocument.Parse(Body))
         {
             currentAccessToken = rotationDoc.RootElement.GetProperty(
                 OAuthRequestParameterNames.AccessToken).GetString()!;
@@ -1064,12 +2119,15 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         }
 
         HashSet<string> revokedJtis = [];
-        host.Server.OAuth().RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            _ = revokedJtis.Add(jti);
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+            {
+                _ = revokedJtis.Add(jti);
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         //A VALID replay of the redeemed code.
         (int StatusCode, string Body) replay = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -1105,8 +2163,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ValidReplayWithRepeatedLostClaimsDoesNotDeleteUnclaimedStateAsync()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1129,12 +2187,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
         string codeIssuedRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, codeIssuedRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        Assert.AreEqual(200, StatusCode, Body);
         string currentRefreshToken;
-        using(JsonDocument rotationDoc = JsonDocument.Parse(rotation.Body))
+        using(JsonDocument rotationDoc = JsonDocument.Parse(Body))
         {
             currentRefreshToken = rotationDoc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
@@ -1142,15 +2200,18 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         var originalClaim = host.Server.OAuth().ClaimFlowStateAsync;
         int claimCalls = 0;
-        host.Server.OAuth().ClaimFlowStateAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(++claimCalls > 2)
+            candidateIntegration.ClaimFlowStateAsync = (_, _, _, _, _) =>
             {
-                throw new InvalidOperationException("A family walk must stop after its bounded claim retry.");
-            }
+                if(++claimCalls > 2)
+                {
+                    throw new InvalidOperationException("A family walk must stop after its bounded claim retry.");
+                }
 
-            return ValueTask.FromResult(false);
-        };
+                return ValueTask.FromResult(false);
+            };
+        }).ConfigureAwait(false);
 
         (int StatusCode, string Body) firstReplay = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment,
@@ -1158,7 +2219,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 ClientId, codeState.Code, codeState.Pkce.EncodedVerifier, RedirectUri.OriginalString),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, firstReplay.StatusCode, firstReplay.Body);
-        host.Server.OAuth().ClaimFlowStateAsync = originalClaim;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimFlowStateAsync = originalClaim;
+        }).ConfigureAwait(false);
 
         (int StatusCode, string Body) currentAfterIncompleteWalk = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
@@ -1191,12 +2255,9 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>:
     /// "the authorization server MUST deny the request" for an already-used code — a THIRD valid
-    /// presentation is still denied, but per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.2">RFC 7009 §2.2</see> "the
-    /// purpose of the revocation request ... is already achieved" once the first replay revoked
-    /// the tokens, so a second and third valid replay must not re-invoke
-    /// <see cref="AuthorizationServerIntegration.RevokeIssuedTokenAsync"/> — proven as an
-    /// invariant on the call count, not on which path fired. The
+    /// presentation is still denied. The library's persisted revocation marker makes later valid
+    /// replay idempotent: it does not repeat RevokeIssuedTokenAsync calls. This callback-count
+    /// invariant is library behavior, separate from the protocol's replay denial.
     /// <see cref="ServerTokenIssuedState.RevokedAt"/> marker the first replay writes is directly
     /// observable on the test host's persisted state.
     /// </summary>
@@ -1204,18 +2265,22 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task SecondAndThirdValidReplayDoNotReinvokeRevocationAndTheMarkerPersists()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection).ConfigureAwait(false);
 
         int revokeCallCount = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            _ = Interlocked.Increment(ref revokeCallCount);
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
 
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+            {
+                _ = Interlocked.Increment(ref revokeCallCount);
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1240,10 +2305,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Dictionary<string, string> replayFields = RawAuthCodeWirePushers.BuildTokenFields(
             ClientId, codeState.Code, codeState.Pkce.EncodedVerifier, RedirectUri.OriginalString);
 
-        (int StatusCode, string Body) secondPresentation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, replayFields, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(400, secondPresentation.StatusCode, secondPresentation.Body);
-        Assert.Contains(OAuthErrors.InvalidGrant, secondPresentation.Body, StringComparison.Ordinal);
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
 
         int countAfterFirstReplay = revokeCallCount;
         Assert.IsGreaterThanOrEqualTo(1, countAfterFirstReplay,
@@ -1282,14 +2347,18 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task UnwiredRevokeIssuedTokenStillDeniesReplayButLeavesTheAccessTokenValid()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection).ConfigureAwait(false);
 
         //RevokeIssuedTokenAsync deliberately left unwired.
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(new TokenIntrospectionResult { IsActive = true });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult { IsActive = true });
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1313,13 +2382,13 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string firstAccessToken = (string)firstExchange.Body![OAuthRequestParameterNames.AccessToken];
         string firstRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        (int StatusCode, string Body) replay = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment,
             RawAuthCodeWirePushers.BuildTokenFields(
                 ClientId, codeState.Code, codeState.Pkce.EncodedVerifier, RedirectUri.OriginalString),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(400, replay.StatusCode, replay.Body);
-        Assert.Contains(OAuthErrors.InvalidGrant, replay.Body, StringComparison.Ordinal);
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
 
         (int StatusCode, string Body) stillActive = await RawAuthCodeWirePushers.PushRawIntrospectionFieldsAsync(
             host, segment,
@@ -1352,8 +2421,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task RefreshTokenRevokedByValidCodeReplayIsRefusedInvalidGrant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1421,8 +2490,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ConcurrentRefreshOfSameTokenYieldsExactlyOneSuccess()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1432,6 +2501,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = host.Host("default");
+
+        //This test forces same-version claim contention on the refresh token's own live record:
+        //with the per-grant ordering gate on, the second request would never enter the library
+        //while the first is held at LoadFlowStateAsync below.
+        hosted.IsOrderingRequestsPerGrant = false;
         string segment = material.Registration.TenantId.Value;
 
         string flowId = await DriveParAuthorizeAndCallbackAsync(
@@ -1450,32 +2524,39 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         const int ConcurrentRequests = 8;
 
         string refreshFlowId = hosted.RefreshTokenIndex[firstRefreshToken];
+        string grantFlowId = hosted.ResolveGrantKey(refreshFlowId);
         int revokeCalls = 0;
-        host.Server.OAuth().RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            _ = Interlocked.Increment(ref revokeCalls);
+            candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+            {
+                _ = Interlocked.Increment(ref revokeCalls);
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
         int initialLiveRecords = hosted.FlowStates.Values.Count(entry => entry.State is ServerRefreshTokenIssuedState);
         int arrivedAtLiveState = 0;
         TaskCompletionSource releaseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         LoadServerFlowStateDelegate originalLoad = host.Server.OAuth().LoadFlowStateAsync!;
-        host.Server.OAuth().LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
-            if(key == refreshFlowId && state is ServerRefreshTokenIssuedState)
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
             {
-                if(Interlocked.Increment(ref arrivedAtLiveState) == ConcurrentRequests)
+                (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+                if(key == refreshFlowId && state is ServerRefreshTokenIssuedState)
                 {
-                    _ = releaseGate.TrySetResult();
+                    if(Interlocked.Increment(ref arrivedAtLiveState) == ConcurrentRequests)
+                    {
+                        _ = releaseGate.TrySetResult();
+                    }
+
+                    await releaseGate.Task.WaitAsync(ct).ConfigureAwait(false);
                 }
 
-                await releaseGate.Task.WaitAsync(ct).ConfigureAwait(false);
-            }
-
-            return (state, stepCount);
-        };
+                return (state, stepCount);
+            };
+        }).ConfigureAwait(false);
 
         Task<(int StatusCode, string Body)>[] rotations = [.. Enumerable.Range(0, ConcurrentRequests)
             .Select(_ => RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -1483,9 +2564,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         (int StatusCode, string Body)[] responses = await Task.WhenAll(rotations).ConfigureAwait(false);
 
-        host.Server.OAuth().LoadFlowStateAsync = originalLoad;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadFlowStateAsync = originalLoad;
+        }).ConfigureAwait(false);
 
-        (int StatusCode, string Body) successful = Assert.ContainsSingle(r => r.StatusCode == 200, responses,
+        (int StatusCode, string Body) = Assert.ContainsSingle(r => r.StatusCode == 200, responses,
             $"Exactly one concurrent rotation of the same refresh token must succeed. Bodies: {string.Join(" | ", responses.Select(r => r.Body))}");
         Assert.AreEqual(ConcurrentRequests - 1,
             responses.Count(r => r.StatusCode == 400
@@ -1495,12 +2579,392 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.AreEqual(initialLiveRecords,
             hosted.FlowStates.Values.Count(entry => entry.State is ServerRefreshTokenIssuedState),
             "One consumed live record must be replaced by exactly one live successor.");
-        using JsonDocument successfulDocument = JsonDocument.Parse(successful.Body);
+
+        //LOST CLAIM state assertion (directly after both the race and its released, joined
+        //LoadFlowStateAsync gate — before the "successor is still usable" presentation below):
+        //a lost claim on the SAME live token neither revokes anything nor leaves the grant with
+        //more or fewer than the one live successor the winner published.
+        GrantStateSnapshot grantState = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
+        Assert.AreEqual(1, grantState.RedeemableRecordCount,
+            $"LOST CLAIM: exactly one live successor of the grant must remain redeemable after the race. " +
+            $"Live refresh flow ids: {string.Join(", ", grantState.RedeemableRefreshFlowIds)}; " +
+            $"live code flow ids: {string.Join(", ", grantState.RedeemableCodeFlowIds)}.");
+        Assert.IsEmpty(grantState.LiveRecordsMissingFromGrantIndex,
+            "Every live record the oracle finds directly in FlowStates must also be indexed under the grant key.");
+
+        using JsonDocument successfulDocument = JsonDocument.Parse(Body);
         string successor = successfulDocument.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
         (int StatusCode, string Body) next = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, successor),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, next.StatusCode, "Losing claims must leave the issued successor usable.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>: "The authorization server cannot determine which party submitted the
+    /// invalid refresh token, but it will revoke the active refresh token as well as the access
+    /// authorization grant associated with it." That sentence draws no distinction between an
+    /// attacker's replay and a legitimate client's own second, merely late, presentation: whichever
+    /// presentation of a refresh token loads its flow record AFTER the other has already saved that
+    /// record's rotation observes it retired, which this library treats as a reuse under the same
+    /// strict rule — refused, and taking the newly rotated successor down with it.
+    /// </summary>
+    [TestMethod]
+    public async Task LateConcurrentPresentationLoadingAfterRotationSaveIsRefusedAsReuse()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        //This test forces a presentation loading after the rotation's own save: with the per-grant
+        //ordering gate on, the second presentation below would never enter the library while the
+        //first holds the gate.
+        hosted.IsOrderingRequestsPerGrant = false;
+        string segment = material.Registration.TenantId.Value;
+
+        string flowId = await DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, clientFlowStore, segment, host.ServerCertificate, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult firstExchange = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, firstExchange.Outcome,
+            $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
+        string presentedRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
+
+        string refreshFlowId = hosted.RefreshTokenIndex[presentedRefreshToken];
+        string grantFlowId = hosted.ResolveGrantKey(refreshFlowId);
+
+        //The full expected access-token jti set, collected INDEPENDENTLY of the revocation seam,
+        //from every successful token response of the test so far — the code redemption's own.
+        //The winner's rotation response adds its own jti once it is known, below.
+        HashSet<string> expectedAccessTokenJtis = new(StringComparer.Ordinal)
+        {
+            JwtPayloadReader.ReadJti((string)firstExchange.Body![OAuthRequestParameterNames.AccessToken])!
+        };
+        ConcurrentBag<(string Jti, string TokenType)> revocationNotifications = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, tokenType, _, _, _) =>
+            {
+                revocationNotifications.Add((jti, tokenType));
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        int loadOrder = 0;
+        TaskCompletionSource lateLoadGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        LoadServerFlowStateDelegate originalLoad = host.Server.OAuth().LoadFlowStateAsync!;
+        SaveServerFlowStateDelegate originalSave = host.Server.OAuth().SaveFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
+            {
+                if(key == refreshFlowId && Interlocked.Increment(ref loadOrder) == 2)
+                {
+                    await lateLoadGate.Task.WaitAsync(ct).ConfigureAwait(false);
+                }
+
+                return await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+            };
+
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
+                if(key == refreshFlowId && state is ServerTokenIssuedState)
+                {
+                    _ = lateLoadGate.TrySetResult();
+                }
+            };
+        }).ConfigureAwait(false);
+
+        Dictionary<string, string> refreshFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(
+            ClientId, presentedRefreshToken);
+
+        Task<(int StatusCode, string Body)> firstTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken);
+        Task<(int StatusCode, string Body)> lateTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken);
+
+        (int StatusCode, string Body)[] responses = await Task.WhenAll(firstTask, lateTask).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadFlowStateAsync = originalLoad;
+
+            candidateIntegration.SaveFlowStateAsync = originalSave;
+        }).ConfigureAwait(false);
+
+        (_, string WinnerBody) = Assert.ContainsSingle(r => r.StatusCode == 200, responses,
+            $"The presentation that loads first must complete its rotation. Bodies: {string.Join(" | ", responses.Select(r => r.Body))}");
+        (_, string LateBody) = Assert.ContainsSingle(r => r.StatusCode == 400, responses,
+            $"The presentation that loads after the rotation has saved must be refused. Bodies: {string.Join(" | ", responses.Select(r => r.Body))}");
+        Assert.Contains(OAuthErrors.InvalidGrant, LateBody, StringComparison.Ordinal);
+
+        using JsonDocument winnerDocument = JsonDocument.Parse(WinnerBody);
+        string successor = winnerDocument.RootElement.GetProperty(
+            OAuthRequestParameterNames.RefreshToken).GetString()!;
+        _ = expectedAccessTokenJtis.Add(JwtPayloadReader.ReadJti(
+            winnerDocument.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!)!);
+
+        //REUSE state assertion (directly after both responses are awaited and the paused
+        //Load/SaveFlowStateAsync delegates have been released and joined — before the "successor
+        //is refused" presentation below): the late load resolved a just-retired record, which is a
+        //fresh, valid reuse — it must have notified every access token minted in the grant so far
+        //by IDENTITY, and left no record of the grant redeemable.
+        HashSet<string> notifiedAccessTokenJtis = revocationNotifications
+            .Where(notification => string.Equals(notification.TokenType, WellKnownTokenTypes.AccessToken, StringComparison.Ordinal))
+            .Select(notification => notification.Jti)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.IsTrue(expectedAccessTokenJtis.SetEquals(notifiedAccessTokenJtis),
+            "REUSE must notify the application of exactly the access tokens minted in the grant so " +
+            "far (this proves the application was notified, not that a resource server enforces it). " +
+            $"Expected: {string.Join(", ", expectedAccessTokenJtis)}; notified: {string.Join(", ", notifiedAccessTokenJtis)}.");
+
+        GrantStateSnapshot grantState = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
+        Assert.AreEqual(0, grantState.RedeemableRecordCount,
+            $"REUSE: no record of the grant may remain redeemable after the late presentation resolved " +
+            $"as reuse. Live refresh flow ids: {string.Join(", ", grantState.RedeemableRefreshFlowIds)}.");
+
+        (int SurvivorStatusCode, _) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, successor),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, SurvivorStatusCode,
+            "The family's active refresh token must not survive a reuse the late presentation triggered.");
+    }
+
+
+    /// <summary>
+    /// <see cref="ServerIntegration.ClaimFlowStateAsync"/>'s exactly-once contract is a marker
+    /// independent of the record it guards: a concurrent second presentation of the SAME,
+    /// already-claimed refresh token that runs to completion entirely inside the window between
+    /// the winning presentation's claim and its successor's publish observes the unpublished
+    /// marker alone and is refused without ever seeing the retired shape the winner has not yet
+    /// saved. <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>'s "it will revoke the active refresh token" still reaches the
+    /// published successor once the retired token is presented again afterward — the race narrows
+    /// the window but does not leave the successor reachable outside reuse detection.
+    /// </summary>
+    [TestMethod]
+    public async Task RotationHeldBetweenClaimAndPublishRefusesAConcurrentPresentationOfTheSameToken()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        //This test forces the claim held before publication: with the per-grant ordering gate on,
+        //the concurrent presentation below would never enter the library while the rotation's own
+        //claim is held.
+        hosted.IsOrderingRequestsPerGrant = false;
+        string segment = material.Registration.TenantId.Value;
+
+        string flowId = await DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, clientFlowStore, segment, host.ServerCertificate, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult firstExchange = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, firstExchange.Outcome,
+            $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
+        string presentedRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
+
+        string refreshFlowId = hosted.RefreshTokenIndex[presentedRefreshToken];
+        string grantFlowId = hosted.ResolveGrantKey(refreshFlowId);
+        int revokeCalls = 0;
+        TaskCompletionSource claimedGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        ClaimServerFlowStateDelegate originalClaim = host.Server.OAuth().ClaimFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+            {
+                _ = Interlocked.Increment(ref revokeCalls);
+
+                return ValueTask.CompletedTask;
+            };
+
+            candidateIntegration.ClaimFlowStateAsync = async (tenantId, key, expectedStepCount, ctx, ct) =>
+            {
+                bool claimed = await originalClaim(tenantId, key, expectedStepCount, ctx, ct).ConfigureAwait(false);
+                if(claimed && key == refreshFlowId)
+                {
+                    _ = claimedGate.TrySetResult();
+                    await releaseGate.Task.WaitAsync(ct).ConfigureAwait(false);
+                }
+
+                return claimed;
+            };
+        }).ConfigureAwait(false);
+
+        Dictionary<string, string> refreshFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(
+            ClientId, presentedRefreshToken);
+
+        Task<(int StatusCode, string Body)> rotationTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken);
+        await claimedGate.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int StatusCode, string Body) concurrent = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = releaseGate.TrySetResult();
+        (int StatusCode, string Body) rotation = await rotationTask.ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimFlowStateAsync = originalClaim;
+        }).ConfigureAwait(false);
+
+        //LOST CLAIM state assertion (directly after both responses are awaited and the paused
+        //ClaimFlowStateAsync gate has been released and joined — before the LATER reuse
+        //presentation below, which this test's own doc describes on purpose): the concurrent
+        //presentation of the SAME still-live token lost its claim outright, before ever resolving
+        //to a retired record, so it must not have triggered any revocation, and the grant must
+        //still have exactly the one live successor the winner published.
+        Assert.AreEqual(0, revokeCalls,
+            "A lost claim on a still-live token must not revoke any issued token.");
+        GrantStateSnapshot grantStateAfterRace = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
+        Assert.AreEqual(1, grantStateAfterRace.RedeemableRecordCount,
+            $"LOST CLAIM: exactly one live successor of the grant must remain redeemable after the race. " +
+            $"Live refresh flow ids: {string.Join(", ", grantStateAfterRace.RedeemableRefreshFlowIds)}.");
+
+        (int StatusCode, string Body)[] responses = [rotation, concurrent];
+        Assert.DoesNotContain(r => r.StatusCode >= 500, responses,
+            $"Neither presentation may fail with a server error. Bodies: {string.Join(" | ", responses.Select(r => r.Body))}");
+        (_, string WinnerBody) = Assert.ContainsSingle(r => r.StatusCode == 200, responses,
+            $"Exactly one presentation must be answered with tokens. Bodies: {string.Join(" | ", responses.Select(r => r.Body))}");
+
+        using JsonDocument winnerDocument = JsonDocument.Parse(WinnerBody);
+        string successor = winnerDocument.RootElement.GetProperty(
+            OAuthRequestParameterNames.RefreshToken).GetString()!;
+
+        (int ReuseStatusCode, string ReuseBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, ReuseStatusCode, ReuseBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, ReuseBody, StringComparison.Ordinal);
+
+        (int SurvivorStatusCode, _) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, successor),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, SurvivorStatusCode,
+            "Once the retired token is presented again, its published successor must be refused.");
+    }
+
+
+    /// <summary>
+    /// <see cref="ClaimServerFlowStateDelegate"/>'s own contract: "Deletion must not permit a
+    /// stale caller to claim the same consumed step again: implementations retain the claim or
+    /// atomically reject absent and obsolete flow versions." A presentation that observed the live
+    /// refresh record before a concurrent family walk (a reuse of an earlier retired sibling in the
+    /// same grant) claimed and deleted that exact record must still be refused when its own,
+    /// delayed claim call finally runs — the deletion evicting the walk's claim marker must not
+    /// reopen the consumed step for a stale caller arriving after it.
+    /// </summary>
+    [TestMethod]
+    public async Task ClaimAgainstARecordDeletedByAConcurrentFamilyWalkIsRefused()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        //This test forces the claim against a record a concurrent family walk already deleted:
+        //with the per-grant ordering gate on, the stale presentation below would never enter the
+        //library while the reuse presentation it races is held at ClaimFlowStateAsync.
+        hosted.IsOrderingRequestsPerGrant = false;
+        string segment = material.Registration.TenantId.Value;
+
+        string flowId = await DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, clientFlowStore, segment, host.ServerCertificate, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult firstExchange = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, firstExchange.Outcome,
+            $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
+        string retiredRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
+
+        (int RotationStatusCode, string RotationBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, RotationStatusCode, RotationBody);
+        string liveRefreshToken;
+        using(JsonDocument rotationDocument = JsonDocument.Parse(RotationBody))
+        {
+            liveRefreshToken = rotationDocument.RootElement.GetProperty(
+                OAuthRequestParameterNames.RefreshToken).GetString()!;
+        }
+
+        string liveFlowId = hosted.RefreshTokenIndex[liveRefreshToken];
+        TaskCompletionSource stalePresentationAtClaim = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseStalePresentation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        ClaimServerFlowStateDelegate originalClaim = host.Server.OAuth().ClaimFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimFlowStateAsync = async (tenantId, key, expectedStepCount, ctx, ct) =>
+            {
+                //ctx.FlowId names THIS request's own top-level flow. It equals the claimed key
+                //only for a presentation of liveRefreshToken itself, never for the family walk's
+                //nested claim on the SAME key while resolving a DIFFERENT presented token.
+                if(key == liveFlowId && ctx.FlowId == key)
+                {
+                    _ = stalePresentationAtClaim.TrySetResult();
+                    await releaseStalePresentation.Task.WaitAsync(ct).ConfigureAwait(false);
+                }
+
+                return await originalClaim(tenantId, key, expectedStepCount, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
+
+        Task<(int StatusCode, string Body)> staleTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, liveRefreshToken),
+            TestContext.CancellationToken);
+        await stalePresentationAtClaim.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int ReuseStatusCode, string ReuseBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, ReuseStatusCode, ReuseBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, ReuseBody, StringComparison.Ordinal);
+
+        _ = releaseStalePresentation.TrySetResult();
+        (int StaleStatusCode, string StaleBody) = await staleTask.ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimFlowStateAsync = originalClaim;
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StaleStatusCode, StaleBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, StaleBody, StringComparison.Ordinal);
     }
 
 
@@ -1522,16 +2986,19 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task DoubleRotatedReuseOfOldestRefreshTokenRevokesTheCurrentSuccessor()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         HashSet<string> revokedJtis = [];
-        host.Server.OAuth().RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            _ = revokedJtis.Add(jti);
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+            {
+                _ = revokedJtis.Add(jti);
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1557,13 +3024,13 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         //Rotation 1: oldestRefreshToken -> middleRefreshToken. The access token minted here
         //(middleAccessTokenJti) is the token a live client is now holding.
-        (int StatusCode, string Body) rotation1 = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation1.StatusCode, rotation1.Body);
+        Assert.AreEqual(200, StatusCode, Body);
         string middleRefreshToken;
         string middleAccessTokenJti;
-        using(JsonDocument rotation1Doc = JsonDocument.Parse(rotation1.Body))
+        using(JsonDocument rotation1Doc = JsonDocument.Parse(Body))
         {
             middleRefreshToken = rotation1Doc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
@@ -1623,8 +3090,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ManyRotationsThenReuseOfTheOldestStillRevokesTheCurrentSuccessorAsync()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1652,12 +3119,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string currentRefreshToken = oldestRefreshToken;
         for(int rotationIndex = 0; rotationIndex < RotationsPastAFormerFixedBound; rotationIndex++)
         {
-            (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
                 TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(200, rotation.StatusCode, $"Rotation {rotationIndex} must succeed. Body={rotation.Body}");
+            Assert.AreEqual(200, StatusCode, $"Rotation {rotationIndex} must succeed. Body={Body}");
 
-            using JsonDocument rotationDoc = JsonDocument.Parse(rotation.Body);
+            using JsonDocument rotationDoc = JsonDocument.Parse(Body);
             currentRefreshToken = rotationDoc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
         }
@@ -1696,8 +3163,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ReuseRacingALegitimateRotationOfTheSameRecordNeverLeavesAnHonourableSurvivorAsync(bool isReuseClaimFirst)
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1707,6 +3174,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = host.Host("default");
+
+        //Both racing presentations resolve to the SAME grant key (the reuse's retired record
+        //carries the same GrantFlowId as the rotation's live one), and each side's own release
+        //depends on the OTHER having already entered the library — with the per-grant ordering
+        //gate on, whichever side the gate admits first would hold it while waiting on a signal only
+        //the still-queued side can raise, which never arrives. This is not one of the four forced
+        //claim paths the per-grant ordering feature names; it stays a library-only, unordered race.
+        hosted.IsOrderingRequestsPerGrant = false;
         string segment = material.Registration.TenantId.Value;
 
         string flowId = await DriveParAuthorizeAndCallbackAsync(
@@ -1719,16 +3194,29 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
         string oldestRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        (int StatusCode, string Body) rotation1 = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation1.StatusCode, rotation1.Body);
+        Assert.AreEqual(200, StatusCode, Body);
         string currentRefreshToken;
-        using(JsonDocument rotation1Doc = JsonDocument.Parse(rotation1.Body))
+        string rotation1AccessTokenJti;
+        using(JsonDocument rotation1Doc = JsonDocument.Parse(Body))
         {
             currentRefreshToken = rotation1Doc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
+            rotation1AccessTokenJti = JwtPayloadReader.ReadJti(
+                rotation1Doc.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!)!;
         }
+
+        //The full expected access-token jti set, collected INDEPENDENTLY of the revocation seam,
+        //from every successful token response so far. Whatever the race itself mints is added once
+        //its own outcome is known, below.
+        HashSet<string> expectedAccessTokenJtis = new(StringComparer.Ordinal)
+        {
+            JwtPayloadReader.ReadJti((string)firstExchange.Body![OAuthRequestParameterNames.AccessToken])!,
+            rotation1AccessTokenJti
+        };
+        ConcurrentBag<(string Jti, string TokenType)> revocationNotifications = [];
 
         //A VALID reuse of the ORIGINAL (once-rotated-out) token races a LEGITIMATE rotation of the
         //family's current successor — both requests reach the same live flow record.
@@ -1738,40 +3226,81 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken);
 
         string currentFlowId = hosted.RefreshTokenIndex[currentRefreshToken];
+        string grantFlowId = hosted.ResolveGrantKey(currentFlowId);
         TaskCompletionSource walkObservedLive = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource rotationRetiredLive = new(TaskCreationOptions.RunContinuationsAsynchronously);
         LoadServerFlowStateDelegate originalLoad = host.Server.OAuth().LoadFlowStateAsync!;
+        LoadGrantFlowStatesDelegate originalLoadGrant = host.Server.OAuth().LoadGrantFlowStatesAsync!;
         SaveServerFlowStateDelegate originalSave = host.Server.OAuth().SaveFlowStateAsync!;
         DeleteServerFlowStateDelegate originalDelete = host.Server.OAuth().DeleteFlowStateAsync!;
-        host.Server.OAuth().LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
-            bool isPausedReader = isReuseClaimFirst ? ctx.FlowId == key : ctx.FlowId != key;
-            if(key == currentFlowId && isPausedReader && state is ServerRefreshTokenIssuedState)
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, tokenType, _, _, _) =>
             {
-                _ = walkObservedLive.TrySetResult();
-                await rotationRetiredLive.Task.WaitAsync(ct).ConfigureAwait(false);
-            }
+                revocationNotifications.Add((jti, tokenType));
 
-            return (state, stepCount);
-        };
-        host.Server.OAuth().SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
-        {
-            await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
-            if(key == currentFlowId && state is ServerTokenIssuedState)
-            {
-                _ = rotationRetiredLive.TrySetResult();
-            }
-        };
+                return ValueTask.CompletedTask;
+            };
 
-        host.Server.OAuth().DeleteFlowStateAsync = async (tenantId, key, ctx, ct) =>
-        {
-            await originalDelete(tenantId, key, ctx, ct).ConfigureAwait(false);
-            if(isReuseClaimFirst && key == currentFlowId)
+            //isReuseClaimFirst pauses the ROTATION request on its OWN direct dispatcher load of
+            //the live record it presents, unaffected by how the revoker reaches the same record.
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
             {
-                _ = rotationRetiredLive.TrySetResult();
-            }
-        };
+                (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+                if(isReuseClaimFirst && key == currentFlowId && ctx.FlowId == key && state is ServerRefreshTokenIssuedState)
+                {
+                    _ = walkObservedLive.TrySetResult();
+                    await rotationRetiredLive.Task.WaitAsync(ct).ConfigureAwait(false);
+                }
+
+                return (state, stepCount);
+            };
+
+            //The other race shape pauses the REVOKING request the moment its own grant read has
+            //returned the live record — it has observed the live record and has not yet claimed it.
+            candidateIntegration.LoadGrantFlowStatesAsync = async (tenantId, grantFlowId, ctx, ct) =>
+            {
+                IReadOnlyList<(string FlowId, FlowState State, int StepCount)> records =
+                    await originalLoadGrant(tenantId, grantFlowId, ctx, ct).ConfigureAwait(false);
+                bool hasObservedTheLiveRecord = false;
+                foreach((string recordFlowId, FlowState recordState, int _) in records)
+                {
+                    if(recordFlowId == currentFlowId && recordState is ServerRefreshTokenIssuedState)
+                    {
+                        hasObservedTheLiveRecord = true;
+
+                        break;
+                    }
+                }
+
+                if(!isReuseClaimFirst && hasObservedTheLiveRecord)
+                {
+                    _ = walkObservedLive.TrySetResult();
+                    await rotationRetiredLive.Task.WaitAsync(ct).ConfigureAwait(false);
+                }
+
+                return records;
+            };
+
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
+                if(key == currentFlowId && state is ServerTokenIssuedState)
+                {
+                    _ = rotationRetiredLive.TrySetResult();
+                }
+            };
+
+
+            candidateIntegration.DeleteFlowStateAsync = async (tenantId, key, ctx, ct) =>
+            {
+                await originalDelete(tenantId, key, ctx, ct).ConfigureAwait(false);
+                if(isReuseClaimFirst && key == currentFlowId)
+                {
+                    _ = rotationRetiredLive.TrySetResult();
+                }
+            };
+        }).ConfigureAwait(false);
 
         Task<(int StatusCode, string Body)> reuseTask;
         Task<(int StatusCode, string Body)> rotateTask;
@@ -1793,14 +3322,48 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         }
 
         (int StatusCode, string Body)[] results = await Task.WhenAll(reuseTask, rotateTask).ConfigureAwait(false);
-        host.Server.OAuth().LoadFlowStateAsync = originalLoad;
-        host.Server.OAuth().SaveFlowStateAsync = originalSave;
-        host.Server.OAuth().DeleteFlowStateAsync = originalDelete;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadFlowStateAsync = originalLoad;
+
+            candidateIntegration.LoadGrantFlowStatesAsync = originalLoadGrant;
+
+            candidateIntegration.SaveFlowStateAsync = originalSave;
+
+            candidateIntegration.DeleteFlowStateAsync = originalDelete;
+        }).ConfigureAwait(false);
         (int StatusCode, string Body) reuseResult = results[0];
         (int StatusCode, string Body) rotateResult = results[1];
 
         Assert.AreEqual(400, reuseResult.StatusCode, reuseResult.Body);
         Assert.Contains(OAuthErrors.InvalidGrant, reuseResult.Body, StringComparison.Ordinal);
+
+        //REUSE state assertion (directly after both responses are awaited and every paused
+        //Load/LoadGrant/Save/DeleteFlowStateAsync delegate has been released and joined — BEFORE
+        //the probes below, which could themselves repair a missed revocation and so must never be
+        //what proves this): whatever the race left behind, by IDENTITY every access token minted
+        //in the grant so far must already have been notified, and no record of the grant may
+        //remain redeemable — the legitimate rotation's own freshly minted successor included.
+        if(rotateResult.StatusCode == 200)
+        {
+            using JsonDocument rotateRaceDoc = JsonDocument.Parse(rotateResult.Body);
+            _ = expectedAccessTokenJtis.Add(JwtPayloadReader.ReadJti(
+                rotateRaceDoc.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!)!);
+        }
+
+        HashSet<string> notifiedAccessTokenJtis = revocationNotifications
+            .Where(notification => string.Equals(notification.TokenType, WellKnownTokenTypes.AccessToken, StringComparison.Ordinal))
+            .Select(notification => notification.Jti)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.IsTrue(expectedAccessTokenJtis.SetEquals(notifiedAccessTokenJtis),
+            "REUSE must notify the application of exactly the access tokens minted in the grant so " +
+            "far (this proves the application was notified, not that a resource server enforces it). " +
+            $"Expected: {string.Join(", ", expectedAccessTokenJtis)}; notified: {string.Join(", ", notifiedAccessTokenJtis)}.");
+
+        GrantStateSnapshot grantStateAfterRace = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
+        Assert.AreEqual(0, grantStateAfterRace.RedeemableRecordCount,
+            $"REUSE: no record of the grant may remain redeemable directly after the race, before any " +
+            $"further presentation. Live refresh flow ids: {string.Join(", ", grantStateAfterRace.RedeemableRefreshFlowIds)}.");
 
         foreach(string token in new[] { oldestRefreshToken, currentRefreshToken })
         {
@@ -1837,12 +3400,150 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
+    /// <see cref="LoadGrantFlowStatesDelegate"/>'s own remarks: the application sees every request
+    /// before the library is called and every response after it, and it alone can order two
+    /// requests presented for the same grant; the library runs no ordering protocol of its own
+    /// beyond the claim it makes, through <see cref="ClaimServerFlowStateDelegate"/>, on a record
+    /// it is about to delete. A rotation of the grant's live end is held AFTER its own
+    /// dispatcher-level claim has already succeeded and BEFORE it saves its successor; a VALID
+    /// reuse of an OLDER retired token of the same grant runs to completion entirely inside that
+    /// window, which the library's own one-retry bound on a grant's revocation walk may still lose
+    /// on the record the rotation already holds — this test asserts only what that contract promises an
+    /// application presenting the two requests with no ordering of its own: the reuse is refused;
+    /// the rotation's own already-successful claim is unaffected; and once the application gives
+    /// the grant one further presentation of a retired token — its own turn to retry, exactly as
+    /// the delegate's remarks describe — nothing of the grant remains redeemable. Whether the
+    /// racing rotation's own successor survived the race itself is recorded, never asserted: that
+    /// is the fact an application ordering its own requests per grant would be built on.
+    /// </summary>
+    [TestMethod]
+    public async Task RotationHeldBeforeSuccessorPublicationStillConvergesAfterOneFurtherPresentationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        //This test's own reuse presentation is awaited synchronously WHILE the rotation is held —
+        //the rotation's own release runs only after that await returns. Both presentations resolve
+        //to the SAME grant key, so with the per-grant ordering gate on the reuse would never reach
+        //the library while the rotation holds the gate, and the rotation would never be released:
+        //a deadlock this test's own synchronization does not exist to survive. This is the library-
+        //only baseline the ordered counterpart (HostedAuthorizationServerOrderingTests) demonstrates
+        //the gate closing; it is not one of the four forced claim paths named for this feature.
+        hosted.IsOrderingRequestsPerGrant = false;
+        string segment = material.Registration.TenantId.Value;
+
+        string flowId = await DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, clientFlowStore, segment, host.ServerCertificate, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult firstExchange = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, firstExchange.Outcome,
+            $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
+        string oldestRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
+
+        //A normal, unraced rotation: oldestRefreshToken becomes the OLDER retired token the reuse
+        //below presents; currentRefreshToken becomes the grant's live end the held rotation consumes.
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, StatusCode, Body);
+        string currentRefreshToken;
+        using(JsonDocument rotation1Doc = JsonDocument.Parse(Body))
+        {
+            currentRefreshToken = rotation1Doc.RootElement.GetProperty(
+                OAuthRequestParameterNames.RefreshToken).GetString()!;
+        }
+
+        string currentFlowId = hosted.RefreshTokenIndex[currentRefreshToken];
+        string grantFlowId = hosted.ResolveGrantKey(currentFlowId);
+
+        TaskCompletionSource rotationReachedSuccessorSave = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseRotation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        SaveServerFlowStateDelegate originalSave = host.Server.OAuth().SaveFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            //The rotation's own dispatcher-level claim on currentFlowId has already succeeded by
+            //the time its handler saves anything at all; the FIRST save of a brand-new live
+            //refresh record (never currentFlowId's own key — the DISPATCHER retires that key only
+            //after the handler returns) is the successor's publication, held here both after the
+            //claim and before that publication.
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                if(key != currentFlowId && state is ServerRefreshTokenIssuedState)
+                {
+                    _ = rotationReachedSuccessorSave.TrySetResult();
+                    await releaseRotation.Task.WaitAsync(ct).ConfigureAwait(false);
+                }
+
+                await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
+
+        Task<(int StatusCode, string Body)> rotationTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
+            TestContext.CancellationToken);
+        await rotationReachedSuccessorSave.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A VALID reuse of the OLDER retired token runs to completion while the rotation is held —
+        //its own bounded retry may still lose both claim attempts on currentFlowId, since the
+        //rotation's OWN dispatcher-level claim on it already succeeded before the pause.
+        (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, reuse.StatusCode, reuse.Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, reuse.Body, StringComparison.Ordinal);
+
+        _ = releaseRotation.TrySetResult();
+        (int StatusCode, string Body) rotation = await rotationTask.ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SaveFlowStateAsync = originalSave;
+        }).ConfigureAwait(false);
+
+        //Recorded, never asserted — this library promises no ordering protocol of its own beyond
+        //the claim it makes on a record it is about to delete.
+        GrantStateSnapshot grantStateAfterRace = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
+        TestContext.WriteLine(
+            $"RotationHeldBeforeSuccessorPublication: the rotation answered {rotation.StatusCode} " +
+            $"(Body={rotation.Body}); directly after the race, before any further presentation, the " +
+            $"grant's redeemable record count is {grantStateAfterRace.RedeemableRecordCount} " +
+            $"(live refresh flow ids: {string.Join(", ", grantStateAfterRace.RedeemableRefreshFlowIds)}).");
+
+        //ONE FURTHER presentation of a retired token of the grant — the application, not the
+        //library, giving the two requests another turn, exactly as the delegate's remarks describe.
+        (int StatusCode, string Body) further = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, further.StatusCode, further.Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, further.Body, StringComparison.Ordinal);
+
+        GrantStateSnapshot grantStateAfterFurtherPresentation = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
+        Assert.AreEqual(0, grantStateAfterFurtherPresentation.RedeemableRecordCount,
+            $"After one further presentation of a retired token of the grant, nothing of the grant " +
+            $"may remain redeemable. Live refresh flow ids: " +
+            $"{string.Join(", ", grantStateAfterFurtherPresentation.RedeemableRefreshFlowIds)}.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
     /// draft-16 §4.3.1</see> requires refresh replay detection: "Authorization servers MUST utilize
     /// one of these methods to detect refresh token replay by malicious actors for public clients".
     /// The retired <see cref="ServerTokenIssuedState"/> a rotation leaves behind must outlive the
     /// access token it was minted alongside, per
-    /// <see cref="AuthCodeServerFlowInputs.ServerTokenExchangeSucceeded.ExpiresAt"/>'s remarks: it
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.ServerTokenExchangeSucceeded.ExpiresAt"/>'s remarks: it
     /// carries at least the freshly-minted successor refresh token's own expiry, never merely the
     /// one-hour default access-token lifetime. The clock advances past that access-token lifetime
     /// but stays well inside the 30-day default refresh-token lifetime, then a reuse of the
@@ -1852,8 +3553,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ReuseAfterAccessTokenExpiryStillRevokesTheSuccessor()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1875,12 +3576,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
         string retiredRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        Assert.AreEqual(200, StatusCode, Body);
         string successorRefreshToken;
-        using(JsonDocument rotationDoc = JsonDocument.Parse(rotation.Body))
+        using(JsonDocument rotationDoc = JsonDocument.Parse(Body))
         {
             successorRefreshToken = rotationDoc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
@@ -1908,20 +3609,22 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <summary>
     /// The mirror of
     /// <see cref="DoubleRotatedReuseOfOldestRefreshTokenRevokesTheCurrentSuccessor"/>: an INVALID
-    /// reuse presentation (the wrong <c>client_id</c>) of a rotated-out refresh token is refused
-    /// <c>invalid_grant</c> exactly as a valid reuse would be, but revokes nothing — the
-    /// denial-of-service reasoning
+    /// reuse presentation (a <c>client_id</c> that is not the registration's own) of a rotated-out
+    /// refresh token answers the SAME constant <c>invalid_grant</c> body an unknown, expired, or
+    /// already-revoked refresh token receives — an unauthenticated observer must not be able to
+    /// tell a wrong-identity reuse of a genuinely retired token apart from a reuse of one that
+    /// never existed — and revokes nothing, under the denial-of-service reasoning
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
     /// draft-16 §7.5.3</see> applies to a code replay applies identically here: an attacker who
     /// merely observed the spent token must not be able to deny the legitimate holder service by
-    /// presenting it with the wrong client. The successor remains usable afterward.
+    /// presenting it with an unidentified client. The successor remains usable afterward.
     /// </summary>
     [TestMethod]
     public async Task InvalidReuseOfRotatedOutRefreshTokenLeavesTheSuccessorUsable()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -1943,18 +3646,18 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
         string retiredRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        Assert.AreEqual(200, StatusCode, Body);
         string successorRefreshToken;
-        using(JsonDocument rotationDoc = JsonDocument.Parse(rotation.Body))
+        using(JsonDocument rotationDoc = JsonDocument.Parse(Body))
         {
             successorRefreshToken = rotationDoc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
         }
 
-        //An INVALID reuse of the just-retired token: the wrong client_id.
+        //An INVALID reuse of the just-retired token: a client_id that is not the registration's own.
         (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields("not-the-bound-client", retiredRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -1971,20 +3674,19 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see> client
-    /// identification on a reuse presentation is held to the SAME bar
-    /// <see cref="BuildRefreshToken"/>'s live rotation path holds a live presentation to: a form
-    /// omitting <c>client_id</c> entirely is an INVALID presentation — exactly as it is against a
-    /// still-live refresh token — never a fallback to the tenant's resolved registration. A bare
-    /// <c>grant_type=refresh_token&amp;refresh_token=&lt;retired&gt;</c> revokes nothing and the
-    /// successor remains usable.
+    /// The oracle closed here: a presenter with no credentials must not be able to tell an
+    /// UNKNOWN refresh token apart from a LIVE or RETIRED (rotated-out) one by sending each the
+    /// SAME wrong <c>client_id</c>. <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC
+    /// 6749 §5.2</see> names <c>invalid_grant</c> for a grant "issued to another client", which is
+    /// exactly what a foreign <c>client_id</c> is told here — the SAME status, error and body bytes
+    /// the dispatcher's own unknown-token answer carries, for every one of the three presentations.
     /// </summary>
     [TestMethod]
-    public async Task ReuseOfRotatedOutRefreshTokenWithNoFormClientIdLeavesTheSuccessorUsableAsync()
+    public async Task WrongClientIdAgainstUnknownLiveAndRetiredRefreshTokensAnswersByteIdenticalRefusals()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -2006,12 +3708,97 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
         string retiredRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int RotationStatusCode, string RotationBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        Assert.AreEqual(200, RotationStatusCode, RotationBody);
+        string liveRefreshToken;
+        using(JsonDocument rotationDoc = JsonDocument.Parse(RotationBody))
+        {
+            liveRefreshToken = rotationDoc.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+        }
+
+        const string ForeignClientId = "https://not-the-registration.example.com";
+        const string UnknownRefreshToken = "an-entirely-unknown-refresh-token-value-0123456789";
+
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ForeignClientId, UnknownRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int LiveStatusCode, string LiveBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ForeignClientId, liveRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int RetiredStatusCode, string RetiredBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ForeignClientId, retiredRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, UnknownStatusCode, UnknownBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, UnknownBody, StringComparison.Ordinal);
+        Assert.AreEqual(UnknownStatusCode, LiveStatusCode,
+            "A wrong client_id against a LIVE refresh token must answer with the same status as one against an UNKNOWN token.");
+        Assert.AreEqual(UnknownBody, LiveBody,
+            "A wrong client_id against a LIVE refresh token must answer with byte-identical bytes to one against an UNKNOWN token.");
+        Assert.AreEqual(UnknownStatusCode, RetiredStatusCode,
+            "A wrong client_id against a RETIRED (rotated-out) refresh token must answer with the same status as one against an UNKNOWN token.");
+        Assert.AreEqual(UnknownBody, RetiredBody,
+            "A wrong client_id against a RETIRED (rotated-out) refresh token must answer with byte-identical bytes to one against an UNKNOWN token.");
+
+        //Nothing was consumed, rotated or revoked by any of the three wrong-client_id presentations:
+        //the live refresh token still redeems correctly afterward.
+        (int LiveStillWorksStatusCode, string LiveStillWorksBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, liveRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, LiveStillWorksStatusCode,
+            $"The oracle probes above must not have consumed, rotated or revoked the live refresh token. Body={LiveStillWorksBody}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2.1">RFC 6749 §3.2.1</see>
+    /// client identification on a reuse presentation is held to the SAME bar
+    /// <c>AuthCodeEndpoints.BuildRefreshToken</c>'s live rotation path holds a live presentation to: a form
+    /// omitting <c>client_id</c> entirely is an INVALID presentation — exactly as it is against a
+    /// still-live refresh token — never a fallback to the tenant's resolved registration. The refresh
+    /// endpoint's pre-correlation step decides this request-only fact (no <c>client_id</c> field and
+    /// no declared credentials) before the retired token is ever looked up, so the answer is the
+    /// SAME <c>invalid_request</c> "client_id is required for a client that is not authenticating."
+    /// a still-live presentation with no identity would also receive — never the record-dependent
+    /// <c>invalid_grant</c> binding body the stored-grant comparison answers once a record is
+    /// loaded. A bare <c>grant_type=refresh_token&amp;refresh_token=&lt;retired&gt;</c> revokes
+    /// nothing and the successor remains usable.
+    /// </summary>
+    [TestMethod]
+    public async Task ReuseOfRotatedOutRefreshTokenWithNoFormClientIdLeavesTheSuccessorUsableAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+
+        string flowId = await DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, clientFlowStore, segment, host.ServerCertificate, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult firstExchange = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, firstExchange.Outcome,
+            $"The first redemption must succeed. ErrorCode={firstExchange.ErrorCode}");
+        string retiredRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, StatusCode, Body);
         string successorRefreshToken;
-        using(JsonDocument rotationDoc = JsonDocument.Parse(rotation.Body))
+        using(JsonDocument rotationDoc = JsonDocument.Parse(Body))
         {
             successorRefreshToken = rotationDoc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
@@ -2027,7 +3814,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, reuseFieldsWithoutClientId, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, reuse.StatusCode, reuse.Body);
-        Assert.Contains(OAuthErrors.InvalidGrant, reuse.Body, StringComparison.Ordinal);
+        //A reuse presentation with no client_id and no credentials is refused by the refresh
+        //endpoint's request-only rule (RFC 6749 §3.2.1) before the token is looked up, with the
+        //SAME invalid_request a live presentation without any identity receives.
+        Assert.Contains(OAuthErrors.InvalidRequest, reuse.Body, StringComparison.Ordinal);
+        Assert.Contains("client_id is required for a client that is not authenticating.", reuse.Body, StringComparison.Ordinal);
 
         //The successor must remain usable — a client_id-less reuse presentation revoked nothing.
         (int StatusCode, string Body) successorAfterReuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -2042,25 +3833,25 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
     /// draft-16 §4.3.1</see> requires refresh replay detection: "Authorization servers MUST utilize
     /// one of these methods to detect refresh token replay by malicious actors for public clients".
-    /// <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation.ValidateAsync"/>
-    /// runs on every refresh-token reuse presentation, bound or not — mirroring
-    /// <see cref="BuildRefreshToken"/>'s own unconditional call on a live rotation — so a
-    /// structurally malformed DPoP proof attached to a reuse of a retired BEARER (unbound)
-    /// refresh token is an INVALID presentation, exactly as the same malformed proof would refuse
-    /// a live Bearer rotation, rather than being silently ignored because no thumbprint was ever
-    /// bound to compare against. Revokes nothing; the successor remains usable.
+    /// The refresh endpoint's pre-correlation step runs the request-only half of DPoP validation
+    /// once, before the presented <c>refresh_token</c> is looked up, so a structurally malformed
+    /// proof answers <c>invalid_dpop_proof</c> identically whether the handle is unknown, live, or
+    /// a retired (reused) token — <see
+    /// href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: "If the DPoP
+    /// proof is invalid, the authorization server issues an error response ... with
+    /// invalid_dpop_proof". Revokes nothing; the successor remains usable.
     /// </summary>
     [TestMethod]
     public async Task ReuseOfRotatedOutBearerRefreshTokenWithMalformedDpopProofIsRefusedAsync()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
         //DPoP delegates must be wired for DpopTokenEndpointValidation to evaluate the attached
         //proof at all — this test's client itself never binds a token to a key (Bearer issuance),
         //so wiring here proves the unconditional call, not a policy requiring DPoP.
-        _ = host.EnableDpop();
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -2085,12 +3876,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             "This test needs an unbound Bearer issuance to prove anything about the unconditional DPoP check.");
         string retiredRefreshToken = (string)firstExchange.Body![OAuthRequestParameterNames.RefreshToken];
 
-        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        Assert.AreEqual(200, StatusCode, Body);
         string successorRefreshToken;
-        using(JsonDocument rotationDoc = JsonDocument.Parse(rotation.Body))
+        using(JsonDocument rotationDoc = JsonDocument.Parse(Body))
         {
             successorRefreshToken = rotationDoc.RootElement.GetProperty(
                 OAuthRequestParameterNames.RefreshToken).GetString()!;
@@ -2103,8 +3894,21 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
             OutgoingHeaders.Empty.WithDpop("not-a-well-formed-dpop-proof"), TestContext.CancellationToken)
             .ConfigureAwait(false);
+
+        //The pre-correlation step decides a malformed proof before this presentation is even
+        //known to be retired — so an UNKNOWN handle with the same malformed proof answers
+        //byte-identically.
+        (int UnknownStatusCode, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, "unknown-refresh-token-value"),
+            OutgoingHeaders.Empty.WithDpop("not-a-well-formed-dpop-proof"), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
         Assert.AreEqual(400, reuse.StatusCode, reuse.Body);
-        Assert.Contains(OAuthErrors.InvalidGrant, reuse.Body, StringComparison.Ordinal);
+        Assert.Contains(OAuthErrors.InvalidDpopProof, reuse.Body, StringComparison.Ordinal);
+        Assert.AreEqual(UnknownStatusCode, reuse.StatusCode,
+            "An unknown handle and a retired one must answer byte-identically once the request-only DPoP decision runs first.");
+        Assert.AreEqual(UnknownBody, reuse.Body,
+            "An unknown handle and a retired one must answer byte-identically once the request-only DPoP decision runs first.");
 
         //Revoked nothing — the successor remains usable.
         (int StatusCode, string Body) successorAfterReuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -2127,19 +3931,25 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task InvalidReplayOfRedeemedCodeIsInvalidGrantAndDoesNotRevokeTheIssuedAccessToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithIntrospection).ConfigureAwait(false);
 
         bool revokeInvoked = false;
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            revokeInvoked = true;
-            return ValueTask.CompletedTask;
-        };
-        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(new TokenIntrospectionResult { IsActive = true });
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+            {
+                revokeInvoked = true;
+
+                return ValueTask.CompletedTask;
+            };
+
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult { IsActive = true });
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -2193,8 +4003,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task WrongPkceVerifierThenCorrectVerifierStillRedeemsTheCode()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -2231,8 +4041,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task MismatchedRedirectUriThenCorrectRedirectUriStillRedeemsTheCode()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -2267,8 +4077,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task AuthorizationCodeOnWireIsNotTheStoredHashButHashesToIt()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -2298,8 +4108,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task PresentingTheStoredCodeHashAsCodeIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -2316,6 +4126,194 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         Assert.AreEqual(400, StatusCode, Body);
         Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// The plain (non-PAR) authorization start's whole journey over the real wire — start,
+    /// authorize, callback, token — against a registration whose profile permits a direct
+    /// authorization request. The redirect
+    /// <see cref="AuthCodeClient.StartAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, IReadOnlyList{string}?, TimeSpan, CancellationToken)"/>
+    /// returns carries every parameter
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see> lists —
+    /// "response_type: REQUIRED. Value MUST be set to 'code'.", "client_id: REQUIRED.",
+    /// "redirect_uri: OPTIONAL.", "scope: OPTIONAL.", "state: RECOMMENDED." — plus the PKCE pair per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PlainStartReachesTokenOverRealWire()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        AuthCodeFlowEndpointResult startResult = await client.AuthCode.StartAsync(
+            registration, RedirectUri, OAuthFormEncodedFields.Empty, [], resource: null,
+            requestLifetime: TimeSpan.FromMinutes(5), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
+            $"A plain start must redirect over the real wire. ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+
+        string flowId = clientFlowStore.Keys.Single();
+        ParCompletedState parState = (ParCompletedState)clientFlowStore[flowId];
+        Dictionary<string, string> queryParams = ParseQuery(startResult.RedirectUri!);
+
+        Assert.AreEqual(WellKnownResponseTypes.Code, queryParams[OAuthRequestParameterNames.ResponseType],
+            "RFC 6749 §4.1.1: response_type REQUIRED, value MUST be 'code'.");
+        Assert.AreEqual(ClientId, queryParams[OAuthRequestParameterNames.ClientId],
+            "RFC 6749 §4.1.1: client_id REQUIRED.");
+        Assert.AreEqual(RedirectUri.OriginalString, queryParams[OAuthRequestParameterNames.RedirectUri],
+            "RFC 6749 §4.1.1: redirect_uri.");
+        Assert.AreEqual(WellKnownScopes.OpenId, queryParams[OAuthRequestParameterNames.Scope],
+            "RFC 6749 §4.1.1: scope.");
+        Assert.AreEqual(flowId, queryParams[OAuthRequestParameterNames.State],
+            "RFC 6749 §4.1.1: state.");
+        Assert.AreEqual(parState.Pkce.EncodedChallenge, queryParams[OAuthRequestParameterNames.CodeChallenge],
+            "RFC 7636 §4.3: code_challenge.");
+        Assert.AreEqual("S256", queryParams[OAuthRequestParameterNames.CodeChallengeMethod],
+            "RFC 7636 §4.3: code_challenge_method.");
+
+        _ = await GetAuthorizeRedirectAndCallbackAsync(
+            hosted, client, registration, host.ServerCertificate, startResult.RedirectUri!, flowId,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Token exchange must succeed over the real wire. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        string accessToken = (string)tokenResult.Body![OAuthRequestParameterNames.AccessToken];
+        Assert.IsFalse(string.IsNullOrEmpty(accessToken));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-5">RFC 9126 §5</see>:
+    /// "require_pushed_authorization_requests: Boolean parameter indicating whether the
+    /// authorization server accepts authorization request data only via PAR." A registration whose
+    /// resolved metadata sets it is refused before anything is dialed — every delegate other than
+    /// metadata resolution throws if invoked, proving neither a PAR/authorize/token POST nor state
+    /// persistence nor PKCE minting happens.
+    /// </summary>
+    [TestMethod]
+    public async Task StartAsyncRefusedBeforeAnyDialWhenMetadataRequiresPar()
+    {
+        Uri issuer = new("https://as.example.com");
+        AuthorizationServerMetadata parRequiredMetadata = new()
+        {
+            Issuer = issuer,
+            AuthorizationEndpoint = new Uri("https://as.example.com/authorize"),
+            TokenEndpoint = new Uri("https://as.example.com/token"),
+            PushedAuthorizationRequestEndpoint = new Uri("https://as.example.com/par"),
+            RequirePushedAuthorizationRequests = true
+        };
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: (_, _, _, _, _) =>
+                throw new InvalidOperationException("Must not dial any endpoint when the metadata requires PAR."),
+            saveStateAsync: (_, _, _) =>
+                throw new InvalidOperationException("Must not persist state before the PAR-required refusal."),
+            loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("Test does not exercise dynamic registration."),
+            resolveAuthorizationServerMetadataAsync: (_, _, _) =>
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = parRequiredMetadata
+                }),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: TimeProvider,
+            fillEntropy: _ =>
+                throw new InvalidOperationException("Must not mint entropy before the PAR-required refusal."),
+            generateIdentifierAsync: (_, _, _) =>
+                throw new InvalidOperationException("Must not mint an identifier before the PAR-required refusal."));
+
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(ClientId),
+            AuthorizationServerIssuer = issuer,
+            RedirectUris = [RedirectUri],
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            Profile = PolicyProfile.Fapi20
+        };
+
+        OAuthClient client = new(infrastructure);
+
+        AuthCodeFlowEndpointResult result = await client.AuthCode.StartAsync(
+            registration, RedirectUri, OAuthFormEncodedFields.Empty, [], resource: null,
+            requestLifetime: TimeSpan.FromMinutes(5), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome,
+            $"A PAR-required authorization server must refuse a plain start. Body={result.Body}");
+        Assert.AreEqual(OAuthErrors.InvalidRequest, result.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// The additional fields a caller supplies to
+    /// <see cref="AuthCodeClient.StartAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, IReadOnlyList{string}?, TimeSpan, CancellationToken)"/>
+    /// ride the front channel, which any party observing the redirect can also construct — so a
+    /// field named <c>state</c> or <c>code_challenge</c> must not be able to override the value this
+    /// call minted for RFC 6749 §4.1.1's CSRF-protection <c>state</c> or RFC 7636 §4.3's PKCE
+    /// <c>code_challenge</c>; either would let an attacker fix the flow to a value of their choosing.
+    /// </summary>
+    [TestMethod]
+    public async Task AdditionalFieldsCannotOverrideStateOrCodeChallengeAtPlainStart()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> attackerFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.State] = "attacker-supplied-state",
+            [OAuthRequestParameterNames.CodeChallenge] = "attacker-supplied-challenge"
+        };
+
+        AuthCodeFlowEndpointResult startResult = await client.AuthCode.StartAsync(
+            registration, RedirectUri, new OAuthFormEncodedFields(attackerFields), [], resource: null,
+            requestLifetime: TimeSpan.FromMinutes(5), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
+            $"ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+
+        string flowId = clientFlowStore.Keys.Single();
+        ParCompletedState parState = (ParCompletedState)clientFlowStore[flowId];
+        Dictionary<string, string> queryParams = ParseQuery(startResult.RedirectUri!);
+
+        Assert.AreEqual(flowId, queryParams[OAuthRequestParameterNames.State],
+            "An additional field named state must not override the state this call minted.");
+        Assert.AreNotEqual("attacker-supplied-state", queryParams[OAuthRequestParameterNames.State]);
+        Assert.AreEqual(parState.Pkce.EncodedChallenge, queryParams[OAuthRequestParameterNames.CodeChallenge],
+            "An additional field named code_challenge must not override the PKCE challenge this call minted.");
+        Assert.AreNotEqual("attacker-supplied-challenge", queryParams[OAuthRequestParameterNames.CodeChallenge]);
     }
 
 
@@ -2338,20 +4336,35 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <paramref name="codeChallengeMethod"/> and the browser's authorize GET, returning the
     /// extracted authorization code — the wire shape <see cref="AuthCodeFlowDriver"/> and
     /// <see cref="OAuthClient"/> cannot produce since the client abstraction always generates an
-    /// S256 challenge of its own.
+    /// S256 challenge of its own. An optional <paramref name="resource"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>) or
+    /// <paramref name="authorizationDetails"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9396#section-5">RFC 9396 §5</see>) rides the
+    /// pushed request, establishing the granted set a later token-request value is compared
+    /// against.
     /// </summary>
     private static async Task<string> DriveRawParAndAuthorizeAsync(
         TestHostShell host, string segment, string codeChallenge, string codeChallengeMethod,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? resource = null, string? authorizationDetails = null)
     {
         Dictionary<string, string> parFields = new(StringComparer.Ordinal)
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = codeChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = codeChallengeMethod,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
+        if(resource is not null)
+        {
+            parFields[OAuthRequestParameterNames.Resource] = resource;
+        }
+
+        if(authorizationDetails is not null)
+        {
+            parFields[OAuthRequestParameterNames.AuthorizationDetails] = authorizationDetails;
+        }
 
         (int ParStatusCode, string ParBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
             host, segment, parFields, cancellationToken).ConfigureAwait(false);
@@ -2389,12 +4402,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string code = await DriveRawParAndAuthorizeAsync(
             host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
             TestContext.CancellationToken).ConfigureAwait(false);
-        (int StatusCode, string Body) response = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildTokenFields(
                 ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, response.StatusCode, response.Body);
-        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(200, StatusCode, Body);
+        using JsonDocument document = JsonDocument.Parse(Body);
 
         return (document.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!,
             document.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!);
@@ -2408,11 +4421,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     private async Task<(string RefreshToken, string AccessToken)> RotateBearerPairAsync(
         TestHostShell host, string segment, string refreshToken)
     {
-        (int StatusCode, string Body) response = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, response.StatusCode, response.Body);
-        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(200, StatusCode, Body);
+        using JsonDocument document = JsonDocument.Parse(Body);
 
         return (document.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!,
             document.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!);
@@ -2429,64 +4442,375 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ReuseRevokesTheAccessTokenPairedWithARotatedRefreshToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         (string original, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
         (string reused, string pairedAccessToken) = await RotateBearerPairAsync(host, segment, original).ConfigureAwait(false);
         _ = await RotateBearerPairAsync(host, segment, reused).ConfigureAwait(false);
         HashSet<string> revokedJtis = [];
-        host.Server.OAuth().RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            _ = revokedJtis.Add(jti);
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+            {
+                _ = revokedJtis.Add(jti);
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
-        (int StatusCode, string Body) response = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, reused),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(400, response.StatusCode, response.Body);
-        Assert.Contains(JwtPayloadReader.ReadJti(pairedAccessToken)!, revokedJtis,
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(JwtPayloadReader.ReadJti(pairedAccessToken), revokedJtis,
             "The predecessor audit must revoke the access token paired with the reused refresh token.");
     }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.2">RFC 7009 §2.2</see>:
-    /// "the purpose of the revocation request, invalidating the particular token, is already
-    /// achieved." A second sequential valid refresh reuse keeps the persisted revocation marker
-    /// and refuses without repeating the family loads or audit revocations.
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
+    /// authorization grant associated with it." A reuse of the family's THIRD generation refresh
+    /// token — not its oldest — must still reach and revoke every access token of the grant,
+    /// including the one issued alongside the authorization code itself.
+    /// </summary>
+    [TestMethod]
+    public async Task ReuseOfAThirdGenerationRefreshTokenRevokesTheWholeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string firstGenerationRefreshToken, string codeGrantAccessToken) =
+            await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        (string secondGenerationRefreshToken, string firstRotationAccessToken) =
+            await RotateBearerPairAsync(host, segment, firstGenerationRefreshToken).ConfigureAwait(false);
+        (string thirdGenerationRefreshToken, string secondRotationAccessToken) =
+            await RotateBearerPairAsync(host, segment, secondGenerationRefreshToken).ConfigureAwait(false);
+        (string fourthGenerationRefreshToken, string thirdRotationAccessToken) =
+            await RotateBearerPairAsync(host, segment, thirdGenerationRefreshToken).ConfigureAwait(false);
+
+        HashSet<string> revokedJtis = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+            {
+                _ = revokedJtis.Add(jti);
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        (int ReuseStatusCode, string ReuseBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, thirdGenerationRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, ReuseStatusCode, ReuseBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, ReuseBody, StringComparison.Ordinal);
+
+        HashSet<string?> expectedRevokedJtis =
+        [
+            JwtPayloadReader.ReadJti(codeGrantAccessToken),
+            JwtPayloadReader.ReadJti(firstRotationAccessToken),
+            JwtPayloadReader.ReadJti(secondRotationAccessToken),
+            JwtPayloadReader.ReadJti(thirdRotationAccessToken)
+        ];
+        Assert.IsTrue(expectedRevokedJtis.SetEquals(revokedJtis),
+            $"Expected exactly {{{string.Join(",", expectedRevokedJtis)}}} revoked; got {{{string.Join(",", revokedJtis)}}}.");
+
+        (int NewestAfterReuseStatusCode, _) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, fourthGenerationRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, NewestAfterReuseStatusCode,
+            "The grant's newest refresh token must be refused once an earlier generation is reused.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>'s revocation of "the access authorization grant" does not depend on
+    /// every intermediate retired record still being retained: a reuse must still reach and
+    /// revoke the grant's live refresh token and its paired access token even when one retired
+    /// record between the presented token and the live one is missing.
+    /// </summary>
+    [TestMethod]
+    public async Task ReuseWithAMissingIntermediateRetiredRecordStillRevokesTheLiveSuccessorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string firstGenerationRefreshToken, _) =
+            await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        (string secondGenerationRefreshToken, _) =
+            await RotateBearerPairAsync(host, segment, firstGenerationRefreshToken).ConfigureAwait(false);
+        (string thirdGenerationRefreshToken, _) =
+            await RotateBearerPairAsync(host, segment, secondGenerationRefreshToken).ConfigureAwait(false);
+        (string liveRefreshToken, string accessTokenPairedWithLiveRefreshToken) =
+            await RotateBearerPairAsync(host, segment, thirdGenerationRefreshToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string missingIntermediateFlowId = hosted.RefreshTokenIndex[secondGenerationRefreshToken];
+        Assert.IsTrue(hosted.FlowStates.TryRemove(missingIntermediateFlowId, out _),
+            "The intermediate record between the presented token and the live one must exist before removal.");
+
+        HashSet<string> revokedJtis = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+            {
+                _ = revokedJtis.Add(jti);
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        (int ReuseStatusCode, string ReuseBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, firstGenerationRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, ReuseStatusCode, ReuseBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, ReuseBody, StringComparison.Ordinal);
+
+        Assert.Contains(JwtPayloadReader.ReadJti(accessTokenPairedWithLiveRefreshToken), revokedJtis,
+            "The access token paired with the grant's live refresh token must be revoked even when a retired record between the presented token and the live one is missing.");
+
+        (int LiveAfterReuseStatusCode, _) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, liveRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, LiveAfterReuseStatusCode,
+            "The grant's live refresh token must be refused once an earlier generation is reused, even with a missing intermediate record.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>'s grant revocation is scoped to the presented grant's own client: a
+    /// foreign record the grant read returns under the same grant key but a DIFFERENT
+    /// <c>ClientId</c> is neither claimed nor deleted, while the grant's own records still are.
+    /// </summary>
+    [TestMethod]
+    public async Task ForeignRecordUnderTheSameGrantKeyIsNeitherClaimedNorDeletedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string firstGenerationRefreshToken, string codeGrantAccessToken) =
+            await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        (string liveRefreshToken, _) =
+            await RotateBearerPairAsync(host, segment, firstGenerationRefreshToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string retiredFlowId = hosted.RefreshTokenIndex[firstGenerationRefreshToken];
+        string grantFlowId = ((ServerTokenIssuedState)hosted.FlowStates[retiredFlowId].State).GrantFlowId!;
+
+        string foreignFlowId = $"foreign-{Guid.NewGuid():N}";
+        ServerRefreshTokenIssuedState foreignRecord = new()
+        {
+            FlowId = foreignFlowId,
+            GrantFlowId = grantFlowId,
+            ExpectedIssuer = "https://foreign.example",
+            EnteredAt = TimeProvider.GetUtcNow(),
+            ExpiresAt = TimeProvider.GetUtcNow().AddHours(1),
+            Kind = FlowKind.AuthCodeServer,
+            ClientId = "foreign-client-under-the-same-grant-key",
+            RefreshToken = $"foreign-refresh-{Guid.NewGuid():N}",
+            OriginatingGrantType = WellKnownGrantTypes.AuthorizationCode,
+            IssuedAt = TimeProvider.GetUtcNow(),
+            SubjectId = "foreign-subject",
+            Scope = WellKnownScopes.OpenId
+        };
+        hosted.InjectForeignGrantRecord(grantFlowId, foreignFlowId, foreignRecord, stepCount: 0);
+
+        HashSet<string> revokedJtis = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+            {
+                _ = revokedJtis.Add(jti);
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        (int ReuseStatusCode, string ReuseBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, firstGenerationRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, ReuseStatusCode, ReuseBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, ReuseBody, StringComparison.Ordinal);
+
+        Assert.Contains(JwtPayloadReader.ReadJti(codeGrantAccessToken), revokedJtis,
+            "The grant's own access token must still be revoked.");
+        Assert.IsTrue(hosted.FlowStates.TryGetValue(foreignFlowId, out var foreignEntry),
+            "A foreign record under the same grant key must never be deleted.");
+        Assert.AreEqual(foreignRecord, foreignEntry.State,
+            "A foreign record under the same grant key must be left byte-for-byte untouched.");
+        Assert.IsFalse(hosted.ClaimedFlowSteps.ContainsKey((foreignFlowId, 0)),
+            "A foreign record under the same grant key must never be claimed.");
+
+        (int LiveAfterReuseStatusCode, _) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, liveRefreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, LiveAfterReuseStatusCode,
+            "The grant's own live refresh token must still be refused once an earlier generation is reused.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see> and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>'s
+    /// revocation reads every record of a grant once, regardless of how many times it has
+    /// rotated: a reuse after two rotations, a reuse after five, and a replay of the code after
+    /// five rotations each cost exactly one grant read and one plain flow-state load.
+    /// </summary>
+    [TestMethod]
+    public async Task GrantRevocationCostsExactlyOneGrantReadPerPresentationRegardlessOfRotationCountAsync()
+    {
+        async Task<(int GrantReads, int PlainLoads)> MeasureReuseCostsAsync(int rotationCount)
+        {
+            await using TestHostShell reuseHost = new(TimeProvider);
+            using VerifierKeyMaterial reuseMaterial = await reuseHost.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+            string reuseSegment = reuseMaterial.Registration.TenantId.Value;
+
+            (string presentedRefreshToken, _) = await IssueBearerPairAsync(reuseHost, reuseSegment).ConfigureAwait(false);
+            string nextRefreshToken = presentedRefreshToken;
+            for(int rotation = 0; rotation < rotationCount; rotation++)
+            {
+                (nextRefreshToken, _) = await RotateBearerPairAsync(reuseHost, reuseSegment, nextRefreshToken).ConfigureAwait(false);
+            }
+
+            int grantReads = 0;
+            int plainLoads = 0;
+            LoadGrantFlowStatesDelegate originalGrantRead = reuseHost.Server.OAuth().LoadGrantFlowStatesAsync!;
+            LoadServerFlowStateDelegate originalLoad = reuseHost.Server.OAuth().LoadFlowStateAsync!;
+            await TestHostShell.AlterAsync(reuseHost.Server, candidateIntegration =>
+            {
+                candidateIntegration.LoadGrantFlowStatesAsync = (tenantId, grantFlowId, ctx, ct) =>
+                {
+                    ++grantReads;
+
+                    return originalGrantRead(tenantId, grantFlowId, ctx, ct);
+                };
+                candidateIntegration.LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+                {
+                    ++plainLoads;
+
+                    return originalLoad(tenantId, key, ctx, ct);
+                };
+            }).ConfigureAwait(false);
+
+            (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                reuseHost, reuseSegment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, presentedRefreshToken),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(400, StatusCode, Body);
+
+            return (grantReads, plainLoads);
+        }
+
+        (int GrantReadsAfterTwo, int PlainLoadsAfterTwo) = await MeasureReuseCostsAsync(2).ConfigureAwait(false);
+        Assert.AreEqual(1, GrantReadsAfterTwo, "A reuse after two rotations must read the grant exactly once.");
+        Assert.AreEqual(1, PlainLoadsAfterTwo,
+            "A reuse after two rotations must plain-load a flow state exactly once (the dispatcher's own).");
+
+        (int GrantReadsAfterFive, int PlainLoadsAfterFive) = await MeasureReuseCostsAsync(5).ConfigureAwait(false);
+        Assert.AreEqual(1, GrantReadsAfterFive, "A reuse after five rotations must still read the grant exactly once.");
+        Assert.AreEqual(1, PlainLoadsAfterFive,
+            "A reuse after five rotations must still plain-load a flow state exactly once.");
+
+        await using TestHostShell replayHost = new(TimeProvider);
+        using VerifierKeyMaterial replayMaterial = await replayHost.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string replaySegment = replayMaterial.Registration.TenantId.Value;
+
+        PkceParameters replayPkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string replayCode = await DriveRawParAndAuthorizeAsync(
+            replayHost, replaySegment, replayPkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, string> replayTokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, replayCode, replayPkce.EncodedVerifier, RedirectUri.OriginalString);
+        (int FirstStatusCode, string FirstBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            replayHost, replaySegment, replayTokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, FirstStatusCode, FirstBody);
+        using(JsonDocument firstDocument = JsonDocument.Parse(FirstBody))
+        {
+            string replayNextRefreshToken = firstDocument.RootElement.GetProperty(
+                OAuthRequestParameterNames.RefreshToken).GetString()!;
+            for(int rotation = 0; rotation < 5; rotation++)
+            {
+                (replayNextRefreshToken, _) = await RotateBearerPairAsync(
+                    replayHost, replaySegment, replayNextRefreshToken).ConfigureAwait(false);
+            }
+        }
+
+        int replayGrantReads = 0;
+        int replayPlainLoads = 0;
+        LoadGrantFlowStatesDelegate originalReplayGrantRead = replayHost.Server.OAuth().LoadGrantFlowStatesAsync!;
+        LoadServerFlowStateDelegate originalReplayLoad = replayHost.Server.OAuth().LoadFlowStateAsync!;
+        await TestHostShell.AlterAsync(replayHost.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadGrantFlowStatesAsync = (tenantId, grantFlowId, ctx, ct) =>
+            {
+                ++replayGrantReads;
+
+                return originalReplayGrantRead(tenantId, grantFlowId, ctx, ct);
+            };
+            candidateIntegration.LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+            {
+                ++replayPlainLoads;
+
+                return originalReplayLoad(tenantId, key, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        (int ReplayStatusCode, string ReplayBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            replayHost, replaySegment, replayTokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, ReplayStatusCode, ReplayBody);
+        Assert.AreEqual(1, replayGrantReads, "A code replay after five rotations must read the grant exactly once.");
+        Assert.AreEqual(1, replayPlainLoads,
+            "A code replay after five rotations must still plain-load a flow state exactly once.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.3.1">OAuth 2.1 §4.3.1</see>
+    /// describes refresh-token replay detection. The library's persisted marker makes a second
+    /// sequential valid refresh reuse refuse without repeating family loads or audit revocations.
     /// </summary>
     [TestMethod]
     public async Task SecondValidRefreshReuseDoesNotRepeatRevocationAndTheMarkerPersists()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         (string original, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
         _ = await RotateBearerPairAsync(host, segment, original).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
         string retiredFlowId = hosted.RefreshTokenIndex[original];
         int revocationCalls = 0;
-        int familyLoads = 0;
-        LoadServerFlowStateDelegate originalLoad = host.Server.OAuth().LoadFlowStateAsync!;
-        host.Server.OAuth().LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+        int grantReads = 0;
+        LoadGrantFlowStatesDelegate originalLoadGrant = host.Server.OAuth().LoadGrantFlowStatesAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(key != retiredFlowId)
+            candidateIntegration.LoadGrantFlowStatesAsync = (tenantId, grantFlowId, ctx, ct) =>
             {
-                ++familyLoads;
-            }
+                ++grantReads;
 
-            return originalLoad(tenantId, key, ctx, ct);
-        };
-        host.Server.OAuth().RevokeIssuedTokenAsync = (_, _, _, _, _) =>
-        {
-            ++revocationCalls;
+                return originalLoadGrant(tenantId, grantFlowId, ctx, ct);
+            };
 
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
+            {
+                ++revocationCalls;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
         Dictionary<string, string> fields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, original);
         (int StatusCode, string Body) first = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, fields, TestContext.CancellationToken).ConfigureAwait(false);
@@ -2494,15 +4818,15 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         ServerTokenIssuedState retired = (ServerTokenIssuedState)hosted.FlowStates[retiredFlowId].State;
         Assert.IsNotNull(retired.RevokedAt, "A valid refresh reuse must persist RevokedAt.");
         int callsAfterFirst = revocationCalls;
-        int loadsAfterFirst = familyLoads;
+        int grantReadsAfterFirst = grantReads;
         Assert.IsGreaterThan(0, callsAfterFirst);
-        Assert.IsGreaterThan(0, loadsAfterFirst);
+        Assert.IsGreaterThan(0, grantReadsAfterFirst);
 
         (int StatusCode, string Body) second = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, fields, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(first, second, "Sequential reuse must keep the same refusal response.");
         Assert.AreEqual(callsAfterFirst, revocationCalls, "Sequential reuse must not repeat audit revocation.");
-        Assert.AreEqual(loadsAfterFirst, familyLoads, "Sequential reuse must not repeat the family walk.");
+        Assert.AreEqual(grantReadsAfterFirst, grantReads, "Sequential reuse must not repeat the grant read.");
         Assert.AreEqual(retired.RevokedAt,
             ((ServerTokenIssuedState)hosted.FlowStates[retiredFlowId].State).RevokedAt);
     }
@@ -2518,14 +4842,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task LiveRefreshWithoutCredentialsOrClientIdIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         (string original, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
-        (int StatusCode, string Body) refusal = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(null, original),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(400, refusal.StatusCode, "A public refresh must identify its bound client.");
+        Assert.AreEqual(400, StatusCode, "A public refresh must identify its bound client.");
         _ = await RotateBearerPairAsync(host, segment, original).ConfigureAwait(false);
     }
 
@@ -2543,28 +4867,34 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     public async Task ReuseWithRepeatedLostClaimsDoesNotDeleteUnclaimedState()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         (string original, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
         (string successor, _) = await RotateBearerPairAsync(host, segment, original).ConfigureAwait(false);
         var originalClaim = host.Server.OAuth().ClaimFlowStateAsync;
         int claimCalls = 0;
-        host.Server.OAuth().ClaimFlowStateAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(++claimCalls > 2)
+            candidateIntegration.ClaimFlowStateAsync = (_, _, _, _, _) =>
             {
-                throw new InvalidOperationException("A family walk must stop after its bounded claim retry.");
-            }
+                if(++claimCalls > 2)
+                {
+                    throw new InvalidOperationException("A family walk must stop after its bounded claim retry.");
+                }
 
-            return ValueTask.FromResult(false);
-        };
+                return ValueTask.FromResult(false);
+            };
+        }).ConfigureAwait(false);
 
-        (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, original),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(400, reuse.StatusCode, "Lost claims must produce a bounded refusal without deleting state.");
-        host.Server.OAuth().ClaimFlowStateAsync = originalClaim;
+        Assert.AreEqual(400, StatusCode, "Lost claims must produce a bounded refusal without deleting state.");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimFlowStateAsync = originalClaim;
+        }).ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = host.Host("default");
         string originalFlowId = hosted.RefreshTokenIndex[original];
@@ -2591,20 +4921,22 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
     /// <summary>
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
-    /// draft-16 §4.3.1</see>'s reuse revocation keeps completed audit revocations when corrupt
-    /// storage contains a successor cycle. Traversal terminates instead of repeatedly revoking
-    /// that cycle; the corruption cannot authorize a fresh issuance.
+    /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
+    /// authorization grant associated with it." A corrupted <see cref="ServerTokenIssuedState.SuccessorRefreshFlowId"/>
+    /// on a retired record of the grant — one pointing at itself — has no effect on revoking the
+    /// grant, because the one grant read returns every retained record sharing the grant's key
+    /// and the library never follows a link from one record to another.
     /// </summary>
     [TestMethod]
-    public async Task RefreshReuseStopsAtACorruptedCycleAndKeepsCompletedRevocations()
+    public async Task CorruptedSuccessorRefreshFlowIdHasNoEffectOnGrantRevocationAsync()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
-        (string original, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
-        (string middle, _) = await RotateBearerPairAsync(host, segment, original).ConfigureAwait(false);
-        (_, string currentAccessToken) = await RotateBearerPairAsync(host, segment, middle).ConfigureAwait(false);
+        (string original, string codeGrantAccessToken) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        (string middle, string middleAccessToken) = await RotateBearerPairAsync(host, segment, original).ConfigureAwait(false);
+        (string current, string currentAccessToken) = await RotateBearerPairAsync(host, segment, middle).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
         string middleFlowId = hosted.RefreshTokenIndex[middle];
         (FlowState state, int stepCount) = hosted.FlowStates[middleFlowId];
@@ -2614,24 +4946,37 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         }, stepCount);
         HashSet<string> revokedJtis = [];
         int revocationCalls = 0;
-        host.Server.OAuth().RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(++revocationCalls > 20)
+            candidateIntegration.RevokeIssuedTokenAsync = (jti, _, _, _, _) =>
             {
-                throw new InvalidOperationException("A corrupted cycle must not repeat audit revocations indefinitely.");
-            }
+                if(++revocationCalls > 20)
+                {
+                    throw new InvalidOperationException("A self-referencing link must not cause repeated audit revocations.");
+                }
 
-            _ = revokedJtis.Add(jti);
+                _ = revokedJtis.Add(jti);
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
-        (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, original),
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(400, reuse.StatusCode, "A cycle must terminate with the refresh refusal.");
-        Assert.Contains(JwtPayloadReader.ReadJti(currentAccessToken)!, revokedJtis,
-            "Audits reached before the cycle must remain revoked.");
+        Assert.AreEqual(400, StatusCode, "The self-referencing link must not prevent the reuse refusal.");
+        Assert.Contains(JwtPayloadReader.ReadJti(codeGrantAccessToken), revokedJtis,
+            "Every access token of the grant must be handed to the revocation seam.");
+        Assert.Contains(JwtPayloadReader.ReadJti(middleAccessToken), revokedJtis,
+            "Every access token of the grant must be handed to the revocation seam.");
+        Assert.Contains(JwtPayloadReader.ReadJti(currentAccessToken), revokedJtis,
+            "Every access token of the grant must be handed to the revocation seam.");
+
+        (int NewestAfterReuseStatusCode, _) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, current),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, NewestAfterReuseStatusCode,
+            "The grant's newest refresh token must be refused once an earlier generation is reused.");
     }
 
 
@@ -2641,6 +4986,13 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// callback (a client-local state transition over the extracted <c>code</c>/<c>state</c>/<c>iss</c>).
     /// Returns the flow identifier ready for token exchange.
     /// </summary>
+    /// <param name="hosted">The hosted authorization server the real wire calls reach.</param>
+    /// <param name="client">The client SDK instance the PAR and callback calls are issued through.</param>
+    /// <param name="registration">The registration identifying the authorization server to the client.</param>
+    /// <param name="clientFlowStore">The client-local flow-state store PAR writes the started flow into.</param>
+    /// <param name="segment">The tenant path segment addressing this authorization server's endpoints.</param>
+    /// <param name="pinnedCertificate">The server's certificate the real wire calls pin against.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="resource">
     /// The RFC 8707 §2 <c>resource</c> indicator(s) to request through the CLIENT abstraction
     /// (<see cref="AuthCodeClient.StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, IReadOnlyList{string}?, CancellationToken)"/>),
@@ -2701,6 +5053,30 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(ClientId)}" +
             $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(parState.Par.RequestUri.ToString())}");
 
+        return await GetAuthorizeRedirectAndCallbackAsync(
+            hosted, client, registration, pinnedCertificate, authorizeUrl, flowId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Drives the browser's authorize GET against <paramref name="authorizeUrl"/> (a real wire GET
+    /// with auto-redirect disabled and the test subject header standing in for an authenticated
+    /// session) and the callback (a client-local state transition over the extracted
+    /// <c>code</c>/<c>state</c>/<c>iss</c>). Shared by <see cref="AuthorizeAndCallbackAsync"/>'s
+    /// PAR-style <c>request_uri</c> redirect and a plain start's fully composed redirect
+    /// alike — both land here once the URL to GET is known. Returns the flow identifier ready for
+    /// token exchange.
+    /// </summary>
+    private static async Task<string> GetAuthorizeRedirectAndCallbackAsync(
+        HostedAuthorizationServer hosted,
+        OAuthClient client,
+        ClientRegistration registration,
+        X509Certificate2 pinnedCertificate,
+        Uri authorizeUrl,
+        string flowId,
+        CancellationToken cancellationToken)
+    {
         //A fresh pinned, no-redirect client for the browser leg: the same certificate the shell's
         //SharedHttpClient pins, so this genuine HTTPS GET succeeds without trusting a CA, and with
         //auto-redirect disabled so the 302 Location is read off the wire instead of being followed.
@@ -2737,4 +5113,762 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         return flowId;
     }
+
+
+    /// <summary>
+    /// Parses a redirect URI's query string into a single-valued map, unescaping both keys and
+    /// values. Reads a plain authorization start's redirect for the individual
+    /// RFC 6749 §4.1.1 / RFC 7636 §4.3 parameters it must carry.
+    /// </summary>
+    private static Dictionary<string, string> ParseQuery(Uri uri) =>
+        uri.Query.TrimStart('?').Split('&')
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(
+                parts => Uri.UnescapeDataString(parts[0]),
+                parts => Uri.UnescapeDataString(parts[1]),
+                StringComparer.Ordinal);
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.2">RFC 6749 §2.2</see>: a
+    /// <c>client_id</c> the caller presents on a pushed authorization request must be the
+    /// identifier of the registration ALREADY SELECTED for the tenant's route — an unregistered
+    /// name, a path-traversal string, or another tenant's own registered identifier are each
+    /// refused <c>invalid_client</c>, with no <c>request_uri</c> minted and no flow record created
+    /// for the attempt.
+    /// </summary>
+    [TestMethod]
+    [DataRow("an-unregistered-client-id", DisplayName = "UnregisteredClientId")]
+    [DataRow("../../etc/passwd", DisplayName = "PathTraversalClientId")]
+    public async Task PushedAuthorizationRequestWithUnidentifiedClientIdIsRefusedInvalidClient(string presentedClientId)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        int flowCountBefore = hosted.FlowStates.Count;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = presentedClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidClient, Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("request_uri", Body, StringComparison.Ordinal);
+        Assert.HasCount(flowCountBefore, hosted.FlowStates,
+            "An identification failure must create no flow record.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.2">RFC 6749 §2.2</see>: naming
+    /// ANOTHER TENANT'S registered <c>client_id</c> on tenant A's own pushed-authorization route is
+    /// refused exactly as an unregistered name is — the route resolves tenant A's registration
+    /// regardless of the string presented, so identification compares against THAT registration,
+    /// never against whatever registration the presented string would name elsewhere.
+    /// </summary>
+    [TestMethod]
+    public async Task PushedAuthorizationRequestNamingAnotherTenantsClientIdIsRefusedInvalidClient()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial tenantA = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        const string TenantBClientId = "https://tenant-b.example.com";
+        using VerifierKeyMaterial tenantB = await host.RegisterDpopClientAsync(
+            TenantBClientId, new Uri(TenantBClientId), profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities)
+            .ConfigureAwait(false);
+        Assert.AreNotEqual(tenantA.Registration.TenantId, tenantB.Registration.TenantId,
+            "The two registrations must sit under distinct tenants for this to be a cross-tenant presentation.");
+
+        string segmentA = tenantA.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        int flowCountBefore = hosted.FlowStates.Count;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = TenantBClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        //Naming tenant A's route: the dispatcher loads tenant A's own registration regardless of
+        //the presented client_id (asserted above by distinct TenantId values), so this proves
+        //identification runs against the ROUTE's registration, never a lookup by the presented id.
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segmentA, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidClient, Body, StringComparison.Ordinal);
+        Assert.HasCount(flowCountBefore, hosted.FlowStates,
+            "An identification failure must create no flow record.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
+    /// an invalid client identifier at the direct authorization endpoint is a DIRECT refusal — no
+    /// redirect, nothing stored — never the redirect-carried error a validated destination would
+    /// receive. The matching-identifier request that follows is the success control proving the
+    /// profile and fixture are otherwise capable of completing this leg.
+    /// </summary>
+    [TestMethod]
+    public async Task DirectAuthorizationWithUnidentifiedClientIdIsRefusedDirectlyWithNoLocation()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        static Uri BuildDirectAuthorizeUrl(HostedAuthorizationServer hosted, string segment, string clientId, PkceParameters pkce) =>
+            new(hosted.HttpBaseAddress!,
+                $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeDirectAuthorize, segment)}" +
+                $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}" +
+                $"&{OAuthRequestParameterNames.CodeChallenge}={Uri.EscapeDataString(pkce.EncodedChallenge)}" +
+                $"&{OAuthRequestParameterNames.CodeChallengeMethod}={WellKnownCodeChallengeMethods.S256}" +
+                $"&{OAuthRequestParameterNames.RedirectUri}={Uri.EscapeDataString(RedirectUri.OriginalString)}" +
+                $"&{OAuthRequestParameterNames.Scope}={Uri.EscapeDataString(WellKnownScopes.OpenId)}" +
+                $"&{OAuthRequestParameterNames.ResponseType}={WellKnownResponseTypes.Code}");
+
+        //The mismatching request: refused directly.
+        PkceParameters mismatchPkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Uri mismatchUrl = BuildDirectAuthorizeUrl(hosted, segment, "not-the-registration", mismatchPkce);
+        using HttpResponseMessage mismatchResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, mismatchUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string mismatchBody = await mismatchResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)mismatchResponse.StatusCode, mismatchBody);
+        Assert.IsNull(mismatchResponse.Headers.Location);
+
+        //The success control: the SAME request with the registration's own identifier redirects
+        //with a code, proving the profile and fixture are otherwise capable of this leg.
+        PkceParameters successPkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Uri successUrl = BuildDirectAuthorizeUrl(hosted, segment, ClientId, successPkce);
+        using HttpResponseMessage successResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, successUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)successResponse.StatusCode);
+        Assert.IsNotNull(TestBrowser.ExtractQueryParam(successResponse.Headers.Location!.ToString(), OAuthRequestParameterNames.Code));
+    }
+
+
+    /// <summary>
+    /// RFC 9126 §4: <c>client_id</c> is REQUIRED on the authorization request that presents a
+    /// pushed <c>request_uri</c>, and it must agree with both the ALREADY SELECTED registration
+    /// and the stored pushed request's own client — a DIFFERENT identifier and an OMITTED one are
+    /// each a direct refusal, with no code issued and the pushed request left unconsumed (it still
+    /// completes normally afterward with the right identifier).
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUriCompletionWithWrongOrMissingClientIdIsRefusedWithoutConsumingThePushedRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        (int ParStatusCode, string ParBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, ParStatusCode, ParBody);
+        using JsonDocument parDoc = JsonDocument.Parse(ParBody);
+        string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
+
+        Uri AuthorizeUrl(string? clientId)
+        {
+            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
+                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri)}";
+            if(clientId is not null)
+            {
+                query += $"&{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}";
+            }
+
+            return new Uri(hosted.HttpBaseAddress!, query);
+        }
+
+        //A DIFFERENT client_id: refused directly, no code, the pushed request left unconsumed.
+        using HttpResponseMessage wrongIdResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, AuthorizeUrl("not-the-registration"), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string wrongIdBody = await wrongIdResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)wrongIdResponse.StatusCode, wrongIdBody);
+
+        //NO client_id at all: also refused directly.
+        using HttpResponseMessage missingIdResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, AuthorizeUrl(null), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string missingIdBody = await missingIdResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)missingIdResponse.StatusCode, missingIdBody);
+
+        //The pushed request still works afterward with the RIGHT identifier — neither refusal
+        //consumed it.
+        using HttpResponseMessage successResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, AuthorizeUrl(ClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)successResponse.StatusCode);
+        Assert.IsNotNull(TestBrowser.ExtractQueryParam(successResponse.Headers.Location!.ToString(), OAuthRequestParameterNames.Code));
+    }
+
+
+    /// <summary>
+    /// The <c>request_uri</c> completion's two comparisons are independent, and run in different
+    /// places. Identification against the ALREADY SELECTED registration rests on
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>: "The
+    /// 'client_id' parameter is defined with the same semantics for both authorization requests and
+    /// requests to the token endpoint; as a required authorization request parameter, it is
+    /// similarly required in a pushed authorization request." It runs in the endpoint's own
+    /// pre-correlation step, before the pushed record is ever loaded. Agreement with the STORED
+    /// pushed request's own <c>client_id</c> rests on
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: "The
+    /// authorization server MUST validate authorization requests arising from a pushed request as
+    /// it would any other authorization request." It runs in the handler, once the record is
+    /// loaded — the only place it CAN run. A pushed record whose stored <c>client_id</c> is
+    /// not the registration's is seeded directly into the host's store. Presenting the
+    /// registration's own identifier fails the binding comparison alone; presenting the stored
+    /// hostile identifier fails the identification (step) comparison alone. Both answer the SAME
+    /// body. Either presentation is refused, and neither consumes, advances, or repairs the record.
+    /// An UNKNOWN <c>request_uri</c> presenting the same hostile <c>client_id</c> answers the
+    /// identical body too, and never touches the seeded record's own step count — proof that
+    /// identification runs before any record, existing or not, is ever loaded.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUriCompletionOfASeededMismatchedRecordFailsEachComparisonIndependently()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        (int ParStatusCode, string ParBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, ParStatusCode, ParBody);
+        using JsonDocument parDoc = JsonDocument.Parse(ParBody);
+        string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
+
+        //Seed the mismatch directly in the store: the stored record names a client the
+        //registration never was, exactly the shape a store fault or a legacy record could produce.
+        const string HostileStoredClientId = "https://attacker.example.com";
+        string flowId = hosted.RequestUriTokenIndex[TestHostShell.ExtractRequestUriToken(new Uri(requestUri))];
+        (FlowState State, int StepCount) = hosted.FlowStates[flowId];
+        ParRequestReceivedState parState = (ParRequestReceivedState)State;
+        hosted.FlowStates[flowId] = (parState with { ClientId = HostileStoredClientId }, StepCount);
+        int stepCountBefore = StepCount;
+
+        Uri AuthorizeUrl(string clientId)
+        {
+            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
+                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri)}" +
+                $"&{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}";
+
+            return new Uri(hosted.HttpBaseAddress!, query);
+        }
+
+        //The registration's own (correctly identified) identifier: refused by the binding
+        //comparison alone (it agrees with the registration but not with the stored record).
+        using HttpResponseMessage boundResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, AuthorizeUrl(ClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string boundBody = await boundResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)boundResponse.StatusCode, boundBody);
+        Assert.Contains("client_id does not match the pushed authorization request.", boundBody, StringComparison.Ordinal);
+        Assert.IsNull(boundResponse.Headers.Location, "A request_uri completion refusal is direct, never a redirect.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "A grant-binding refusal must not consume the pushed request.");
+        Assert.AreEqual(HostileStoredClientId, ((ParRequestReceivedState)hosted.FlowStates[flowId].State).ClientId,
+            "A grant-binding refusal must never repair the stored record to the registration's identifier.");
+
+        //The STORED hostile identifier: refused by identification instead — in the pre-correlation
+        //step, before this pushed record is even loaded (it agrees with the stored record but not
+        //with the registration).
+        using HttpResponseMessage hostileResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, AuthorizeUrl(HostileStoredClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string hostileBody = await hostileResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)hostileResponse.StatusCode, hostileBody);
+        Assert.IsNull(hostileResponse.Headers.Location, "A request_uri completion refusal is direct, never a redirect.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "An identification refusal must not consume the pushed request either.");
+
+        //Both comparisons answer the SAME body byte-for-byte, even though one runs in the step and
+        //the other in the handler — a presenter with no credentials cannot tell which one fired.
+        Assert.AreEqual(boundBody, hostileBody,
+            "The binding comparison (handler) and the identification comparison (step) must answer byte-identically.");
+
+        //An UNKNOWN request_uri presented with the SAME hostile client_id: the identification
+        //comparison runs in the step, before any record — this seeded one included — is ever
+        //loaded, so an unknown handle and this existing (but mismatched) one answer byte-identically.
+        string unknownRequestUri = requestUri + "-does-not-exist";
+        Uri UnknownAuthorizeUrl(string clientId)
+        {
+            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
+                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(unknownRequestUri)}" +
+                $"&{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}";
+
+            return new Uri(hosted.HttpBaseAddress!, query);
+        }
+
+        using HttpResponseMessage unknownHostileResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, UnknownAuthorizeUrl(HostileStoredClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string unknownHostileBody = await unknownHostileResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)unknownHostileResponse.StatusCode, unknownHostileBody);
+        Assert.IsNull(unknownHostileResponse.Headers.Location, "A request_uri completion refusal is direct, never a redirect.");
+        Assert.AreEqual(hostileBody, unknownHostileBody,
+            "An unknown request_uri and this existing, mismatched one must answer byte-identically for the same "
+            + "hostile client_id — the identification comparison runs before either record would be loaded.");
+        Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
+            "The unknown-handle presentation must not touch the seeded record's own step count.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: "The
+    /// authorization server MUST validate authorization requests arising from a pushed request as
+    /// it would any other authorization request," and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see> requires
+    /// <c>client_id</c> on it. The check runs in the endpoint's own pre-correlation step, before
+    /// the pushed request is ever looked up, so a request naming no <c>client_id</c> is refused
+    /// identically whether its <c>request_uri</c> names a live pushed request or nothing at all.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUriCompletionWithNoClientIdAnswersTheSameBodyForAnUnknownAndAnExistingRequestUriAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        (int ParStatusCode, string ParBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, ParStatusCode, ParBody);
+        using JsonDocument parDoc = JsonDocument.Parse(ParBody);
+        string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
+
+        Uri AuthorizeUrlWithoutClientId(string requestUriValue)
+        {
+            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
+                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUriValue)}";
+
+            return new Uri(hosted.HttpBaseAddress!, query);
+        }
+
+        using HttpResponseMessage existingResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, AuthorizeUrlWithoutClientId(requestUri), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string existingBody = await existingResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage unknownResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, AuthorizeUrlWithoutClientId("urn:ietf:params:oauth:request_uri:unknown-value"), SubjectId, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string unknownBody = await unknownResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)existingResponse.StatusCode, existingBody);
+        Assert.Contains("Missing client_id.", existingBody, StringComparison.Ordinal);
+        Assert.AreEqual((int)unknownResponse.StatusCode, (int)existingResponse.StatusCode);
+        Assert.AreEqual(unknownBody, existingBody,
+            "An unknown request_uri and an existing one must answer byte-identically when client_id is missing.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>: a
+    /// missing required parameter is <c>invalid_request</c>. A public client's code redemption
+    /// that presents neither client authentication nor a <c>client_id</c> field is refused
+    /// <c>invalid_request</c>, distinct from a confidential client's own declared-method
+    /// authentication failure (<c>invalid_client</c>) and from a wrong or foreign <c>client_id</c>
+    /// (the same <c>invalid_grant</c> constant an unknown code answers with); the same code
+    /// redeems normally afterward with the field present. The check runs in the code-redemption
+    /// endpoint's own pre-correlation step, before the presented <c>code</c> is ever looked up,
+    /// so an UNKNOWN code with the same well-formed verifier and no <c>client_id</c> is refused
+    /// byte-identically — RFC 6749 §3.2.1.
+    /// </summary>
+    [TestMethod]
+    public async Task PublicClientCodeRedemptionWithNoClientIdIsInvalidRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> fieldsWithoutClientId = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
+        };
+        (int MissingStatus, string MissingBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, fieldsWithoutClientId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, MissingStatus, MissingBody);
+        Assert.Contains(OAuthErrors.InvalidRequest, MissingBody, StringComparison.Ordinal);
+
+        //An UNKNOWN code, same well-formed verifier, no client_id: the pre-correlation step
+        //answers this before the code is ever looked up, so the body is byte-identical.
+        Dictionary<string, string> unknownCodeFieldsWithoutClientId = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
+            [OAuthRequestParameterNames.Code] = "unknown-authorization-code-value",
+            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
+        };
+        (int UnknownStatus, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, unknownCodeFieldsWithoutClientId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(MissingStatus, UnknownStatus);
+        Assert.AreEqual(MissingBody, UnknownBody,
+            "An unknown code and a live one must answer byte-identically when client_id is missing.");
+
+        //The code was not consumed: redeeming it correctly afterward still succeeds.
+        (int OkStatus, string OkBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, OkStatus, OkBody);
+    }
+
+
+    /// <summary>
+    /// The REFRESH twin of <see cref="PublicClientCodeRedemptionWithNoClientIdIsInvalidRequest"/>:
+    /// this proves the library's own refresh identification policy —
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
+    /// §4.3.1</see>'s stored-grant binding rule read fail-closed on neither identity — and the
+    /// uniform answer it shares with code redemption, not an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2.1">RFC 6749 §3.2.1</see>
+    /// requirement (that MUST is scoped to the <c>authorization_code</c> grant's request, not
+    /// refresh). A public client's refresh that presents neither client authentication nor a
+    /// <c>client_id</c> field is refused <c>invalid_request</c>, hoisted into the refresh
+    /// endpoint's pre-correlation step
+    /// so an UNKNOWN refresh token answers byte-identically to a LIVE one — before this fix, the
+    /// request-only condition was decided only once the stored record was already loaded, so a
+    /// live token answered the record-dependent binding body while an unknown one answered the
+    /// endpoint's own not-found constant. The live token is not consumed: refreshing correctly
+    /// afterward still succeeds.
+    /// </summary>
+    [TestMethod]
+    public async Task PublicRefreshWithNoClientIdIsInvalidRequestAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int TokenStatus, string TokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, TokenStatus, TokenBody);
+        string refreshToken;
+        using(JsonDocument tokenDoc = JsonDocument.Parse(TokenBody))
+        {
+            refreshToken = tokenDoc.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+        }
+
+        Dictionary<string, string> fieldsWithoutClientId = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken
+        };
+        (int MissingStatus, string MissingBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, fieldsWithoutClientId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, MissingStatus, MissingBody);
+        Assert.Contains(OAuthErrors.InvalidRequest, MissingBody, StringComparison.Ordinal);
+
+        //An UNKNOWN refresh token, no client_id: the pre-correlation step answers this before the
+        //token is ever looked up, so the body is byte-identical.
+        Dictionary<string, string> unknownFieldsWithoutClientId = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = "unknown-refresh-token-value"
+        };
+        (int UnknownStatus, string UnknownBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, unknownFieldsWithoutClientId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(MissingStatus, UnknownStatus);
+        Assert.AreEqual(MissingBody, UnknownBody,
+            "An unknown refresh token and a live one must answer byte-identically when client_id is missing.");
+
+        //The refresh token was not consumed: refreshing correctly afterward still succeeds.
+        (int OkStatus, string OkBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, OkStatus, OkBody);
+    }
+
+
+    /// <summary>
+    /// The design document's
+    /// <see href="../../../documents/AuthorizationServerDesign.md#5-operational-ordering-on-validation">ordering
+    /// section</see>: a check that needs only the request and the registration must run before any
+    /// stored record is correlated or loaded. A malformed <c>code_verifier</c> is refused by the
+    /// code-redemption endpoint's pre-correlation step, for an UNKNOWN and a LIVE code alike, before
+    /// <c>HostedAuthorizationServer.ResolveCorrelationKeyAsync</c> or
+    /// <c>LoadFlowStateAsync</c> ever runs; a correct presentation shows exactly one of each.
+    /// </summary>
+    [TestMethod]
+    public async Task MalformedVerifierRefusalTouchesNoGrantStorageAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+
+        const string MalformedVerifier = "too-short";
+
+        int beforeLiveRefusal = hosted.StorageObservations.Count;
+        (int LiveRefusalStatus, string LiveRefusalBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, code, MalformedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, LiveRefusalStatus, LiveRefusalBody);
+        var liveRefusalOps = hosted.StorageObservations.Skip(beforeLiveRefusal).Select(entry => entry.Operation).ToList();
+        Assert.DoesNotContain(op => op == "correlate", liveRefusalOps, "A pre-correlation refusal must not correlate the grant store.");
+        Assert.DoesNotContain(op => op == "load", liveRefusalOps, "A pre-correlation refusal must not load the grant store.");
+
+        int beforeUnknownRefusal = hosted.StorageObservations.Count;
+        (int UnknownRefusalStatus, string UnknownRefusalBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, "unknown-authorization-code-value", MalformedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(LiveRefusalStatus, UnknownRefusalStatus);
+        Assert.AreEqual(LiveRefusalBody, UnknownRefusalBody,
+            "An unknown code and a live one must answer byte-identically for a malformed verifier.");
+        var unknownRefusalOps = hosted.StorageObservations.Skip(beforeUnknownRefusal).Select(entry => entry.Operation).ToList();
+        Assert.DoesNotContain(op => op == "correlate", unknownRefusalOps, "A pre-correlation refusal must not correlate the grant store.");
+        Assert.DoesNotContain(op => op == "load", unknownRefusalOps, "A pre-correlation refusal must not load the grant store.");
+
+        int beforeSuccess = hosted.StorageObservations.Count;
+        (int OkStatus, string OkBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, OkStatus, OkBody);
+        var successOps = hosted.StorageObservations.Skip(beforeSuccess).Select(entry => entry.Operation).ToList();
+        _ = Assert.ContainsSingle(op => op == "correlate", successOps,
+            "A correct presentation must correlate the grant store exactly once.");
+        _ = Assert.ContainsSingle(op => op == "load", successOps,
+            "A correct presentation must load the grant store exactly once.");
+    }
+
+
+    /// <summary>
+    /// Extends <see cref="MalformedVerifierRefusalTouchesNoGrantStorageAsync"/>'s storage-observation
+    /// proof to the request-only refusals a declared client authentication failure, a missing
+    /// credential, and a required-but-absent DPoP proof answer: the grant store shows no
+    /// <c>correlate</c> and no <c>load</c> for any of them, unknown and live alike, distinguishing
+    /// those grant-store operations from the authentication stores (<c>jti</c>, nonce) the
+    /// pre-correlation step legitimately touches for a well-formed presentation.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#5-operational-ordering-on-validation">ordering section</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AuthenticationAndDpopRefusalsAlsoTouchNoGrantStorageAsync()
+    {
+        const string ClientSecret = "s3cret-of-the-storage-observation-client";
+        const string WrongClientSecret = "wrong-not-the-registered-secret";
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        //The registration is still undeclared (public) for PAR and authorize — this helper's PAR
+        //push attaches no credential — and is upgraded to a declared confidential method only once
+        //the code is issued, so redemption (not PAR) is what is under test.
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+        }).ConfigureAwait(false);
+
+        _ = await host.SetTokenEndpointAuthMethodAsync(
+            material, ClientAuthenticationMethod.ClientSecretBasic, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(hosted.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretBasic];
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        OutgoingHeaders wrongSecretHeaders = OutgoingHeaders.Empty.WithClientSecretBasic(
+            ClientId, Encoding.UTF8.GetBytes(WrongClientSecret));
+
+        //Shape 3: a wrong client_secret_basic secret.
+        int beforeLiveAuthRefusal = hosted.StorageObservations.Count;
+        HttpResponseData liveAuthRefusal = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, tokenUri,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            wrongSecretHeaders, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, liveAuthRefusal.StatusCode, liveAuthRefusal.Body);
+        AssertNoGrantStorageTouched(hosted, beforeLiveAuthRefusal, "a wrong Basic secret refusal");
+
+        int beforeUnknownAuthRefusal = hosted.StorageObservations.Count;
+        HttpResponseData unknownAuthRefusal = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, tokenUri,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, "unknown-authorization-code-value", pkce.EncodedVerifier, RedirectUri.OriginalString),
+            wrongSecretHeaders, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(liveAuthRefusal.StatusCode, unknownAuthRefusal.StatusCode);
+        Assert.AreEqual(liveAuthRefusal.Body, unknownAuthRefusal.Body,
+            "An unknown code and a live one must answer byte-identically for a wrong Basic secret.");
+        AssertNoGrantStorageTouched(hosted, beforeUnknownAuthRefusal, "a wrong Basic secret refusal");
+
+        //Shape 4: no credentials at all.
+        int beforeLiveNoCredentialRefusal = hosted.StorageObservations.Count;
+        HttpResponseData liveNoCredentialRefusal = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, tokenUri,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, liveNoCredentialRefusal.StatusCode, liveNoCredentialRefusal.Body);
+        AssertNoGrantStorageTouched(hosted, beforeLiveNoCredentialRefusal, "a no-credentials refusal");
+
+        int beforeUnknownNoCredentialRefusal = hosted.StorageObservations.Count;
+        HttpResponseData unknownNoCredentialRefusal = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, tokenUri,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, "unknown-authorization-code-value", pkce.EncodedVerifier, RedirectUri.OriginalString),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(liveNoCredentialRefusal.StatusCode, unknownNoCredentialRefusal.StatusCode);
+        Assert.AreEqual(liveNoCredentialRefusal.Body, unknownNoCredentialRefusal.Body,
+            "An unknown code and a live one must answer byte-identically when no credentials are presented.");
+        AssertNoGrantStorageTouched(hosted, beforeUnknownNoCredentialRefusal, "a no-credentials refusal");
+
+        //Shape 5: a DPoP-required registration presenting no proof at all. A DPoP-enabled client
+        //drives PAR and authorize (DPoP is not checked there, only at redemption), so the manual
+        //raw pushes below are the only presentations under test.
+        using VerifierKeyMaterial dpopMaterial = await host.RegisterDpopClientAsync(
+            "https://dpop-required.storage-observation.test",
+            new Uri("https://dpop-required.storage-observation.test"),
+            capabilities: Capabilities).ConfigureAwait(false);
+        string dpopSegment = dpopMaterial.Registration.TenantId.Value;
+
+        using DpopClientFixture dpopFixture = await host.CreateDpopEnabledOAuthClientAsync(
+            dpopMaterial.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpClient dpopBrowserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        (string dpopFlowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            hosted, dpopFixture.Client, dpopFixture.Registration, dpopFixture.ClientFlowStore, dpopSegment, RedirectUri,
+            SubjectId, dpopBrowserClient, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        AuthorizationCodeReceivedState dpopCallbackState = (AuthorizationCodeReceivedState)dpopFixture.ClientFlowStore[dpopFlowId];
+
+        Uri dpopTokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, dpopSegment);
+
+        int beforeLiveDpopRefusal = hosted.StorageObservations.Count;
+        HttpResponseData liveDpopRefusal = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, dpopTokenUri,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                dpopMaterial.Registration.ClientId, dpopCallbackState.Code,
+                dpopCallbackState.Pkce.EncodedVerifier, dpopCallbackState.RedirectUri.OriginalString),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, liveDpopRefusal.StatusCode, liveDpopRefusal.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, liveDpopRefusal.Body, StringComparison.Ordinal);
+        AssertNoGrantStorageTouched(hosted, beforeLiveDpopRefusal, "a required-DPoP-proof-absent refusal");
+
+        int beforeUnknownDpopRefusal = hosted.StorageObservations.Count;
+        HttpResponseData unknownDpopRefusal = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, dpopTokenUri,
+            RawAuthCodeWirePushers.BuildTokenFields(
+                dpopMaterial.Registration.ClientId, "unknown-authorization-code-value",
+                dpopCallbackState.Pkce.EncodedVerifier, dpopCallbackState.RedirectUri.OriginalString),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(liveDpopRefusal.StatusCode, unknownDpopRefusal.StatusCode);
+        Assert.AreEqual(liveDpopRefusal.Body, unknownDpopRefusal.Body,
+            "An unknown code and a live one must answer byte-identically when a required DPoP proof is absent.");
+        AssertNoGrantStorageTouched(hosted, beforeUnknownDpopRefusal, "a required-DPoP-proof-absent refusal");
+
+        //A correct presentation shows one correlate and one load — the live code from shapes 3 and
+        //4 is unconsumed.
+        int beforeSuccess = hosted.StorageObservations.Count;
+        OutgoingHeaders rightSecretHeaders = OutgoingHeaders.Empty.WithClientSecretBasic(
+            ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        HttpResponseData success = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, tokenUri,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            rightSecretHeaders, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, success.StatusCode, success.Body);
+        var successOps2 = hosted.StorageObservations.Skip(beforeSuccess).Select(entry => entry.Operation).ToList();
+        _ = Assert.ContainsSingle(op => op == "correlate", successOps2,
+            "A correct presentation must correlate the grant store exactly once.");
+        _ = Assert.ContainsSingle(op => op == "load", successOps2,
+            "A correct presentation must load the grant store exactly once.");
+    }
+
+
+    /// <summary>
+    /// Asserts that <see cref="HostedAuthorizationServer.StorageObservations"/> recorded NO flow-state
+    /// store operation of ANY kind since <paramref name="before"/>. Delegates to
+    /// <see cref="HostedAuthorizationServer.AssertNoFlowStateStoreOperationTouched"/>, whose remarks
+    /// explain why every operation (not only <c>correlate</c>/<c>load</c>) is checked and why zero
+    /// is the exact expected count for the shapes this helper covers.
+    /// </summary>
+    private static void AssertNoGrantStorageTouched(HostedAuthorizationServer hosted, int before, string context) =>
+        hosted.AssertNoFlowStateStoreOperationTouched(before, context);
 }

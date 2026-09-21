@@ -25,6 +25,26 @@ namespace Verifiable.OAuth.Federation;
 /// delegate when the queried subject is not a known subordinate; the
 /// library then returns HTTP 404.
 /// </para>
+/// <para>
+/// <strong>How withdrawal is stated.</strong> Federation §3.1.1 gives every
+/// statement a required <c>exp</c>: "Expiration time after which the
+/// statement MUST NOT be accepted for processing." Federation §8.1.2 gives
+/// the fetch endpoint its withdrawal signal: "If the fetch endpoint cannot
+/// provide data for the requested <c>sub</c> parameter, returning the
+/// <c>not_found</c> error code is RECOMMENDED." The specification therefore
+/// provides two mechanisms — a bounded validity window and a per-request
+/// "no longer available" answer — and names neither a dedicated revoke nor
+/// a rotate operation. The library resolves every fetch request fresh
+/// against <see cref="Server.AuthorizationServerIntegration.ResolveSubordinateStatementAsync"/>
+/// and stamps <c>exp</c> from <see cref="Server.AuthorizationServerIntegration.Timings"/>
+/// at that moment: an application withdraws a Subordinate Statement by
+/// having the delegate return <see langword="null"/> for that subject (the
+/// §8.1.2 <c>not_found</c> answer, applied on the next fetch) and bounds
+/// exposure of one already issued by keeping the configured lifetime short
+/// (the §3.1.1 <c>exp</c> window). The library ships no separate
+/// Update/Revoke/Rotate operation and no cached-statement store to
+/// invalidate — there is nothing held past the current response to revoke.
+/// </para>
 /// </remarks>
 public sealed record SubordinateStatementContribution
 {

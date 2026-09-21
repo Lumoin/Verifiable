@@ -69,11 +69,11 @@ internal sealed class TrustMarkValidatorTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //§7.3: an unsigned (alg=none) trust mark must be rejected. Only the header is adversarial.
-        UnverifiedJwtHeader noneHeader = new(new Dictionary<string, object>
+        UnverifiedJwtHeader noneHeader = new()
         {
             [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None,
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkJwt
-        });
+        };
 
         TrustMarkValidationContext context = new()
         {

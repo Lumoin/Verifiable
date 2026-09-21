@@ -4,8 +4,8 @@ namespace Verifiable.Cryptography;
 
 /// <summary>
 /// A semantic identifier for a specific key instance, stored as an entry in a
-/// <see cref="Tag"/> alongside type metadata such as <see cref="CryptoAlgorithm"/>
-/// and <see cref="Purpose"/>.
+/// <see cref="Tag"/> alongside type metadata such as <see cref="Verifiable.Cryptography.Context.CryptoAlgorithm"/>
+/// and <see cref="Verifiable.Cryptography.Context.Purpose"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -35,7 +35,7 @@ namespace Verifiable.Cryptography;
 ///     <description>
 ///       A DID key identifier (<c>did:key:z6Mk…</c>) for keys whose identity is derived
 ///       from the public key bytes via multibase/multicodec encoding, as produced by
-///       <see cref="CryptoFormatConversions"/> in <c>Verifiable.JCose</c>.
+///       <c>CryptoFormatConversions</c> in <c>Verifiable.JCose</c>.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -97,8 +97,10 @@ public readonly struct KeyId: IEquatable<KeyId>
     public override string ToString() => Value;
 
 
+    /// <summary>Reports whether two <see cref="KeyId"/> values carry the same identifier.</summary>
     public static bool operator ==(KeyId left, KeyId right) => left.Equals(right);
 
+    /// <summary>Reports whether two <see cref="KeyId"/> values carry different identifiers.</summary>
     public static bool operator !=(KeyId left, KeyId right) => !(left == right);
 
 

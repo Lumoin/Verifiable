@@ -13,27 +13,27 @@ using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.OAuth;
-using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Server.Routing;
+using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Tests for <see cref="TestHostShell"/> exercising the
-/// <see cref="AuthorizationServer"/> observable paths, dynamic registration,
+/// <see cref="AuthorizationServerIntegration"/> observable paths, dynamic registration,
 /// deregistration, key rotation, and multi-client routing — exactly as a production
 /// ASP.NET application would observe them.
 /// </summary>
 /// <remarks>
-/// Each test subscribes to <see cref="app.Server.Events"/> independently
+/// Each test subscribes to <see cref="AuthorizationServerIntegration.Events"/> independently
 /// to assert that the correct events are emitted in order with the correct payloads.
 /// The routing table assertions verify that the observable subscriber updates the
-/// in-memory store that backs <see cref="AuthorizationServerOptions.LoadClientRegistrationAsync"/>
+/// in-memory store that backs <see cref="AuthorizationServerIntegration.LoadClientRegistrationAsync"/>
 /// before each test's dispatch calls begin.
 /// </remarks>
 [TestClass]
@@ -182,12 +182,17 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Resolves the built-in profiles' PAR requirements under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see> and
+    /// <see href="https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5.3.2.2">FAPI 2.0 §5.3.2.2</see>:
+    /// "shall reject authorization requests sent without [RFC9126]",
+    /// and issuer emission under <see href="https://www.rfc-editor.org/rfc/rfc9207#section-2">RFC 9207 §2</see>.
+    /// </summary>
     [TestMethod]
     public async Task DefaultResolvePolicyAsyncDispatchesCorrectProfile()
     {
-        //Three registrations, one per built-in profile, produce the expected
-        //policy values. Round 4.8 — confirms the dispatch via PolicyProfile
-        //code equality replaces the earlier string-equality approach.
+        //Each registration selects the corresponding profile's request requirements.
         ClientRecord strict = MakeMinimalRegistration(PolicyProfile.Fapi20);
         ClientRecord haip = MakeMinimalRegistration(PolicyProfile.Haip10);
         ClientRecord rfc = MakeMinimalRegistration(PolicyProfile.Rfc6749WithPkce);
@@ -203,12 +208,9 @@ internal sealed class AuthorizationServerFeatureTests
         await PolicyProfiles.DefaultResolvePolicyAsync(
             rfc, rfcContext, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(PkceMethodSet.S256Only, strictContext.AllowedPkceMethods,
-            "Strict permits only S256.");
-        Assert.AreEqual(PkceMethodSet.S256Only, haipContext.AllowedPkceMethods,
-            "Haip is Strict + tightenings — also S256-only.");
-        Assert.AreEqual(PkceMethodSet.S256AndPlain, rfcContext.AllowedPkceMethods,
-            "Rfc6749 baseline permits both S256 and plain.");
+        Assert.IsTrue(strictContext.RequirePushedAuthorizationRequests, "FAPI 2.0 requires PAR.");
+        Assert.IsTrue(haipContext.RequirePushedAuthorizationRequests, "HAIP requires PAR.");
+        Assert.IsFalse(rfcContext.RequirePushedAuthorizationRequests, "The RFC 6749 profile permits direct authorization.");
 
         Assert.IsTrue(strictContext.EmitIssOnRedirect,
             "Strict emits iss on redirect (RFC 9207 / FAPI 2.0).");
@@ -265,7 +267,7 @@ internal sealed class AuthorizationServerFeatureTests
             name: "timing-derivation",
             timeProvider: TimeProvider,
             subjectClaims: [],
-            resolveIssuerKey: _ => null,
+            resolveIssuerKey: static (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null),
             vpValidator: new Verifiable.Core.Assessment.ClaimIssuer<Verifiable.OAuth.Validation.ValidationContext>(
                 "vp-timing-derivation",
                 Verifiable.OAuth.Validation.ValidationProfiles.Haip10SdJwtRules(),
@@ -286,6 +288,10 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// An unrecognized profile uses the strict authorization request requirements, including
+    /// issuer identification per <see href="https://www.rfc-editor.org/rfc/rfc9207#section-2">RFC 9207 §2</see>.
+    /// </summary>
     [TestMethod]
     public async Task DefaultResolvePolicyAsyncFallsBackToStrictForCustomCode()
     {
@@ -300,7 +306,7 @@ internal sealed class AuthorizationServerFeatureTests
         await PolicyProfiles.DefaultResolvePolicyAsync(
             registration, context, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(PkceMethodSet.S256Only, context.AllowedPkceMethods,
+        Assert.IsTrue(context.RequirePushedAuthorizationRequests,
             "Custom code with no application resolver falls back to Strict.");
         Assert.IsTrue(context.EmitIssOnRedirect,
             "Strict baseline emits iss on the redirect.");
@@ -562,34 +568,184 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //Observable: key rotation updates registration and new flows use new key.
-    //
-    //Key rotation is a common production operation. The old signing key must
-    //remain resolvable for in-flight flows. New flows must use the new signing
-    //key. This test verifies that RotateSigningKey emits ClientUpdated, that
-    //the routing table reflects the new key identifier, and that a full flow
-    //completed after rotation verifies correctly with the new key.
-
+    /// <summary>
+    /// Neither authorization-details seam wired, and the registry holding only the built-in
+    /// <c>openid_credential</c> type, is the baseline every fixture starts from: composition must
+    /// not throw over this shape.
+    /// </summary>
     [TestMethod]
-    public async Task KeyRotationEmitsClientUpdatedAndNewFlowUsesNewKey()
+    public async Task NeitherAuthorizationDetailsSeamWiredValidates()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        Assert.IsTrue(host.Server.OAuth().IsValidated,
+            "A freshly built host with neither authorization-details seam wired must already be validated.");
+    }
+
+
+    /// <summary>
+    /// <see cref="AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync"/> wired with
+    /// <see cref="AuthorizationServerIntegration.ParseAuthorizationDetailsAsync"/> unwired can never
+    /// be reached — RFC 9396 §5's <c>invalid_authorization_details</c> refusal fires at parse time,
+    /// before any parsed object could reach the decision seam. Refused naming both members.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveCredentialAuthorizationWiredWithoutParserIsRefused()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ResolveCredentialAuthorizationAsync =
+                    static (details, subject, registration, context, ct) =>
+                        ValueTask.FromResult(CredentialAuthorizationDecision.Grant([]));
+            }));
+
+        Assert.Contains(nameof(AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync),
+            ex.Message, StringComparison.Ordinal, "Error must name ResolveCredentialAuthorizationAsync.");
+        Assert.Contains(nameof(AuthorizationServerIntegration.ParseAuthorizationDetailsAsync),
+            ex.Message, StringComparison.Ordinal, "Error must name ParseAuthorizationDetailsAsync.");
+    }
+
+
+    /// <summary>
+    /// <see cref="AuthorizationServerIntegration.ParseAuthorizationDetailsAsync"/> wired for the
+    /// built-in <c>openid_credential</c> type alone, with
+    /// <see cref="AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync"/> unwired, is
+    /// an issuance-capable integration whose grant can never mint <c>credential_identifiers</c>.
+    /// Refused naming both members.
+    /// </summary>
+    [TestMethod]
+    public async Task ParserAloneForTheBuiltInTypeOnlyIsRefused()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            }));
+
+        Assert.Contains(nameof(AuthorizationServerIntegration.ParseAuthorizationDetailsAsync),
+            ex.Message, StringComparison.Ordinal, "Error must name ParseAuthorizationDetailsAsync.");
+        Assert.Contains(nameof(AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync),
+            ex.Message, StringComparison.Ordinal, "Error must name ResolveCredentialAuthorizationAsync.");
+    }
+
+
+    /// <summary>
+    /// A deployment that registers a further authorization details type has visibly signaled it
+    /// uses <c>authorization_details</c> for something other than credential issuance (a RAR-only
+    /// use), so the pairing check stays silent for it even with the decision seam unwired.
+    /// </summary>
+    [TestMethod]
+    public async Task ParserWithAnAdditionalRegisteredTypeAndNoResolverValidates()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizationDetailTypes.Register(new AuthorizationDetailHandler
+            {
+                Type = "urn:example:rar-only",
+                ValidateShape = static (detail, validation) => null
+            });
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+        }).ConfigureAwait(false);
+
+        Assert.IsTrue(host.Server.OAuth().IsValidated,
+            "A deployment registering a further type must validate with the parser wired and the resolver unwired.");
+    }
+
+
+    /// <summary>Both authorization-details seams wired together is the ordinary credential-issuing shape and must validate.</summary>
+    [TestMethod]
+    public async Task BothAuthorizationDetailsSeamsWiredValidates()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                    ValueTask.FromResult(CredentialAuthorizationDecision.Grant([]));
+        }).ConfigureAwait(false);
+
+        Assert.IsTrue(host.Server.OAuth().IsValidated, "Both seams wired together must validate.");
+    }
+
+
+    /// <summary>
+    /// A committed registration's event carries both the tenant key (for observer correlation)
+    /// and the tenant handle (the display-safe value diagnostics show); its debugger display
+    /// renders the handle and never the key.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Server design</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientRegisteredEventCarriesTenantIdAndHandleWithHandleOnlyDebuggerDisplay()
     {
         List<ClientRegistrationEvent> received = [];
-
 
 
         await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
-        using VerifierKeyMaterial originalKeys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial material = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        string segment = material.Registration.TenantId;
+        string handle = material.Registration.TenantHandle!.Value.Value;
+
+        ClientRegistrationEvent registered = received.Single(e =>
+            string.Equals(e.TenantId, segment, StringComparison.Ordinal));
+
+        Assert.AreEqual(segment, registered.TenantId.Value,
+            "The event must carry the tenant key so observers can correlate stale updates.");
+        Assert.AreEqual(handle, registered.TenantHandle?.Value,
+            "The event must carry the tenant handle the registration was given.");
+
+        //Proved as a source scan of the attribute's own text, not by reflecting the loaded type
+        //system: the declared shape is what every debugger session renders for any instance.
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        string eventSource = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "src", "Verifiable.OAuth", "Server", "ClientRegistrationEvent.cs"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        int attributeStart = eventSource.IndexOf("[DebuggerDisplay(", StringComparison.Ordinal);
+        Assert.IsGreaterThanOrEqualTo(0, attributeStart, "ClientRegistrationEvent must declare a DebuggerDisplay attribute.");
+        string attributeLine = eventSource[attributeStart..eventSource.IndexOf('\n', attributeStart, StringComparison.Ordinal)];
+
+        Assert.Contains("TenantHandle={TenantHandle}", attributeLine, StringComparison.Ordinal,
+            "The debugger display must show the handle.");
+        Assert.DoesNotContain("TenantId={TenantId}", attributeLine,
+            "The debugger display must never show the tenant key.");
+    }
+
+
+    /// <summary>
+    /// Checks that host-managed key rotation emits its registration update and permits a presentation with the replacement key.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Server design</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task KeyRotationEmitsClientUpdatedAndNewFlowUsesNewKey()
+    {
+        List<ClientRegistrationEvent> received = [];
+
+
+        await using TestHostShell app = new(TimeProvider);
+
+        using IDisposable subscription = app.Server.Events.Subscribe(
+            new CollectingObserver<ClientRegistrationEvent>(received));
+        using VerifierKeyMaterial originalKeys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = originalKeys.Registration.TenantId;
         KeyId originalSigningKeyId = originalKeys.SigningKeyId;
 
         //Rotate — emits ClientUpdated, adds new keys to stores.
-        using VerifierKeyMaterial rotatedKeys = app.RotateSigningKey(segment);
+        using VerifierKeyMaterial rotatedKeys = await app.RotateSigningKeyAsync(segment).ConfigureAwait(false);
 
-        //Filter to this segment — the static subject is shared across tests.
+        //Filter to this registration segment.
         ClientRegistrationEvent[] forThisSegment = received
             .Where(e => string.Equals(e.TenantId, segment, StringComparison.Ordinal))
             .ToArray();
@@ -600,10 +756,10 @@ internal sealed class AuthorizationServerFeatureTests
             "Second event must be ClientUpdated.");
 
         ClientUpdated updated = (ClientUpdated)forThisSegment[1];
-        Assert.AreEqual(originalSigningKeyId, updated.Previous.GetDefaultSigningKeyId(KeyUsageContext.JarSigning),
+        Assert.AreEqual(originalSigningKeyId, updated.Previous.SigningKeyIds[KeyUsageContext.JarSigning],
             "ClientUpdated.Previous must carry the original signing key identifier.");
-        Assert.AreEqual(rotatedKeys.SigningKeyId, updated.Current.GetDefaultSigningKeyId(KeyUsageContext.JarSigning),
-            "ClientUpdated.Current must carry the new signing key identifier.");
+        Assert.AreEqual(rotatedKeys.SigningKeyId, updated.Projection.SigningKeyIds[KeyUsageContext.JarSigning],
+            "ClientUpdated.Projection must carry the new signing key identifier.");
 
         //Routing table must immediately reflect the new registration.
         ClientRecord current = app.RegistrationStore[segment];
@@ -672,13 +828,12 @@ internal sealed class AuthorizationServerFeatureTests
         List<ClientRegistrationEvent> received = [];
 
 
-
         await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
-        using VerifierKeyMaterial keysA = app.RegisterClient("https://tenant-a.example.com", VerifierBaseUri, Oid4VpCapabilities);
-        using VerifierKeyMaterial keysB = app.RegisterClient("https://tenant-b.example.com", VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keysA = await app.RegisterClientAsync("https://tenant-a.example.com", VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        using VerifierKeyMaterial keysB = await app.RegisterClientAsync("https://tenant-b.example.com", VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segmentA = keysA.Registration.TenantId;
         string segmentB = keysB.Registration.TenantId;
@@ -771,12 +926,11 @@ internal sealed class AuthorizationServerFeatureTests
         List<ClientRegistrationEvent> received = [];
 
 
-
         await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
-        using VerifierKeyMaterial firstKeys = app.RegisterClient("https://first.example.com", VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial firstKeys = await app.RegisterClientAsync("https://first.example.com", VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string firstSegment = firstKeys.Registration.TenantId;
 
@@ -793,7 +947,7 @@ internal sealed class AuthorizationServerFeatureTests
         int countBeforeSecond = received.Count;
 
         //Register a second client — the disposed observer must not receive it.
-        using VerifierKeyMaterial secondKeys = app.RegisterClient("https://second.example.com", VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial secondKeys = await app.RegisterClientAsync("https://second.example.com", VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         Assert.HasCount(countBeforeSecond, received,
             "No additional events must be received after subscription is disposed.");
@@ -807,7 +961,7 @@ internal sealed class AuthorizationServerFeatureTests
     public async Task ParDispatchReturns201WithRequestUriAndExpiresInJson()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
         PreparedDcqlQuery query = CreatePreparedQuery();
@@ -850,8 +1004,7 @@ internal sealed class AuthorizationServerFeatureTests
     public async Task JarRequestDispatchReturns200WithCompactJwsContentType()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
 
         (_, string parHandle) = await app.HandleParAsync(keys,
@@ -894,7 +1047,7 @@ internal sealed class AuthorizationServerFeatureTests
     public async Task DirectPostCrossDeviceReturns200WithEmptyBody()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
@@ -961,7 +1114,7 @@ internal sealed class AuthorizationServerFeatureTests
     public async Task DirectPostSameDeviceReturns200WithRedirectUriInBody()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
@@ -1074,7 +1227,7 @@ internal sealed class AuthorizationServerFeatureTests
     public async Task NewlyRegisteredClientCanComputeEndpointUrisFromSegment()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
 
@@ -1124,7 +1277,7 @@ internal sealed class AuthorizationServerFeatureTests
     public async Task NewlyRegisteredClientCanReachParEndpointAndReceivesRequestUri()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
 
@@ -1196,8 +1349,8 @@ internal sealed class AuthorizationServerFeatureTests
         string expectedAlg = expectedJwk.Alg!;
         string? expectedCrv = expectedJwk.Crv;
 
-        ClientRecord registration = app.RegisterSigningClient(
-            $"client-{displayName}", keyPair, JwksCapabilities);
+        ClientRecord registration = await app.RegisterSigningClientAsync(
+            $"client-{displayName}", keyPair, JwksCapabilities).ConfigureAwait(false);
 
         ServerHttpResponse response = await FetchJwksAsync(
             app, registration, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1254,10 +1407,10 @@ internal sealed class AuthorizationServerFeatureTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> pqKeys =
             TestKeyMaterialProvider.CreateMlDsa65KeyMaterial();
 
-        ClientRecord ecClient = app.RegisterSigningClient(
-            "ec-client", ecKeys, JwksCapabilities);
-        ClientRecord pqClient = app.RegisterSigningClient(
-            "pq-client", pqKeys, JwksCapabilities);
+        ClientRecord ecClient = await app.RegisterSigningClientAsync(
+            "ec-client", ecKeys, JwksCapabilities).ConfigureAwait(false);
+        ClientRecord pqClient = await app.RegisterSigningClientAsync(
+            "pq-client", pqKeys, JwksCapabilities).ConfigureAwait(false);
 
         ServerHttpResponse ecResponse = await FetchJwksAsync(
             app, ecClient, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1285,6 +1438,10 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that the key-set delegate receives the supplied tenant and caller context values.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#6-per-call-delegate-guidance">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task BuildJwksDocumentDelegateReceivesContextBagFromAspNetSkin()
     {
@@ -1304,24 +1461,27 @@ internal sealed class AuthorizationServerFeatureTests
         //Override BuildJwksDocumentAsync to capture what the delegate receives.
         //This is exactly what an application developer would do — wire a delegate
         //that reads from the context bag to make per-call decisions.
-        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            capturedSigningKeyId = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
-
-            if(ctx.TryGetValue("app.tenantId", out object? tid) && tid is string t)
+            candidateIntegration.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
             {
-                capturedTenantId = t;
-            }
+                capturedSigningKeyId = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
 
-            if(ctx.TryGetValue("app.callerTier", out object? tier) && tier is string tr)
-            {
-                capturedCallerTier = tr;
-            }
+                if(ctx.TryGetValue("app.tenantId", out object? tid) && tid is string t)
+                {
+                    capturedTenantId = t;
+                }
 
-            return ValueTask.FromResult(new JwksDocument { Keys = [] });
-        };
+                if(ctx.TryGetValue("app.callerTier", out object? tier) && tier is string tr)
+                {
+                    capturedCallerTier = tr;
+                }
 
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return ValueTask.FromResult(new JwksDocument { Keys = [] });
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
         string segment = keys.Registration.TenantId;
 
         //The ASP.NET skin adds tenant and caller tier to the context bag.
@@ -1349,6 +1509,10 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that the application's key-set delegate can select key visibility from request context.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#6-per-call-delegate-guidance">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task BuildJwksDocumentDelegateCanSuppressKeysBasedOnContext()
     {
@@ -1356,34 +1520,38 @@ internal sealed class AuthorizationServerFeatureTests
         //different JWKS depending on context bag contents. This is the billing/
         //tier/tenant isolation pattern the design intends.
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
 
         //Wire BuildJwksDocumentAsync to suppress all keys for restricted callers.
-        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            bool isRestricted = ctx.TryGetValue("app.restricted", out object? r)
-                && r is bool b && b;
-
-            if(isRestricted)
+            candidateIntegration.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
             {
-                return ValueTask.FromResult(new JwksDocument { Keys = [] });
-            }
+                bool isRestricted = ctx.TryGetValue("app.restricted", out object? r)
+                    && r is bool b && b;
 
-            return ValueTask.FromResult(new JwksDocument
-            {
-                Keys =
-                [
-                    new JsonWebKey
-                    {
-                        Kty = WellKnownKeyTypeValues.Ec,
-                        Use = WellKnownJwkValues.UseSig,
-                        Kid = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning).Value
-                    }
-                ]
-            });
-        };
+                if(isRestricted)
+                {
+
+                    return ValueTask.FromResult(new JwksDocument { Keys = [] });
+                }
+
+                return ValueTask.FromResult(new JwksDocument
+                {
+                    Keys =
+                    [
+                        new JsonWebKey
+                        {
+                            Kty = WellKnownKeyTypeValues.Ec,
+                            Use = WellKnownJwkValues.UseSig,
+                            Kid = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning).Value
+                        }
+                    ]
+                });
+            };
+        }).ConfigureAwait(false);
 
         //Unrestricted caller — receives the full JWKS.
         ExchangeContext unrestrictedContext = [];
@@ -1435,7 +1603,7 @@ internal sealed class AuthorizationServerFeatureTests
     public async Task DiscoveryEndpointReturns200WithActiveCapabilityEndpoints()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
 
@@ -1485,6 +1653,10 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that discovery omits an endpoint removed by the request's capability decision.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task DiscoveryEmissionDropsFieldsForCapabilitiesAttenuatedByResolveCapabilitiesAsync()
     {
@@ -1497,14 +1669,18 @@ internal sealed class AuthorizationServerFeatureTests
         //allows, so the issuer and any other advertised endpoint (e.g.
         //pushed_authorization_request_endpoint if it were in the set)
         //still emit.
-        app.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            HashSet<CapabilityIdentifier> attenuated =
-                [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
-            return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
-        };
+            candidateIntegration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+            {
+                HashSet<CapabilityIdentifier> attenuated =
+                    [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
 
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
         string segment = keys.Registration.TenantId;
 
         ExchangeContext context = [];
@@ -1536,13 +1712,17 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that a capability excluded for the request removes its endpoint from the chain.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task CapabilityAttenuationByResolveCapabilitiesAsyncRemovesEndpointFromChain()
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         // The per-request capability gate moved into
         // EndpointChain.BuildForRequestAsync. Attenuating the capability set
@@ -1550,12 +1730,16 @@ internal sealed class AuthorizationServerFeatureTests
         // active set; the dispatcher never sees the endpoint, so the chain
         // walk finds no match and the response is 404 (not 403 as under the
         // old post-match capability-check model).
-        app.Server.OAuth().ResolveCapabilitiesAsync = static (registration, context, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            HashSet<CapabilityIdentifier> attenuated =
-                [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
-            return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
-        };
+            candidateIntegration.ResolveCapabilitiesAsync = static (registration, context, ct) =>
+            {
+                HashSet<CapabilityIdentifier> attenuated =
+                    [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
+
+                return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(attenuated);
+            };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
@@ -1572,8 +1756,8 @@ internal sealed class AuthorizationServerFeatureTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         int flowsBefore = app.FlowStore.Count;
 
@@ -1593,8 +1777,8 @@ internal sealed class AuthorizationServerFeatureTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             keys,
@@ -1628,8 +1812,8 @@ internal sealed class AuthorizationServerFeatureTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         ExchangeContext context = [];
 
@@ -1644,13 +1828,17 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that continuation resolves the external handle before loading state by its internal identifier.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task ContinuingFlowResolvesExternalHandleToInternalFlowIdBeforeLoadingState()
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             keys,
@@ -1660,11 +1848,15 @@ internal sealed class AuthorizationServerFeatureTests
 
         string? capturedLoadFlowId = null;
         LoadServerFlowStateDelegate originalLoad = app.Server.OAuth().LoadFlowStateAsync!;
-        app.Server.OAuth().LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            capturedLoadFlowId = flowId;
-            return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);
-        };
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
+            {
+                capturedLoadFlowId = flowId;
+
+                return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
 
         ExchangeContext context = [];
         context.SetCorrelationKey(parHandle);
@@ -1682,13 +1874,17 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that matched-stage inspection receives the selected match payload before handler execution.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task DispatchPlacesMatchPayloadOnContextBeforeHandlerFires()
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         MatchPayload? capturedAtMatchedStage = null;
 
@@ -1697,15 +1893,18 @@ internal sealed class AuthorizationServerFeatureTests
         // the matched endpoint's handler runs. Capturing context.MatchPayload
         // here proves the payload is visible to anything that fires
         // post-match-pre-handler.
-        app.Server.OAuth().InspectAsync = (stage, context, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            if(stage is MatchedStage)
+            candidateIntegration.InspectAsync = (stage, context, ct) =>
             {
-                capturedAtMatchedStage = context.MatchPayload;
-            }
+                if(stage is MatchedStage)
+                {
+                    capturedAtMatchedStage = context.MatchPayload;
+                }
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
@@ -1718,29 +1917,41 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that integration operations participating in one dispatch receive the same request context.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#6-per-call-delegate-guidance">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task SameRequestContextInstanceReachesEveryIntegrationDelegate()
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         List<ExchangeContext> captured = [];
 
         LoadRegistrationDelegate originalLoadReg = app.Server.OAuth().LoadClientRegistrationAsync!;
-        app.Server.OAuth().LoadClientRegistrationAsync = async (tenantId, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            captured.Add(ctx);
-            return await originalLoadReg(tenantId, ctx, ct).ConfigureAwait(false);
-        };
+            candidateIntegration.LoadClientRegistrationAsync = async (tenantId, ctx, ct) =>
+            {
+                captured.Add(ctx);
+
+                return await originalLoadReg(tenantId, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
 
         InspectDelegate originalInspect = app.Server.OAuth().InspectAsync!;
-        app.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            captured.Add(ctx);
-            return originalInspect(stage, ctx, ct);
-        };
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
+            {
+                captured.Add(ctx);
+
+                return originalInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
 
         ExchangeContext outerContext = [];
 
@@ -1759,21 +1970,28 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that flow persistence receives the tenant resolved for the request.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#4-storage-abstraction-philosophy">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task SaveFlowStateAsyncReceivesResolvedTenantId()
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         TenantId? capturedTenantId = null;
         SaveServerFlowStateDelegate originalSave = app.Server.OAuth().SaveFlowStateAsync!;
-        app.Server.OAuth().SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            capturedTenantId = tenantId;
-            await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
-        };
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                capturedTenantId = tenantId;
+                await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
 
         _ = await app.HandleParAsync(
             keys,
@@ -1786,13 +2004,17 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    /// <summary>
+    /// Checks that flow loading receives the tenant resolved for the request.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#4-storage-abstraction-philosophy">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task LoadFlowStateAsyncReceivesResolvedTenantId()
     {
         await using TestHostShell app = new(TimeProvider);
 
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (Uri _, string parHandle) = await app.HandleParAsync(
             keys,
@@ -1802,11 +2024,15 @@ internal sealed class AuthorizationServerFeatureTests
 
         TenantId? capturedTenantId = null;
         LoadServerFlowStateDelegate originalLoad = app.Server.OAuth().LoadFlowStateAsync!;
-        app.Server.OAuth().LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            capturedTenantId = tenantId;
-            return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);
-        };
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
+            {
+                capturedTenantId = tenantId;
+
+                return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
 
         ExchangeContext context = [];
         context.SetCorrelationKey(parHandle);

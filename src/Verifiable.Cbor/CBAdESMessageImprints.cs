@@ -96,7 +96,6 @@ public sealed record CBAdESCoseSign1StructureContext: CBAdESSignatureStructureCo
 /// string for whichever countersignature shape (version 1 or version 2) the caller resolved, carried here as
 /// data since this file does not itself model the countersignature substrate.
 /// </summary>
-/// <param name="ContextText">The RFC 9338 clause 3.3 context text string. Must not be null or empty.</param>
 [DebuggerDisplay("CBAdESCountersignatureStructureContext: {ContextText}")]
 public sealed record CBAdESCountersignatureStructureContext: CBAdESSignatureStructureContext
 {
@@ -200,10 +199,6 @@ public sealed class CBAdESDetachedPayloadImprintSource: CBAdESPayloadImprintSour
 /// <c>pars</c>, in order — dereference it..., then concatenate the resulting octets onto the stream." Order
 /// is load-bearing (COSE-Payload byte order); <see cref="ProcessedParBytes"/> preserves it.
 /// </remarks>
-/// <param name="ProcessedParBytes">
-/// The ordered, already-dereferenced byte sequences to concatenate. Must be non-empty (CB-5.2.8-06: <c>sigD</c>
-/// shall reference one or more detached data objects). Each element is a <strong>borrowed</strong> view.
-/// </param>
 [DebuggerDisplay("CBAdESSigDProcessedPayloadImprintSource: {ProcessedParBytes.Count} segments")]
 public sealed class CBAdESSigDProcessedPayloadImprintSource: CBAdESPayloadImprintSource
 {

@@ -243,8 +243,8 @@ internal sealed class SiopCombinedResponseTests
     private async ValueTask<VpTokenParsed> VerifyPresentationAsync(
         string vpToken, PublicKeyMemory issuerPublicKey)
     {
-        PublicKeyMemory? IssuerLookup(string iss) =>
-            string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null;
+        ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
+            ValueTask.FromResult(string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null);
 
         return await SdJwtVpTokenVerification.VerifyAsync(
             vpToken,
@@ -258,6 +258,9 @@ internal sealed class SiopCombinedResponseTests
             TestSetup.Base64UrlEncoder,
             Pool,
             saltReuseSeam: null,
+            parseX5c: null,
+            resolveTrustedAuthorityEvidence: null,
+            context: new ExchangeContext(),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

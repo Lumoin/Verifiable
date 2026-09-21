@@ -2,14 +2,17 @@ using Lumoin.Veridical.Backends.Managed;
 using Lumoin.Veridical.Bbs;
 using Lumoin.Veridical.Core.Algebraic;
 using System.Buffers;
+using System.Text.Json;
 using Verifiable.Cbor;
 using Verifiable.Core;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
+using static Verifiable.Tests.TestInfrastructure.DerivedCredentialDisclosureAssertions;
 
 namespace Verifiable.Tests.DataIntegrity;
 
@@ -36,6 +39,9 @@ internal sealed class Bbs2023W3cVectorTests
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
     internal static ExchangeContext EmptyContext { get; } = [];
+
+    /// <summary>The A.1 credential's own <c>@context</c>, from W3C Example 18.</summary>
+    internal static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, "https://w3id.org/citizenship/v4rc1");
 
     /// <summary>The bbs-2023 ciphersuite (BLS12-381-SHA-256).</summary>
     private static BbsCiphersuite Ciphersuite { get; } = BbsCiphersuite.Bls12Curve381Sha256;
@@ -309,6 +315,7 @@ internal sealed class Bbs2023W3cVectorTests
             Bbs2023CborSerializer.ParseDerivedProof,
             rdfcCanonicalizer,
             contextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -327,6 +334,7 @@ internal sealed class Bbs2023W3cVectorTests
             Bbs2023CborSerializer.ParseDerivedProof,
             rdfcCanonicalizer,
             contextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -390,6 +398,7 @@ internal sealed class Bbs2023W3cVectorTests
             JsonLdSelection.PartitionStatements,
             rdfcCanonicalizer,
             contextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -430,6 +439,7 @@ internal sealed class Bbs2023W3cVectorTests
             Bbs2023CborSerializer.ParseDerivedProof,
             rdfcCanonicalizer,
             contextResolver,
+            KnownContext,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -440,13 +450,22 @@ internal sealed class Bbs2023W3cVectorTests
 
         Assert.IsTrue(derivedVerify.IsValid, "Verifier must verify the derived proof.");
 
-        //The reduced credential discloses the mandatory issuer plus the selected claims, and hides the rest.
+        //The reduced credential discloses the mandatory issuer plus the selected claims, and hides
+        //the rest. This is checked against the derived credential's own JSON structure, never its
+        //serialized text: the proof value is a fresh draw of real CSPRNG scalars each run, so a
+        //short undisclosed value can appear inside it by coincidence, and a substring search over
+        //the whole document both fails a correct hiding and passes a real leak that lands under a
+        //different literal.
         var derivedJson = CanonicalizationTestUtilities.SerializeCredential(derivedCredential);
-        Assert.Contains("Arcadia", derivedJson, "Disclosed birthCountry must be present.");
-        Assert.Contains("2024-12-16T00:00:00Z", derivedJson, "Disclosed validFrom must be present.");
-        Assert.Contains("zDnaeTHxNEBZoKaEo6PdA83fq98ebiFvo3X273Ydu4YmV96rg", derivedJson, "Mandatory issuer must be present.");
-        Assert.DoesNotContain("JANE", derivedJson, "Undisclosed givenName must be hidden.");
-        Assert.DoesNotContain("83627465", derivedJson, "Undisclosed identifier must be hidden.");
+        using JsonDocument derivedDocument = JsonDocument.Parse(derivedJson);
+        JsonElement derivedRoot = derivedDocument.RootElement;
+
+        AssertClaimDisclosed(derivedRoot, "/credentialSubject/birthCountry", "Arcadia");
+        AssertClaimDisclosed(derivedRoot, "/validFrom", "2024-12-16T00:00:00Z");
+        AssertClaimDisclosed(derivedRoot, "/issuer/id", "did:key:zDnaeTHxNEBZoKaEo6PdA83fq98ebiFvo3X273Ydu4YmV96rg");
+
+        AssertClaimHidden(derivedRoot, "/credentialSubject/givenName", "JANE");
+        AssertClaimHidden(derivedRoot, "/credentialSubject/permanentResidentCard/identifier", "83627465");
     }
 
 

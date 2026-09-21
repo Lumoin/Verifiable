@@ -70,8 +70,10 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
         }
 
-        //Header checks.
-        if(!string.Equals(header.Typ, WellKnownDpopValues.ProofTypeHeader, StringComparison.Ordinal))
+        //Header checks. The typ compares as the RFC 7515 §4.1.9 media type it is: case insensitive,
+        //and with the implicit "application/" prefix when the wire value carries no '/' of its own —
+        //the same comparison every other typ check in this library shares.
+        if(!WellKnownMediaTypes.Jwt.IsDpopJwt(header.Typ))
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidTyp);
         }

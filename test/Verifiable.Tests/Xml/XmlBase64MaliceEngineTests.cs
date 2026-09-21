@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Xml;
 
 /// <summary>
 /// Proofs of base64 malice against the section 6.6.2 transform, exercised through the full <see
-/// cref="XmlReferenceProcessing.TryComputeDigestInput"/> transform-chain engine rather than <see
+/// cref="XmlReferenceProcessing.TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/> transform-chain engine rather than <see
 /// cref="XmlBase64Content"/> directly — the octets-arriving path AND the node-set-arriving
 /// <c>self::text</c> collection path both feed the same lexical decoder: whitespace tricks, alphabet abuse,
 /// and truncation. Every refusal path is observed through <see

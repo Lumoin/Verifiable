@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Xml;
 
 /// <summary>
 /// Proofs of <see cref="XmlReferenceProcessing"/> — the transform-chain engine and its two entry points,
-/// <see cref="XmlReferenceProcessing.TryComputeDigestInput"/> and <see
+/// <see cref="XmlReferenceProcessing.TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/> and <see
 /// cref="XmlReferenceProcessing.TryComputeSignedInfoOctets"/> — covering section
 /// 4.3.3.2 type-flow in both MUST directions, the implicit Canonical XML 1.0 final default, base64 over
 /// octets and over a node-set, enveloped-signature nearest-ancestor semantics over sibling and nested
@@ -693,7 +693,7 @@ internal sealed class XmlReferenceProcessingTests
     /// bare-name dereference already marked <see cref="XmlNodeSet.WithoutComments"/> — exactly, byte for
     /// byte, against a hand-derived expectation, and carrying <see cref="BufferTags.XmlDigestInput"/>
     /// directly rather than a copy-to-retag (house finding on the tag-parameterized <see
-    /// cref="XmlCanonicalization.TryCanonicalize"/> overload).
+    /// cref="XmlCanonicalization.TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, Lumoin.Base.Tag, out PooledMemory?, out XmlCanonicalizationError)"/> overload).
     /// </summary>
     [TestMethod]
     public void NodeSetWithNoTransformsConvertsByTheImplicitCanonicalXml10Default()
@@ -718,7 +718,7 @@ internal sealed class XmlReferenceProcessingTests
         using(table)
         using(signature)
         {
-            Assert.HasCount(0, signature.SignedInfo.References[0].Transforms, "This fixture proves the no-Transforms path.");
+            Assert.IsEmpty(signature.SignedInfo.References[0].Transforms, "This fixture proves the no-Transforms path.");
 
             bool isComputed = XmlReferenceProcessing.TryComputeDigestInput(table, signature, 0, resolver: null, BaseMemoryPool.Shared, out PooledMemory? digestInput, out XmlSignatureProcessingError error);
             Assert.IsTrue(isComputed, $"Digest input must compute but was refused with {error.Failure}.");
@@ -1259,7 +1259,7 @@ internal sealed class XmlReferenceProcessingTests
     /// <c>Reference</c> with no <c>URI</c> attribute is <c>UriOmitted</c>" propagates through the engine,
     /// not only the dereferencer directly: a dereferencing refusal (<see cref="XmlReferenceDereferencer"/>'s
     /// own <see cref="XmlSignatureProcessingFailure.UriOmitted"/>) propagates unchanged through <see
-    /// cref="XmlReferenceProcessing.TryComputeDigestInput"/> rather than being absorbed or remapped.
+    /// cref="XmlReferenceProcessing.TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/> rather than being absorbed or remapped.
     /// </summary>
     [TestMethod]
     public void DereferencingRefusalPropagatesThroughDigestInputComputation()
@@ -1293,3 +1293,4 @@ internal sealed class XmlReferenceProcessingTests
         }
     }
 }
+

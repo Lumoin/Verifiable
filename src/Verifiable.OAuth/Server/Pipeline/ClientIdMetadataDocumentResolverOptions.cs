@@ -26,9 +26,10 @@ public delegate ValueTask<bool> AdditionalClientIdMetadataDocumentValidationDele
 
 
 /// <summary>
-/// Tunables for <see cref="ClientIdMetadataDocuments.BuildResolving"/>: byte caps, cache
-/// lifetime bounds, logo prefetch, the Section 4 additional-validation hook, and how Section 3
-/// SHOULD/NOT-RECOMMENDED-tier advisories are treated.
+/// Tunables for <see cref="ClientIdMetadataDocuments.ResolveAsync"/>: byte caps, logo prefetch, the
+/// Section 4 additional-validation hook, how Section 3 SHOULD/NOT-RECOMMENDED-tier advisories are
+/// treated, and the key-set resolution seam. Caching — for how long a resolved document is kept — is
+/// an application-layer concern; see <see cref="ResolveClientMetadataDelegate"/>.
 /// </summary>
 public sealed record ClientIdMetadataDocumentResolverOptions
 {
@@ -52,23 +53,6 @@ public sealed record ClientIdMetadataDocumentResolverOptions
     /// oversized or hostile logo response.
     /// </summary>
     public long MaximumLogoBytes { get; init; } = 51_200;
-
-    /// <summary>
-    /// The lower bound the resolver clamps a header-derived cache lifetime to, per
-    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-5.2">
-    /// draft-ietf-oauth-client-id-metadata-document-02 Section 5.2</see> — "MAY define its own
-    /// upper and/or lower bounds on an acceptable cache lifetime." <see langword="null"/> applies
-    /// no lower bound. Never overrides a <c>Cache-Control: no-store</c> response, which is never
-    /// cached regardless of this bound.
-    /// </summary>
-    public TimeSpan? MinimumCacheLifetime { get; init; }
-
-    /// <summary>
-    /// The upper bound the resolver clamps a header-derived cache lifetime to (Section 5.2, same
-    /// clause as <see cref="MinimumCacheLifetime"/>). <see langword="null"/> applies no upper
-    /// bound.
-    /// </summary>
-    public TimeSpan? MaximumCacheLifetime { get; init; }
 
     /// <summary>
     /// Whether the resolver prefetches the document's <c>logo_uri</c> through the same guarded
@@ -96,4 +80,17 @@ public sealed record ClientIdMetadataDocumentResolverOptions
     /// is still resolved unless a deployment opts into the stricter posture.
     /// </summary>
     public bool TreatAdvisoriesAsErrors { get; init; }
+
+    /// <summary>
+    /// The OPTIONAL key-set resolution seam a <c>private_key_jwt</c> client's <c>jwks_uri</c> is
+    /// discovered through, per
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">
+    /// draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see> — at Step 9a of
+    /// <see cref="ClientIdMetadataDocuments.ResolveAsync"/>, and again through
+    /// <see cref="ClientIdMetadataDocuments.RefreshJwksAsync"/> whenever a caller's own cache serves
+    /// a fresh document whose key set was discovered this way. <see langword="null"/> (the default)
+    /// leaves a <c>jwks_uri</c> never dereferenced: the document still resolves with no key set, and
+    /// the token endpoint later rejects the client for want of one.
+    /// </summary>
+    public ResolveJwksUriDelegate? ResolveJwksUri { get; init; }
 }

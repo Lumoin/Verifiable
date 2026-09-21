@@ -98,8 +98,8 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
 
         //Register the RP so the AS signs its §9 Request Object with the leaf cert key — the key the
         //wallet must recover from x5c through the fabric.
-        using VerifierKeyMaterial rpKeys = host.RegisterJarSigningClient(
-            scheme.ClientId, RelyingPartyBaseUri, scheme.JarSigningKeyPair, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterJarSigningClientAsync(
+            scheme.ClientId, RelyingPartyBaseUri, scheme.JarSigningKeyPair, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         //=== Step 1: the RP prepares the transaction, setting the §9 Request Object header to carry the
@@ -219,8 +219,8 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
         using SchemeMaterial scheme = await Oid4VpSchemeFixtures.X509.CreateAsync(
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterJarSigningClient(
-            scheme.ClientId, RelyingPartyBaseUri, scheme.JarSigningKeyPair, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterJarSigningClientAsync(
+            scheme.ClientId, RelyingPartyBaseUri, scheme.JarSigningKeyPair, SiopCapabilities).ConfigureAwait(false);
 
         (string requestHandle, _) = await host.HandleSiopRequestPreparationAsync(
             rpKeys, SiopNonce, scheme.ClientId, AllowedSiopAlgorithms,

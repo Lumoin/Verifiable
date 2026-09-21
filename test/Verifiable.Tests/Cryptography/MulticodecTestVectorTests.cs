@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Cryptography
     internal sealed class MulticodecTestVectorTests
     {
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#ed25519-x25519">Ed25519</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#ed25519-x25519">Ed25519</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripEd25519()
@@ -62,7 +62,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#x25519">25519</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#x25519">25519</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripX25519()
@@ -94,7 +94,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#secp256k1">Secp256k1</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#secp256k1">Secp256k1</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripSecp256k1()
@@ -126,7 +126,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#bls-12381">BLS 12381</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#bls-12381">BLS 12381</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripBls12381()
@@ -152,7 +152,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#p-256">P-256</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#p-256">P-256</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripP256()
@@ -178,7 +178,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#p-384">P-384</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#p-384">P-384</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripP384()
@@ -204,7 +204,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#p-521">P-521</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#p-521">P-521</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripP521()
@@ -232,7 +232,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#rsa">RSA 2048</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#rsa">RSA 2048</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripRsa2048()
@@ -252,7 +252,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
-        /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#rsa-4096">RSA 4096</href>.
+        /// Sourced from <see href="https://w3c-ccg.github.io/did-method-key/#rsa-4096">RSA 4096</see>.
         /// </summary>
         [TestMethod]
         public void RoundtripRsa4096()

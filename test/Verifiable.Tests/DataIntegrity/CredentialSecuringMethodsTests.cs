@@ -122,6 +122,7 @@ internal sealed class CredentialSecuringMethodsTests
             didDocument,
             RdfcCanonicalizer,
             ContextResolver,
+            signedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -198,6 +199,7 @@ internal sealed class CredentialSecuringMethodsTests
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -251,6 +253,7 @@ internal sealed class CredentialSecuringMethodsTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -310,6 +313,7 @@ internal sealed class CredentialSecuringMethodsTests
             didDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            signedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -407,6 +411,7 @@ internal sealed class CredentialSecuringMethodsTests
             didDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            reparsedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -423,7 +428,8 @@ internal sealed class CredentialSecuringMethodsTests
     /// <summary>
     /// An eddsa-jcs-2022 proof over a credential whose <c>@context</c> is authored as a bare
     /// scalar URL string, not an array, survives a serialize-&gt;parse-&gt;re-serialize cycle
-    /// preserving that scalar wire shape byte-identically, and the proof still verifies.
+    /// preserving that scalar wire shape byte-identically; the proof itself checks out over those
+    /// bytes, and verification refuses the credential for the form of its <c>@context</c>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -449,7 +455,7 @@ internal sealed class CredentialSecuringMethodsTests
     /// </para>
     /// </remarks>
     [TestMethod]
-    public async ValueTask EddsaJcs2022DataIntegrityProofSucceedsWithScalarContext()
+    public async ValueTask EddsaJcs2022ProofPreservesAScalarContextAndVerificationRefusesItsForm()
     {
         const string UnsignedCredentialWithScalarContextJson = /*lang=json,strict*/ """
         {"@context":"https://www.w3.org/ns/credentials/v2","id":"http://university.example/credentials/3736","type":["VerifiableCredential"],"issuer":{"id":"did:example:76e12ec712ebc6f1c221ebfeb1f","name":"Example University"},"credentialSubject":{"id":"did:example:ebfeb1f712ebc6f1c276e12ec21"},"validFrom":"2010-01-01T19:23:24Z"}
@@ -501,6 +507,7 @@ internal sealed class CredentialSecuringMethodsTests
             didDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            reparsedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -510,7 +517,11 @@ internal sealed class CredentialSecuringMethodsTests
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(verificationResult.IsValid);
+        //The proof itself checks out over the scalar bytes: a writer that wrapped the scalar into an
+        //array would surface here as SignatureInvalid. What verification refuses is the @context's
+        //FORM, which VC Data Model 2.0 section 4.3 requires to be an ordered set.
+        Assert.IsFalse(verificationResult.IsValid);
+        Assert.AreEqual(VerificationFailureReason.ContextValidationFailed, verificationResult.FailureReason);
     }
 
 
@@ -598,6 +609,7 @@ internal sealed class CredentialSecuringMethodsTests
             didDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            reparsedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -739,12 +751,9 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        byte[] salt1 = RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes);
-        byte[] salt2 = RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes);
-
-        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt1), "degree",
+        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.Generate(SdConstants.DefaultSaltLengthBytes, TestSalts.TestSaltTag), "degree",
             new Dictionary<string, object> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
-        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt2), "name", "Example University");
+        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.Generate(SdConstants.DefaultSaltLengthBytes, TestSalts.TestSaltTag), "name", "Example University");
 
         string encodedDisclosure1 = EncodeDisclosure(disclosure1, TestSetup.Base64UrlEncoder);
         string encodedDisclosure2 = EncodeDisclosure(disclosure2, TestSetup.Base64UrlEncoder);
@@ -818,9 +827,9 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes)), "degree",
+        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.Generate(SdConstants.DefaultSaltLengthBytes, TestSalts.TestSaltTag), "degree",
             new Dictionary<string, object?> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
-        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes)), "name", "Example University");
+        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.Generate(SdConstants.DefaultSaltLengthBytes, TestSalts.TestSaltTag), "name", "Example University");
 
         var protectedHeader = BuildSdCwtProtectedHeader();
         byte[] payload = BuildCwtPayload(credential);
@@ -874,6 +883,8 @@ internal sealed class CredentialSecuringMethodsTests
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+
+    private static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, Context.CredentialsExamples20);
 
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, JsonOptions);
@@ -932,8 +943,13 @@ internal sealed class CredentialSecuringMethodsTests
         return base64UrlEncoder(Encoding.UTF8.GetBytes(json));
     }
 
-    private static string ComputeDisclosureDigest(string encodedDisclosure, EncodeDelegate base64UrlEncoder) =>
-        base64UrlEncoder(SHA256.HashData(Encoding.ASCII.GetBytes(encodedDisclosure)));
+    private static string ComputeDisclosureDigest(string encodedDisclosure, EncodeDelegate base64UrlEncoder)
+    {
+        byte[] disclosureBytes = Encoding.ASCII.GetBytes(encodedDisclosure);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(disclosureBytes, 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+
+        return base64UrlEncoder(digest.AsReadOnlySpan());
+    }
 
     private static byte[] BuildCwtPayload(VerifiableCredential credential)
     {

@@ -11,7 +11,7 @@ namespace Verifiable.JCose;
 /// <see cref="UnverifiedJwsMessage"/>'s generic unprotected-header dictionary cannot preserve.
 /// </summary>
 /// <remarks>
-/// Must be verified (<see cref="JAdESSignatureValidation.ValidateAsync"/>) before any fact it carries is trusted
+/// Must be verified (<see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.DecodeDelegate, Verifiable.Cryptography.EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/>) before any fact it carries is trusted
 /// — <see cref="Wire"/>'s own header/payload/signature content is attacker-controlled until then, exactly like
 /// every other <c>Unverified*</c> type in this family.
 /// </remarks>

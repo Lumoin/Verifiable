@@ -19,7 +19,7 @@ public delegate CryptosuiteInfo CryptosuiteInfoFactoryDelegate(string cryptosuit
 /// </summary>
 /// <remarks>
 /// <para>
-/// The default factory uses <see cref="CryptosuiteInfo.FromName"/> to resolve
+/// The default factory uses <c>CryptosuiteInfo.FromName</c> to resolve
 /// cryptosuite names. For unknown cryptosuites, it returns an <see cref="UnknownCryptosuiteInfo"/>
 /// to enable round-tripping of documents with unsupported cryptosuites.
 /// </para>
@@ -28,7 +28,7 @@ public delegate CryptosuiteInfo CryptosuiteInfoFactoryDelegate(string cryptosuit
 /// </para>
 /// <para>
 /// To support additional cryptosuites, create a custom factory that chains
-/// to <see cref="CryptosuiteInfo.FromName"/> for known types:
+/// to <c>CryptosuiteInfo.FromName</c> for known types:
 /// </para>
 /// <code>
 /// CryptosuiteInfoFactoryDelegate customFactory = name =>
@@ -43,7 +43,7 @@ public delegate CryptosuiteInfo CryptosuiteInfoFactoryDelegate(string cryptosuit
 public static class CryptosuiteInfoFactory
 {
     /// <summary>
-    /// The default factory that resolves cryptosuite names using <see cref="CryptosuiteInfo.FromName"/>.
+    /// The default factory that resolves cryptosuite names using <c>CryptosuiteInfo.FromName</c>.
     /// </summary>
     public static CryptosuiteInfoFactoryDelegate Default { get; } = CryptosuiteInfo.FromName;
 }

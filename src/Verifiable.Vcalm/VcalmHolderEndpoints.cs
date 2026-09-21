@@ -43,7 +43,7 @@ public static class VcalmHolderEndpoints
     {
         List<EndpointCandidate> candidates = [];
 
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmHolder))
         {
             //§3.5.1 derive materializes only when the parse seam and the derive configuration are both
@@ -88,7 +88,11 @@ public static class VcalmHolderEndpoints
     };
 
 
-    //§3.5.1 POST /credentials/derive.
+    /// <summary>
+    /// Builds the endpoint for §3.5.1 POST /credentials/derive.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildDeriveCredential() =>
         new()
         {
@@ -102,7 +106,7 @@ public static class VcalmHolderEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -141,7 +145,11 @@ public static class VcalmHolderEndpoints
         };
 
 
-    //§3.5.2 POST /presentations.
+    /// <summary>
+    /// Builds the endpoint for §3.5.2 POST /presentations.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildCreatePresentation() =>
         new()
         {
@@ -155,7 +163,7 @@ public static class VcalmHolderEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -210,7 +218,11 @@ public static class VcalmHolderEndpoints
         };
 
 
-    //§3.5.3 GET /presentations.
+    /// <summary>
+    /// Builds the endpoint for §3.5.3 GET /presentations.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildGetPresentations() =>
         new()
         {
@@ -224,7 +236,7 @@ public static class VcalmHolderEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 IReadOnlyList<string> presentations = await vcalm.ListVcalmPresentationsAsync!(
@@ -241,7 +253,11 @@ public static class VcalmHolderEndpoints
         };
 
 
-    //§3.5.4 GET /presentations/{id}.
+    /// <summary>
+    /// Builds the endpoint for §3.5.4 GET /presentations/{id}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildGetPresentation() =>
         new()
         {
@@ -256,7 +272,7 @@ public static class VcalmHolderEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 string? presentationId = ExtractPresentationId(context);
@@ -290,7 +306,11 @@ public static class VcalmHolderEndpoints
         };
 
 
-    //§3.5.5 DELETE /presentations/{id}.
+    /// <summary>
+    /// Builds the endpoint for §3.5.5 DELETE /presentations/{id}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildDeletePresentation() =>
         new()
         {
@@ -305,7 +325,7 @@ public static class VcalmHolderEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 string? presentationId = ExtractPresentationId(context);

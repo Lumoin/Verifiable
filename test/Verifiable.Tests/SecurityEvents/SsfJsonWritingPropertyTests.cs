@@ -3,6 +3,7 @@ using System.Text.Json;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Json;
 using Verifiable.OAuth.Ssf;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SecurityEvents;
 
@@ -108,7 +109,7 @@ internal sealed class SsfJsonWritingPropertyTests
             Assert.AreEqual(stream.MinVerificationInterval, parsed.MinVerificationInterval);
             Assert.AreEqual(stream.Description, parsed.Description);
             Assert.AreEqual(stream.InactivityTimeout, parsed.InactivityTimeout);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -131,7 +132,7 @@ internal sealed class SsfJsonWritingPropertyTests
                 Assert.AreEqual(streams[index].StreamId, parsed.StreamId);
                 ++index;
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -215,7 +216,7 @@ internal sealed class SsfJsonWritingPropertyTests
                 expectedSpecUrns,
                 parsed.AuthorizationSchemes?.Select(static scheme => scheme.SpecUrn).ToArray());
             Assert.AreEqual(testCase.Contribution.DefaultSubjects, parsed.DefaultSubjects);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -242,7 +243,7 @@ internal sealed class SsfJsonWritingPropertyTests
             Assert.AreEqual(status.StreamId, parsed.StreamId);
             Assert.AreEqual(status.Status, parsed.Status);
             Assert.AreEqual(status.Reason, parsed.Reason);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

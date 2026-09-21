@@ -107,7 +107,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
     };
 
     /// <summary>
-    /// RDFC-1.0 canonicalization delegate using dotNetRdf.
+    /// RDFC-1.0 canonicalization delegate using the first-party <see cref="CanonicalizationTestUtilities.CreateRdfcCanonicalizer"/> factory.
     /// Uses pre-validated embedded contexts for deterministic test behavior.
     /// </summary>
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } =
@@ -265,6 +265,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
             issuerDidDocument,
             RdfcCanonicalizer,
             ContextResolver,
+            signedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,
@@ -349,6 +350,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
             issuerDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            signedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,
@@ -430,6 +432,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
             issuerDidDocument,
             RdfcCanonicalizer,
             ContextResolver,
+            tamperedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,
@@ -505,6 +508,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
             issuerDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            tamperedCredential.Context!,
             ProofValueDecoder,
             SerializeCredential,
             SerializeProofOptions,

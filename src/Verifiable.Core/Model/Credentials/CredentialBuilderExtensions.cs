@@ -29,14 +29,12 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// <para>
 /// <strong>Time handling.</strong>
-#pragma warning disable RS0030 // Banned API referenced in documentation only.
 /// All timestamps are provided explicitly by the caller via the build-method
 /// parameters and the configuration record's
 /// <see cref="DataIntegritySigningConfig.ProofCreated"/> field. The library
-/// does not consult <see cref="DateTime.UtcNow"/> or
+/// does not consult <c>DateTime.UtcNow</c> or
 /// <see cref="System.TimeProvider"/>; this preserves deterministic testing
 /// and explicit control over time sources.
-#pragma warning restore RS0030
 /// </para>
 /// <para>
 /// <strong>Closure-free.</strong>
@@ -53,7 +51,7 @@ public static class CredentialBuilderExtensions
         /// <summary>
         /// Stores Data Integrity signing configuration on the builder. The
         /// configuration is applied by
-        /// <see cref="CredentialBuilder.BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, System.Collections.Generic.IEnumerable{string}?, DateTime?, string?, System.Threading.CancellationToken)"/>.
+        /// <see cref="CredentialBuilder.BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, System.Collections.Generic.IEnumerable{string}?, DateTime?, string?, ExchangeContext?, System.Threading.CancellationToken)"/>.
         /// </summary>
         /// <param name="config">
         /// The signing configuration. Calling this method again replaces the

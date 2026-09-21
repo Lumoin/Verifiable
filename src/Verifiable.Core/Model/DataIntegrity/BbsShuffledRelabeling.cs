@@ -24,7 +24,6 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 public static class BbsShuffledRelabeling
 {
-    private const string CanonicalBlankNodeMarker = "_:c";
     private const string ShuffledBlankNodePrefix = "b";
 
 
@@ -96,27 +95,23 @@ public static class BbsShuffledRelabeling
         foreach(string statement in canonicalStatements)
         {
             int searchStart = 0;
-            while(true)
+            while(NQuadBlankNodeScanner.FindNext(statement, searchStart) is (int markerStart, int identifierEnd))
             {
-                int index = statement.IndexOf(CanonicalBlankNodeMarker, searchStart, StringComparison.Ordinal);
-                if(index < 0)
+                //A blank node term that is not canonical (_:c14nN) is not part of the shuffle map.
+                string fullBlankNodeId = statement[markerStart..identifierEnd];
+                if(!BlankNodeRelabelingExtensions.IsCanonicalBlankNode(fullBlankNodeId))
                 {
-                    break;
+                    searchStart = identifierEnd;
+                    continue;
                 }
 
-                int endIndex = index + 2;
-                while(endIndex < statement.Length && (char.IsLetterOrDigit(statement[endIndex]) || statement[endIndex] == 'n'))
-                {
-                    endIndex++;
-                }
-
-                string canonicalId = statement[(index + 2)..endIndex];
+                string canonicalId = fullBlankNodeId[2..];
                 if(seen.Add(canonicalId))
                 {
                     ordered.Add(canonicalId);
                 }
 
-                searchStart = endIndex;
+                searchStart = identifierEnd;
             }
         }
 

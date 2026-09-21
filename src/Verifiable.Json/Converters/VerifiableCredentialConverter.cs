@@ -65,7 +65,7 @@ public class VerifiableCredentialConverter: JsonConverter<VerifiableCredential>
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
 
-        var hasProof = root.TryGetProperty("proof", out var proofElement)
+        var hasProof = root.TryGetProperty(WellKnownCredentialMemberNames.Proof, out var proofElement)
             && proofElement.ValueKind != JsonValueKind.Null;
 
         //A proof member (or an explicitly requested secured type) means the embedded-secured
@@ -81,82 +81,82 @@ public class VerifiableCredentialConverter: JsonConverter<VerifiableCredential>
         {
             switch(property.Name)
             {
-                case "@context":
+                case string name when name == WellKnownCredentialMemberNames.Context:
                 {
                     credential.Context = Deserialize<Context>(property.Value, options);
                     break;
                 }
-                case "id":
+                case string name when name == WellKnownCredentialMemberNames.Id:
                 {
                     credential.Id = property.Value.GetString();
                     break;
                 }
-                case "type":
+                case string name when name == WellKnownCredentialMemberNames.Type:
                 {
                     credential.Type = ReadStringList(property.Value);
                     break;
                 }
-                case "name":
+                case string name when name == WellKnownCredentialMemberNames.Name:
                 {
                     credential.Name = property.Value.GetString();
                     break;
                 }
-                case "description":
+                case string name when name == WellKnownCredentialMemberNames.Description:
                 {
                     credential.Description = property.Value.GetString();
                     break;
                 }
-                case "issuer":
+                case string name when name == WellKnownCredentialMemberNames.Issuer:
                 {
                     credential.Issuer = Deserialize<Issuer>(property.Value, options);
                     break;
                 }
-                case "credentialSubject":
+                case string name when name == WellKnownCredentialMemberNames.CredentialSubject:
                 {
                     credential.CredentialSubject = Deserialize<List<CredentialSubject>>(property.Value, options);
                     break;
                 }
-                case "validFrom":
+                case string name when name == WellKnownCredentialMemberNames.ValidFrom:
                 {
                     credential.ValidFrom = property.Value.GetString();
                     break;
                 }
-                case "validUntil":
+                case string name when name == WellKnownCredentialMemberNames.ValidUntil:
                 {
                     credential.ValidUntil = property.Value.GetString();
                     break;
                 }
-                case "credentialStatus":
+                case string name when name == WellKnownCredentialMemberNames.CredentialStatus:
                 {
                     credential.CredentialStatus = Deserialize<List<CredentialStatus>>(property.Value, options);
                     break;
                 }
-                case "credentialSchema":
+                case string name when name == WellKnownCredentialMemberNames.CredentialSchema:
                 {
                     credential.CredentialSchema = Deserialize<List<CredentialSchema>>(property.Value, options);
                     break;
                 }
-                case "relatedResource":
+                case string name when name == WellKnownCredentialMemberNames.RelatedResource:
                 {
                     credential.RelatedResource = Deserialize<List<RelatedResource>>(property.Value, options);
                     break;
                 }
-                case "refreshService":
+                case string name when name == WellKnownCredentialMemberNames.RefreshService:
                 {
                     credential.RefreshService = Deserialize<List<RefreshService>>(property.Value, options);
                     break;
                 }
-                case "termsOfUse":
+                case string name when name == WellKnownCredentialMemberNames.TermsOfUse:
                 {
                     credential.TermsOfUse = Deserialize<List<TermsOfUse>>(property.Value, options);
                     break;
                 }
-                case "evidence":
+                case string name when name == WellKnownCredentialMemberNames.Evidence:
                 {
                     credential.Evidence = Deserialize<List<Evidence>>(property.Value, options);
                     break;
                 }
-                case "proof":
+                case string name when name == WellKnownCredentialMemberNames.Proof:
                 {
                     if(hasProof)
                     {
@@ -190,91 +190,91 @@ public class VerifiableCredentialConverter: JsonConverter<VerifiableCredential>
 
         if(value.Context is not null)
         {
-            writer.WritePropertyName("@context");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.Context);
             WriteMember(writer, typeof(Context), value.Context, options);
         }
 
         if(value.Id is not null)
         {
-            writer.WriteString("id", value.Id);
+            writer.WriteString(WellKnownCredentialMemberNames.Id, value.Id);
         }
 
         if(value.Type is not null)
         {
-            WriteStringList(writer, "type", value.Type);
+            WriteStringList(writer, WellKnownCredentialMemberNames.Type, value.Type);
         }
 
         if(value.Name is not null)
         {
-            writer.WriteString("name", value.Name);
+            writer.WriteString(WellKnownCredentialMemberNames.Name, value.Name);
         }
 
         if(value.Description is not null)
         {
-            writer.WriteString("description", value.Description);
+            writer.WriteString(WellKnownCredentialMemberNames.Description, value.Description);
         }
 
         if(value.Issuer is not null)
         {
-            writer.WritePropertyName("issuer");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.Issuer);
             WriteMember(writer, typeof(Issuer), value.Issuer, options);
         }
 
         if(value.CredentialSubject is not null)
         {
-            writer.WritePropertyName("credentialSubject");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.CredentialSubject);
             WriteMember(writer, typeof(List<CredentialSubject>), value.CredentialSubject, options);
         }
 
         if(value.ValidFrom is not null)
         {
-            writer.WriteString("validFrom", value.ValidFrom);
+            writer.WriteString(WellKnownCredentialMemberNames.ValidFrom, value.ValidFrom);
         }
 
         if(value.ValidUntil is not null)
         {
-            writer.WriteString("validUntil", value.ValidUntil);
+            writer.WriteString(WellKnownCredentialMemberNames.ValidUntil, value.ValidUntil);
         }
 
         if(value.CredentialStatus is not null)
         {
-            writer.WritePropertyName("credentialStatus");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.CredentialStatus);
             WriteMember(writer, typeof(List<CredentialStatus>), value.CredentialStatus, options);
         }
 
         if(value.CredentialSchema is not null)
         {
-            writer.WritePropertyName("credentialSchema");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.CredentialSchema);
             WriteMember(writer, typeof(List<CredentialSchema>), value.CredentialSchema, options);
         }
 
         if(value.RelatedResource is not null)
         {
-            writer.WritePropertyName("relatedResource");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.RelatedResource);
             WriteMember(writer, typeof(List<RelatedResource>), value.RelatedResource, options);
         }
 
         if(value.RefreshService is not null)
         {
-            writer.WritePropertyName("refreshService");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.RefreshService);
             WriteMember(writer, typeof(List<RefreshService>), value.RefreshService, options);
         }
 
         if(value.TermsOfUse is not null)
         {
-            writer.WritePropertyName("termsOfUse");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.TermsOfUse);
             WriteMember(writer, typeof(List<TermsOfUse>), value.TermsOfUse, options);
         }
 
         if(value.Evidence is not null)
         {
-            writer.WritePropertyName("evidence");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.Evidence);
             WriteMember(writer, typeof(List<Evidence>), value.Evidence, options);
         }
 
         if(value is DataIntegritySecuredCredential secured && secured.Proof is not null)
         {
-            writer.WritePropertyName("proof");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.Proof);
             WriteMember(writer, typeof(List<DataIntegrityProof>), secured.Proof, options);
         }
 

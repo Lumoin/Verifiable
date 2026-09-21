@@ -19,6 +19,14 @@ namespace Verifiable.WebFinger;
 /// </param>
 /// <param name="context">The per-operation context carrying the guarded-fetch (SSRF) policy.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
+/// <remarks>
+/// The library's fetch reports the JRD response's
+/// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/> on <see cref="WebFingerResolutionResult.Freshness"/>.
+/// An application that stores the resolved descriptor stores it for that reported lifetime: "A cache MUST NOT
+/// generate a stale response unless it is disconnected or doing so is explicitly permitted by the client or
+/// origin server" (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>).
+/// This library stores nothing itself.
+/// </remarks>
 public delegate ValueTask<WebFingerResolutionResult> WebFingerResolveDelegate(
     string resource,
     string host,

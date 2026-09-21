@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Threading.Channels;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -38,8 +41,55 @@ using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Tests.OAuth;
 
+/// <summary>The five points <see cref="HostedAuthorizationServer.EnterGrantOrderGateAsync"/> reports for its per-grant ordering gate.</summary>
+internal enum GrantOrderEventKind
+{
+    /// <summary>A request joined the FIFO queue for its (tenant, grant key).</summary>
+    Enqueued,
+
+    /// <summary>A request was let through to the library.</summary>
+    Admitted,
+
+    /// <summary>A request's response was written (or it faulted) and its turn passed to the next waiter.</summary>
+    Released,
+
+    /// <summary>A queued request left the FIFO queue through its own cancellation, without ever being admitted.</summary>
+    Left,
+
+    /// <summary>The entry for a (tenant, grant key) was removed because nobody held or waited for it any longer.</summary>
+    Retired
+}
+
+
 /// <summary>
-/// Per-host state for a single test-fixture <see cref="AuthorizationServer"/>
+/// One observation of <see cref="HostedAuthorizationServer.EnterGrantOrderGateAsync"/>'s per-grant
+/// ordering gate, in the order it occurred. <see cref="Sequence"/> is allocated and this
+/// observation is written to the channel under the same single lock
+/// (<see cref="HostedAuthorizationServer.EmitGrantOrderObservation"/>), so the channel's read order
+/// IS the sequence order, across every key the host serves.
+/// </summary>
+/// <param name="Kind">
+/// Which point of the gate this observation reports: <see cref="GrantOrderEventKind.Enqueued"/>
+/// establishes the request's own FIFO chain position for its key;
+/// <see cref="GrantOrderEventKind.Admitted"/> that the library runs for it from that point;
+/// <see cref="GrantOrderEventKind.Released"/> that its turn has passed to the next waiter (always
+/// before that waiter's own <see cref="GrantOrderEventKind.Admitted"/>);
+/// <see cref="GrantOrderEventKind.Left"/> that a queued request departed through its own
+/// cancellation, never admitted; <see cref="GrantOrderEventKind.Retired"/> that the key's entry was
+/// removed because nobody holds or waits for it any longer.
+/// </param>
+/// <param name="TenantId">The tenant half of the gate's key.</param>
+/// <param name="GrantKey">The grant half of the gate's key.</param>
+/// <param name="Sequence">This observation's position in the host's single monotonic sequence.</param>
+internal readonly record struct GrantOrderObservation(
+    GrantOrderEventKind Kind,
+    TenantId TenantId,
+    string GrantKey,
+    long Sequence);
+
+
+/// <summary>
+/// Per-host state for a single test-fixture <c>AuthorizationServer</c>
 /// deployment: registrations, key stores, flow-handle indexes, and the
 /// associated HTTPS host + HttpClient when the host is serving requests.
 /// </summary>
@@ -55,14 +105,204 @@ namespace Verifiable.Tests.OAuth;
 /// Production parallel: this object stands in for the constellation of
 /// dependency-injected services and configuration that a real
 /// <c>WebApplication</c> would wire together for a single
-/// <see cref="AuthorizationServer"/> instance.
+/// <c>AuthorizationServer</c> instance.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("HostedAuthorizationServer Name={Name} Clients={Registrations.Count} HasHttp={HttpHost != null}")]
-internal sealed class HostedAuthorizationServer
+internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 {
+    /// <summary>Records named server faults observed by the real HTTP skin.</summary>
+    public ConcurrentQueue<Exception> HttpFaults { get; } = new();
+
+
+    /// <summary>Transfers captured faults to the owning assertion so teardown preserves its result.</summary>
+    public Exception[] ConsumeHttpFaults()
+    {
+        List<Exception> faults = [];
+        while(HttpFaults.TryDequeue(out Exception? fault))
+        {
+            faults.Add(fault);
+        }
+
+        return [.. faults];
+    }
+
+
+    /// <summary>The fixture hook marking listener arrival before server admission, awaited by the request path.</summary>
+    public Func<Task>? RequestArriving { get; set; }
+
+
+    /// <summary>Whether the listener deliberately permits unvalidated wiring for admission tests.</summary>
+    public bool IsUnvalidatedListenerAllowed { get; set; }
+
+
+    /// <summary>
+    /// Whether <see cref="AuthorizationServerHttpApplication.ProcessRequestAsync"/> holds an
+    /// inbound request the ordering matrix (<see cref="ResolveOrderingKey"/>) can place behind
+    /// other requests of the SAME (tenant, grant key) before dispatching it to the library. This is
+    /// the application's own coordination — the last paragraph of
+    /// <see cref="Verifiable.OAuth.Server.LoadGrantFlowStatesDelegate"/>'s
+    /// documentation — demonstrated by this test host; the library runs no ordering protocol of its
+    /// own. Settable so a test can force a concurrency window this gate would otherwise close — the
+    /// one stated exception to this codebase's get-only-property rule, mirroring
+    /// <see cref="IsUnvalidatedListenerAllowed"/>. Defaults to <see langword="true"/>.
+    /// </summary>
+    public bool IsOrderingRequestsPerGrant { get; set; } = true;
+
+
+    /// <summary>
+    /// An optional Kestrel connection middleware installed before TLS on this host's next
+    /// <see cref="TestHostShell.StartHttpHostAsync(string, CancellationToken)"/> bind, letting one test
+    /// hold the raw loopback connection deterministically (e.g. on a closed gate) to prove a deadline
+    /// defect without depending on real network timing. <see langword="null"/> installs nothing.
+    /// </summary>
+    public Func<global::Microsoft.AspNetCore.Connections.ConnectionContext, Func<Task>, Task>? ConnectionMiddleware { get; set; }
+
+
+    /// <summary>Creates a fresh unvalidated server over construction wiring for admission tests.</summary>
+    public void UseUnvalidatedServer()
+    {
+        EndpointServer source = Server;
+        Server = new EndpointServer
+        {
+            Integration = source.Integration,
+            Configuration = source.Configuration,
+            TimeProvider = source.TimeProvider,
+            ActionExecutor = source.ActionExecutor
+        };
+        Server.AddIntegration(source.OAuth());
+        Server.AddIntegration(source.Vcalm());
+        source.Dispose();
+    }
+
+
+    /// <summary>The backend and operation observed for each request in a storage alteration proof.</summary>
+    public ConcurrentQueue<(ExchangeContext Context, string Backend, string Operation)> StorageObservations { get; } = new();
+
+
+    /// <summary>Copies persisted flows and their indexes during the serving host's drained alteration.</summary>
+    /// <param name="destination">The independent backend receiving retained flow records.</param>
+    public void MigrateFlowStorageTo(HostedAuthorizationServer destination)
+    {
+        foreach(var entry in FlowStates)
+        {
+            destination.FlowStates[entry.Key] = entry.Value;
+        }
+        foreach(var entry in ClaimedFlowSteps)
+        {
+            destination.ClaimedFlowSteps[entry.Key] = entry.Value;
+        }
+        foreach(var entry in RequestUriTokenIndex)
+        {
+            destination.RequestUriTokenIndex[entry.Key] = entry.Value;
+        }
+        foreach(var entry in CodeIndex)
+        {
+            destination.CodeIndex[entry.Key] = entry.Value;
+        }
+        foreach(var entry in JtiIndex)
+        {
+            destination.JtiIndex[entry.Key] = entry.Value;
+        }
+        foreach(var entry in AccessTokenIndex)
+        {
+            destination.AccessTokenIndex[entry.Key] = entry.Value;
+        }
+        foreach(var entry in RefreshTokenIndex)
+        {
+            destination.RefreshTokenIndex[entry.Key] = entry.Value;
+        }
+        foreach(var entry in GrantIndex)
+        {
+            destination.GrantIndex[entry.Key] = new ConcurrentDictionary<string, byte>(entry.Value);
+        }
+    }
+
+
+    /// <summary>Installs one backend's full storage bundle with per-request observation.</summary>
+    /// <param name="candidate">The candidate integration receiving the storage operations.</param>
+    /// <param name="backend">The independent backend supplying every operation.</param>
+    public void InstallObservedStorage(AuthorizationServerIntegration candidate, HostedAuthorizationServer backend)
+    {
+        AuthorizationServerIntegration source = backend.Server.OAuth();
+        LoadServerFlowStateDelegate load = source.LoadFlowStateAsync!;
+        SaveServerFlowStateDelegate save = source.SaveFlowStateAsync!;
+        ClaimServerFlowStateDelegate claim = source.ClaimFlowStateAsync!;
+        DeleteServerFlowStateDelegate delete = source.DeleteFlowStateAsync!;
+        ResolveCorrelationKeyDelegate correlate = source.ResolveCorrelationKeyAsync!;
+        LoadGrantFlowStatesDelegate loadGrant = source.LoadGrantFlowStatesAsync!;
+        candidate.LoadGrantFlowStatesAsync = (tenant, grantFlowId, ctx, ct) =>
+        {
+            StorageObservations.Enqueue((ctx, backend.Name, "load-grant"));
+
+            return loadGrant(tenant, grantFlowId, ctx, ct);
+        };
+        candidate.LoadFlowStateAsync = (tenant, key, ctx, ct) =>
+        {
+            StorageObservations.Enqueue((ctx, backend.Name, "load"));
+
+            return load(tenant, key, ctx, ct);
+        };
+        candidate.SaveFlowStateAsync = (tenant, key, state, step, ctx, ct) =>
+        {
+            StorageObservations.Enqueue((ctx, backend.Name, "save"));
+
+            return save(tenant, key, state, step, ctx, ct);
+        };
+        candidate.ClaimFlowStateAsync = (tenant, key, step, ctx, ct) =>
+        {
+            StorageObservations.Enqueue((ctx, backend.Name, "claim"));
+
+            return claim(tenant, key, step, ctx, ct);
+        };
+        candidate.DeleteFlowStateAsync = (tenant, key, ctx, ct) =>
+        {
+            StorageObservations.Enqueue((ctx, backend.Name, "delete"));
+
+            return delete(tenant, key, ctx, ct);
+        };
+        candidate.ResolveCorrelationKeyAsync = (tenant, kind, key, ctx, ct) =>
+        {
+            StorageObservations.Enqueue((ctx, backend.Name, "correlate"));
+
+            return correlate(tenant, kind, key, ctx, ct);
+        };
+    }
+
+
+    /// <summary>
+    /// Asserts that NO flow-state store operation of ANY kind — <c>correlate</c>, <c>load</c>,
+    /// <c>save</c>, <c>claim</c>, <c>delete</c>, and <c>load-grant</c> alike — was recorded on
+    /// <see cref="StorageObservations"/> since <paramref name="before"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="InstallObservedStorage"/>'s observation identifies a record only by (context,
+    /// backend name, operation) — never by the stored <c>FlowState.Kind</c> or the correlation
+    /// key — so a <c>save</c>/<c>claim</c> the authentication stores (a client assertion's
+    /// <c>jti</c>, a DPoP proof's <c>jti</c>, a nonce) legitimately make cannot be told apart, by
+    /// this instrumentation, from one the GRANT store makes; both travel through the same
+    /// <c>SaveFlowStateAsync</c>/<c>ClaimFlowStateAsync</c> delegates
+    /// (<see cref="JtiReplayGuard.ConsultAsync"/> is the shared caller for both). A caller uses
+    /// this assertion only for a shape that is refused before
+    /// <see cref="JtiReplayGuard.ConsultAsync"/> is ever reached at all (a Basic-secret mismatch,
+    /// no credentials, an absent-or-server-nonce-challenged DPoP proof, or a signature failure —
+    /// none of which consults any <c>jti</c> store) — never for one that legitimately touches the
+    /// authentication stores — so the EXACT expected count for every operation, including the
+    /// authentication stores, is zero for these shapes.
+    /// </remarks>
+    /// <param name="before">The <see cref="StorageObservations"/> count captured before the request under test.</param>
+    /// <param name="context">Describes the refusal under test, for the assertion failure message.</param>
+    public void AssertNoFlowStateStoreOperationTouched(int before, string context)
+    {
+        var ops = StorageObservations.Skip(before).Select(entry => entry.Operation).ToList();
+        Assert.IsEmpty(ops,
+            $"{context} must touch no flow-state store operation of any kind (correlate/load/save/claim/delete/load-grant); observed: {string.Join(", ", ops)}.");
+    }
+
+
     /// <summary>The host's role name (e.g. "verifier", "anchor", "resource-server").</summary>
     public string Name { get; }
+
 
     /// <summary>The wired authorization server. All HTTP and in-process dispatch routes through this.</summary>
     /// <remarks>
@@ -96,6 +336,15 @@ internal sealed class HostedAuthorizationServer
     public ConcurrentDictionary<string, string> JtiIndex { get; } = new();
     public ConcurrentDictionary<string, string> AccessTokenIndex { get; } = new();
     public ConcurrentDictionary<string, string> RefreshTokenIndex { get; } = new();
+
+    /// <summary>
+    /// Backs <see cref="AuthorizationServerIntegration.LoadGrantFlowStatesAsync"/>: every grant
+    /// key (a saved <see cref="ServerTokenIssuedState"/> or <see cref="ServerRefreshTokenIssuedState"/>'s
+    /// own <c>GrantFlowId ?? FlowId</c>) maps to the flow ids saved under it. Maintained wherever
+    /// <see cref="ServerIntegration.SaveFlowStateAsync"/> indexes one of those two state types, and
+    /// cleaned on <see cref="ServerIntegration.DeleteFlowStateAsync"/>.
+    /// </summary>
+    public ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> GrantIndex { get; } = new();
     public ConcurrentDictionary<KeyId, PrivateKeyMemory> SigningKeys { get; } = new();
     public ConcurrentDictionary<KeyId, PublicKeyMemory> VerificationKeys { get; } = new();
     public ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys { get; } = new();
@@ -107,6 +356,7 @@ internal sealed class HostedAuthorizationServer
     public global::Microsoft.AspNetCore.Builder.WebApplication? HttpHost { get; set; }
     public Uri? HttpBaseAddress { get; set; }
     public System.Net.Http.HttpClient? SharedHttpClient { get; set; }
+
 
     /// <summary>
     /// The <see cref="RegistrationObserver"/> subscription onto <see cref="Server"/>'s event stream,
@@ -120,6 +370,439 @@ internal sealed class HostedAuthorizationServer
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         Name = name;
+    }
+
+
+    /// <summary>
+    /// The grant key a saved grant record indexes under: its own <c>GrantFlowId</c> when set, its
+    /// own <paramref name="flowId"/> otherwise.
+    /// </summary>
+    private static string GrantKeyOf(FlowState state, string flowId) =>
+        state switch
+        {
+            ServerTokenIssuedState issued => issued.GrantFlowId ?? flowId,
+            ServerRefreshTokenIssuedState refresh => refresh.GrantFlowId ?? flowId,
+            _ => flowId
+        };
+
+
+    /// <summary>
+    /// The grant key <see cref="FlowStates"/>'s own record for <paramref name="flowId"/> belongs
+    /// to, computed the same way <see cref="GrantKeyOf"/> computes it for a save: its own
+    /// <c>GrantFlowId</c> when the record carries one, <paramref name="flowId"/> itself otherwise
+    /// or when no record is stored under it. Lets a test resolve a grant's key from any one flow
+    /// id inside it without duplicating <see cref="GrantKeyOf"/>'s switch.
+    /// </summary>
+    /// <param name="flowId">A flow id belonging to the grant whose key is wanted.</param>
+    public string ResolveGrantKey(string flowId) =>
+        FlowStates.TryGetValue(flowId, out var entry) ? GrantKeyOf(entry.State, flowId) : flowId;
+
+
+    /// <summary>
+    /// Adds one record directly to what <see cref="AuthorizationServerIntegration.LoadGrantFlowStatesAsync"/>
+    /// returns for <paramref name="grantFlowId"/>, without going through
+    /// <see cref="ServerIntegration.SaveFlowStateAsync"/>. Lets a test simulate a store fault that
+    /// returns another client's record under the same grant key.
+    /// </summary>
+    /// <param name="grantFlowId">The grant key the injected record should be returned under.</param>
+    /// <param name="flowId">The injected record's own flow id.</param>
+    /// <param name="state">The injected record.</param>
+    /// <param name="stepCount">The injected record's step count.</param>
+    public void InjectForeignGrantRecord(string grantFlowId, string flowId, FlowState state, int stepCount)
+    {
+        FlowStates[flowId] = (state, stepCount);
+        _ = GrantIndex.GetOrAdd(grantFlowId, static _ => new ConcurrentDictionary<string, byte>())
+            .TryAdd(flowId, 0);
+    }
+
+
+    /// <summary>
+    /// Which requests <see cref="EnterGrantOrderGateAsync"/> can place into a grant, and which it
+    /// cannot. The host only LOOKS UP an already-issued wire handle against its own indexes; it
+    /// validates nothing, so a malformed or unknown handle here is UNORDERED exactly like a request
+    /// shape this matrix does not cover at all — both reach the library exactly as they would with
+    /// <see cref="IsOrderingRequestsPerGrant"/> off, for the library itself to answer.
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    ///   <item><description>
+    ///   Token endpoint, <c>grant_type=refresh_token</c>: the wire <c>refresh_token</c> resolves
+    ///   through <see cref="RefreshTokenIndex"/> to its record's flow id, whose grant key
+    ///   (<see cref="ResolveGrantKey"/>) is the ordering key. An unknown token is unordered.
+    ///   </description></item>
+    ///   <item><description>
+    ///   Token endpoint, <c>grant_type=authorization_code</c>: the wire <c>code</c> is hashed
+    ///   EXACTLY as <c>AuthCodeEndpoints.ComputeDigestBase64Url</c> hashes it at issuance
+    ///   (<see cref="HashAuthorizationCode"/>) and resolved through <see cref="CodeIndex"/> to the
+    ///   flow id that IS the grant key before any token exists. An unknown code is unordered.
+    ///   </description></item>
+    ///   <item><description>
+    ///   The revocation endpoint: a presented <c>token</c> known to <see cref="RefreshTokenIndex"/>
+    ///   or <see cref="AccessTokenIndex"/> resolves to its grant; any other token is unordered.
+    ///   </description></item>
+    ///   <item><description>
+    ///   Everything else is UNORDERED here: the pushed and direct authorization requests (pre-grant),
+    ///   client credentials, the JWT bearer grant, the pre-authorized code grant, and a token
+    ///   exchange (it creates its grant inside the library). An application that needs those
+    ///   coordinated uses its own correlation or versioned writes.
+    ///   </description></item>
+    ///   <item><description>
+    ///   The gate's key is (tenant, grant key) even though this host's stores ignore the tenant — a
+    ///   request whose tenant this host never resolved
+    ///   (<see cref="ExchangeContextExtensions.extension(ExchangeContext).TenantId"/> unset) is
+    ///   unordered.
+    ///   </description></item>
+    ///   <item><description>
+    ///   A resolved flow id whose record <see cref="FlowStates"/> does not hold is UNORDERED: the
+    ///   record can be gone because a revocation deleted it and this host's
+    ///   <see cref="ServerIntegration.DeleteFlowStateAsync"/> wiring cleans up
+    ///   <see cref="RefreshTokenIndex"/> but not <see cref="AccessTokenIndex"/> on delete, or because
+    ///   the request's own index read landed just before a concurrent deletion of that same record.
+    ///   The library answers such a request exactly as it answers any other unordered one.
+    ///   </description></item>
+    ///   <item><description>
+    ///   This lookup is a PRE-AUTHENTICATION read of an unauthenticated wire value: a holder of any
+    ///   known handle — refresh token, authorization code, or access token — can queue behind the
+    ///   grant it resolves to, whether or not that holder could authenticate as the grant's own
+    ///   client. An application copying this host's gate bounds its own per-key queue depth and
+    ///   wait; this test host bounds neither.
+    ///   </description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="request">The inbound request, before it reaches the library.</param>
+    /// <param name="context">The per-request exchange context, carrying the resolved tenant.</param>
+    internal (TenantId TenantId, string GrantKey)? ResolveOrderingKey(IncomingRequest request, ExchangeContext context)
+    {
+        if(context.TenantId is not { } tenantId)
+        {
+            return null;
+        }
+
+        bool isTokenEndpoint = string.Equals(request.Method, "POST", StringComparison.Ordinal)
+            && request.Path.EndsWith("/" + TokenEndpointPathSuffix, StringComparison.Ordinal);
+        if(isTokenEndpoint && request.Fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType))
+        {
+            return grantType switch
+            {
+                _ when string.Equals(grantType, WellKnownGrantTypes.RefreshToken, StringComparison.Ordinal)
+                    && request.Fields.TryGetValue(OAuthRequestParameterNames.RefreshToken, out string? refreshToken)
+                    && RefreshTokenIndex.TryGetValue(refreshToken, out string? refreshFlowId)
+                    && FlowStates.ContainsKey(refreshFlowId)
+                    => (tenantId, ResolveGrantKey(refreshFlowId)),
+
+                _ when string.Equals(grantType, WellKnownGrantTypes.AuthorizationCode, StringComparison.Ordinal)
+                    && request.Fields.TryGetValue(OAuthRequestParameterNames.Code, out string? code)
+                    && HashAuthorizationCode(code) is { } codeHash
+                    && CodeIndex.TryGetValue(codeHash, out string? codeFlowId)
+                    && FlowStates.ContainsKey(codeFlowId)
+                    => (tenantId, ResolveGrantKey(codeFlowId)),
+
+                _ => null
+            };
+        }
+
+        bool isRevocationEndpoint = string.Equals(request.Method, "POST", StringComparison.Ordinal)
+            && request.Path.EndsWith("/" + RevocationEndpointPathSuffix, StringComparison.Ordinal);
+        if(isRevocationEndpoint && request.Fields.TryGetValue(OAuthRequestParameterNames.Token, out string? presentedToken))
+        {
+            return true switch
+            {
+                _ when RefreshTokenIndex.TryGetValue(presentedToken, out string? revokedRefreshFlowId)
+                    && FlowStates.ContainsKey(revokedRefreshFlowId)
+                    => (tenantId, ResolveGrantKey(revokedRefreshFlowId)),
+
+                _ when AccessTokenIndex.TryGetValue(presentedToken, out string? revokedAccessFlowId)
+                    && FlowStates.ContainsKey(revokedAccessFlowId)
+                    => (tenantId, ResolveGrantKey(revokedAccessFlowId)),
+
+                _ => null
+            };
+        }
+
+        return null;
+    }
+
+
+    /// <summary>The token endpoint's fixture path suffix, shared with <see cref="TestHostShell.EndpointPathSuffix"/>.</summary>
+    private static string TokenEndpointPathSuffix { get; } =
+        TestHostShell.EndpointPathSuffix(WellKnownEndpointNames.AuthCodeToken)!;
+
+
+    /// <summary>The revocation endpoint's fixture path suffix, shared with <see cref="TestHostShell.EndpointPathSuffix"/>.</summary>
+    private static string RevocationEndpointPathSuffix { get; } =
+        TestHostShell.EndpointPathSuffix(WellKnownEndpointNames.AuthCodeRevoke)!;
+
+
+    /// <summary>
+    /// Hashes <paramref name="code"/> exactly as <c>AuthCodeEndpoints.ComputeDigestBase64Url</c>
+    /// hashes an authorization code at issuance and at redemption: a SHA-256 digest of its ASCII
+    /// bytes, base64url-encoded, through this host's OWN wired
+    /// <see cref="AuthorizationServerCodecs.Encoder"/> and
+    /// <see cref="AuthorizationServerIntegration.MemoryPool"/> — never a fixture-private codec or
+    /// pool — so a test that alters either on <see cref="Server"/> is hashed the same way the
+    /// library itself would hash it. Returns <see langword="null"/>, without hashing, for a
+    /// <paramref name="code"/> outside
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.11">RFC 6749 Appendix A.11</see>'s
+    /// <c>code = 1*VSCHAR</c> grammar (<c>VSCHAR = %x20-7E</c>): the library applies this same
+    /// precondition before ever hashing a presented code, because <see cref="System.Text.Encoding.ASCII"/>
+    /// folds a byte outside plain ASCII rather than rejecting it.
+    /// </summary>
+    /// <param name="code">The wire authorization code to hash.</param>
+    private string? HashAuthorizationCode(string code)
+    {
+        foreach(char c in code)
+        {
+            if(c is < (char)0x20 or > (char)0x7E)
+            {
+                return null;
+            }
+        }
+
+        AuthorizationServerIntegration oauth = Server.OAuth();
+        int byteCount = System.Text.Encoding.ASCII.GetByteCount(code);
+        using IMemoryOwner<byte> owner = oauth.MemoryPool!.Rent(byteCount);
+        Span<byte> codeBytes = owner.Memory.Span[..byteCount];
+        _ = System.Text.Encoding.ASCII.GetBytes(code, codeBytes);
+
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            codeBytes, WellKnownHashAlgorithms.Sha256SizeBytes, CryptoTags.Sha256Digest, oauth.MemoryPool!);
+
+        return oauth.Codecs.Encoder!(digest.AsReadOnlySpan());
+    }
+
+
+    /// <summary>
+    /// The keyed FIFO queue backing <see cref="EnterGrantOrderGateAsync"/>: one entry per (tenant,
+    /// grant key) currently enqueued or admitted, retired the instant nobody holds or waits for it.
+    /// </summary>
+    private ConcurrentDictionary<(TenantId TenantId, string GrantKey), GrantOrderGateEntry> GrantOrderGates { get; } = new();
+
+
+    /// <summary>
+    /// The monotonic counter every <see cref="GrantOrderObservation"/> reads its own sequence from.
+    /// Written only under <see cref="GrantOrderEmissionLock"/>, so a plain increment (never
+    /// <see cref="Interlocked.Increment(ref long)"/>) is sufficient.
+    /// </summary>
+    private long _grantOrderSequence;
+
+
+    /// <summary>
+    /// Serializes <see cref="EmitGrantOrderObservation"/>'s sequence allocation and channel write
+    /// into one atomic step, so the channel's read order is always the sequence order. A distinct
+    /// lock, never <c>lock(entry)</c>: an emission this lock protects may run while an entry's own
+    /// lock is already held (<see cref="EnterGrantOrderGateAsync"/>'s Enqueued emission), so this
+    /// lock is always taken INSIDE an entry's lock, never the reverse.
+    /// </summary>
+    private object GrantOrderEmissionLock { get; } = new();
+
+
+    /// <summary>
+    /// The Enqueued / Admitted / Released / Left / Retired observations
+    /// <see cref="EnterGrantOrderGateAsync"/> and <see cref="RetireGrantOrderGateIfIdle"/> emit, in
+    /// the order they occur. A test awaits <c>GrantOrderObservations.Reader.ReadAsync</c> — no
+    /// polling.
+    /// </summary>
+    public Channel<GrantOrderObservation> GrantOrderObservations { get; } = Channel.CreateUnbounded<GrantOrderObservation>();
+
+
+    /// <summary>
+    /// Waits <paramref name="grantKey"/>'s FIFO turn for <paramref name="tenantId"/>, admits this
+    /// caller, and returns a ticket whose <see cref="IAsyncDisposable.DisposeAsync"/> releases the
+    /// next waiter — call it from a <c>finally</c> so an exception releases the gate exactly as a
+    /// normal response does. Awaited with <paramref name="cancellationToken"/>: a cancelled waiter
+    /// leaves the queue without ever being admitted, and its slot passes its turn on ONLY when the
+    /// turn before it has passed, so the requests still queued behind it are never admitted ahead
+    /// of whoever it was itself waiting for. The entry for the key is retired the instant nobody
+    /// holds or waits for it, so two requests for the same key never find two separate gates.
+    /// </summary>
+    /// <param name="tenantId">The tenant half of the gate's key.</param>
+    /// <param name="grantKey">The grant half of the gate's key, from <see cref="ResolveOrderingKey"/>.</param>
+    /// <param name="cancellationToken">The presenting request's own cancellation token.</param>
+    public async ValueTask<IAsyncDisposable> EnterGrantOrderGateAsync(
+        TenantId tenantId, string grantKey, CancellationToken cancellationToken)
+    {
+        (TenantId, string) key = (tenantId, grantKey);
+        TaskCompletionSource myTurn = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        GrantOrderGateEntry entry;
+        Task waitFor;
+        while(true)
+        {
+            entry = GrantOrderGates.GetOrAdd(key, static _ => new GrantOrderGateEntry());
+            lock(entry)
+            {
+                if(entry.IsRetired)
+                {
+                    continue;
+                }
+
+                entry.Waiters++;
+                waitFor = entry.Tail;
+                entry.Tail = myTurn.Task;
+
+                //Taken inside the entry lock, never the reverse: this observation's sequence is
+                //therefore this request's own chain position, exactly as entry.Tail was just set.
+                EmitGrantOrderObservation(GrantOrderEventKind.Enqueued, tenantId, grantKey);
+            }
+
+            break;
+        }
+
+        try
+        {
+            await waitFor.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch(OperationCanceledException)
+        {
+            //This waiter leaves without ever being admitted. Its own turn (myTurn) is not resolved
+            //here directly — it is chained onto waitFor's own completion, so whoever this waiter
+            //was itself chained after (waitFor) must complete FIRST, and only then does myTurn
+            //complete and the next FIFO waiter proceed. A waiter admitted while an earlier holder
+            //still holds its turn is exactly the corruption this chaining prevents.
+            _ = waitFor.ContinueWith(
+                static (_, state) => ((TaskCompletionSource)state!).TrySetResult(),
+                myTurn,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+            RetireGrantOrderGateIfIdle(key, entry);
+            EmitGrantOrderObservation(GrantOrderEventKind.Left, tenantId, grantKey);
+
+            throw;
+        }
+
+        EmitGrantOrderObservation(GrantOrderEventKind.Admitted, tenantId, grantKey);
+
+        return new GrantOrderGateTicket(this, key, entry, myTurn);
+    }
+
+
+    /// <summary>
+    /// Whether a per-grant ordering gate entry currently exists for (<paramref name="tenantId"/>,
+    /// <paramref name="grantKey"/>) — a test's way of confirming an idle entry was retired rather
+    /// than left behind.
+    /// </summary>
+    /// <param name="tenantId">The tenant half of the gate's key.</param>
+    /// <param name="grantKey">The grant half of the gate's key.</param>
+    public bool HasGrantOrderGateEntry(TenantId tenantId, string grantKey) =>
+        GrantOrderGates.ContainsKey((tenantId, grantKey));
+
+
+    /// <summary>
+    /// Writes one gate observation. The next sequence number is allocated and the channel write
+    /// performed under <see cref="GrantOrderEmissionLock"/> as a single atomic step, so the
+    /// channel's read order is always the sequence order across every key.
+    /// </summary>
+    /// <param name="kind">Which point of the gate this observation reports.</param>
+    /// <param name="tenantId">The tenant half of the gate's key.</param>
+    /// <param name="grantKey">The grant half of the gate's key.</param>
+    private void EmitGrantOrderObservation(GrantOrderEventKind kind, TenantId tenantId, string grantKey)
+    {
+        lock(GrantOrderEmissionLock)
+        {
+            long sequence = ++_grantOrderSequence;
+            _ = GrantOrderObservations.Writer.TryWrite(new GrantOrderObservation(kind, tenantId, grantKey, sequence));
+        }
+    }
+
+
+    /// <summary>
+    /// Decrements <paramref name="entry"/>'s waiter count and, when it reaches zero, atomically
+    /// retires the entry so the next arrival for <paramref name="key"/> starts a fresh gate rather
+    /// than joining a chain nothing will ever advance, and emits
+    /// <see cref="GrantOrderEventKind.Retired"/>. <see cref="GrantOrderGateEntry.Waiters"/> is
+    /// changed only under this entry's own lock by every participant currently enqueued or
+    /// admitted, so a count of zero means nobody holds or waits for it — a straggling arrival that
+    /// fetched this same entry just before the removal is caught by
+    /// <see cref="EnterGrantOrderGateAsync"/>'s own <c>IsRetired</c> re-fetch loop.
+    /// </summary>
+    /// <param name="key">The (tenant, grant key) pair this entry is filed under.</param>
+    /// <param name="entry">The entry this caller was enqueued on or admitted from.</param>
+    private void RetireGrantOrderGateIfIdle((TenantId, string) key, GrantOrderGateEntry entry)
+    {
+        lock(entry)
+        {
+            entry.Waiters--;
+            if(entry.Waiters == 0)
+            {
+                entry.IsRetired = true;
+                if(GrantOrderGates.TryRemove(new KeyValuePair<(TenantId, string), GrantOrderGateEntry>(key, entry)))
+                {
+                    EmitGrantOrderObservation(GrantOrderEventKind.Retired, key.Item1, key.Item2);
+                }
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// One <see cref="EnterGrantOrderGateAsync"/> key's FIFO chain. Every property is read and
+    /// written only under <c>lock(this)</c>.
+    /// </summary>
+    private sealed class GrantOrderGateEntry
+    {
+        /// <summary>
+        /// The most recently enqueued waiter's own completion signal, so the next arrival awaits
+        /// it. A settable property, not a naked field, because it is mutable chain state written
+        /// only under this entry's own lock.
+        /// </summary>
+        public Task Tail { get; set; } = Task.CompletedTask;
+
+        /// <summary>
+        /// The count of participants currently enqueued or admitted for this key. A settable
+        /// property, not a naked field, because it is mutable chain state written only under this
+        /// entry's own lock.
+        /// </summary>
+        public int Waiters { get; set; }
+
+        /// <summary>
+        /// Whether a release already removed this entry from <see cref="GrantOrderGates"/>, so a
+        /// straggling arrival that fetched this SAME entry just before the removal knows to fetch a
+        /// fresh one instead of joining a chain nothing will ever advance. A settable property, not
+        /// a naked field, because it is mutable chain state written only under this entry's own
+        /// lock.
+        /// </summary>
+        public bool IsRetired { get; set; }
+    }
+
+
+    /// <summary>
+    /// The disposable ticket <see cref="EnterGrantOrderGateAsync"/> returns: releases exactly once,
+    /// idempotently, so a caller may safely dispose it from both a normal path and a <c>finally</c>.
+    /// </summary>
+    /// <param name="host">The host whose <see cref="GrantOrderObservations"/> this ticket's release reports to.</param>
+    /// <param name="key">The (tenant, grant key) pair this ticket was admitted under.</param>
+    /// <param name="entry">The FIFO entry this ticket was admitted from.</param>
+    /// <param name="myTurn">This ticket's own completion signal, resolved on release so the next waiter proceeds.</param>
+    private sealed class GrantOrderGateTicket(
+        HostedAuthorizationServer host,
+        (TenantId, string) key,
+        GrantOrderGateEntry entry,
+        TaskCompletionSource myTurn): IAsyncDisposable
+    {
+        /// <summary>
+        /// 0 until released. A field, not a property: <see cref="Interlocked.Exchange(ref int, int)"/>
+        /// requires a genuine <see langword="ref"/>-addressable storage location.
+        /// </summary>
+        private int _isReleased;
+
+
+        /// <summary>
+        /// Emits <see cref="GrantOrderEventKind.Released"/>, resolves this ticket's own completion
+        /// signal so the next FIFO waiter for its key proceeds, and retires its entry when nobody
+        /// holds or waits for it any longer. Idempotent: a second call does nothing.
+        /// </summary>
+        public ValueTask DisposeAsync()
+        {
+            if(Interlocked.Exchange(ref _isReleased, 1) == 0)
+            {
+                host.EmitGrantOrderObservation(GrantOrderEventKind.Released, key.Item1, key.Item2);
+                _ = myTurn.TrySetResult();
+                host.RetireGrantOrderGateIfIdle(key, entry);
+            }
+
+            return ValueTask.CompletedTask;
+        }
     }
 
 
@@ -144,11 +827,19 @@ internal sealed class HostedAuthorizationServer
     /// truth.
     /// </param>
     /// <param name="vpValidator">VP token validator (HAIP 1.0 SD-JWT rules by default).</param>
+    /// <param name="mdocSeams">Optional mdoc VP verification seams; <see langword="null"/> uses the shipped defaults.</param>
+    /// <param name="sdCwtSeams">Optional SD-CWT VP verification seams; <see langword="null"/> uses the shipped defaults.</param>
+    /// <param name="saltReuseSeam">Optional commitment/salt reuse detector shared across presentations; <see langword="null"/> disables the check.</param>
+    /// <param name="timings">Optional timing policy for issued tokens and objects; <see langword="null"/> uses the shipped defaults.</param>
     /// <param name="resolveDidVerificationKey">
     /// SIOPv2 §11.1 DID resolution seam for Self-Issued ID Tokens of the Decentralized
     /// Identifier Subject Syntax Type. Shared from the shell so the DID trust map is a single
     /// source of truth, mirroring <paramref name="resolveIssuerKey"/>. When
     /// <see langword="null"/> the SIOP validator fails closed on a DID subject.
+    /// </param>
+    /// <param name="resolveVerifiedStatusListToken">
+    /// Optional resolver that returns an already-verified status list token for a credential's
+    /// <c>status</c> claim. <see langword="null"/> uses the shipped default resolution.
     /// </param>
     /// <param name="parseX5c">
     /// Optional parser for a <c>dc+sd-jwt</c> issuer JWS's <c>x5c</c> header, feeding the <c>aki</c>
@@ -228,18 +919,32 @@ internal sealed class HostedAuthorizationServer
                         ? claims : null),
 
             LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
-                ValueTask.FromResult<IRegistrationRecord?>(
-                    host.Registrations.TryGetValue(tenantId, out ClientRecord? reg)
-                        ? reg : null),
+            {
+                lock(host.RegistrationGate)
+                {
+
+                    return ValueTask.FromResult<IRegistrationRecord?>(
+                        host.Registrations.TryGetValue(tenantId, out ClientRecord? reg) ? reg : null);
+                }
+            },
+            ClientRegistrationStore = host,
 
             DeleteFlowStateAsync = (tenantId, flowId, ctx, ct) =>
             {
                 //Replay and reuse revoke the claimed live refresh record and its token index.
                 //Retired rotation records retain their indexes for reuse detection.
-                if(host.FlowStates.TryRemove(flowId, out var removed)
-                    && removed.State is ServerRefreshTokenIssuedState removedRefresh)
+                if(host.FlowStates.TryRemove(flowId, out var removed))
                 {
-                    _ = host.RefreshTokenIndex.TryRemove(removedRefresh.RefreshToken, out _);
+                    if(removed.State is ServerRefreshTokenIssuedState removedRefresh)
+                    {
+                        _ = host.RefreshTokenIndex.TryRemove(removedRefresh.RefreshToken, out _);
+                    }
+
+                    if(removed.State is ServerTokenIssuedState or ServerRefreshTokenIssuedState
+                        && host.GrantIndex.TryGetValue(GrantKeyOf(removed.State, flowId), out var grantFlowIds))
+                    {
+                        _ = grantFlowIds.TryRemove(flowId, out _);
+                    }
                 }
 
                 //A real backend ties a claim entry's lifetime to its flow record's; this
@@ -369,7 +1074,7 @@ internal sealed class HostedAuthorizationServer
                         host.JtiIndex[jti.CorrelationKey] = flowId;
                         break;
                     }
-                    case ServerTokenIssuedState:
+                    case ServerTokenIssuedState issuedGrant:
                     {
                         //Capture access_token → flowId so test code can recover the
                         //Confirmation binding for a known access token. The
@@ -381,6 +1086,9 @@ internal sealed class HostedAuthorizationServer
                             host.AccessTokenIndex[accessToken] = flowId;
                         }
 
+                        _ = host.GrantIndex.GetOrAdd(GrantKeyOf(issuedGrant, flowId), static _ => new())
+                            .TryAdd(flowId, 0);
+
                         break;
                     }
                     case ServerRefreshTokenIssuedState refresh:
@@ -388,6 +1096,45 @@ internal sealed class HostedAuthorizationServer
                         //Refresh tokens index by their wire string. Rotation
                         //replaces the entry on every refresh-grant call.
                         host.RefreshTokenIndex[refresh.RefreshToken] = flowId;
+
+                        _ = host.GrantIndex.GetOrAdd(GrantKeyOf(refresh, flowId), static _ => new())
+                            .TryAdd(flowId, 0);
+
+                        break;
+                    }
+                    case VerifierJarServedState:
+                    case SiopResponseReceivedState:
+                    case SiopEncryptedResponseReceivedState:
+                    case SiopCombinedResponseReceivedState:
+                    case SelfIssuedAuthenticationVerifiedState:
+                    case Verifiable.OAuth.Oid4Vp.Wallet.States.DcqlEvaluated:
+                    case Verifiable.OAuth.Oid4Vp.Wallet.States.JarParsed:
+                    case Verifiable.OAuth.Oid4Vp.States.PresentationVerifiedState:
+                    case VerifierWalletPostReceivedState:
+                    case VerifierWalletErrorReceivedState:
+                    case VerifierResponseReceivedState:
+                    case VerifierUnencryptedResponseReceivedState:
+                    case Verifiable.OAuth.AuthCode.States.TokenReceivedState:
+                    case Verifiable.OAuth.AuthCode.States.PkceGeneratedState:
+                    case Verifiable.OAuth.AuthCode.States.ParCompletedState:
+                    case SiopVerifierFlowFailedState:
+                    case VerifierFlowFailedState:
+                    case Verifiable.OAuth.AuthCode.States.ParRequestReadyState:
+                    case Verifiable.OAuth.AuthCode.States.AuthorizationCodeReceivedState:
+                    case Verifiable.OAuth.Oid4Vp.Wallet.States.WalletNonceSent:
+                    case Verifiable.OAuth.Oid4Vp.Wallet.States.ResponseSent:
+                    case Verifiable.OAuth.Oid4Vp.Wallet.States.RequestUriReceived:
+                    case Verifiable.OAuth.Oid4Vp.Wallet.States.PresentationBuilt:
+                    case Verifiable.OAuth.Oid4Vp.Wallet.States.BrowserRedirectIssued:
+                    case Verifiable.OAuth.Oid4Vp.States.ResponseReceivedState:
+                    case Verifiable.OAuth.Oid4Vp.States.ParCompletedState:
+                    case Verifiable.OAuth.Oid4Vp.States.JarServedState:
+                    case Verifiable.OAuth.Oid4Vp.States.JarReadyState:
+                    case ServerFlowFailedState:
+                    {
+                        //Carries no externally-visible correlation handle this secondary-index build
+                        //keys on; an explicit no-op arm preserving this switch's original silent
+                        //fall-through for every other flow state.
                         break;
                     }
                 }
@@ -403,6 +1150,26 @@ internal sealed class HostedAuthorizationServer
                     host.FlowStates.TryGetValue(flowId, out var entry)
                         ? (entry.State, entry.StepCount)
                         : (null, 0)),
+
+            //Reads every flow id GrantIndex has ever recorded under this grant key whose record
+            //still exists — a rotated-out or deleted flow id simply misses the TryGetValue below
+            //and is left out, exactly as a deleted row would drop out of a SQL grant-key query.
+            LoadGrantFlowStatesAsync = (tenantId, grantFlowId, ctx, ct) =>
+            {
+                List<(string FlowId, FlowState State, int StepCount)> records = [];
+                if(host.GrantIndex.TryGetValue(grantFlowId, out var flowIds))
+                {
+                    foreach(string candidateFlowId in flowIds.Keys)
+                    {
+                        if(host.FlowStates.TryGetValue(candidateFlowId, out var entry))
+                        {
+                            records.Add((candidateFlowId, entry.State, entry.StepCount));
+                        }
+                    }
+                }
+
+                return ValueTask.FromResult<IReadOnlyList<(string FlowId, FlowState State, int StepCount)>>(records);
+            },
 
             //The atomic claim selects one caller. Checking the stored version afterward also
             //rejects a stale request whose flow was deleted and whose claim entry was evicted.
@@ -452,12 +1219,12 @@ internal sealed class HostedAuthorizationServer
             //URL composition for the discovery document and any token claims that
             //embed endpoint URLs. The library never composes paths; it asks here.
             //Test fixture serves a /connect/{segment}/<suffix> path family rooted
-            //at registration.IssuerUri (or the per-request issuer placed by the
-            //skin on context). Production deployments may use sub-domains, header
-            //routing, or any other scheme.
+            //at the registered issuer, the request issuer, or this host's bound listener
+            //for a dynamically registered client. The listener address is host-owned.
+            //Deployments may use subdomains, header routing, or another scheme.
             ResolveEndpointUriAsync = (endpointKey, registration, ctx, ct) =>
             {
-                Uri? baseUri = ((ClientRecord)registration).IssuerUri ?? ctx.Issuer;
+                Uri? baseUri = ((ClientRecord)registration).IssuerUri ?? ctx.Issuer ?? host.HttpBaseAddress;
                 if(baseUri is null)
                 {
                     return ValueTask.FromResult<Uri?>(null);
@@ -549,25 +1316,6 @@ internal sealed class HostedAuthorizationServer
                     new Uri($"{authority}/connect/{segment}/{suffix}"));
             },
 
-            //Token classification for token-aware matchers (introspection,
-            //revocation, userinfo, OID4VCI proof endpoints when those land).
-            //The base scaffolding wires the JCose-side classifier; tests
-            //that need custom classification (paseto, biscuit, deployment-
-            //specific opaque shapes) replace this slot per test via
-            //Server.Configuration. The OAuth-side delegate signature
-            //includes ExchangeContext for applications that classify on
-            //tenant data; the JCose classifier is purely structural and
-            //does not consume context, so the wiring lambda discards it.
-            ClassifyTokenAsync = (token, ctx, ct) =>
-                JoseTokenClassifier.ClassifyAsync(
-                    token,
-                    TestSetup.Base64UrlDecoder,
-                    static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
-                        bytes, TestSetup.DefaultSerializationOptions)
-                        ?? throw new FormatException("Header JSON parsed to null."),
-                    BaseMemoryPool.Shared,
-                    ct),
-
             //Per-request policy resolution. The default dispatches on
             //ClientRecord.Profile across the three shipped profiles;
             //an unset Profile falls back to PolicyProfile.Fapi20
@@ -575,12 +1323,29 @@ internal sealed class HostedAuthorizationServer
             ResolvePolicyAsync = (registration, ctx, ct) =>
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
 
-            //Per-call decision points. Wired to the
-            //library defaults: full registration capability set (no
-            //attenuation), no-op inspection, public-subject identity.
-            //Applications that need CAEP/RISC attenuation, audit emission,
-            //or pairwise subjects supply their own delegate.
-            ResolveCapabilitiesAsync = DefaultCapabilityResolver.ResolveAsync,
+            //Per-request capability resolution reads the application's active grants.
+            //The registration declares endpoint eligibility; a revoked grant removes
+            //reachability through this resolver while preserving that declaration.
+            //A tenant without persisted history uses its request-derived eligibility.
+            //An empty deletion tombstone keeps an overlapping stored request unreachable.
+            //Inspection and public-subject identity use their library defaults.
+            ResolveCapabilitiesAsync = (registration, _, _) =>
+            {
+                lock(host.RegistrationGate)
+                {
+                    bool hasCurrent = host.Registrations.TryGetValue(registration.TenantId, out ClientRecord? current);
+                    IReadOnlySet<CapabilityIdentifier> granted = hasCurrent switch
+                    {
+                        true => string.Equals(current!.ClientId, registration.ClientId, StringComparison.Ordinal)
+                            && host.GrantedCapabilities.TryGetValue(registration.TenantId, out ImmutableHashSet<CapabilityIdentifier>? capabilities)
+                                ? capabilities : ImmutableHashSet<CapabilityIdentifier>.Empty,
+                        false => host.GrantedCapabilities.ContainsKey(registration.TenantId)
+                            ? ImmutableHashSet<CapabilityIdentifier>.Empty : registration.AllowedCapabilities
+                    };
+
+                    return ValueTask.FromResult(granted);
+                }
+            },
             InspectAsync = DefaultInspector.NoOpAsync,
             ResolveSubjectIdentifierAsync = DefaultSubjectIdentifierResolver.PublicAsync,
             GenerateIdentifierAsync = DefaultIdentifierGenerator.For(timeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
@@ -609,6 +1374,8 @@ internal sealed class HostedAuthorizationServer
                 }
 
                 string? clientName = root.TryGetProperty("client_name", out JsonElement nm) ? nm.GetString() : null;
+                Uri? clientUri = root.TryGetProperty("client_uri", out JsonElement uri) && uri.GetString() is string uriText
+                    ? new Uri(uriText) : null;
                 string? scope = root.TryGetProperty("scope", out JsonElement sc) ? sc.GetString() : null;
                 ClientAuthenticationMethod? authMethod = null;
                 if(root.TryGetProperty("token_endpoint_auth_method", out JsonElement am)
@@ -636,11 +1403,30 @@ internal sealed class HostedAuthorizationServer
 
                 return ValueTask.FromResult(new ClientMetadata
                 {
+                    ClientId = root.TryGetProperty("client_id", out JsonElement id) ? id.GetString() : null,
                     RedirectUris = redirectUris,
                     ClientName = clientName,
+                    ClientUri = clientUri,
                     Scope = scope,
                     TokenEndpointAuthMethod = authMethod,
-                    AuthorizationDetailsTypes = authorizationDetailsTypes
+                    AuthorizationDetailsTypes = authorizationDetailsTypes,
+                    LogoUri = root.TryGetProperty("logo_uri", out JsonElement parsedLogoUri) ? new Uri(parsedLogoUri.GetString()!) : null,
+                    TokenEndpointAuthSigningAlg = root.TryGetProperty("token_endpoint_auth_signing_alg", out JsonElement parsedTokenEndpointAuthSigningAlg) ? parsedTokenEndpointAuthSigningAlg.GetString() : null,
+                    JwksUri = root.TryGetProperty("jwks_uri", out JsonElement parsedJwksUri) ? new Uri(parsedJwksUri.GetString()!) : null,
+                    Jwks = root.TryGetProperty("jwks", out JsonElement parsedJwks) ? parsedJwks.GetRawText() : null,
+                    SoftwareStatement = root.TryGetProperty("software_statement", out JsonElement parsedSoftwareStatement) ? parsedSoftwareStatement.GetString() : null,
+                    ApplicationType = root.TryGetProperty("application_type", out JsonElement parsedApplicationType) ? parsedApplicationType.GetString() : null,
+                    IdTokenSignedResponseAlg = root.TryGetProperty("id_token_signed_response_alg", out JsonElement parsedIdTokenSignedResponseAlg) ? parsedIdTokenSignedResponseAlg.GetString() : null,
+                    RequestObjectSigningAlg = root.TryGetProperty("request_object_signing_alg", out JsonElement parsedRequestObjectSigningAlg) ? parsedRequestObjectSigningAlg.GetString() : null,
+                    RequestObjectEncryptionAlg = root.TryGetProperty("request_object_encryption_alg", out JsonElement parsedRequestObjectEncryptionAlg) ? parsedRequestObjectEncryptionAlg.GetString() : null,
+                    BackchannelLogoutUri = root.TryGetProperty("backchannel_logout_uri", out JsonElement parsedBackchannelLogoutUri) ? new Uri(parsedBackchannelLogoutUri.GetString()!) : null,
+                    FrontchannelLogoutUri = root.TryGetProperty("frontchannel_logout_uri", out JsonElement parsedFrontchannelLogoutUri) ? new Uri(parsedFrontchannelLogoutUri.GetString()!) : null,
+                    BackchannelLogoutSessionRequired = root.TryGetProperty("backchannel_logout_session_required", out JsonElement parsedBackchannelLogoutSessionRequired) && parsedBackchannelLogoutSessionRequired.GetBoolean(),
+                    FrontchannelLogoutSessionRequired = root.TryGetProperty("frontchannel_logout_session_required", out JsonElement parsedFrontchannelLogoutSessionRequired) && parsedFrontchannelLogoutSessionRequired.GetBoolean(),
+                    GrantTypes = root.TryGetProperty("grant_types", out JsonElement parsedGrantTypes) ? parsedGrantTypes.EnumerateArray().Select(value => GrantTypeNames.TryParse(value.GetString()!, out GrantType parsed) ? parsed : throw new InvalidOperationException("Invalid grant type.")).ToArray() : [],
+                    ResponseTypes = root.TryGetProperty("response_types", out JsonElement parsedResponseTypes) ? parsedResponseTypes.EnumerateArray().Select(value => ResponseTypeNames.TryParse(value.GetString()!, out ResponseType parsed) ? parsed : throw new InvalidOperationException("Invalid response type.")).ToArray() : [],
+                    PostLogoutRedirectUris = root.TryGetProperty("post_logout_redirect_uris", out JsonElement parsedPostLogoutRedirectUris) ? parsedPostLogoutRedirectUris.EnumerateArray().Select(value => new Uri(value.GetString()!)).ToArray() : [],
+                    AuthorizationGrantProfilesSupported = root.TryGetProperty("authorization_grant_profiles_supported", out JsonElement parsedAuthorizationGrantProfilesSupported) ? parsedAuthorizationGrantProfilesSupported.EnumerateArray().Select(value => value.GetString()!).ToArray() : null
                 });
             },
 
@@ -650,9 +1436,17 @@ internal sealed class HostedAuthorizationServer
             //exits on the first differing character, letting a network attacker recover the
             //token incrementally by timing.
             ValidateRegistrationAccessTokenAsync = (tenantId, clientId, presented, _, _) =>
-                ValueTask.FromResult(
-                    host.RegistrationAccessTokens.TryGetValue(clientId, out string? stored)
-                    && FixedTimeComparison.AreEqual(stored, presented))
+            {
+                lock(host.RegistrationGate)
+                {
+
+                    return ValueTask.FromResult(
+                        host.Registrations.TryGetValue(tenantId, out ClientRecord? registered)
+                        && string.Equals(registered.ClientId, clientId, StringComparison.Ordinal)
+                        && host.RegistrationAccessTokens.TryGetValue(clientId, out string? stored)
+                        && FixedTimeComparison.AreEqual(stored, presented));
+                }
+            }
         };
 
         AuthorizationServerCryptography cryptography = new()
@@ -679,7 +1473,7 @@ internal sealed class HostedAuthorizationServer
                 //OAuth /jwks publishes OAuth/OIDC token-signing keys and JAR
                 //signing keys. Federation entity-signing keys live behind
                 //the federation EC's own jwks claim (served at
-                ///.well-known/openid-federation), so skip them here. A real
+                // /.well-known/openid-federation), so skip them here. A real
                 //deployment with separate JWKS endpoints would scope
                 //similarly per usage-context.
                 foreach(KeyValuePair<KeyUsageContext, SigningKeySet> entry in registration.SigningKeys)
@@ -949,7 +1743,7 @@ internal sealed class HostedAuthorizationServer
             //It bridges the host-generic PdaAction to the OAuth executor, which owns
             //the OID4VP / SIOP action handlers. Auth Code flows produce no actions.
             ActionExecutor = (action, ctx, ct) =>
-                executor.ExecuteAsync((OAuthAction)action, ctx, ct)
+                ctx.RequestServer!.OAuth().ActionExecutor!.ExecuteAsync((OAuthAction)action, ctx, ct)
         };
 
         //Register the OAuth family integration so endpoints reach it via server.OAuth().
@@ -961,10 +1755,11 @@ internal sealed class HostedAuthorizationServer
         //instance through app.Server.Vcalm() after construction.
         host.Server.AddIntegration(new Verifiable.Vcalm.VcalmIntegration());
 
+
         host.Server.Validate();
 
-        //Subscribe to populate the routing table from events.
-        host.EventSubscription = host.Server.Events.Subscribe(new RegistrationObserver(host.Registrations, host.RegistrationAccessTokens));
+        //Subscribe to apply capability signals to the state consulted by dispatch.
+        host.EventSubscription = host.Server.Events.Subscribe(new RegistrationObserver(host));
 
         return host;
     }
@@ -1007,37 +1802,207 @@ internal sealed class HostedAuthorizationServer
     }
 
 
-    /// <summary>
-    /// Observer that populates the registration routing table from events.
-    /// </summary>
-    private sealed class RegistrationObserver(
-        ConcurrentDictionary<string, ClientRecord> store,
-        ConcurrentDictionary<string, string> tokenStore)
-        : IObserver<ClientRegistrationEvent>
+    /// <summary>The lock shared by registration persistence, routing loads and capability effects.</summary>
+    private object RegistrationGate { get; } = new();
+
+
+    /// <summary>The active grants and empty deletion tombstones that distinguish persisted tenants from request-derived registrations.</summary>
+    private Dictionary<string, ImmutableHashSet<CapabilityIdentifier>> GrantedCapabilities { get; } = [];
+
+
+    /// <summary>A deterministic pre-commit create hook for storage-failure wire assertions.</summary>
+    public Func<ClientRecord, CancellationToken, ValueTask>? BeforeRegistrationCreateAsync { get; set; }
+
+
+    /// <summary>A deterministic pre-commit update hook so concurrent requests can share one loaded revision.</summary>
+    public Func<ClientRecord, CancellationToken, ValueTask>? BeforeRegistrationUpdateAsync { get; set; }
+
+
+    /// <summary>Atomically commits the registration, both routing indexes and its test credential.</summary>
+    public async ValueTask CreateAsync(ClientRecord registration, RegistrationAccessToken accessToken,
+        ExchangeContext context, CancellationToken cancellationToken)
     {
-        public void OnNext(ClientRegistrationEvent value)
+        if(BeforeRegistrationCreateAsync is { } before)
         {
-            if(value is ClientRegistered registered)
-            {
-                store[registered.TenantId] = registered.Registration;
-                store[registered.Registration.ClientId] = registered.Registration;
-                tokenStore[registered.Registration.ClientId] = registered.AccessToken.Value;
-            }
-            else if(value is ClientDeregistered deregistered)
-            {
-                _ = store.TryRemove(deregistered.TenantId, out _);
-                _ = store.TryRemove(deregistered.ClientId, out _);
-                _ = tokenStore.TryRemove(deregistered.ClientId, out _);
-            }
-            else if(value is ClientUpdated updated)
-            {
-                store[updated.TenantId] = updated.Current;
-                store[updated.Current.ClientId] = updated.Current;
-            }
+            await before(registration, cancellationToken).ConfigureAwait(false);
         }
 
-        public void OnError(Exception error) { }
+        lock(RegistrationGate)
+        {
+            if(Registrations.ContainsKey(registration.TenantId) || Registrations.ContainsKey(registration.ClientId))
+            {
+                throw new InvalidOperationException("The registration already exists.");
+            }
 
-        public void OnCompleted() { }
+            Registrations[registration.TenantId] = registration;
+            Registrations[registration.ClientId] = registration;
+            GrantedCapabilities[registration.TenantId] = registration.AllowedCapabilities;
+            RegistrationAccessTokens[registration.ClientId] = accessToken.Value;
+        }
+    }
+
+
+    /// <summary>Atomically refuses stale revisions or commits the next record through both routing indexes.</summary>
+    public async ValueTask<bool> TryUpdateAsync(ClientRecord registration, long expectedRevision,
+        ExchangeContext context, CancellationToken cancellationToken)
+    {
+        if(BeforeRegistrationUpdateAsync is { } before)
+        {
+            await before(registration, cancellationToken).ConfigureAwait(false);
+        }
+
+        lock(RegistrationGate)
+        {
+            if(!Registrations.TryGetValue(registration.TenantId, out ClientRecord? current)
+                || !string.Equals(current.ClientId, registration.ClientId, StringComparison.Ordinal)
+                || current.Revision != expectedRevision
+                || registration.Revision != checked(expectedRevision + 1))
+            {
+
+                return false;
+            }
+
+            Registrations[registration.TenantId] = registration;
+            Registrations[registration.ClientId] = registration;
+            ImmutableHashSet<CapabilityIdentifier> granted = GrantedCapabilities.GetValueOrDefault(registration.TenantId)
+                ?? ImmutableHashSet<CapabilityIdentifier>.Empty;
+            GrantedCapabilities[registration.TenantId] = granted.Intersect(registration.AllowedCapabilities)
+                .Union(registration.AllowedCapabilities.Except(current.AllowedCapabilities));
+
+            return true;
+        }
+    }
+
+
+    /// <summary>A deterministic pre-commit deletion hook for overlapping management requests.</summary>
+    public Func<ClientRecord, CancellationToken, ValueTask>? BeforeRegistrationDeleteAsync { get; set; }
+
+
+    /// <summary>Removes only the expected identity and revision and returns the final record under the index lock.</summary>
+    public async ValueTask<ClientRecord?> DeleteAsync(ClientRecord registration, long expectedRevision,
+        ExchangeContext context, CancellationToken cancellationToken)
+    {
+        if(BeforeRegistrationDeleteAsync is { } before)
+        {
+            await before(registration, cancellationToken).ConfigureAwait(false);
+        }
+
+        lock(RegistrationGate)
+        {
+            if(!Registrations.TryGetValue(registration.TenantId, out ClientRecord? current)
+                || !string.Equals(current.ClientId, registration.ClientId, StringComparison.Ordinal)
+                || current.Revision != expectedRevision)
+            {
+
+                return null;
+            }
+
+            _ = checked(current.Revision + 1);
+            _ = Registrations.TryRemove(registration.TenantId, out _);
+            _ = Registrations.TryRemove(registration.ClientId, out _);
+            _ = RegistrationAccessTokens.TryRemove(registration.ClientId, out _);
+            GrantedCapabilities[registration.TenantId] = ImmutableHashSet<CapabilityIdentifier>.Empty;
+
+            return current;
+        }
+    }
+
+
+    /// <summary>Commits fixture registration data and then awaits its immutable notification.</summary>
+    public async Task RegisterClientAsync(ClientRecord registration, RegistrationAccessToken accessToken, ExchangeContext context, CancellationToken cancellationToken = default)
+    {
+        await CreateAsync(registration, accessToken, context, cancellationToken).ConfigureAwait(false);
+        await Server.RegisterClientAsync(registration, context).ConfigureAwait(false);
+    }
+
+
+    /// <summary>Commits a fixture metadata or key replacement before awaiting its next revision.</summary>
+    public async Task<ClientRecord> UpdateClientAsync(ClientRecord previous, ClientRecord current, ExchangeContext context, CancellationToken cancellationToken = default)
+    {
+        current = current with { Revision = checked(previous.Revision + 1) };
+        bool isCommitted = await TryUpdateAsync(current, previous.Revision, context, cancellationToken).ConfigureAwait(false);
+        if(!isCommitted)
+        {
+            throw new InvalidOperationException("The fixture registration revision changed.");
+        }
+
+        await Server.UpdateClientAsync(previous, current, context).ConfigureAwait(false);
+
+        return current;
+    }
+
+
+    /// <summary>Commits fixture deletion before awaiting the final registration projection.</summary>
+    public async Task DeregisterClientAsync(ClientRecord registration, string reason, ExchangeContext context, CancellationToken cancellationToken = default)
+    {
+        ClientRecord deleted = await DeleteAsync(registration, registration.Revision, context, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The fixture registration revision changed.");
+        await Server.DeregisterClientAsync(deleted, reason, context).ConfigureAwait(false);
+    }
+
+
+    /// <summary>Applies grant and revoke signals to synchronized registration and resolver state.</summary>
+    private void ApplyCapability(ClientRegistrationEvent value)
+    {
+        lock(RegistrationGate)
+        {
+            if(!Registrations.TryGetValue(value.TenantId, out ClientRecord? current)
+                || !string.Equals(current.ClientId, value.ClientId, StringComparison.Ordinal)
+                || current.Revision != value.Revision)
+            {
+
+                return;
+            }
+
+            ImmutableHashSet<CapabilityIdentifier> granted = GrantedCapabilities.GetValueOrDefault(value.TenantId)
+                ?? ImmutableHashSet<CapabilityIdentifier>.Empty;
+            ImmutableHashSet<CapabilityIdentifier> capabilities = value switch
+            {
+                CapabilityGranted grant => granted.Add(grant.Capability),
+                CapabilityRevoked revoke => granted.Remove(revoke.Capability),
+                _ => granted
+            };
+            if(ReferenceEquals(capabilities, granted))
+            {
+
+                return;
+            }
+
+            ClientRecord updated = current with
+            {
+                Revision = checked(current.Revision + 1),
+                AllowedCapabilities = value switch
+                {
+                    CapabilityGranted grant => current.AllowedCapabilities.Add(grant.Capability),
+                    _ => current.AllowedCapabilities
+                }
+            };
+            Registrations[updated.TenantId] = updated;
+            Registrations[updated.ClientId] = updated;
+            GrantedCapabilities[updated.TenantId] = capabilities;
+        }
+    }
+
+
+    /// <summary>The application's effect handler for capability grant and revoke notifications.</summary>
+    private sealed class RegistrationObserver(HostedAuthorizationServer host): IObserver<ClientRegistrationEvent>
+    {
+        /// <summary>Applies capability signals; registration persistence belongs to the required store.</summary>
+        public void OnNext(ClientRegistrationEvent value)
+        {
+            host.ApplyCapability(value);
+        }
+
+
+        /// <summary>The stream does not terminate on an optional observer's exception.</summary>
+        public void OnError(Exception error)
+        {
+        }
+
+
+        /// <summary>The stream has the lifetime of its owning integration.</summary>
+        public void OnCompleted()
+        {
+        }
     }
 }

@@ -131,6 +131,67 @@ public sealed class TpmtSensitive: IDisposable
             {
                 break;
             }
+            case TpmAlgIdConstants.TPM_ALG_ERROR:
+            case TpmAlgIdConstants.TPM_ALG_TDES:
+            case TpmAlgIdConstants.TPM_ALG_SHA:
+            case TpmAlgIdConstants.TPM_ALG_HMAC:
+            case TpmAlgIdConstants.TPM_ALG_AES:
+            case TpmAlgIdConstants.TPM_ALG_MGF1:
+            case TpmAlgIdConstants.TPM_ALG_XOR:
+            case TpmAlgIdConstants.TPM_ALG_SHA256:
+            case TpmAlgIdConstants.TPM_ALG_SHA384:
+            case TpmAlgIdConstants.TPM_ALG_SHA512:
+            case TpmAlgIdConstants.TPM_ALG_SHA256_192:
+            case TpmAlgIdConstants.TPM_ALG_NULL:
+            case TpmAlgIdConstants.TPM_ALG_SM3_256:
+            case TpmAlgIdConstants.TPM_ALG_SM4:
+            case TpmAlgIdConstants.TPM_ALG_RSASSA:
+            case TpmAlgIdConstants.TPM_ALG_RSAES:
+            case TpmAlgIdConstants.TPM_ALG_RSAPSS:
+            case TpmAlgIdConstants.TPM_ALG_OAEP:
+            case TpmAlgIdConstants.TPM_ALG_ECDSA:
+            case TpmAlgIdConstants.TPM_ALG_ECDH:
+            case TpmAlgIdConstants.TPM_ALG_ECDAA:
+            case TpmAlgIdConstants.TPM_ALG_SM2:
+            case TpmAlgIdConstants.TPM_ALG_ECSCHNORR:
+            case TpmAlgIdConstants.TPM_ALG_ECMQV:
+            case TpmAlgIdConstants.TPM_ALG_HKDF:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A:
+            case TpmAlgIdConstants.TPM_ALG_KDF2:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108:
+            case TpmAlgIdConstants.TPM_ALG_SYMCIPHER:
+            case TpmAlgIdConstants.TPM_ALG_CAMELLIA:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_256:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_384:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_512:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE128:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_192:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_512:
+            case TpmAlgIdConstants.TPM_ALG_CMAC:
+            case TpmAlgIdConstants.TPM_ALG_CTR:
+            case TpmAlgIdConstants.TPM_ALG_OFB:
+            case TpmAlgIdConstants.TPM_ALG_CBC:
+            case TpmAlgIdConstants.TPM_ALG_CFB:
+            case TpmAlgIdConstants.TPM_ALG_ECB:
+            case TpmAlgIdConstants.TPM_ALG_CCM:
+            case TpmAlgIdConstants.TPM_ALG_GCM:
+            case TpmAlgIdConstants.TPM_ALG_KW:
+            case TpmAlgIdConstants.TPM_ALG_KWP:
+            case TpmAlgIdConstants.TPM_ALG_EAX:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA_PH:
+            case TpmAlgIdConstants.TPM_ALG_LMS:
+            case TpmAlgIdConstants.TPM_ALG_XMSS:
+            case TpmAlgIdConstants.TPM_ALG_KEYEDXOF:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF128:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF256:
+            case TpmAlgIdConstants.TPM_ALG_KMAC128:
+            case TpmAlgIdConstants.TPM_ALG_KMAC256:
+            case TpmAlgIdConstants.TPM_ALG_MLKEM:
+            case TpmAlgIdConstants.TPM_ALG_MLDSA:
+            case TpmAlgIdConstants.TPM_ALG_HASH_MLDSA:
             default:
             {
                 throw new NotSupportedException($"Sensitive-area type '0x{sensitiveTypeValue:X4}' is not modeled; only TPM_ALG_RSA, TPM_ALG_ECC and TPM_ALG_KEYEDHASH sensitive areas are.");

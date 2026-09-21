@@ -4,7 +4,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -54,7 +53,7 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         await using TestHostShell app = new(timeProvider);
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = await RegisterCimdClientAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -86,7 +85,7 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         await using TestHostShell app = new(timeProvider);
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = await RegisterCimdClientAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -126,7 +125,7 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         await using TestHostShell app = new(timeProvider);
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = await RegisterCimdClientAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -147,9 +146,10 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
 
 
     /// <summary>
-    /// CIMD-038: a huge <c>max-age</c> is clamped by <see cref="ClientIdMetadataDocumentResolverOptions.MaximumCacheLifetime"/>
-    /// rather than honored literally — a clock advance well within the huge max-age but past the
-    /// clamp still triggers a re-fetch.
+    /// CIMD-038: a huge <c>max-age</c> is clamped by the reference cache's own configured maximum
+    /// lifetime rather than honored literally — a clock advance well within the huge max-age but past
+    /// the clamp still triggers a re-fetch. The clamp bound is the caller's own cache option, not a
+    /// library option, since caching itself is an application-layer concern.
     /// </summary>
     [TestMethod]
     public async Task HugeMaxAgeClampedByMaximumCacheLifetimeOption()
@@ -162,9 +162,9 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         await using TestHostShell app = new(timeProvider);
-        app.WireCimdMaterialization(
+        await app.WireCimdMaterializationAsync(
             "default", documentHost.Certificate,
-            new ClientIdMetadataDocumentResolverOptions { MaximumCacheLifetime = TimeSpan.FromSeconds(60) });
+            documentMaximumCacheLifetime: TimeSpan.FromSeconds(60)).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = await RegisterCimdClientAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -207,7 +207,7 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         await using TestHostShell app = new(timeProvider);
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = await RegisterCimdClientAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -252,7 +252,7 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         await using TestHostShell app = new(timeProvider);
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration) = await RegisterCimdClientAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -275,7 +275,7 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
     private static async Task<(OAuthClient Client, ClientRegistration Registration)> RegisterCimdClientAsync(
         TestHostShell app, Uri documentUri, CancellationToken cancellationToken)
     {
-        ClientRecord stub = app.RegisterCimdStubClient(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         (OAuthClient client, ClientRegistration registration, _) = await app.CreateOAuthClientAndRegistrationAsync(
             stub, RedirectUri.OriginalString, PolicyProfile.Rfc6749WithPkce, cancellationToken).ConfigureAwait(false);
 

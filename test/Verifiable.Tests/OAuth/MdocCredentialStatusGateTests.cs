@@ -466,9 +466,11 @@ internal sealed class MdocCredentialStatusGateTests
     /// <c>mso_mdoc</c> presentations whose issuer gated validity on a status list, but wired no resolver to read
     /// it, has a configuration fault rather than a wire answer: the Response URI answers HTTP 500 with no
     /// RFC 6749, Section 4.1.2.1 error object, the verifier's flow takes no terminal refusal, and the presentation
-    /// is not accepted. Silently reading the unreadable status as valid would be the security gap. The
+    /// is not accepted. An unreadable status cannot establish credential validity. The
     /// <c>dc+sd-jwt</c> twin is
     /// <see cref="Oid4VpFlowIntegrationTests.ExecutorFailsClosedWhenCredentialReferencesStatusListButNoResolverWired"/>.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "A status-bearing presentation with no status resolver is refused and its captured fault names the missing resolver."
     /// </summary>
     [TestMethod]
     public async Task AStatusBearingMdocIsNotAcceptedWhenNoStatusResolverIsWired()
@@ -492,6 +494,11 @@ internal sealed class MdocCredentialStatusGateTests
             + "endpoint answers the state it cannot classify, not a refusal it composed.");
         Assert.DoesNotContain("returned status 400", refusalMessage, StringComparison.Ordinal,
             "A configuration fault is not an RFC 6749 Section 4.1.2.1 refusal the wallet is told to act on.");
+
+        Assert.IsTrue(run.App.Host("default").HttpFaults.TryDequeue(out Exception? fault));
+        _ = Assert.IsInstanceOfType<InvalidOperationException>(fault);
+        Assert.Contains("without a status resolver", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("resolveVerifiedStatusListToken", fault.Message, StringComparison.Ordinal);
 
         FlowState state = run.App.GetFlowState(parHandle).State;
         Assert.IsNotInstanceOfType<PresentationVerifiedState>(state,
@@ -643,8 +650,8 @@ internal sealed class MdocCredentialStatusGateTests
         string nonce)
     {
         TestHostShell app = run.App;
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //Building the HTTP-backed wallet starts the listener and aligns the registration's Response URI onto
         //its base address, so the request_uri PAR generates and the response_uri inside the JAR both point at

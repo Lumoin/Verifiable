@@ -34,7 +34,7 @@ namespace Verifiable.Json;
 /// There is no hook to intercept or transform the final output. The following STJ extensibility
 /// points were evaluated but do not solve the JCS requirements. None of the cited types
 /// (<see cref="System.Text.Json.Serialization.JsonConverter{T}"/>, <see cref="IJsonTypeInfoResolver"/>,
-/// <see cref="Metadata.DefaultJsonTypeInfoResolver"/>, <see cref="JsonPropertyOrderAttribute"/>) offers
+/// <see cref="System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver"/>, <see cref="System.Text.Json.Serialization.JsonPropertyOrderAttribute"/>) offers
 /// a document-wide transform hook:
 /// </para>
 /// <list type="bullet">
@@ -56,13 +56,13 @@ namespace Verifiable.Json;
 /// at resolver creation time.
 /// </para>
 /// <para>
-/// Even if the resolver computed lexicographic order for <see cref="JsonPropertyOrderAttribute"/>
-/// based on final property names (respecting <see cref="JsonPropertyNameAttribute"/>),
+/// Even if the resolver computed lexicographic order for <see cref="System.Text.Json.Serialization.JsonPropertyOrderAttribute"/>
+/// based on final property names (respecting <see cref="System.Text.Json.Serialization.JsonPropertyNameAttribute"/>),
 /// this approach fundamentally cannot handle:
 /// </para>
 /// <list type="bullet">
 /// <item><description><c>Dictionary&lt;string, T&gt;</c> where keys are determined at serialization time, not type resolution time.</description></item>
-/// <item><description><see cref="JsonExtensionDataAttribute"/> properties that capture overflow or dynamic properties unknown until runtime.</description></item>
+/// <item><description><see cref="System.Text.Json.Serialization.JsonExtensionDataAttribute"/> properties that capture overflow or dynamic properties unknown until runtime.</description></item>
 /// <item><description>Nested objects containing dictionaries or extension data at any depth.</description></item>
 /// <item><description>Anonymous types or <c>ExpandoObject</c> with dynamic members.</description></item>
 /// </list>
@@ -73,7 +73,7 @@ namespace Verifiable.Json;
 /// </description>
 /// </item>
 /// <item>
-/// <term><see cref="Metadata.DefaultJsonTypeInfoResolver"/> with Modifiers</term>
+/// <term><see cref="System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver"/> with Modifiers</term>
 /// <description>
 /// Allows runtime modification of serialization contracts via the <c>Modifiers</c> collection.
 /// Properties can be reordered by manipulating <c>JsonTypeInfo.Properties</c>, but modifiers
@@ -82,7 +82,7 @@ namespace Verifiable.Json;
 /// </description>
 /// </item>
 /// <item>
-/// <term><see cref="JsonPropertyOrderAttribute"/></term>
+/// <term><see cref="System.Text.Json.Serialization.JsonPropertyOrderAttribute"/></term>
 /// <description>
 /// Specifies static property order at compile time via numeric ordering. JCS requires lexicographic
 /// sorting based on the actual serialized property names, not a predetermined numeric order.
@@ -100,16 +100,16 @@ namespace Verifiable.Json;
 /// <item>
 /// <term>Runtime attribute injection via <c>TypeDescriptor</c> or source generators</term>
 /// <description>
-/// Adding <see cref="JsonPropertyOrderAttribute"/> dynamically
+/// Adding <see cref="System.Text.Json.Serialization.JsonPropertyOrderAttribute"/> dynamically
 /// at runtime is not supported by STJ. Source generators (<c>JsonSerializable</c>) generate
 /// static metadata at compile time. Even if attributes could be injected, the fundamental
 /// limitation remains: dictionary and extension data keys are unknown until serialization.
 /// </description>
 /// </item>
 /// <item>
-/// <term><see cref="JsonNode"/> manipulation</term>
+/// <term><see cref="System.Text.Json.Nodes.JsonNode"/> manipulation</term>
 /// <description>
-/// <see cref="JsonObject"/> is an ordered dictionary that preserves
+/// <see cref="System.Text.Json.Nodes.JsonObject"/> is an ordered dictionary that preserves
 /// insertion order, but provides no built-in sorting. Manual sorting requires removing and
 /// re-adding all properties in sorted order, which is equivalent to the reparse approach
 /// but with mutable state and additional complexity.
@@ -271,6 +271,7 @@ public static class Jcs
             JsonValueKind.True => WriteTrueArm(writer),
             JsonValueKind.False => WriteFalseArm(writer),
             JsonValueKind.Null => WriteNullArm(writer),
+            JsonValueKind.Undefined => ThrowUnexpectedValueKind(element),
             _ => ThrowUnexpectedValueKind(element)
         };
 

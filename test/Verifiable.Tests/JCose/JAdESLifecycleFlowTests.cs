@@ -28,7 +28,7 @@ namespace Verifiable.Tests.JCose;
 /// <strong>Firewall discipline.</strong> Every step a signer performs — creation, every augmentation verb, every
 /// Time-Stamping Authority acquisition — runs inside its own nested block scope, copying ONLY the serialized
 /// wire bytes into an independent <c>byte[]</c> that crosses to the next step. Every level-aware
-/// <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PublicKeyMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, JAdESCanonicalizeUnsignedElementDelegate, BaseMemoryPool, CancellationToken)"/>
+/// <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PublicKeyMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, JAdESCanonicalizeUnsignedElementDelegate, BaseMemoryPool, TryDecodeJAdESCounterSignatureDelegate?, ResolveJAdESCounterSignaturePublicKeyDelegate?, CancellationToken)"/>
 /// call below reconstructs everything from that wire-bytes copy alone — never a creation-side object, model, or
 /// in-memory decoded fact.
 /// </para>

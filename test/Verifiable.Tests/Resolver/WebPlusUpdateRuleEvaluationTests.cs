@@ -4,7 +4,7 @@ using Verifiable.Core.Did.Methods.WebPlus;
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// Tests for <see cref="WebPlusUpdateRuleEvaluation.IsSatisfied"/> — the did:webplus updateRules satisfaction
+/// Tests for <see cref="WebPlusUpdateRuleEvaluation.IsSatisfiedAsync"/> — the did:webplus updateRules satisfaction
 /// (did:webplus Draft v0.4, Update Rules, WP-UR-2..7). Each form is exercised in both its satisfied and
 /// unsatisfied state, including weighted thresholds and nesting.
 /// </summary>

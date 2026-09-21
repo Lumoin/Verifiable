@@ -732,8 +732,8 @@ internal sealed class StatusListTokenSeatFlowTests
             TimeProvider,
             resolveVerifiedStatusListToken: resolution.Resolve,
             credentialStatusPolicy: CredentialStatusPolicies.RefuseNotValid);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync(new StatusListReference(CredentialIndex, statusListUri)).ConfigureAwait(false);
@@ -1040,8 +1040,8 @@ internal sealed class StatusListTokenSeatFlowTests
             TimeProvider,
             mdocSeams: MdocVpFixture.BuildSeams(mdocIssuerPublic),
             resolveVerifiedStatusListToken: resolver);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         using MdocDocument issued = await MdocVpFixture.IssueAsync(
             mdocIssuerKeys, deviceKeys, new StatusListReference(mdocCredentialIndex, statusListUri),
@@ -1282,8 +1282,8 @@ internal sealed class StatusListTokenSeatFlowTests
     private async Task<(string ParHandle, string? RefusalDetail)> PresentPidWithRawStatusAsync(
         TestHostShell app, IReadOnlyDictionary<string, object> rawStatusObject, string nonce)
     {
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await SdJwtVpFixture.IssuePidCredentialWithClaimsAsync(
@@ -1444,8 +1444,8 @@ internal sealed class StatusListTokenSeatFlowTests
     private async Task<(string ParHandle, string? RefusalDetail)> PresentPidReferencingAsync(
         TestHostShell app, string statusListUri, string nonce)
     {
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
             await IssuePidAsync(new StatusListReference(CredentialIndex, statusListUri)).ConfigureAwait(false);
@@ -1481,8 +1481,8 @@ internal sealed class StatusListTokenSeatFlowTests
         PublicKeyMemory issuerPublicKey,
         string nonce)
     {
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         app.RegisterIssuerTrust(IssuerId, issuerPublicKey);
 

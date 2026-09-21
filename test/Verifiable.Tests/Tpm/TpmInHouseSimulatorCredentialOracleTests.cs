@@ -18,7 +18,7 @@ namespace Verifiable.Tests.Tpm;
 /// Library Part 1, clauses 21.3-21.6; clause 44.7.1 (the ECC Labeled KEM's One-Pass Diffie-Hellman), 21.3
 /// "Protection of Credential"). Framework
 /// <see cref="ECDiffieHellman"/> performs the P-256 agreement (a different provider from the simulator's ECC
-/// signing backend, <see cref="BouncyCastleTpmEccSigningBackend.ComputeSharedSecret"/>), and the inner
+/// signing backend, <see cref="TpmEccSigningBackend.ComputeSharedSecret"/>), and the inner
 /// encryption uses framework <see cref="Aes"/> in its native CFB mode (a different code path from the shipped
 /// ECB-loop CFB helper, <c>TpmParameterEncryption.AesCfb</c>) — both cross-provider/cross-implementation
 /// checks. KDFa and KDFe (Part 1, clause 8.4.10.2/clause 8.4.10.3) and the outer HMAC compose the spec message by hand
@@ -37,7 +37,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
 {
     /// <summary>
     /// The challenger's secret credential. Fourteen octets, so the marshaled inner data (a 2-octet size prefix
-    /// plus the credential) is exactly one 16-octet AES block: framework <see cref="Aes.EncryptCfb"/> with a
+    /// plus the credential) is exactly one 16-octet AES block: framework <c>Aes.EncryptCfb</c> with a
     /// full-width (128-bit) feedback register and <see cref="PaddingMode.None"/> requires block-aligned input
     /// (it has no short-final-block handling, unlike the shipped hand-rolled CFB helper), so this length sidesteps
     /// that framework constraint rather than reimplementing partial-block chaining in the independent oracle.

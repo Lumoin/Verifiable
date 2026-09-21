@@ -39,7 +39,7 @@ public static class GlobalTokenRevocationEndpoints
         //Fail-closed: the command revokes every token a subject holds, so it
         //materializes only when the capability is allowed AND the parse seam, the
         //revoke-subject seam, and client authentication are all wired.
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation)
             && server?.OAuth().ParseGlobalTokenRevocationRequestAsync is not null
             && server?.OAuth().RevokeSubjectTokensAsync is not null
@@ -85,7 +85,7 @@ public static class GlobalTokenRevocationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;

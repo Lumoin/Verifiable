@@ -13,7 +13,7 @@ namespace Verifiable.DidComm.BasicMessage;
 /// <c>lang</c> header naming the content's language and the standard <c>created_time</c> header carrying when
 /// it was sent. Each name declares its single UTF-8 source literal as a <c>ReadOnlySpan&lt;byte&gt;</c>
 /// property and derives the interned string view through <see cref="Utf8Constants.ToInternedString"/>,
-/// matching <see cref="WellKnownRoutingNames"/> and the other protocol name tables.
+/// matching <see cref="Verifiable.DidComm.Routing.WellKnownRoutingNames"/> and the other protocol name tables.
 /// </remarks>
 public static class WellKnownBasicMessageNames
 {

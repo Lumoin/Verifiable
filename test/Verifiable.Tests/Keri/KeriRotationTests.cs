@@ -11,7 +11,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Keri;
 
 /// <summary>
-/// Tests for the rotation fold <see cref="KeriKeyStateMachine.Rotate"/> — pre-rotation verification and key state
+/// Tests for the rotation fold <see cref="KeriKeyStateMachine.RotateAsync"/> — pre-rotation verification and key state
 /// roll-forward. The pre-rotation commitments and the keys they hide are the KERI specification's worked
 /// inception example: the example's next keys, when digested, MUST equal the example's published next-key digests,
 /// which is checked directly against an independent Blake3 oracle before the rotation fold is exercised over them.

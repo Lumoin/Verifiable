@@ -1,5 +1,4 @@
 using CsCheck;
-using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -17,11 +16,6 @@ namespace Verifiable.Tests.Cryptography;
 /// different root with no structural error anywhere — which is exactly the shape a property test catches and an
 /// example-based test does not. A failing sample is a defect, not noise: CsCheck shrinks it and prints the seed
 /// that reproduces it.
-/// </para>
-/// <para>
-/// CsCheck's <c>Sample</c> callback is synchronous; the asynchronous calls inside it are blocked on with
-/// <c>AsTask().GetAwaiter().GetResult()</c>, the idiom this suite already uses in
-/// <see cref="ArchiveTimestampV3PropertyTests"/>.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -64,7 +58,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
             }
 
             return actual == 0 == sample.left.AsSpan().SequenceEqual(sample.right);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -105,7 +99,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
             }
 
             return true;
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -115,17 +109,15 @@ internal sealed class EvidenceRecordHashTreePropertyTests
     /// implementation reaches.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the build fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    public void BuildingTheSameTreeTwiceReachesTheSameRootAsTheIndependentBuild()
+    public async Task BuildingTheSameTreeTwiceReachesTheSameRootAsTheIndependentBuild()
     {
-        (from groupCount in Gen.Int[1, 8]
-         from objectsPerGroup in Gen.Int[1, 3]
-         from nodeArity in Gen.Int[2, 4]
-         from seed in Gen.Byte.Array[1, 8]
-         select (groupCount, objectsPerGroup, nodeArity, seed))
-        .Sample(sample => TheBuildIsDeterministic(
-            sample.groupCount, sample.objectsPerGroup, sample.nodeArity, sample.seed, TestContext.CancellationToken), iter: 25);
+        await (from groupCount in Gen.Int[1, 8]
+               from objectsPerGroup in Gen.Int[1, 3]
+               from nodeArity in Gen.Int[2, 4]
+               from seed in Gen.Byte.Array[1, 8]
+               select (groupCount, objectsPerGroup, nodeArity, seed))
+        .SampleAsync(async sample => await TheBuildIsDeterministic(
+            sample.groupCount, sample.objectsPerGroup, sample.nodeArity, sample.seed, TestContext.CancellationToken), iter: 25, threads: CsCheckSampling.Threads);
     }
 
 
@@ -138,17 +130,15 @@ internal sealed class EvidenceRecordHashTreePropertyTests
     /// Proves <see href="https://www.rfc-editor.org/rfc/rfc4998">IETF RFC 4998</see> rfc4998-4.3-R18.
     /// </remarks>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the walk fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    public void EveryDataObjectWalksItsReducedTreeBackToTheRoot()
+    public async Task EveryDataObjectWalksItsReducedTreeBackToTheRoot()
     {
-        (from groupCount in Gen.Int[1, 9]
-         from objectsPerGroup in Gen.Int[1, 4]
-         from nodeArity in Gen.Int[2, 5]
-         from seed in Gen.Byte.Array[1, 8]
-         select (groupCount, objectsPerGroup, nodeArity, seed))
-        .Sample(sample => EveryReducedTreeReachesTheRoot(
-            sample.groupCount, sample.objectsPerGroup, sample.nodeArity, sample.seed, TestContext.CancellationToken), iter: 25);
+        await (from groupCount in Gen.Int[1, 9]
+               from objectsPerGroup in Gen.Int[1, 4]
+               from nodeArity in Gen.Int[2, 5]
+               from seed in Gen.Byte.Array[1, 8]
+               select (groupCount, objectsPerGroup, nodeArity, seed))
+        .SampleAsync(async sample => await EveryReducedTreeReachesTheRoot(
+            sample.groupCount, sample.objectsPerGroup, sample.nodeArity, sample.seed, TestContext.CancellationToken), iter: 25, threads: CsCheckSampling.Threads);
     }
 
 
@@ -162,13 +152,11 @@ internal sealed class EvidenceRecordHashTreePropertyTests
     /// <param name="seed">Octets mixed into every data object, so different samples bind different content.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the sample upheld the property.</returns>
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "GetAwaiter().GetResult() blocks until the build fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    private static bool TheBuildIsDeterministic(int groupCount, int objectsPerGroup, int nodeArity, byte[] seed, CancellationToken cancellationToken)
+    private static async Task<bool> TheBuildIsDeterministic(int groupCount, int objectsPerGroup, int nodeArity, byte[] seed, CancellationToken cancellationToken)
     {
         List<byte[][]> groups = MintGroups(groupCount, objectsPerGroup, seed);
-        using EvidenceRecordHashTreeBuild first = BuildTree(groups, nodeArity, cancellationToken);
-        using EvidenceRecordHashTreeBuild second = BuildTree(groups, nodeArity, cancellationToken);
+        using EvidenceRecordHashTreeBuild first = await BuildTree(groups, nodeArity, cancellationToken);
+        using EvidenceRecordHashTreeBuild second = await BuildTree(groups, nodeArity, cancellationToken);
 
         byte[] expected = EvidenceRecordOracle.BuildRoot(groups, Algorithm, nodeArity);
 
@@ -186,12 +174,10 @@ internal sealed class EvidenceRecordHashTreePropertyTests
     /// <param name="seed">Octets mixed into every data object.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the sample upheld the property.</returns>
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "GetAwaiter().GetResult() blocks until each call fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    private static bool EveryReducedTreeReachesTheRoot(int groupCount, int objectsPerGroup, int nodeArity, byte[] seed, CancellationToken cancellationToken)
+    private static async Task<bool> EveryReducedTreeReachesTheRoot(int groupCount, int objectsPerGroup, int nodeArity, byte[] seed, CancellationToken cancellationToken)
     {
         List<byte[][]> groups = MintGroups(groupCount, objectsPerGroup, seed);
-        using EvidenceRecordHashTreeBuild build = BuildTree(groups, nodeArity, cancellationToken);
+        using EvidenceRecordHashTreeBuild build = await BuildTree(groups, nodeArity, cancellationToken);
         byte[] root = build.Root.AsReadOnlySpan().ToArray();
 
         for(int groupIndex = 0; groupIndex < groups.Count; ++groupIndex)
@@ -212,14 +198,14 @@ internal sealed class EvidenceRecordHashTreePropertyTests
             for(int objectIndex = 0; objectIndex < groups[groupIndex].Length; ++objectIndex)
             {
                 byte[] dataObject = groups[groupIndex][objectIndex];
-                using DigestValue dataObjectHash = CryptographicKeyEvents.ComputeDigestAsync(
+                using DigestValue dataObjectHash = await CryptographicKeyEvents.ComputeDigestAsync(
                     new ReadOnlyMemory<byte>(dataObject),
                     Algorithm.OutputByteLength,
                     Algorithm.DigestTag,
                     BaseMemoryPool.Shared,
-                    cancellationToken: cancellationToken).AsTask().GetAwaiter().GetResult();
+                    cancellationToken: cancellationToken).AsTask();
 
-                using EvidenceRecordRootComputation computation = EvidenceRecordHashTree.ComputeRootAsync(
+                using EvidenceRecordRootComputation computation = await EvidenceRecordHashTree.ComputeRootAsync(
                     new EvidenceRecordRootComputationContext
                     {
                         DataObjectHash = dataObjectHash,
@@ -227,7 +213,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
                         DigestAlgorithm = Algorithm
                     },
                     BaseMemoryPool.Shared,
-                    cancellationToken).AsTask().GetAwaiter().GetResult();
+                    cancellationToken).AsTask();
 
                 if(computation.Status != EvidenceRecordRootStatus.Computed
                     || computation.Root is null
@@ -250,13 +236,13 @@ internal sealed class EvidenceRecordHashTreePropertyTests
 
 
     /// <summary>
-    /// Builds one tree through the shipped surface, blocking until it completes.
+    /// Builds one tree through the shipped surface.
     /// </summary>
     /// <param name="groups">The groups, each a list of data object octets.</param>
     /// <param name="nodeArity">How many children an inner node is given.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The build. The caller disposes it.</returns>
-    private static EvidenceRecordHashTreeBuild BuildTree(List<byte[][]> groups, int nodeArity, CancellationToken cancellationToken)
+    private static async Task<EvidenceRecordHashTreeBuild> BuildTree(List<byte[][]> groups, int nodeArity, CancellationToken cancellationToken)
     {
         var dataObjectGroups = new List<EvidenceRecordDataObjectGroup>(groups.Count);
         for(int i = 0; i < groups.Count; ++i)
@@ -270,7 +256,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
             dataObjectGroups.Add(new EvidenceRecordDataObjectGroup { DataObjects = dataObjects });
         }
 
-        return EvidenceRecordHashTree.BuildAsync(
+        return await EvidenceRecordHashTree.BuildAsync(
             new EvidenceRecordHashTreeBuildContext
             {
                 DataObjectGroups = dataObjectGroups,
@@ -278,7 +264,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
                 NodeArity = nodeArity
             },
             BaseMemoryPool.Shared,
-            cancellationToken).AsTask().GetAwaiter().GetResult();
+            cancellationToken).AsTask();
     }
 
 

@@ -1,4 +1,5 @@
 using Verifiable.Core;
+using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -22,11 +23,21 @@ namespace Verifiable.OAuth.Federation;
 /// </param>
 /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
 /// <remarks>
+/// <para>
 /// The §9 Entity Configuration fetch (no <c>sub</c> query parameter, a
 /// well-known URL) is distinct from the §8.1 Subordinate Statement fetch
 /// (<see cref="FetchEntityStatementDelegate"/>, a superior's fetch endpoint
 /// with the subject in the <c>sub</c> parameter); the trust-chain builder uses
 /// both as it climbs the <c>authority_hints</c> graph.
+/// </para>
+/// <para>
+/// <see cref="Verifiable.OAuth.Federation.FederationHttpTransport"/>'s composition reports the fetch's
+/// <see cref="HttpCacheFreshness"/> on <see cref="FetchedEntityStatement.Freshness"/>. An application
+/// that stores the returned configuration stores it for that reported lifetime: "A cache MUST NOT
+/// generate a stale response unless it is disconnected or doing so is explicitly permitted by the client
+/// or origin server" (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111
+/// §4.2.4</see>). The library stores nothing itself.
+/// </para>
 /// </remarks>
 public delegate ValueTask<FetchedEntityStatement?> FetchEntityConfigurationDelegate(
     EntityIdentifier entity,

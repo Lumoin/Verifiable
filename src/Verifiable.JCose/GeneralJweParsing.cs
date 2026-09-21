@@ -88,6 +88,18 @@ public static class GeneralJweParsing
         byte[] jsonBytes = Encoding.UTF8.GetBytes(generalJson);
         ReadOnlySpan<byte> json = jsonBytes;
 
+        //Gate the whole envelope for well-formedness — including a duplicate member name at any nesting
+        //depth (RFC 7516 §7.2.1 / §5.2 step 4: a repeated "protected"/"iv"/"ciphertext"/"tag" at the
+        //envelope level, or a repeated name inside "unprotected" or a per-recipient "header") — before
+        //extracting a single field, so none of the reads below can ever run against a first occurrence
+        //while a duplicate second occurrence goes unnoticed until later.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(json))
+        {
+            throw new FormatException(
+                "General JSON JWE is not a well-formed JSON object, or contains a duplicate member name, "
+                + "which MUST be unique (RFC 7516 §7.2.1 / §5.2 step 4).");
+        }
+
         string? protectedEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.ProtectedUtf8);
         if(protectedEncoded is null)
         {
@@ -239,6 +251,17 @@ public static class GeneralJweParsing
 
         byte[] jsonBytes = Encoding.UTF8.GetBytes(flattenedJson);
         ReadOnlySpan<byte> json = jsonBytes;
+
+        //Gate the whole envelope for well-formedness — including a duplicate member name at any nesting
+        //depth (RFC 7516 §7.2.2 / §5.2 step 4) — before extracting a single field, so none of the reads
+        //below can ever run against a first occurrence while a duplicate second occurrence goes unnoticed
+        //until later.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(json))
+        {
+            throw new FormatException(
+                "Flattened JSON JWE is not a well-formed JSON object, or contains a duplicate member "
+                + "name, which MUST be unique (RFC 7516 §7.2.2 / §5.2 step 4).");
+        }
 
         //RFC 7516 §7.2.2: "The 'recipients' member MUST NOT be present when using this syntax."
         if(JwkJsonReader.ContainsKey(json, WellKnownJoseSerializationNames.RecipientsUtf8))
@@ -689,6 +712,7 @@ public static class GeneralJweParsing
         {
             JweContentEncryptionFamily.AesGcm => CryptoTags.AesGcmAad,
             JweContentEncryptionFamily.XChaCha20Poly1305 => CryptoTags.Xc20pAad,
+            JweContentEncryptionFamily.AesCbcHmac => CryptoTags.AesCbcHmacAad,
             _ => CryptoTags.AesCbcHmacAad
         };
 
@@ -715,6 +739,7 @@ public static class GeneralJweParsing
         {
             JweContentEncryptionFamily.AesGcm => (CryptoTags.AesGcmIv, CryptoTags.AesGcmCiphertext, CryptoTags.AesGcmAuthTag),
             JweContentEncryptionFamily.XChaCha20Poly1305 => (CryptoTags.Xc20pIv, CryptoTags.Xc20pCiphertext, CryptoTags.Xc20pAuthTag),
+            JweContentEncryptionFamily.AesCbcHmac => (CryptoTags.AesCbcHmacIv, CryptoTags.AesCbcHmacCiphertext, CryptoTags.AesCbcHmacAuthTag),
             _ => (CryptoTags.AesCbcHmacIv, CryptoTags.AesCbcHmacCiphertext, CryptoTags.AesCbcHmacAuthTag)
         };
 
@@ -774,11 +799,11 @@ public static class GeneralJweParsing
         ReadOnlySpan<byte> protectedHeaderJson,
         IReadOnlyList<List<string>> recipientHeaderNames)
     {
-        if(JwkJsonReader.HasDuplicateTopLevelKeys(envelopeJson))
+        if(!JwkJsonReader.IsWellFormedJsonDocument(envelopeJson))
         {
             throw new FormatException(
-                "JWE JSON serialization contains a duplicate top-level member; envelope members "
-                + "MUST be unique (RFC 7516 §7.2.1 / §5.2 step 4).");
+                "JWE JSON serialization is not a well-formed JSON object, or contains a duplicate "
+                + "member name; envelope members MUST be unique (RFC 7516 §7.2.1 / §5.2 step 4).");
         }
 
         //The protected header is already verified internally unique by JweHeaderProcessing.Validate.

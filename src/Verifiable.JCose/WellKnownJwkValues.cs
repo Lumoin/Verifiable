@@ -72,8 +72,17 @@ namespace Verifiable.JCose
         /// <summary>Whether <paramref name="value"/> is <see cref="UseEnc"/>.</summary>
         public static bool IsUseEnc(string value) => Equals(value, UseEnc);
 
-        /// <summary>Whether <paramref name="value"/> is <see cref="TypeJwt"/>.</summary>
-        public static bool IsTypeJwt(string value) => Equals(value, TypeJwt);
+        /// <summary>
+        /// Whether <paramref name="value"/> is <see cref="TypeJwt"/>, comparing as the RFC 7515
+        /// §4.1.9 media type a <c>typ</c> header names — case insensitively, with the implicit
+        /// <c>application/</c> prefix — rather than through this class's own RFC 7517 ordinal
+        /// <see cref="Equals(string, string)"/>, which is right for a <c>use</c> value (RFC 7517
+        /// parameter values are case-sensitive) but wrong for a <c>typ</c> value.
+        /// </summary>
+        /// <param name="value">The JWT <c>typ</c> header value.</param>
+        /// <returns><see langword="true"/> if <paramref name="value"/> is <see cref="TypeJwt"/>; otherwise, <see langword="false"/>.</returns>
+        /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>.</remarks>
+        public static bool IsTypeJwt(string value) => WellKnownMediaTypes.Jwt.Equals(value, TypeJwt);
 
 
         /// <summary>

@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <para>
 /// Carries the payload of <c>TPM2_NV_Read()</c>, <c>TPM2_NV_Write()</c>, and <c>TPM2_NV_Certify()</c>. The
 /// content is public — it is the caller-visible bytes of an NV Index — so this carrier holds no
-/// <see cref="Verifiable.Cryptography.SensitiveMemory"/> tag, matching <see cref="Tpm2bName"/> and
+/// <see cref="Lumoin.Base.SensitiveMemory"/> tag, matching <see cref="Tpm2bName"/> and
 /// <see cref="Tpm2bData"/> rather than the secret-shaped <see cref="Tpm2bDigest"/>.
 /// </para>
 /// <para>

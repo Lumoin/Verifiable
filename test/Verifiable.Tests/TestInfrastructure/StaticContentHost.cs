@@ -22,7 +22,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// requests from a published-content map, 404 for an unknown path and 405 for a non-GET method, with
 /// per-path request counts the firewall assertions read. Callers pin their
 /// <see cref="System.Net.Http.HttpClient"/> to <see cref="Certificate"/> via
-/// <see cref="LoopbackTls.CreatePinnedHttpClient"/>.
+/// <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.
 /// </remarks>
 internal sealed class StaticContentHost: IAsyncDisposable
 {
@@ -41,7 +41,7 @@ internal sealed class StaticContentHost: IAsyncDisposable
     /// <summary>The loopback base address Kestrel bound (ephemeral port).</summary>
     public Uri BaseAddress { get; }
 
-    /// <summary>The self-signed leaf certificate this host's HTTPS listener presents; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient"/>.</summary>
+    /// <summary>The self-signed leaf certificate this host's HTTPS listener presents; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.</summary>
     public X509Certificate2 Certificate { get; }
 
     private StaticContentApplication Application { get; }

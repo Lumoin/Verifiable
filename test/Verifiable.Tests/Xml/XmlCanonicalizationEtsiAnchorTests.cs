@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Xml;
 /// EN 319 132-1 V1.3.1</see> clause 6.3(d) requires of the <c>Algorithm</c> attribute of
 /// <c>ds:SignedInfo</c>'s <c>ds:CanonicalizationMethod</c> child element are supported by this substrate:
 /// each parses a document, canonicalizes the <c>e3</c> subtree under the bullet's algorithm through
-/// <see cref="XmlCanonicalization.TryCanonicalize"/>, obtains non-empty octets, and proves the
+/// <see cref="XmlCanonicalization.TryCanonicalize(XmlNodeTable, XmlNodeSet, XmlCanonicalizationAlgorithm, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/>, obtains non-empty octets, and proves the
 /// distinction the bullet encodes — the comment stance its parenthesis names and, over the crafted
 /// subtree, the divergence of its family from the other two, whose <c>xml</c>-namespace attribute
 /// treatments Canonical XML 1.0 section 2.4, Canonical XML 1.1 section 2.4 and Exclusive XML

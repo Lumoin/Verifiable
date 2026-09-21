@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -27,9 +26,9 @@ namespace Verifiable.OAuth.Server.Registration;
 /// </para>
 /// <para>
 /// <strong>Storage model.</strong> The library does not own credential storage.
-/// Successful registrations emit <see cref="ClientRegistered"/> events carrying
-/// the plaintext access token; the application's event observer persists the
-/// record alongside whatever hashed form of the token it chooses. The library
+/// Successful registrations commit through <see cref="IClientRegistrationStore"/> before
+/// optional observers receive an immutable projection. Only the required store and the
+/// client response receive the management credential. The library
 /// validates RFC 7592 bearer tokens via
 /// <see cref="AuthorizationServerIntegration.ValidateRegistrationAccessTokenAsync"/>
 /// — the application's delegate answers true/false against its stored form.
@@ -45,13 +44,12 @@ namespace Verifiable.OAuth.Server.Registration;
 /// <see cref="ParseClientMetadataServerDelegate"/>).
 /// </para>
 /// </remarks>
-[SuppressMessage("Reliability", "CA2007:Consider calling ConfigureAwait on the awaited task", Justification = "Library code does not pin a SynchronizationContext; this static class is consumed by application code that controls the context.")]
 public static class RegistrationEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate for the per-registration RFC 7592
     /// management endpoints (GET / PUT / DELETE on the URL the application's
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>
     /// returns for <see cref="WellKnownEndpointNames.RegistrationRegister"/>).
     /// Pass this to <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
@@ -63,6 +61,7 @@ public static class RegistrationEndpoints
     {
         if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration))
         {
+
             return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
 
@@ -84,9 +83,9 @@ public static class RegistrationEndpoints
     /// <see cref="AuthorizationServerIntegration.ParseClientMetadataAsync"/>,
     /// generates a <c>client_id</c> and registration access token via the
     /// configured delegates (or library defaults), constructs the new
-    /// <see cref="ClientRecord"/>, emits the
-    /// <see cref="ClientRegistered"/> event for the application observer to
-    /// persist, and returns the RFC 7591 §3.2.1 response body.
+    /// <see cref="ClientRecord"/>, commits it through the required registration store,
+    /// emits <see cref="ClientRegistered"/> to optional observers, and returns the
+    /// RFC 7591 §3.2.1 response body.
     /// </para>
     /// <para>
     /// The handler does NOT load any prior registration — by definition there
@@ -95,6 +94,8 @@ public static class RegistrationEndpoints
     /// out-of-band; deployments needing initial-trust gating handle that at
     /// the skin layer).
     /// </para>
+    /// <para>Acquires the same validated admission lease as dispatch. A bounded admission wait can return
+    /// HTTP 503 with Retry-After; never-validated wiring throws a named InvalidOperationException.</para>
     /// </remarks>
     /// <param name="tenantId">The tenant the new registration belongs to.</param>
     /// <param name="requestBody">The JSON body of the registration request.</param>
@@ -116,10 +117,19 @@ public static class RegistrationEndpoints
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(server);
 
+        using ServerRequestLease? lease = await server.AcquireRequestAsync(context, cancellationToken).ConfigureAwait(false);
+        if(lease is null)
+        {
+
+            return EndpointServer.AdmissionRefusal;
+        }
+
+        server = lease.Server;
         var oauth = server.OAuth();
 
         if(oauth.ParseClientMetadataAsync is null)
         {
+
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "ParseClientMetadataAsync is not configured.");
@@ -135,6 +145,7 @@ public static class RegistrationEndpoints
         {
             //oauth.ParseClientMetadataAsync is a caller-registered delegate over an untrusted request body;
             //any parse failure is a bad request rather than an internal fault.
+
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidClientMetadata,
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
@@ -149,22 +160,35 @@ public static class RegistrationEndpoints
         RegistrationAccessToken accessToken = new(accessTokenValue);
 
         ClientRecord record = BuildRecordFromMetadata(clientId, tenantId, capabilities, metadata);
+        Uri? managementUri = await oauth.ResolveEndpointUriAsync!(WellKnownEndpointNames.RegistrationRegister,
+            record, context, cancellationToken).ConfigureAwait(false);
+        if(managementUri is null || !managementUri.IsAbsoluteUri)
+        {
+            throw new InvalidOperationException("Registration requires an absolute client configuration URI.");
+        }
 
-        server.RegisterClient(record, accessToken, context);
+        record = record with { RegistrationClientUri = managementUri };
+
+        IClientRegistrationStore store = oauth.ClientRegistrationStore
+            ?? throw new InvalidOperationException("Registration requires ClientRegistrationStore.");
+        await store.CreateAsync(record, accessToken, context, cancellationToken).ConfigureAwait(false);
+        await server.RegisterClientAsync(record, context).ConfigureAwait(false);
 
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
         string body = BuildRegistrationResponseJson(
-            clientId, accessToken, metadata, now, tenantId.Value);
+            clientId, accessToken, record.RegisteredMetadata!, now, managementUri);
 
         //OAuth 2.1 §3.2.3 — the response carries client_secret and
         //registration_access_token (RFC 7591 §3.2.1). Same Cache-Control
         //requirement as token-bearing responses.
+
         return ServerHttpResponse
             .Created(body, WellKnownMediaTypes.Application.Json)
             .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
     }
 
 
+    /// <summary>Selects the RFC 7591 client metadata fields persisted in a new revision-one record.</summary>
     private static ClientRecord BuildRecordFromMetadata(
         string clientId,
         TenantId tenantId,
@@ -179,6 +203,7 @@ public static class RegistrationEndpoints
         return new ClientRecord
         {
             ClientId = clientId,
+            RegisteredMetadata = CopyMetadata(metadata),
             TenantId = tenantId,
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = redirectUris,
@@ -195,37 +220,35 @@ public static class RegistrationEndpoints
     }
 
 
-    //RFC 9396 §10/§14.5: the client registration metadata authorization_details_types becomes the
-    //per-client AllowedAuthorizationDetailsTypes allowlist. An omitted parameter (null) registers
-    //no restriction, mirroring the §10 "MAY indicate" semantics — the client may then use any
-    //authorization details type the AS supports.
+    /// <summary>Maps RFC 9396 §10 optional authorization detail types to the immutable allowlist.</summary>
     private static ImmutableHashSet<string>? ToAllowedAuthorizationDetailsTypes(ClientMetadata metadata) =>
         metadata.AuthorizationDetailsTypes is null
             ? null
             : [.. metadata.AuthorizationDetailsTypes];
 
 
+    /// <summary>Builds the RFC 7591 §3.2.1 response, including the client-only management credential.</summary>
     private static string BuildRegistrationResponseJson(
         string clientId,
         RegistrationAccessToken accessToken,
         ClientMetadata metadata,
         DateTimeOffset now,
-        string tenantSegment)
+        Uri managementUri)
     {
         //RFC 7591 §3.2.1 response. Field order matches the RFC §2 table.
         StringBuilder sb = JsonAppender.Rent();
         try
         {
             _ = sb.Append('{');
-            bool first = true;
-            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, clientId, ref first);
+            bool isFirst = true;
+            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, clientId, ref isFirst);
             JsonAppender.AppendInt64Field(sb, ClientMetadataParameterNames.ClientIdIssuedAt,
-                now.ToUnixTimeSeconds(), ref first);
+                now.ToUnixTimeSeconds(), ref isFirst);
             JsonAppender.AppendStringField(sb, "registration_access_token",
-                accessToken.Value, ref first);
+                accessToken.Value, ref isFirst);
             JsonAppender.AppendStringField(sb, "registration_client_uri",
-                $"/connect/{tenantSegment}/register", ref first);
-            AppendMetadataFields(sb, metadata, ref first);
+                managementUri.AbsoluteUri, ref isFirst);
+            ClientMetadataJson.Append(sb, metadata, ref isFirst);
             _ = sb.Append('}');
 
             return sb.ToString();
@@ -237,65 +260,28 @@ public static class RegistrationEndpoints
     }
 
 
-    private static void AppendMetadataFields(
-        StringBuilder sb, ClientMetadata metadata, ref bool first)
-    {
-        if(metadata.ClientName is not null)
-        {
-            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientName, metadata.ClientName, ref first);
-        }
-        if(metadata.ClientUri is not null)
-        {
-            JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.ClientUri, metadata.ClientUri, ref first);
-        }
-        if(metadata.RedirectUris.Count > 0)
-        {
-            JsonAppender.AppendUriArrayField(sb, ClientMetadataParameterNames.RedirectUris,
-                metadata.RedirectUris, ref first);
-        }
-        if(metadata.Scope is not null)
-        {
-            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.Scope, metadata.Scope, ref first);
-        }
-        if(metadata.AuthorizationDetailsTypes is not null)
-        {
-            //RFC 9396 §10/§14.5: echo the registered authorization_details_types so the client
-            //sees the allowlist the AS will enforce on its authorization details requests.
-            JsonAppender.AppendStringArrayField(sb,
-                AuthorizationDetailsParameterNames.AuthorizationDetailsTypes,
-                metadata.AuthorizationDetailsTypes, ref first);
-        }
-        if(metadata.TokenEndpointAuthMethod is not null)
-        {
-            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.TokenEndpointAuthMethod,
-                ClientAuthenticationMethodNames.GetName(metadata.TokenEndpointAuthMethod.Value),
-                ref first);
-        }
-        if(metadata.JwksUri is not null)
-        {
-            JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.JwksUri, metadata.JwksUri, ref first);
-        }
-        //Additional fields (grant_types, response_types, jwks, application_type,
-        //id_token_signed_response_alg, logout URIs) follow the same pattern.
-        //Implementations needing them add them here in the order the RFC §2 table lists.
-    }
-
-
+    /// <summary>Builds the RFC 7592 §2.1 authenticated read operation.</summary>
     private static EndpointCandidate BuildRead() => BuildManagementEndpoint(
         httpMethod: WellKnownHttpMethods.Get,
         handler: HandleReadAsync);
 
 
+    /// <summary>Builds the RFC 7592 §2.2 authenticated conditional replacement operation.</summary>
     private static EndpointCandidate BuildUpdate() => BuildManagementEndpoint(
         httpMethod: WellKnownHttpMethods.Put,
         handler: HandleUpdateAsync);
 
 
+    /// <summary>Builds the RFC 7592 §2.3 authenticated deletion operation.</summary>
     private static EndpointCandidate BuildDelete() => BuildManagementEndpoint(
         httpMethod: WellKnownHttpMethods.Delete,
         handler: HandleDeleteAsync);
 
 
+    /// <summary>Builds a registration management endpoint using the request's admitted family wiring.</summary>
+    /// <remarks><see href="https://www.rfc-editor.org/rfc/rfc7592#section-2">RFC 7592 §2</see> defines the authenticated client configuration operations.</remarks>
+    /// <param name="httpMethod">The HTTP method selecting the configuration operation.</param>
+    /// <param name="handler">The authenticated operation handler.</param>
     private static EndpointCandidate BuildManagementEndpoint(
         string httpMethod,
         ManagementHandlerDelegate handler) =>
@@ -319,22 +305,32 @@ public static class RegistrationEndpoints
             MatchesRequest = (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(req is null)
+                {
+
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
                 if(!WellKnownHttpMethods.Equals(req.Method, httpMethod))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 ServerHttpResponse response = await handler(context, server, ct).ConfigureAwait(false);
+
                 return (null, response);
             },
 
@@ -345,12 +341,14 @@ public static class RegistrationEndpoints
         };
 
 
+    /// <summary>The authenticated RFC 7592 operation selected by the management HTTP method.</summary>
     private delegate ValueTask<ServerHttpResponse> ManagementHandlerDelegate(
         ExchangeContext context,
         EndpointServer server,
         CancellationToken cancellationToken);
 
 
+    /// <summary>Returns the stored RFC 7592 §2.1 client metadata after bearer authentication.</summary>
     private static async ValueTask<ServerHttpResponse> HandleReadAsync(
         ExchangeContext context,
         EndpointServer server,
@@ -358,22 +356,24 @@ public static class RegistrationEndpoints
     {
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
-        if(authFailure is not null) { return authFailure; }
+        if(authFailure is not null)
+        {
+
+            return authFailure;
+        }
 
 
         ClientRecord registration = context.ClientRegistration!;
-        DateTimeOffset now = server.TimeProvider.GetUtcNow();
-        string body = BuildReadResponseJson(registration, now);
-        //OAuth 2.1 §3.2.3 — the RFC 7592 read response echoes client
-        //metadata that may include sensitive fields (registration access
-        //token is omitted on read per RFC 7592 §3, but the response shape
-        //is treated uniformly with create/update).
+        string body = BuildReadResponseJson(registration, context);
+        //The client-information response carries the authenticated management bearer.
+
         return ServerHttpResponse
             .Ok(body, WellKnownMediaTypes.Application.Json)
             .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
     }
 
 
+    /// <summary>Commits one conditional RFC 7592 §2.2 replacement before optional notification; a stale revision receives invalid_client_metadata.</summary>
     private static async ValueTask<ServerHttpResponse> HandleUpdateAsync(
         ExchangeContext context,
         EndpointServer server,
@@ -382,10 +382,15 @@ public static class RegistrationEndpoints
         var oauth = server.OAuth();
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
-        if(authFailure is not null) { return authFailure; }
+        if(authFailure is not null)
+        {
+
+            return authFailure;
+        }
 
         if(oauth.ParseClientMetadataAsync is null)
         {
+
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "ParseClientMetadataAsync is not configured.");
@@ -394,12 +399,15 @@ public static class RegistrationEndpoints
         RequestBody body = context.IncomingRequest?.Body ?? RequestBody.None;
         if(body.IsEmpty)
         {
+
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidClientMetadata,
                 "RFC 7592 §2.2 PUT requires a request body.");
         }
+
         if(!WellKnownMediaTypes.Application.IsJson(body.ContentType))
         {
+
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidClientMetadata,
                 $"RFC 7592 §2.2 PUT requires Content-Type application/json; got '{body.ContentType}'.");
@@ -416,40 +424,59 @@ public static class RegistrationEndpoints
         {
             //oauth.ParseClientMetadataAsync is a caller-registered delegate over an untrusted request body;
             //any parse failure is a bad request rather than an internal fault.
+
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidClientMetadata,
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
         }
 
         ClientRecord previous = context.ClientRegistration!;
+        if(!string.Equals(newMetadata.ClientId, previous.ClientId, StringComparison.Ordinal))
+        {
+
+            return ServerHttpResponse.BadRequest(OAuthErrors.InvalidClientMetadata,
+                "RFC 7592 section 2.2 requires the issued client_id in the replacement document.");
+        }
+
         ClientRecord updated = BuildUpdatedRecord(previous, newMetadata);
 
-        server.UpdateClient(previous, updated, context);
+        IClientRegistrationStore store = oauth.ClientRegistrationStore
+            ?? throw new InvalidOperationException("Registration requires ClientRegistrationStore.");
+        bool isCommitted = await store.TryUpdateAsync(updated, previous.Revision, context, cancellationToken).ConfigureAwait(false);
+        if(!isCommitted)
+        {
 
-        DateTimeOffset now = server.TimeProvider.GetUtcNow();
-        string responseBody = BuildReadResponseJson(updated, now);
+            return ServerHttpResponse.BadRequest(OAuthErrors.InvalidClientMetadata,
+                "The registration changed during this update.");
+        }
+
+        await server.UpdateClientAsync(previous, updated, context).ConfigureAwait(false);
+
+        string responseBody = BuildReadResponseJson(updated, context);
         //OAuth 2.1 §3.2.3 — the update echoes the (possibly new)
         //credentials back to the caller; treat as a token-bearing response.
+
         return ServerHttpResponse
             .Ok(responseBody, WellKnownMediaTypes.Application.Json)
             .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
     }
 
 
+    /// <summary>Builds the next revision of the registered RFC 7592 §2.2 client metadata.</summary>
     private static ClientRecord BuildUpdatedRecord(ClientRecord previous, ClientMetadata newMetadata)
     {
         ImmutableHashSet<Uri> redirectUris = [.. newMetadata.RedirectUris];
         ImmutableHashSet<string> scopes = newMetadata.Scope is null
-            ? previous.AllowedScopes
+            ? []
             : [.. newMetadata.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries)];
 
         return previous with
         {
+            Revision = checked(previous.Revision + 1),
+            RegisteredMetadata = CopyMetadata(newMetadata),
             AllowedRedirectUris = redirectUris,
             AllowedScopes = scopes,
-            AllowedAuthorizationDetailsTypes = newMetadata.AuthorizationDetailsTypes is null
-                ? previous.AllowedAuthorizationDetailsTypes
-                : ToAllowedAuthorizationDetailsTypes(newMetadata),
+            AllowedAuthorizationDetailsTypes = ToAllowedAuthorizationDetailsTypes(newMetadata),
             TokenEndpointAuthMethod = newMetadata.TokenEndpointAuthMethod,
             ClientJwksUri = newMetadata.JwksUri,
             ClientJwks = newMetadata.Jwks,
@@ -459,6 +486,7 @@ public static class RegistrationEndpoints
     }
 
 
+    /// <summary>Commits RFC 7592 §2.3 deletion before notifying optional observers.</summary>
     private static async ValueTask<ServerHttpResponse> HandleDeleteAsync(
         ExchangeContext context,
         EndpointServer server,
@@ -466,15 +494,41 @@ public static class RegistrationEndpoints
     {
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
-        if(authFailure is not null) { return authFailure; }
+        if(authFailure is not null)
+        {
+
+            return authFailure;
+        }
 
         ClientRecord registration = context.ClientRegistration!;
-        server.DeregisterClient(registration, "RFC 7592 DELETE", context);
+        IClientRegistrationStore store = server.OAuth().ClientRegistrationStore
+            ?? throw new InvalidOperationException("Registration requires ClientRegistrationStore.");
+        while(true)
+        {
+            ClientRecord? deleted = await store.DeleteAsync(registration, registration.Revision, context, cancellationToken).ConfigureAwait(false);
+            if(deleted is not null)
+            {
+                await server.DeregisterClientAsync(deleted, "RFC 7592 DELETE", context).ConfigureAwait(false);
+                break;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            ClientRecord? current = await server.Integration.LoadRegistrationAsync!(registration.TenantId,
+                context, cancellationToken).ConfigureAwait(false) as ClientRecord;
+            if(current is null || !string.Equals(current.ClientId, registration.ClientId, StringComparison.Ordinal))
+            {
+
+                return ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, "Registration access token is invalid.");
+            }
+
+            registration = current;
+        }
 
         return ServerHttpResponse.NoContent();
     }
 
 
+    /// <summary>Checks the RFC 7592 §2 management bearer against the required stored credential.</summary>
     private static async ValueTask<ServerHttpResponse?> ValidateBearerAsync(
         ExchangeContext context,
         EndpointServer server,
@@ -483,6 +537,7 @@ public static class RegistrationEndpoints
         var oauth = server.OAuth();
         if(oauth.ValidateRegistrationAccessTokenAsync is null)
         {
+
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "ValidateRegistrationAccessTokenAsync is not configured.");
@@ -495,6 +550,7 @@ public static class RegistrationEndpoints
             || authHeader is null
             || !authHeader.StartsWith(bearerPrefix, StringComparison.Ordinal))
         {
+
             return ServerHttpResponse.Unauthorized(
                 OAuthErrors.InvalidToken,
                 "Missing or malformed Authorization header.");
@@ -503,15 +559,16 @@ public static class RegistrationEndpoints
         string presented = authHeader[bearerPrefix.Length..];
         ClientRecord registration = context.ClientRegistration!;
 
-        bool valid = await oauth.ValidateRegistrationAccessTokenAsync(
+        bool isValid = await oauth.ValidateRegistrationAccessTokenAsync(
             registration.TenantId,
             registration.ClientId,
             presented,
             context,
             cancellationToken).ConfigureAwait(false);
 
-        if(!valid)
+        if(!isValid)
         {
+
             return ServerHttpResponse.Unauthorized(
                 OAuthErrors.InvalidToken,
                 "Registration access token is invalid.");
@@ -521,39 +578,33 @@ public static class RegistrationEndpoints
     }
 
 
-    private static string BuildReadResponseJson(ClientRecord registration, DateTimeOffset now)
+    /// <summary>Builds the complete RFC 7592 section 3 response, echoing the validated bearer and all accepted metadata.</summary>
+    private static string BuildReadResponseJson(ClientRecord registration, ExchangeContext context)
     {
-        _ = now;
+        _ = context.IncomingRequest!.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authorization);
+        string bearer = authorization![(WellKnownAuthenticationSchemes.Bearer.Length + 1)..];
+        Uri managementUri = registration.RegistrationClientUri
+            ?? throw new InvalidOperationException("The registration has no client configuration URI.");
+        ClientMetadata metadata = (registration.RegisteredMetadata ?? new ClientMetadata()) with
+        {
+            ClientName = registration.ClientName,
+            ClientUri = registration.ClientUri,
+            RedirectUris = registration.AllowedRedirectUris.OrderBy(uri => uri.AbsoluteUri, StringComparer.Ordinal).ToImmutableArray(),
+            Scope = registration.AllowedScopes.Count == 0 ? null : string.Join(' ', registration.AllowedScopes.Order(StringComparer.Ordinal)),
+            AuthorizationDetailsTypes = registration.AllowedAuthorizationDetailsTypes?.Order(StringComparer.Ordinal).ToImmutableArray(),
+            TokenEndpointAuthMethod = registration.TokenEndpointAuthMethod,
+            JwksUri = registration.ClientJwksUri,
+            Jwks = registration.ClientJwks
+        };
         StringBuilder sb = JsonAppender.Rent();
         try
         {
             _ = sb.Append('{');
-            bool first = true;
-            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, registration.ClientId, ref first);
-            JsonAppender.AppendUriArrayField(sb, ClientMetadataParameterNames.RedirectUris,
-                registration.AllowedRedirectUris, ref first);
-            if(registration.AllowedScopes.Count > 0)
-            {
-                //RFC 6749 §3.3 says scope order does not matter on the wire, so the
-                //internal store is an ImmutableHashSet (correct set semantics for
-                //membership checks). Sort alphabetically on output so the response
-                //body is byte-for-byte deterministic across invocations — easier
-                //debugging, stable diffs in audit logs.
-                string scope = string.Join(' ',
-                    registration.AllowedScopes.OrderBy(s => s, StringComparer.Ordinal));
-                JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.Scope, scope, ref first);
-            }
-            if(registration.AllowedAuthorizationDetailsTypes is not null)
-            {
-                //RFC 9396 §10/§14.5: echo the registered authorization_details_types allowlist.
-                //Sort ordinally so the body is byte-for-byte deterministic, matching the scope
-                //field's treatment (the internal store is an unordered ImmutableHashSet).
-                JsonAppender.AppendStringArrayField(sb,
-                    AuthorizationDetailsParameterNames.AuthorizationDetailsTypes,
-                    registration.AllowedAuthorizationDetailsTypes.OrderBy(t => t, StringComparer.Ordinal),
-                    ref first);
-            }
-
+            bool isFirst = true;
+            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, registration.ClientId, ref isFirst);
+            JsonAppender.AppendStringField(sb, "registration_access_token", bearer, ref isFirst);
+            JsonAppender.AppendStringField(sb, "registration_client_uri", managementUri.AbsoluteUri, ref isFirst);
+            ClientMetadataJson.Append(sb, metadata, ref isFirst);
             _ = sb.Append('}');
 
             return sb.ToString();
@@ -563,4 +614,16 @@ public static class RegistrationEndpoints
             JsonAppender.Return(sb);
         }
     }
+
+
+    /// <summary>Copies every metadata collection before the required store can retain a parsed document.</summary>
+    private static ClientMetadata CopyMetadata(ClientMetadata metadata) => metadata with
+    {
+        RedirectUris = metadata.RedirectUris.ToImmutableArray(),
+        GrantTypes = metadata.GrantTypes.ToImmutableArray(),
+        ResponseTypes = metadata.ResponseTypes.ToImmutableArray(),
+        AuthorizationDetailsTypes = metadata.AuthorizationDetailsTypes?.ToImmutableArray(),
+        AuthorizationGrantProfilesSupported = metadata.AuthorizationGrantProfilesSupported?.ToImmutableArray(),
+        PostLogoutRedirectUris = metadata.PostLogoutRedirectUris.ToImmutableArray()
+    };
 }

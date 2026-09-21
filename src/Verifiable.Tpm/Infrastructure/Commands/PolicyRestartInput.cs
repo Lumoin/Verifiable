@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// Resets a session's policyDigest to a Zero Digest of the session's hash size and clears
 /// isPasswordNeeded/isAuthValueNeeded and any pending expiration the session had accumulated, so the same policy
 /// (or trial) session can be reused for a fresh assertion sequence without a new TPM2_StartAuthSession round
-/// trip. Unlike every command in <see cref="TpmPolicyAssertion"/>, this is a session lifecycle operation, not a
+/// trip. Unlike every command in <see cref="Verifiable.Tpm.Extensions.Policy.TpmPolicyAssertion"/>, this is a session lifecycle operation, not a
 /// policyDigest-extending assertion — there is no corresponding host-side <c>TpmPolicyDigest.Extend*</c> formula,
 /// because the result does not depend on the prior digest at all.
 /// </para>

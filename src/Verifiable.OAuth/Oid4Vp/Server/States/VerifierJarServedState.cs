@@ -26,7 +26,7 @@ public sealed record VerifierJarServedState: FlowState
 
     /// <summary>
     /// The opaque per-flow token. Carried forward so the application's
-    /// <see cref="Verifiable.OAuth.Server.AuthorizationServerIntegration.SaveFlowStateAsync"/>
+    /// <see cref="Verifiable.Server.ServerIntegration.SaveFlowStateAsync"/>
     /// can index by it for the inbound direct_post lookup, and so terminal-state
     /// auditors can correlate flow records to wire-observable identifiers.
     /// </summary>

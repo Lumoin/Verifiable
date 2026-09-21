@@ -219,7 +219,11 @@ public static class WebDidResolver
             //conditional on its presence.
             string contentType = HasContext(document) ? ContentTypeDidLdJson : ContentTypeDidJson;
 
-            return DidResolutionResult.Success(document, DidDocumentMetadata.Empty, contentType: contentType);
+            return DidResolutionResult.Success(
+                document,
+                DidDocumentMetadata.Empty,
+                contentType: contentType,
+                freshness: HttpCacheFreshness.Compute(fetch.Response));
         };
     }
 

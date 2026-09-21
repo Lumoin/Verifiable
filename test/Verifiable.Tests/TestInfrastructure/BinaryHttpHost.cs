@@ -62,11 +62,11 @@ internal delegate Task<BinaryHttpResponse> BinaryHttpHandlerDelegate(
 /// </summary>
 /// <remarks>
 /// Binds through <see cref="WebApplication.CreateSlimBuilder()"/> with a single explicit
-/// <see cref="Microsoft.AspNetCore.Hosting.ListenOptionsHttpsExtensions.UseHttps(Microsoft.AspNetCore.Server.Kestrel.Core.ListenOptions, X509Certificate2)"/>
+/// <c>ListenOptionsHttpsExtensions.UseHttps(ListenOptions, X509Certificate2)</c>
 /// listen call presenting <see cref="Certificate"/> — the same generic-host bootstrap
 /// <see cref="MinimalHttpHost"/> uses, so there is no plaintext fallback on this host at all. Callers pin their
 /// <see cref="System.Net.Http.HttpClient"/> to <see cref="Certificate"/> via
-/// <see cref="LoopbackTls.CreatePinnedHttpClient"/>.
+/// <see cref="LoopbackTls.CreatePinnedHttpClient(System.Security.Cryptography.X509Certificates.X509Certificate2, System.Uri?)"/>.
 /// </remarks>
 internal sealed class BinaryHttpHost: IAsyncDisposable
 {
@@ -75,7 +75,7 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
     /// <summary>The loopback base address Kestrel bound (ephemeral port).</summary>
     public Uri BaseAddress { get; }
 
-    /// <summary>The self-signed leaf certificate this host's HTTPS listener presents; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient"/>.</summary>
+    /// <summary>The self-signed leaf certificate this host's HTTPS listener presents; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient(System.Security.Cryptography.X509Certificates.X509Certificate2, System.Uri?)"/>.</summary>
     internal X509Certificate2 Certificate { get; }
 
 

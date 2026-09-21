@@ -132,7 +132,7 @@ internal sealed class Fido2CliCompositionRootGapTests
             byte[] assertionClientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
             using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(assertionClientDataJson, BaseMemoryPool.Shared);
             byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-            byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+            byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
             string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
             string signaturePath = WriteTempFile("signature.bin", signature);
@@ -175,8 +175,8 @@ internal sealed class Fido2CliCompositionRootGapTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        using AndroidKeyFixture fixture = CreateAndroidKeyRegistrationFixture(
-            AndroidKeyAttestationTestVectors.EmptyAuthorizationList, AndroidKeyAttestationTestVectors.ConformantAuthorizationList);
+        using AndroidKeyFixture fixture = await CreateAndroidKeyRegistrationFixture(
+            AndroidKeyAttestationTestVectors.EmptyAuthorizationList, AndroidKeyAttestationTestVectors.ConformantAuthorizationList).ConfigureAwait(false);
 
         //Cert-factory-keep: CertificateRequest (inside CreateMdsRootCa) requires a framework
         //AsymmetricAlgorithm to mint the self-signed MDS root CA certificate.
@@ -290,8 +290,8 @@ internal sealed class Fido2CliCompositionRootGapTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        using AndroidKeyFixture fixture = CreateAndroidKeyRegistrationFixture(
-            AndroidKeyAttestationTestVectors.EmptyAuthorizationList, AndroidKeyAttestationTestVectors.ConformantAuthorizationList);
+        using AndroidKeyFixture fixture = await CreateAndroidKeyRegistrationFixture(
+            AndroidKeyAttestationTestVectors.EmptyAuthorizationList, AndroidKeyAttestationTestVectors.ConformantAuthorizationList).ConfigureAwait(false);
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", fixture.AttestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", fixture.ClientDataJsonBytes);
@@ -323,7 +323,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        using FidoU2fFixture fixture = CreateFidoU2fRegistrationFixture();
+        using FidoU2fFixture fixture = await CreateFidoU2fRegistrationFixture().ConfigureAwait(false);
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", fixture.AttestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", fixture.ClientDataJsonBytes);
@@ -361,9 +361,9 @@ internal sealed class Fido2CliCompositionRootGapTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        using AndroidKeyFixture fixture = CreateAndroidKeyRegistrationFixture(
+        using AndroidKeyFixture fixture = await CreateAndroidKeyRegistrationFixture(
             softwareEnforced: AndroidKeyAttestationTestVectors.ConformantAuthorizationList,
-            teeEnforced: AndroidKeyAttestationTestVectors.EmptyAuthorizationList);
+            teeEnforced: AndroidKeyAttestationTestVectors.EmptyAuthorizationList).ConfigureAwait(false);
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", fixture.AttestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", fixture.ClientDataJsonBytes);
@@ -395,9 +395,9 @@ internal sealed class Fido2CliCompositionRootGapTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        using AndroidKeyFixture fixture = CreateAndroidKeyRegistrationFixture(
+        using AndroidKeyFixture fixture = await CreateAndroidKeyRegistrationFixture(
             softwareEnforced: AndroidKeyAttestationTestVectors.ConformantAuthorizationList,
-            teeEnforced: AndroidKeyAttestationTestVectors.EmptyAuthorizationList);
+            teeEnforced: AndroidKeyAttestationTestVectors.EmptyAuthorizationList).ConfigureAwait(false);
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", fixture.AttestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", fixture.ClientDataJsonBytes);
@@ -442,7 +442,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP384(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP384(credentialKey, toBeSigned).ConfigureAwait(false);
 
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
         string signaturePath = WriteTempFile("signature.bin", signature);
@@ -486,7 +486,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP521(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP521(credentialKey, toBeSigned).ConfigureAwait(false);
 
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
         string signaturePath = WriteTempFile("signature.bin", signature);
@@ -699,7 +699,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
         string signaturePath = WriteTempFile("signature.bin", signature);
@@ -837,7 +837,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the ECDsa keys and X509Certificate2 instances transfers to the returned AndroidKeyFixture, which the caller disposes via a using declaration.")]
-    private static AndroidKeyFixture CreateAndroidKeyRegistrationFixture(
+    private static async Task<AndroidKeyFixture> CreateAndroidKeyRegistrationFixture(
         AndroidKeyAuthorizationList softwareEnforced, AndroidKeyAuthorizationList teeEnforced)
     {
         Guid aaguid = Guid.NewGuid();
@@ -872,7 +872,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialData);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
 
         byte[] attStmtCbor = AndroidKeyAttestationTestVectors.EncodeAndroidKeyAttStmt(
             WellKnownCoseAlgorithms.Es256, signature, [credCert.RawData, attestationRootCertificate.RawData]);
@@ -891,7 +891,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the ECDsa keys and X509Certificate2 instances transfers to the returned FidoU2fFixture, which the caller disposes via a using declaration.")]
-    private static FidoU2fFixture CreateFidoU2fRegistrationFixture()
+    private static async Task<FidoU2fFixture> CreateFidoU2fRegistrationFixture()
     {
         Guid aaguid = Guid.NewGuid();
 
@@ -930,7 +930,7 @@ internal sealed class Fido2CliCompositionRootGapTests
 
         byte[] verificationData = FidoU2fAttestationTestVectors.BuildVerificationData(
             rpIdHash, clientDataHash, credentialId, credentialPublicKey.X!.Value.Span, credentialPublicKey.Y!.Value.Span);
-        byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, verificationData);
+        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, verificationData).ConfigureAwait(false);
 
         byte[] attStmtCbor = EncodeFidoU2fAttStmt(signature, leafCertificate.RawData);
         byte[] attestationObjectBytes = Fido2AttestationTestVectors.EncodeAttestationObject(

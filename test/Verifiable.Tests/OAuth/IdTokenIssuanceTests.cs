@@ -4,8 +4,6 @@ using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
-using Verifiable.OAuth.Pkce;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -18,7 +16,7 @@ namespace Verifiable.Tests.OAuth;
 /// <remarks>
 /// Drives PAR → Authorize → Token with <c>openid</c> in the requested scope
 /// and asserts the wire-level shape of the issued <c>id_token</c>. Tests
-/// dispatch directly via <see cref="TestHostShell.DispatchAtEndpointAsync"/>
+/// dispatch directly via <see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>
 /// rather than through the HTTP transport — same pattern as
 /// <see cref="RefreshGrantTests"/>, sufficient for asserting the AS's
 /// response body. DPoP-bound ID Token (RFC 9449 §6 cnf-on-ID-Token)
@@ -51,8 +49,8 @@ internal sealed class IdTokenIssuanceTests
             email: "alice@example.com",
             emailVerified: true);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile} {WellKnownScopes.Email}";
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(host, material, scope).ConfigureAwait(false);
@@ -81,8 +79,8 @@ internal sealed class IdTokenIssuanceTests
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //Profile + email only, no openid — the ID Token producer's IsApplicable
         //gate skips it and the response body omits id_token.
@@ -106,8 +104,8 @@ internal sealed class IdTokenIssuanceTests
             name: "Alice",
             email: "alice@example.com");
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //openid only — emit ID Token but no profile/email claims.
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(
@@ -142,8 +140,8 @@ internal sealed class IdTokenIssuanceTests
             }
         };
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Address}";
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(host, material, scope).ConfigureAwait(false);
@@ -176,8 +174,8 @@ internal sealed class IdTokenIssuanceTests
             }
         };
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Phone}";
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(host, material, scope).ConfigureAwait(false);
@@ -199,8 +197,8 @@ internal sealed class IdTokenIssuanceTests
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(
             host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -216,16 +214,23 @@ internal sealed class IdTokenIssuanceTests
     }
 
 
+    /// <summary>
+    /// ID-token issuance places the application-resolved subject identifier in the required sub claim.
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">Core §2</see>.
+    /// </summary>
     [TestMethod]
     public async Task ResolveSubjectIdentifierIsConsultedOnIdTokenIssuance()
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        host.Server.OAuth().ResolveSubjectIdentifierAsync =
-            (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
+        }).ConfigureAwait(false);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(
             host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -250,8 +255,8 @@ internal sealed class IdTokenIssuanceTests
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
 
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await DriveCodeExchangeAsync(
             host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -273,77 +278,11 @@ internal sealed class IdTokenIssuanceTests
     private async Task<ServerHttpResponse> DriveCodeExchangeAsync(
         TestHostShell host, VerifierKeyMaterial material, string scope)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = scope
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = scope },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
 
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-        return await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-    }
-
-
-    private static string ExtractFromBody(string body, string property)
-    {
-        using JsonDocument doc = JsonDocument.Parse(body);
-        return doc.RootElement.GetProperty(property).GetString()!;
-    }
-
-
-    private static string ExtractCode(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Authorize redirect did not carry a code parameter: {location}");
+        return result.TokenResponse;
     }
 }

@@ -4,7 +4,6 @@ using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
-using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -23,7 +22,7 @@ namespace Verifiable.Tests.OAuth;
 /// <para>
 /// Drives PAR → Authorize → Token → Refresh against a real Kestrel <see cref="LoopbackTls"/> host.
 /// The PAR, token, and refresh legs run over the genuine TLS wire
-/// (<see cref="OAuthTestTransport.PostFormAsync(System.Net.Http.HttpClient, Uri, IReadOnlyDictionary{string, string}, System.Threading.CancellationToken)"/>);
+/// (<see cref="OAuthTestTransport.PostFormAsync(System.Net.Http.HttpClient, Uri, IReadOnlyCollection{KeyValuePair{string, string}}, System.Threading.CancellationToken)"/>);
 /// the authorize leg dispatches in-process on the SAME <see cref="EndpointServer"/> instance the
 /// Kestrel host serves (<see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, System.Threading.CancellationToken)"/>)
 /// because stamping the authorize-time authentication context (<c>SetAuthTime</c> / <c>SetAcr</c>)
@@ -91,85 +90,55 @@ internal sealed class RefreshedIdTokenAuthContextTests
     public async Task RefreshedIdTokenPinsAuthTimeAndAcrToOriginalAuthentication()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         //The resolver answers differently depending on which call it is — see the remarks above for
         //why this is what makes the refresh assertions non-vacuous.
         bool isRefreshCall = false;
-        host.Server.OAuth().ResolveOidcClaimsAsync = (subject, grantedScope, tenantId, context, cancellationToken) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            AuthenticationContext resolvedAuthContext = isRefreshCall
-                ? new AuthenticationContext
-                {
-                    AuthTime = ResolverRefreshAuthTime,
-                    Acr = ResolverRefreshAcr,
-                    Amr = ResolverRefreshAmr
-                }
-                : new AuthenticationContext { Acr = EstablishedAcr };
-
-            return ValueTask.FromResult<OidcClaims?>(new OidcClaims
+            candidateIntegration.ResolveOidcClaimsAsync = (subject, grantedScope, tenantId, context, cancellationToken) =>
             {
-                Subject = subject,
-                AuthContext = resolvedAuthContext
-            });
-        };
+                AuthenticationContext resolvedAuthContext = isRefreshCall
+                    ? new AuthenticationContext
+                    {
+                        AuthTime = ResolverRefreshAuthTime,
+                        Acr = ResolverRefreshAcr,
+                        Amr = ResolverRefreshAmr
+                    }
+
+                    : new AuthenticationContext { Acr = EstablishedAcr };
+
+                return ValueTask.FromResult<OidcClaims?>(new OidcClaims
+                {
+                    Subject = subject,
+                    AuthContext = resolvedAuthContext
+                });
+            };
+        }).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
 
-        //1. PAR over the real wire.
-        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-        Uri parUrl = new(
-            hosted.HttpBaseAddress!,
-            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
-        using HttpResponseMessage parResponse = await OAuthTestTransport.PostFormAsync(
-            hosted.SharedHttpClient!, parUrl, new Dictionary<string, string>
+        //PAR and Token run over the real wire; Authorize dispatches in-process on the SAME
+        //EndpointServer the Kestrel host serves — the wire skin
+        //(AuthorizationServerHttpApplication) carries only the test subject header, not
+        //SetAuthTime/SetAcr, over HTTP.
+        InProcessAuthCodeDriveResult drive = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions
             {
-                [OAuthRequestParameterNames.ClientId] = ClientId,
-                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-                [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-            }, TestContext.CancellationToken).ConfigureAwait(false);
-        string parBody = await parResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, (int)parResponse.StatusCode, parBody);
-        string requestUri = ExtractRequestUri(parBody);
+                Scope = WellKnownScopes.OpenId,
+                AuthTime = EstablishedAuthTime,
+                Acr = EstablishedAcr,
+                UsesRealWireTransport = true
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+        string tokenBody = drive.TokenResponse.Body;
 
-        //2. Authorize — in-process on the SAME EndpointServer the Kestrel host serves; the wire skin
-        //   (AuthorizationServerHttpApplication) carries only the test subject header, not
-        //   SetAuthTime/SetAcr, over HTTP.
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        authorizeContext.SetAuthTime(EstablishedAuthTime);
-        authorizeContext.SetAcr(EstablishedAcr);
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
-        string code = TestBrowser.ExtractQueryParam(authorizeResponse.Location!, OAuthRequestParameterNames.Code)
-            ?? throw new InvalidOperationException("Authorize redirect Location missing code.");
-
-        //3. Token exchange over the real wire.
         Uri tokenUrl = new(hosted.HttpBaseAddress!, $"/connect/{segment}/token");
-        using HttpResponseMessage tokenResponse = await OAuthTestTransport.PostFormAsync(
-            hosted.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
-            {
-                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-                [OAuthRequestParameterNames.Code] = code,
-                [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-                [OAuthRequestParameterNames.ClientId] = ClientId,
-                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-            }, TestContext.CancellationToken).ConfigureAwait(false);
-        string tokenBody = await tokenResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, (int)tokenResponse.StatusCode, tokenBody);
-
         using JsonDocument tokenDoc = JsonDocument.Parse(tokenBody);
         Assert.IsTrue(tokenDoc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out JsonElement initialIdTokenElement),
             $"openid in scope on authorization_code must mint an id_token. Body: {tokenBody}");
@@ -239,14 +208,5 @@ internal sealed class RefreshedIdTokenAuthContextTests
         Assert.IsFalse(refreshedClaims.TryGetProperty(WellKnownJwtClaimNames.Amr, out _),
             "amr has no carried representation across refresh rotation; the refreshed id_token must "
             + "not carry the resolver's refresh-time amr.");
-    }
-
-
-    /// <summary>Reads the <c>request_uri</c> from a PAR response body.</summary>
-    private static string ExtractRequestUri(string body)
-    {
-        using JsonDocument doc = JsonDocument.Parse(body);
-
-        return doc.RootElement.GetProperty("request_uri").GetString()!;
     }
 }

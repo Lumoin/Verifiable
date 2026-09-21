@@ -10,7 +10,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <summary>
 /// Composes a <see cref="CtapPinRetriesCustody"/> bundle whose authenticator-global persistent PIN-retry
 /// budget is backed by ONE <c>TPM_NT_PIN_FAIL</c> NV Index on an in-house simulated TPM — a thin
-/// adapter over the <see cref="TpmDeviceExtensions"/> business-capability verbs package A
+/// adapter over the <see cref="Verifiable.Tpm.Extensions.Pin.TpmDeviceExtensions"/> business-capability verbs package A
 /// shipped (<c>DefinePinFailIndexAsync</c>/<c>VerifyPinAsync</c>/<c>ReadPinCountersAsync</c>/
 /// <c>ResetPinCountAsync</c>/<c>UndefinePinIndexAsync</c>), never a raw <c>TPM2_NV_Read</c>/<c>NV_Write</c>
 /// input, the same dogfood posture <see cref="TpmNvSignatureCounterCustody"/> established over

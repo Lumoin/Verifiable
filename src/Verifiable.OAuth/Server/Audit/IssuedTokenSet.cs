@@ -17,14 +17,14 @@ namespace Verifiable.OAuth.Server.Audit;
 /// </para>
 /// <para>
 /// Token strings are transient — they appear in the HTTP response body once and are
-/// not persisted into <see cref="ServerTokenIssuedState"/> or any other durable
+/// not persisted into <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerTokenIssuedState"/> or any other durable
 /// flow state. Only the audit metadata (<c>jti</c>, signing key id, issued/expires
 /// timestamps) is persisted; the token bytes themselves exist only in this set during
 /// response composition.
 /// </para>
 /// <para>
-/// Construct via <see cref="IssuedTokenSetBuilder"/> when assembling tokens incrementally,
-/// or pass a pre-built dictionary to the constructor when the full set is known up front.
+/// Construct by assembling a <see cref="Dictionary{TKey, TValue}"/> of the tokens issued so far and
+/// setting it as <see cref="Tokens"/> on the required-member initializer once the full set is known.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("IssuedTokenSet({Tokens.Count} tokens)")]

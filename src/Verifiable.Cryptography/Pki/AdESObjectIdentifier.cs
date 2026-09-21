@@ -51,8 +51,8 @@ namespace Verifiable.Cryptography.Pki;
 /// </code>
 /// <para>
 /// The map/wire keys for the CB-AdES CBOR encoding and the JAdES JSON member names are per-format
-/// serialization facts, not part of this semantic type — see <see cref="CBAdESWireKeys.ObjectIdentifier"/> and
-/// <see cref="JAdESWireNames.ObjectIdentifier"/>.
+/// serialization facts, not part of this semantic type — see the <c>ObjectIdentifier*</c> constant
+/// groups on <see cref="CBAdESWireKeys"/> and <see cref="JAdESWireNames"/>.
 /// </para>
 /// <para>
 /// <strong>Equality.</strong> Equality compares this type's value — <see cref="Id"/> and <see cref="Desc"/>
@@ -125,7 +125,7 @@ public sealed record AdESObjectIdentifier
     /// <summary>
     /// Gets the URIs of documents that describe the identified object (CB-AdES clause 5.4.1; JAdES clause 5.4.1,
     /// JA-5.4.1-11), or <see langword="null"/> when absent. Non-empty when present (constructor-enforced — both
-    /// specs' non-emptiness constraint; see the constructor's <paramref name="docRefs"/> remarks). Both formats
+    /// specs' non-emptiness constraint; see the constructor's <c>docRefs</c> remarks). Both formats
     /// agree this member is <see cref="Uri"/>-typed, so it keeps that type.
     /// </summary>
     public IReadOnlyList<Uri>? DocRefs { get; }

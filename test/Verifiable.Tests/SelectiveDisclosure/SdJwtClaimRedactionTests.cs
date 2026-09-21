@@ -7,7 +7,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.SelectiveDisclosure;
 
 /// <summary>
-/// Tests for <see cref="SdJwtClaimRedaction.Redact"/> — the redaction step only, no signing.
+/// Tests for <see cref="SdJwtClaimRedaction.Redact(string, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, SerializeDisclosureDelegate{SdDisclosure}, ComputeDisclosureDigestDelegate, EncodeDelegate, string, BaseMemoryPool, DecoyDigestOptions)"/> — the redaction step only, no signing.
 /// Verifies <c>_sd</c> placement at the correct nesting levels, partition correctness,
 /// type preservation, and <c>_sd_alg</c> conditional logic.
 /// </summary>
@@ -157,7 +157,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         var (payload, disclosures) = RedactWithDigests(json, []);
 
-        Assert.HasCount(0, disclosures);
+        Assert.IsEmpty(disclosures);
         Assert.IsFalse(payload.ContainsKey(SdConstants.SdClaimName), "No _sd when nothing is disclosable.");
         Assert.IsFalse(payload.ContainsKey(SdConstants.SdAlgorithmClaimName), "No _sd_alg when nothing is disclosable.");
         Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaimNames.Iss]);
@@ -442,7 +442,7 @@ internal sealed class SdJwtClaimRedactionTests
 
 
     /// <summary>
-    /// Calls the full <see cref="SdJwtClaimRedaction.Redact"/> overload with digest computation.
+    /// Calls the full <see cref="SdJwtClaimRedaction.Redact(string, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, SerializeDisclosureDelegate{SdDisclosure}, ComputeDisclosureDigestDelegate, EncodeDelegate, string, BaseMemoryPool, DecoyDigestOptions)"/> overload with digest computation.
     /// </summary>
     private static (JwtPayload Payload, IReadOnlyList<SdDisclosure> Disclosures) RedactWithDigests(
         string json, HashSet<CredentialPath> disclosablePaths)
@@ -454,7 +454,7 @@ internal sealed class SdJwtClaimRedactionTests
     }
 
     /// <summary>
-    /// Calls the full <see cref="SdJwtClaimRedaction.Redact"/> overload with a decoy-digest policy.
+    /// Calls the full <see cref="SdJwtClaimRedaction.Redact(string, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, SerializeDisclosureDelegate{SdDisclosure}, ComputeDisclosureDigestDelegate, EncodeDelegate, string, BaseMemoryPool, DecoyDigestOptions)"/> overload with a decoy-digest policy.
     /// </summary>
     private static (JwtPayload Payload, IReadOnlyList<SdDisclosure> Disclosures) RedactWithDecoys(
         string json, HashSet<CredentialPath> disclosablePaths, DecoyDigestCountDelegate decoyCount)
@@ -471,3 +471,4 @@ internal sealed class SdJwtClaimRedactionTests
             encodedDisclosure, algorithmName, encoder, pool);
     }
 }
+

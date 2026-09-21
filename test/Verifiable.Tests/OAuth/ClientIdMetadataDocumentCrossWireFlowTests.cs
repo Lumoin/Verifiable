@@ -69,14 +69,14 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         PublishCimdDocument(documentHost, path, documentUri, [redirectUri]);
 
         await using TestHostShell app = new(timeProvider);
-        ClientRecord stub = app.RegisterCimdStubClient(
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(
             documentUri,
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
-            profile: PolicyProfile.Rfc6749WithPkce);
+            profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
@@ -117,12 +117,12 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         Uri haip10DocumentUri = new(documentHost.BaseAddress, haip10Path);
         PublishCimdDocument(documentHost, haip10Path, haip10DocumentUri, [haip10Redirect]);
 
-        ClientRecord haip10Stub = app.RegisterCimdStubClient(
+        ClientRecord haip10Stub = await app.RegisterCimdStubClientAsync(
             haip10DocumentUri,
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
-            profile: PolicyProfile.Haip10);
+            profile: PolicyProfile.Haip10).ConfigureAwait(false);
 
         (OAuthClient haip10Client, ClientRegistration haip10Registration, Dictionary<string, FlowState> haip10FlowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
@@ -181,33 +181,56 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             documentHost.Publish(path, Encoding.UTF8.GetBytes(documentJson), "application/json");
 
             await using TestHostShell app = new(timeProvider);
-            ClientRecord stub = app.RegisterCimdStubClient(
+            ClientRecord stub = await app.RegisterCimdStubClientAsync(
                 documentUri,
                 ImmutableHashSet.Create(
                     WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                     WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
-                profile: PolicyProfile.Rfc6749WithPkce);
+                profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-            app.WireCimdMaterialization("default", documentHost.Certificate);
-            app.Server.OAuth().ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
-            //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
-            //refuses a declared method it does not advertise before any validator runs (RFC 8414,
-            //Section 2), so the advertisement must agree with the document.
-            app.Server.OAuth().ClientAuthenticationMethodsSupported =
-                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-            app.Server.OAuth().ClientAssertionSigningAlgorithmsSupported = [alg];
+            await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+                //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
+                //refuses a declared method it does not advertise before any validator runs (RFC 8414,
+                //Section 2), so the advertisement must agree with the document.
+
+                candidateIntegration.ClientAuthenticationMethodsSupported =
+                    [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+
+
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [alg];
+            }).ConfigureAwait(false);
 
             (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
                 await app.CreateOAuthClientAndRegistrationAsync(
                     stub, redirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
                     .ConfigureAwait(false);
+            //RFC 9126 §2: the pushed request now authenticates the client exactly as the token
+            //endpoint does, so the confidential method the fetched document declares must be
+            //presented at PAR too, before any code can be issued.
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys
+            };
+            ClientAssertionOptions parAssertionOptions = new()
+            {
+                SigningKeyId = ClientSigningKeyId,
+                HeaderSerializer = app.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                PayloadSerializer = app.Server.OAuth().Codecs.JwtPayloadSerializer!
+            };
 
             HostedAuthorizationServer hosted = app.Host("default");
             string segment = stub.TenantId.Value;
 
-            string flowId = await DriveParAuthorizeAndCallbackAsync(
-                hosted, client, registration, flowStore, segment, redirectUri, SubjectId, app.ServerCertificate,
-                TestContext.CancellationToken).ConfigureAwait(false);
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(app.ServerCertificate);
+            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, flowStore, segment, redirectUri, SubjectId, browserClient,
+                clientAssertionOptions: parAssertionOptions, cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
 
             AuthorizationCodeReceivedState codeState = (AuthorizationCodeReceivedState)flowStore[flowId];
             Uri tokenEndpoint = new(
@@ -288,7 +311,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
     /// document itself, exactly the shape
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">
     /// §8.2</see>'s own example advertises. The resolver's Step 9a
-    /// (<see cref="ClientIdMetadataDocuments.BuildResolving"/>) fetches the key set through that
+    /// (<see cref="ClientIdMetadataDocuments.ResolveAsync"/>) fetches the key set through that
     /// second host over the real wire and folds it into the resolved document's <c>jwks</c>, so
     /// <see cref="PrivateKeyJwtClientAuthentication"/>'s validator resolves the client's key and a
     /// VALID <c>private_key_jwt</c> assertion completes the exchange.
@@ -327,12 +350,12 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             documentHost.Publish(documentPath, Encoding.UTF8.GetBytes(documentJson), "application/json");
 
             await using TestHostShell app = new(timeProvider);
-            ClientRecord stub = app.RegisterCimdStubClient(
+            ClientRecord stub = await app.RegisterCimdStubClientAsync(
                 documentUri,
                 ImmutableHashSet.Create(
                     WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                     WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
-                profile: PolicyProfile.Rfc6749WithPkce);
+                profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
             //WireCimdMaterialization pins the resolver's transport to a SINGLE document host
             //certificate; here the resolver must reach both the CIMD document host and the separate
@@ -344,36 +367,64 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             using HttpClient resolverHttpClient = new(resolverHandler);
             OutboundTransportDelegate resolverTransport =
                 GuardedHttpClientTransport.BuildSingleHopTransport(resolverHttpClient);
-            ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-                resolverTransport, new ClientIdMetadataDocumentResolverOptions(), timeProvider);
+            ClientMetadataResolutionCache resolverCache = new(
+                resolverTransport, new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), timeProvider);
+            ResolveClientMetadataDelegate resolve = resolverCache.ResolveDocumentAsync;
 
             AuthorizationServerIntegration oauth = app.Server.OAuth();
-            oauth.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-            oauth.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
             {
-                context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+                candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
 
-                return resolve(clientMetadataUri, context, cancellationToken);
-            };
-            oauth.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
-            //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
-            //refuses a declared method it does not advertise before any validator runs (RFC 8414,
-            //Section 2), so the advertisement must agree with the document.
-            oauth.ClientAuthenticationMethodsSupported =
-                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
-            oauth.ClientAssertionSigningAlgorithmsSupported = [alg];
+
+                candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+                {
+                    context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+
+                    return resolve(clientMetadataUri, context, cancellationToken);
+                };
+
+
+                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+                //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
+                //refuses a declared method it does not advertise before any validator runs (RFC 8414,
+                //Section 2), so the advertisement must agree with the document.
+
+                candidateIntegration.ClientAuthenticationMethodsSupported =
+                    [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+
+
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [alg];
+            }).ConfigureAwait(false);
 
             (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
                 await app.CreateOAuthClientAndRegistrationAsync(
                     stub, redirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
                     .ConfigureAwait(false);
+            //RFC 9126 §2: the pushed request now authenticates the client exactly as the token
+            //endpoint does, so the confidential method the fetched document declares must be
+            //presented at PAR too, before any code can be issued.
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys
+            };
+            ClientAssertionOptions parAssertionOptions = new()
+            {
+                SigningKeyId = ClientSigningKeyId,
+                HeaderSerializer = app.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                PayloadSerializer = app.Server.OAuth().Codecs.JwtPayloadSerializer!
+            };
 
             HostedAuthorizationServer hosted = app.Host("default");
             string segment = stub.TenantId.Value;
 
-            string flowId = await DriveParAuthorizeAndCallbackAsync(
-                hosted, client, registration, flowStore, segment, redirectUri, SubjectId, app.ServerCertificate,
-                TestContext.CancellationToken).ConfigureAwait(false);
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(app.ServerCertificate);
+            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, flowStore, segment, redirectUri, SubjectId, browserClient,
+                clientAssertionOptions: parAssertionOptions, cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
 
             AuthorizationCodeReceivedState codeState = (AuthorizationCodeReceivedState)flowStore[flowId];
             Uri tokenEndpoint = new(
@@ -448,16 +499,19 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         PublishCimdDocument(documentHost, path, documentUri, redirectUris: null);
 
         await using TestHostShell app = new(timeProvider);
-        ClientRecord stub = app.RegisterCimdStubClient(
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(
             documentUri,
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials),
-            profile: PolicyProfile.Rfc6749WithPkce);
+            profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        app.WireCimdMaterialization("default", documentHost.Certificate);
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = app.Host("default");
@@ -514,21 +568,20 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
 
         using HttpClient pinnedHttpClient = LoopbackTls.CreatePinnedHttpClient(documentHost.Certificate);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(pinnedHttpClient);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport, new ClientIdMetadataDocumentResolverOptions(), timeProvider);
 
-        ClientIdMetadataResolution resolution = await resolve(
-            documentUri, NewLoopbackContext(), TestContext.CancellationToken).ConfigureAwait(false);
+        ClientIdMetadataResolution resolution = await ClientIdMetadataDocuments.ResolveAsync(
+            documentUri, NewLoopbackContext(), transport, new ClientIdMetadataDocumentResolverOptions(),
+            TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(resolution.IsResolved,
             $"CIMD-046: the document must resolve at pre-registration time. Defect={resolution.Defect}");
 
         await using TestHostShell app = new(timeProvider);
-        ClientRecord stub = app.RegisterCimdStubClient(
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(
             documentUri,
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
-            profile: PolicyProfile.Rfc6749WithPkce);
+            profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //CIMD-031: the AS associates the Client Identifier URL with client metadata "through other
         //means" — the pre-registration overlay below, applied once — rather than automatically
@@ -538,9 +591,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             AllowedRedirectUris = [.. resolution.Document!.RedirectUris]
         };
         HostedAuthorizationServer host = app.Host("default");
-        host.Registrations[preRegistered.TenantId.Value] = preRegistered;
-        host.Registrations[preRegistered.ClientId] = preRegistered;
-        host.Server.UpdateClient(stub, preRegistered, []);
+        preRegistered = await host.UpdateClientAsync(stub, preRegistered, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
@@ -582,14 +633,14 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         PublishCimdDocument(documentHost, path, documentUri, redirectUris: null);
 
         await using TestHostShell app = new(timeProvider);
-        ClientRecord stub = app.RegisterCimdStubClient(
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(
             documentUri,
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint),
-            profile: PolicyProfile.Rfc6749WithPkce);
+            profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = app.Host("default");
@@ -637,14 +688,14 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             developerInfo: "team-mobile");
 
         await using TestHostShell app = new(timeProvider);
-        ClientRecord stub = app.RegisterCimdStubClient(
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(
             clientIdentifierUrl,
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
-            profile: PolicyProfile.Rfc6749WithPkce);
+            profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        app.WireCimdMaterialization("default", cimdService.Certificate);
+        await app.WireCimdMaterializationAsync("default", cimdService.Certificate).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
@@ -733,15 +784,16 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         {
             AdditionalDocumentValidation = sameOriginUnlessServiceOrigin
         };
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(transport, options, timeProvider);
 
-        ClientIdMetadataResolution serviceResolution = await resolve(
-            serviceClientIdentifierUrl, NewLoopbackContext(), TestContext.CancellationToken).ConfigureAwait(false);
+        ClientIdMetadataResolution serviceResolution = await ClientIdMetadataDocuments.ResolveAsync(
+            serviceClientIdentifierUrl, NewLoopbackContext(), transport, options, TestContext.CancellationToken)
+            .ConfigureAwait(false);
         Assert.IsTrue(serviceResolution.IsResolved,
             $"CIMD-063: the CIMD Service origin must be exempt from the redirect_uri origin restriction. Defect={serviceResolution.Defect}");
 
-        ClientIdMetadataResolution foreignResolution = await resolve(
-            foreignClientIdentifierUrl, NewLoopbackContext(), TestContext.CancellationToken).ConfigureAwait(false);
+        ClientIdMetadataResolution foreignResolution = await ClientIdMetadataDocuments.ResolveAsync(
+            foreignClientIdentifierUrl, NewLoopbackContext(), transport, options, TestContext.CancellationToken)
+            .ConfigureAwait(false);
         Assert.AreEqual(ClientIdMetadataResolutionOutcome.InvalidDocument, foreignResolution.Outcome,
             "A non-service document with the SAME cross-origin redirect_uri must still be rejected by the " +
             "restriction — proving the CIMD-063 exemption is doing real work, not a no-op policy.");

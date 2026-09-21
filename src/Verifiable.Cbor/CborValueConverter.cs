@@ -16,7 +16,6 @@ namespace Verifiable.Cbor;
 /// <list type="bullet">
 /// <item><description><see cref="CoseSerialization"/> for COSE structures.</description></item>
 /// <item><description><c>SdCwtSerializer</c> for SD-CWT disclosures.</description></item>
-/// <item><description><c>DictionaryStringObjectCborConverter</c> for generic dictionary handling.</description></item>
 /// </list>
 /// <para>
 /// Supported types for writing:
@@ -212,30 +211,6 @@ public static class CborValueConverter
 
 
     /// <summary>
-    /// Writes a CLR value as CBOR, taking <paramref name="options"/> for parity with the other
-    /// options-carrying overloads in this class. A <see langword="null"/> value is omitted rather
-    /// than written, matching the only null-handling behavior any caller of this overload has ever
-    /// exercised.
-    /// </summary>
-    /// <param name="writer">The CBOR writer.</param>
-    /// <param name="value">The value to write.</param>
-    /// <param name="options">The serializer options; unused today beyond establishing overload parity.</param>
-    /// <exception cref="NotSupportedException">Thrown when the type is not supported.</exception>
-    public static void WriteValue(CborWriter writer, object? value, CborSerializerOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-        ArgumentNullException.ThrowIfNull(options);
-
-        if(value is null)
-        {
-            return;
-        }
-
-        WriteValue(writer, value);
-    }
-
-
-    /// <summary>
     /// Reads a CBOR value and converts it to a CLR object.
     /// </summary>
     /// <param name="reader">The CBOR reader.</param>
@@ -260,6 +235,11 @@ public static class CborValueConverter
             CborReaderState.StartArray => ReadArray(ref reader),
             CborReaderState.StartMap => ReadMap(ref reader),
             CborReaderState.Tag => ReadTaggedValue(ref reader),
+            CborReaderState.Undefined => throw new CborContentException($"Unsupported CBOR state: {state}."),
+            CborReaderState.SimpleValue => throw new CborContentException($"Unsupported CBOR state: {state}."),
+            CborReaderState.EndArray => throw new CborContentException($"Unsupported CBOR state: {state}."),
+            CborReaderState.EndMap => throw new CborContentException($"Unsupported CBOR state: {state}."),
+            CborReaderState.Finished => throw new CborContentException($"Unsupported CBOR state: {state}."),
             _ => throw new CborContentException($"Unsupported CBOR state: {state}.")
         };
     }
@@ -274,43 +254,6 @@ public static class CborValueConverter
     {
         ArgumentNullException.ThrowIfNull(reader);
         return ReadValue(ref reader);
-    }
-
-
-    /// <summary>
-    /// Reads a CBOR value using the specified options.
-    /// </summary>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <param name="options">The serializer options.</param>
-    /// <returns>The converted CLR object.</returns>
-    /// <exception cref="CborContentException">Thrown when the CBOR content is invalid.</exception>
-    /// <remarks>
-    /// This overload is provided for compatibility with the <see cref="CborConverter{T}"/> infrastructure.
-    /// Currently, options affects indefinite-length handling via <see cref="CborSerializerOptions.AllowIndefiniteLength"/>.
-    /// </remarks>
-    public static object? ReadValue(ref CborReader reader, CborSerializerOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(reader);
-        ArgumentNullException.ThrowIfNull(options);
-
-        CborReaderState state = reader.PeekState();
-
-        return state switch
-        {
-            CborReaderState.Null => ReadNull(ref reader),
-            CborReaderState.Boolean => reader.ReadBoolean(),
-            CborReaderState.UnsignedInteger => ReadUnsignedInteger(ref reader),
-            CborReaderState.NegativeInteger => ReadNegativeInteger(ref reader),
-            CborReaderState.HalfPrecisionFloat => (double)reader.ReadHalf(),
-            CborReaderState.SinglePrecisionFloat => reader.ReadSingle(),
-            CborReaderState.DoublePrecisionFloat => reader.ReadDouble(),
-            CborReaderState.TextString => reader.ReadTextString(),
-            CborReaderState.ByteString => reader.ReadByteString(),
-            CborReaderState.StartArray => ReadArray(ref reader, options),
-            CborReaderState.StartMap => ReadMap(ref reader, options),
-            CborReaderState.Tag => ReadTaggedValue(ref reader, options),
-            _ => throw new CborContentException($"Unsupported CBOR state: {state}.")
-        };
     }
 
 
@@ -367,27 +310,6 @@ public static class CborValueConverter
     }
 
 
-    private static List<object?> ReadArray(ref CborReader reader, CborSerializerOptions options)
-    {
-        int? count = reader.ReadStartArray();
-
-        if(count is null && !options.AllowIndefiniteLength)
-        {
-            CborThrowHelper.ThrowIndefiniteLengthNotAllowed();
-        }
-
-        var list = new List<object?>(count ?? 4);
-
-        while(reader.PeekState() != CborReaderState.EndArray)
-        {
-            list.Add(ReadValue(ref reader, options));
-        }
-
-        reader.ReadEndArray();
-        return list;
-    }
-
-
     private static Dictionary<object, object?> ReadMap(ref CborReader reader)
     {
         int? count = reader.ReadStartMap();
@@ -405,44 +327,12 @@ public static class CborValueConverter
     }
 
 
-    private static Dictionary<object, object?> ReadMap(ref CborReader reader, CborSerializerOptions options)
-    {
-        int? count = reader.ReadStartMap();
-
-        if(count is null && !options.AllowIndefiniteLength)
-        {
-            CborThrowHelper.ThrowIndefiniteLengthNotAllowed();
-        }
-
-        var dict = new Dictionary<object, object?>(count ?? 4);
-
-        while(reader.PeekState() != CborReaderState.EndMap)
-        {
-            object key = ReadValue(ref reader, options)!;
-            object? value = ReadValue(ref reader, options);
-            dict[key] = value;
-        }
-
-        reader.ReadEndMap();
-        return dict;
-    }
-
-
     private static object ReadTaggedValue(ref CborReader reader)
     {
         CborTag tag = reader.ReadTag();
         object? value = ReadValue(ref reader);
 
         //Return as tuple; callers can handle specific tags as needed.
-        return (Tag: tag.Value, Value: value);
-    }
-
-
-    private static object ReadTaggedValue(ref CborReader reader, CborSerializerOptions options)
-    {
-        CborTag tag = reader.ReadTag();
-        object? value = ReadValue(ref reader, options);
-
         return (Tag: tag.Value, Value: value);
     }
 

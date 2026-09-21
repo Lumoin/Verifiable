@@ -1,5 +1,4 @@
 using CsCheck;
-using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -20,11 +19,6 @@ namespace Verifiable.Tests.Cryptography;
 /// attributes are appended and how large their values are, chosen wide enough that the enclosing containers'
 /// length octets grow. A failing sample is a defect, not noise: CsCheck shrinks it and prints the seed that
 /// reproduces it.
-/// </para>
-/// <para>
-/// CsCheck's <c>Sample</c> callback is synchronous; the asynchronous calls inside it are blocked on with
-/// <c>AsTask().GetAwaiter().GetResult()</c>, the idiom this suite already uses in
-/// <see cref="SignatureValidationDeterminismPropertyTests"/>.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -61,8 +55,6 @@ internal sealed class ArchiveTimestampV3PropertyTests
     /// every time, and those octets are the ones the independent oracle assembles from the clause text.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the build fully completes, so the using declarations' dispose runs strictly after every call returns.")]
     public async Task TheMessageImprintInputIsTheSameOnEveryBuildFromTheSameInputs()
     {
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -79,11 +71,11 @@ internal sealed class ArchiveTimestampV3PropertyTests
             octets, signerIndex: 0, hashIndex.AsReadOnlySpan(), PkiDigestAlgorithm.Sha256);
         byte[] expected = oracleInput.AsReadOnlySpan().ToArray();
 
-        Gen.Int[2, 6].Sample(repeatCount =>
+        await Gen.Int[2, 6].SampleAsync(async repeatCount =>
         {
             for(int i = 0; i < repeatCount; ++i)
             {
-                using SignedContentMemory built = ArchiveTimestampV3.BuildMessageImprintInputAsync(
+                using SignedContentMemory built = await ArchiveTimestampV3.BuildMessageImprintInputAsync(
                     new ArchiveTimestampImprintContext
                     {
                         SignedData = signature,
@@ -91,7 +83,7 @@ internal sealed class ArchiveTimestampV3PropertyTests
                         MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256
                     },
                     BaseMemoryPool.Shared,
-                    TestContext.CancellationToken).AsTask().GetAwaiter().GetResult();
+                    TestContext.CancellationToken).AsTask().ConfigureAwait(false);
 
                 if(!built.AsReadOnlySpan().SequenceEqual(expected))
                 {
@@ -100,7 +92,7 @@ internal sealed class ArchiveTimestampV3PropertyTests
             }
 
             return true;
-        });
+        }, threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 
@@ -112,8 +104,6 @@ internal sealed class ArchiveTimestampV3PropertyTests
     /// augmentation that adds new ones cannot disturb an earlier archive time-stamp.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until the build fully completes, so the using declarations' dispose runs strictly after every call returns.")]
     public async Task AppendingUnsignedAttributesLeavesTheMessageImprintInputUnchanged()
     {
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -130,10 +120,10 @@ internal sealed class ArchiveTimestampV3PropertyTests
             TestContext.CancellationToken).ConfigureAwait(false);
         byte[] expected = before.AsReadOnlySpan().ToArray();
 
-        (from attributeCount in Gen.Int[1, 4]
-         from valueLength in Gen.Int[0, 300]
-         select (attributeCount, valueLength))
-        .Sample(sample => TheImprintInputSurvivesTheAugmentation(signature, hashIndex, sample.attributeCount, sample.valueLength, expected, TestContext.CancellationToken));
+        await (from attributeCount in Gen.Int[1, 4]
+               from valueLength in Gen.Int[0, 300]
+               select (attributeCount, valueLength))
+        .SampleAsync(async sample => await TheImprintInputSurvivesTheAugmentation(signature, hashIndex, sample.attributeCount, sample.valueLength, expected, TestContext.CancellationToken).ConfigureAwait(false), threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 
@@ -149,9 +139,7 @@ internal sealed class ArchiveTimestampV3PropertyTests
     /// <param name="expected">The imprint input built before the augmentation.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the sample upheld the property.</returns>
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "GetAwaiter().GetResult() blocks until the build fully completes, so the using declarations' dispose runs strictly after every call returns.")]
-    private static bool TheImprintInputSurvivesTheAugmentation(
+    private static async Task<bool> TheImprintInputSurvivesTheAugmentation(
         CmsSignedData signature,
         AtsHashIndexV3 hashIndex,
         int attributeCount,
@@ -171,10 +159,10 @@ internal sealed class ArchiveTimestampV3PropertyTests
             }
 
             using CmsSignedData augmented = CmsSignedDataAugmentation.AppendUnsignedAttributes(signature, signerIndex: 0, attributes, BaseMemoryPool.Shared);
-            using SignedContentMemory rebuilt = ArchiveTimestampV3.BuildMessageImprintInputAsync(
+            using SignedContentMemory rebuilt = await ArchiveTimestampV3.BuildMessageImprintInputAsync(
                 new ArchiveTimestampImprintContext { SignedData = augmented, HashIndex = hashIndex, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256 },
                 BaseMemoryPool.Shared,
-                cancellationToken).AsTask().GetAwaiter().GetResult();
+                cancellationToken).AsTask().ConfigureAwait(false);
 
             return rebuilt.AsReadOnlySpan().SequenceEqual(expected);
         }

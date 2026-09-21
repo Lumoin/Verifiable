@@ -85,12 +85,12 @@ public sealed record ResponsePostedByWallet(
 /// <summary>
 /// The Verifier's HTTP response to the <c>direct_post.jwt</c> POST contained a
 /// <c>redirect_uri</c> that the Wallet must follow to return the user to the browser
-/// session. Drives <c>ResponseSent</c> → <see cref="BrowserRedirectIssued"/>.
+/// session. Drives <c>ResponseSent</c> → <c>BrowserRedirectIssued</c>.
 /// </summary>
 /// <remarks>
 /// This input is only produced in the same-device flow. In the cross-device flow the
 /// Verifier's POST response carries no redirect URI and the flow ends at
-/// <see cref="ResponseSent"/>. The application must read the <c>redirect_uri</c> from the
+/// <c>ResponseSent</c>. The application must read the <c>redirect_uri</c> from the
 /// Verifier's HTTP 200 response body and construct this input before feeding it to the
 /// Wallet PDA.
 /// </remarks>

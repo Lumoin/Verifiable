@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 
 namespace Verifiable.OAuth.Server;
@@ -40,7 +41,53 @@ public enum AuthorizationDenialReason
     /// <c>resource</c> value before this seam ever runs; this reason is for the application's own
     /// acceptability policy over an otherwise well-formed value.
     /// </summary>
-    InvalidTarget
+    InvalidTarget,
+
+    /// <summary>
+    /// The application cannot vouch that the End-User was (re)authenticated. Mapped to
+    /// <see cref="OAuthErrors.LoginRequired"/> per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>.
+    /// The library returns this reason itself, with no seam invoked, when no subject is
+    /// established at all, and fails closed with it when the request's <c>prompt</c> asks for
+    /// <c>login</c> and no seam is wired to vouch for a fresh reauthentication.
+    /// </summary>
+    LoginRequired,
+
+    /// <summary>
+    /// The application cannot proceed without some form of End-User interaction it did not
+    /// perform. Mapped to <see cref="OAuthErrors.InteractionRequired"/> per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>.
+    /// </summary>
+    InteractionRequired,
+
+    /// <summary>
+    /// The application cannot vouch that the End-User granted consent. Mapped to
+    /// <see cref="OAuthErrors.ConsentRequired"/> per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>.
+    /// The library fails closed with this reason when the request's <c>prompt</c> asks for
+    /// <c>consent</c> and no seam is wired to vouch that consent was obtained.
+    /// </summary>
+    ConsentRequired,
+
+    /// <summary>
+    /// The application cannot vouch that the End-User selected an account/session. Mapped to
+    /// <see cref="OAuthErrors.AccountSelectionRequired"/> per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OIDC Core §3.1.2.6</see>.
+    /// The library fails closed with this reason when the request's <c>prompt</c> asks for
+    /// <c>select_account</c> and no seam is wired to vouch that a selection was made.
+    /// </summary>
+    AccountSelectionRequired,
+
+    /// <summary>
+    /// The application considers the request's scope invalid, unknown, or excessive under its
+    /// own policy — for example a combination of scope values it refuses to grant together.
+    /// Mapped to <see cref="OAuthErrors.InvalidScope"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
+    /// Distinct from the library's own refusal when
+    /// <see cref="AuthorizationRequestDecision.Permit(string?)"/> is called with a scope outside
+    /// the request — that is a seam defect answered with <c>server_error</c>, never this reason.
+    /// </summary>
+    InvalidScope
 }
 
 
@@ -85,6 +132,19 @@ public sealed record AuthorizationRequestEvaluation
     public string? RequestedAuthorizationDetails { get; init; }
 
     /// <summary>
+    /// The same request's <see cref="RequestedAuthorizationDetails"/>, parsed through the wired
+    /// <see cref="ParseAuthorizationDetailListDelegate"/> into the neutral
+    /// <see cref="AuthorizationDetail"/> model — the SAME parse the token endpoint's
+    /// <see cref="ResolveCredentialAuthorizationDelegate"/> seam consumes, so an application
+    /// correlating <c>issuer_state</c> to the requested <c>credential_configuration_id</c> values
+    /// reads them typed instead of re-parsing <see cref="RequestedAuthorizationDetails"/> itself.
+    /// <see langword="null"/> when the request carried no <c>authorization_details</c>. A request
+    /// whose <c>authorization_details</c> cannot be parsed never reaches this seam — it is
+    /// refused at request receipt.
+    /// </summary>
+    public IReadOnlyList<AuthorizationDetail>? RequestedAuthorizationDetailObjects { get; init; }
+
+    /// <summary>
     /// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> the Wallet echoed from a Credential Offer, or
     /// <see langword="null"/> when the request carried none. The library treats this strictly as
     /// UNTRUSTED input and validates nothing about it: §5.1.3 requires the Credential Issuer to
@@ -104,6 +164,16 @@ public sealed record AuthorizationRequestEvaluation
     /// the issued access token — is the application's decision.
     /// </summary>
     public IReadOnlyList<string>? RequestedResource { get; init; }
+
+    /// <summary>
+    /// The recognized <c>prompt</c> values the request carried (OIDC Core §3.1.2.1's
+    /// <c>login</c>, <c>consent</c>, <c>select_account</c>, <c>none</c>), or an empty set when
+    /// the request carried no <c>prompt</c> or only values this library does not recognize —
+    /// "If an OP receives a prompt value outside the set defined above that it does not
+    /// understand, it MAY ... ignore it" (§3.1.2.1), which this library does for the purpose of
+    /// this set.
+    /// </summary>
+    public IImmutableSet<string> RequestedPromptValues { get; init; } = ImmutableHashSet<string>.Empty;
 
     /// <summary>The authenticated subject identifier.</summary>
     public required string Subject { get; init; }
@@ -193,9 +263,33 @@ public sealed record AuthorizationRequestDecision
     /// </summary>
     public string? DenialDescription { get; init; }
 
+    /// <summary>
+    /// The scope <see cref="Permit(string?)"/> was called with, or <see langword="null"/> for a
+    /// bare permit that grants the requested scope unchanged. When set, it MUST be a non-empty
+    /// subset of the request's scope per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: "The
+    /// authorization server MAY fully or partially ignore the scope requested by the client" —
+    /// an empty or whitespace value, or a value outside the requested scope, is a seam defect
+    /// the library answers with <c>server_error</c> rather than a silent widening or an empty
+    /// grant. The library canonicalizes the effective scope it stores to the requested tokens'
+    /// own order, deduplicated, discarding any ordering this value carries.
+    /// </summary>
+    public string? GrantedScope { get; init; }
 
-    /// <summary>A bare permit verdict.</summary>
-    public static AuthorizationRequestDecision Permit { get; } = new() { IsPermitted = true };
+
+    /// <summary>
+    /// A permit verdict, optionally narrowing the granted scope to
+    /// <paramref name="grantedScope"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>.
+    /// </summary>
+    /// <param name="grantedScope">
+    /// A non-empty subset of the request's scope to grant, or <see langword="null"/> to grant
+    /// the request unchanged. An empty or whitespace value is a seam defect — to grant nothing,
+    /// deny with <see cref="AuthorizationDenialReason.InvalidScope"/> instead.
+    /// </param>
+    /// <returns>A permitted <see cref="AuthorizationRequestDecision"/>.</returns>
+    public static AuthorizationRequestDecision Permit(string? grantedScope = null) =>
+        new() { IsPermitted = true, GrantedScope = grantedScope };
 
 
     /// <summary>

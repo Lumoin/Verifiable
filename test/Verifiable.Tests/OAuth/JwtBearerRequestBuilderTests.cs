@@ -151,9 +151,9 @@ internal sealed class JwtBearerRequestBuilderTests
     public async Task BuilderOutputRoundTripsThroughShippedEndpointOverHttpWire()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -178,8 +178,8 @@ internal sealed class JwtBearerRequestBuilderTests
 
 
     /// <summary>Registers a confidential client allowed the <see cref="WellKnownCapabilityIdentifiers.OAuthJwtBearer"/> capability, with the signing keys the RFC 9068 access-token producer needs.</summary>
-    private static VerifierKeyMaterial RegisterJwtBearerClient(TestHostShell app) =>
-        app.RegisterDpopClient(
+    private static async Task<VerifierKeyMaterial> RegisterJwtBearerClientAsync(TestHostShell app) =>
+        await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -188,23 +188,29 @@ internal sealed class JwtBearerRequestBuilderTests
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthJwtBearer,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
 
     /// <summary>Wires the <c>client_secret_post</c> (RFC 6749 §2.3.1) authentication seam that checks the request's <c>client_secret</c> form field against the fixture secret.</summary>
-    private static void WireClientAuthentication(TestHostShell app) =>
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+    private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
 
     /// <summary>Wires an assertion-validation seam that accepts any assertion and returns the fixture subject and granted scope.</summary>
-    private static void WireAcceptingValidator(TestHostShell app) =>
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(
-                    new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope });
+    private static async Task WireAcceptingValidatorAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(
+                        new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope });
+        }).ConfigureAwait(false);
 
 
 }

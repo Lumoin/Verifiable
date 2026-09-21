@@ -1015,15 +1015,119 @@ namespace Verifiable.JCose
 
 
             /// <summary>
-            /// Returns a value that indicates if the typ values are the same.
+            /// Returns a value that indicates if the typ values are the same media type.
             /// </summary>
             /// <param name="typA">The first typ value to compare.</param>
             /// <param name="typB">The second typ value to compare.</param>
-            /// <returns><see langword="true"/> if the typ values are the same; otherwise, <see langword="false"/>.</returns>
-            /// <remarks>The comparison is case-insensitive per RFC 7515.</remarks>
+            /// <returns><see langword="true"/> if the typ values are the same media type; otherwise, <see langword="false"/>.</returns>
+            /// <remarks>
+            /// <para>
+            /// Comparison is on the <c>type/subtype</c> only, case-insensitively per
+            /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>,
+            /// which requires a recipient to "treat it as if <c>application/</c> were prepended to any
+            /// <c>typ</c> value not containing a <c>/</c>"; a value with no <c>/</c> is therefore
+            /// compared as if it carried that prefix, without allocating one. Any media-type parameters
+            /// are ignored, matching how <see cref="Application.Equals(string, string)"/> compares HTTP
+            /// media types.
+            /// </para>
+            /// <para>
+            /// The common case — both values already equal by reference or ordinal, case-insensitive
+            /// comparison — is checked first and allocates nothing; span slicing of the differing case
+            /// costs nothing either.
+            /// </para>
+            /// </remarks>
             public static bool Equals(string typA, string typB)
             {
-                return ReferenceEquals(typA, typB) || StringComparer.OrdinalIgnoreCase.Equals(typA, typB);
+                if(ReferenceEquals(typA, typB) || StringComparer.OrdinalIgnoreCase.Equals(typA, typB))
+                {
+                    return true;
+                }
+
+                if(typA is null || typB is null)
+                {
+                    return false;
+                }
+
+                return IsSameMediaType(typA.AsSpan(), typB.AsSpan());
+            }
+
+
+            /// <summary>
+            /// Compares two <c>typ</c> values as media types: the <c>type/subtype</c> portion of each,
+            /// with an implicit <c>application/</c> type when a value carries no <c>/</c> ANYWHERE, per
+            /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>:
+            /// "a 'typ' value of 'example' SHOULD be used to represent the 'application/example' media
+            /// type, whereas the media type 'application/example;part="1/2"' cannot be shortened to
+            /// 'example;part="1/2"'." A value that already carries an explicit <c>type/subtype</c> (a
+            /// <c>/</c> before its first parameter, if any) compares on that portion with its parameters
+            /// dropped; a value with no <c>/</c> in its <c>type/subtype</c> but ONE inside a parameter —
+            /// the RFC's own example — names no media type this rule covers and equals nothing.
+            /// </summary>
+            /// <param name="typA">The first typ value.</param>
+            /// <param name="typB">The second typ value.</param>
+            /// <returns><see langword="true"/> if both name the same <c>type/subtype</c>; otherwise, <see langword="false"/>.</returns>
+            private static bool IsSameMediaType(ReadOnlySpan<char> typA, ReadOnlySpan<char> typB)
+            {
+                return TryGetTypeAndSubtype(typA, out ReadOnlySpan<char> typeA, out ReadOnlySpan<char> subtypeA)
+                    && TryGetTypeAndSubtype(typB, out ReadOnlySpan<char> typeB, out ReadOnlySpan<char> subtypeB)
+                    && typeA.Equals(typeB, StringComparison.OrdinalIgnoreCase)
+                    && subtypeA.Equals(subtypeB, StringComparison.OrdinalIgnoreCase);
+            }
+
+
+            /// <summary>
+            /// Splits a <c>typ</c> value into its <c>type</c> and <c>subtype</c>, applying the RFC 7515
+            /// §4.1.9 implicit <c>application/</c> prefix when the condition for it holds.
+            /// </summary>
+            /// <param name="typ">The typ value, possibly carrying parameters.</param>
+            /// <param name="type">The type, on success.</param>
+            /// <param name="subtype">The subtype, on success.</param>
+            /// <returns>
+            /// <see langword="true"/> if <paramref name="typ"/> names a media type this rule covers —
+            /// either its <c>type/subtype</c> already has a <c>/</c>, or the WHOLE value carries no
+            /// <c>/</c> anywhere, so the implicit <c>application/</c> prefix applies; otherwise
+            /// <see langword="false"/> (no <c>/</c> in the <c>type/subtype</c> but one inside a
+            /// parameter, such as the RFC's own <c>example;part="1/2"</c>).
+            /// </returns>
+            private static bool TryGetTypeAndSubtype(
+                ReadOnlySpan<char> typ, out ReadOnlySpan<char> type, out ReadOnlySpan<char> subtype)
+            {
+                ReadOnlySpan<char> withoutParameters = WithoutParameters(typ);
+                int slash = withoutParameters.IndexOf('/');
+                if(slash >= 0)
+                {
+                    type = withoutParameters[..slash];
+                    subtype = withoutParameters[(slash + 1)..];
+
+                    return true;
+                }
+
+                if(typ.IndexOf('/') >= 0)
+                {
+                    type = default;
+                    subtype = default;
+
+                    return false;
+                }
+
+                type = "application";
+                subtype = withoutParameters;
+
+                return true;
+            }
+
+
+            /// <summary>
+            /// Drops any parameters (the part from the first <c>;</c> onward) from a <c>typ</c> value,
+            /// the same way the sibling HTTP media-type comparison trims parameters from a media type.
+            /// </summary>
+            /// <param name="typ">The typ value, possibly carrying parameters.</param>
+            /// <returns>The trimmed span with any parameters removed.</returns>
+            private static ReadOnlySpan<char> WithoutParameters(ReadOnlySpan<char> typ)
+            {
+                int parameterIndex = typ.IndexOf(';');
+
+                return (parameterIndex < 0 ? typ : typ[..parameterIndex]).Trim();
             }
         }
     }

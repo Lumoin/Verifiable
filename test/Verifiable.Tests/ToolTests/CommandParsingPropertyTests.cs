@@ -1,5 +1,6 @@
 using CsCheck;
 using System.CommandLine;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.ToolTests;
 
@@ -19,7 +20,7 @@ internal class CommandParsingPropertyTests
 
             Assert.IsEmpty(result.Errors);
             Assert.AreEqual(id, result.GetValue(createIdArg));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -42,7 +43,7 @@ internal class CommandParsingPropertyTests
 
             Assert.IsEmpty(result.Errors);
             Assert.AreEqual(param, result.GetValue(createParamArg));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -65,7 +66,7 @@ internal class CommandParsingPropertyTests
 
             Assert.IsEmpty(result.Errors);
             Assert.AreEqual(param, result.GetValue(createParamArg));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -78,7 +79,7 @@ internal class CommandParsingPropertyTests
             ParseResult result = rootCommand.Parse($"did revoke {id}");
 
             Assert.IsEmpty(result.Errors);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -91,7 +92,7 @@ internal class CommandParsingPropertyTests
             ParseResult result = rootCommand.Parse($"did view {id}");
 
             Assert.IsEmpty(result.Errors);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -114,7 +115,7 @@ internal class CommandParsingPropertyTests
 
             Assert.IsEmpty(result.Errors);
             Assert.AreEqual(extra, result.GetValue(extraParamOpt));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -136,7 +137,7 @@ internal class CommandParsingPropertyTests
                 ParseResult result = rootCommand.Parse($"did create {invalidId} param");
 
                 Assert.IsNotEmpty(result.Errors);
-            });
+            }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -155,7 +156,7 @@ internal class CommandParsingPropertyTests
                 ParseResult result = rootCommand.Parse(unknownCommand);
 
                 Assert.IsNotEmpty(result.Errors);
-            });
+            }, threads: CsCheckSampling.Threads);
     }
 
 

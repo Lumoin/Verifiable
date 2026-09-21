@@ -36,8 +36,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task EvaluationEndpointReturnsPermitWithContext()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WirePdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WirePdpAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -65,8 +65,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task EvaluationEndpointReturnsDeny()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WirePdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WirePdpAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -88,19 +88,29 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects malformed evaluation JSON before consulting application policy.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-10.1.2">Authorization API §10.1.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task EvaluationEndpointRejectsMalformedBody()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
 
         bool pdpInvoked = false;
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
-        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            pdpInvoked = true;
-            return ValueTask.FromResult(AccessEvaluationDecision.Permit);
-        };
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+
+
+            candidateIntegration.EvaluateAccessAsync = (request, _, _, _) =>
+            {
+                pdpInvoked = true;
+
+                return ValueTask.FromResult(AccessEvaluationDecision.Permit);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -118,19 +128,29 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects an evaluation missing its required action before consulting application policy.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-6.1">Authorization API §6.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task EvaluationEndpointRejectsBodyMissingRequiredField()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
 
         bool pdpInvoked = false;
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
-        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            pdpInvoked = true;
-            return ValueTask.FromResult(AccessEvaluationDecision.Permit);
-        };
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+
+
+            candidateIntegration.EvaluateAccessAsync = (request, _, _, _) =>
+            {
+                pdpInvoked = true;
+
+                return ValueTask.FromResult(AccessEvaluationDecision.Permit);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -152,7 +172,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task ConfigurationEndpointAdvertisesRequiredFields()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -210,8 +230,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task BatchExecuteAllReturnsEveryDecisionInOrder()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WirePdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WirePdpAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -247,8 +267,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task BatchDenyOnFirstDenyStopsAtFirstDeny()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WirePdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WirePdpAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -279,8 +299,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task BatchPermitOnFirstPermitStopsAtFirstPermit()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WirePdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WirePdpAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -311,8 +331,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task BatchAppliesRequestLevelDefaultsToEachItem()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WirePdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WirePdpAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -339,19 +359,29 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects unsupported batch semantics before evaluating any decision.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-7.1.2">Authorization API §7.1.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task BatchRejectsUnknownSemantic()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
 
         bool pdpInvoked = false;
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
-        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            pdpInvoked = true;
-            return ValueTask.FromResult(AccessEvaluationDecision.Permit);
-        };
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+
+
+            candidateIntegration.EvaluateAccessAsync = (request, _, _, _) =>
+            {
+                pdpInvoked = true;
+
+                return ValueTask.FromResult(AccessEvaluationDecision.Permit);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -381,8 +411,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task SubjectSearchReturnsResultsWithPagination()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WireSearch(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WireSearchAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -418,8 +448,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task ResourceSearchReturnsResources()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WireSearch(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WireSearchAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -449,8 +479,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task ActionSearchReturnsPermittedActions()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WireSearch(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WireSearchAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -471,19 +501,29 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects a subject search missing the subject whose type defines the search.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-8.4.1">Authorization API §8.4.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task SubjectSearchRejectsBodyWithoutSubject()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
 
         bool seamInvoked = false;
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
-        app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            seamInvoked = true;
-            return ValueTask.FromResult(new SubjectSearchResult());
-        };
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+
+
+            candidateIntegration.SearchSubjectsAsync = (request, _, _, _) =>
+            {
+                seamInvoked = true;
+
+                return ValueTask.FromResult(new SubjectSearchResult());
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -499,11 +539,15 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Preserves search results across cursor pages and emits an empty continuation at completion.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-8.2.2">Authorization API §8.2.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task SubjectSearchPaginatesWithCursorAcrossPagesToEnd()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
 
         string[] dataset =
         [
@@ -514,40 +558,45 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         //offset), limit is a maximum, next_token is "" at the end. The request
         //is parsed by the SHIPPED default parser, so page{token,limit} comes off
         //the wire through production code.
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
-        app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            int offset = 0;
-            if(request.Page?.Token is { Length: > 0 } token && int.TryParse(token, out int parsed))
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+
+
+            candidateIntegration.SearchSubjectsAsync = (request, _, _, _) =>
             {
-                offset = parsed;
-            }
-
-            int limit = request.Page?.Limit is int l and > 0 ? l : 50;
-
-            List<AuthZenSubject> slice = [];
-            for(int i = offset; i < dataset.Length && slice.Count < limit; ++i)
-            {
-                slice.Add(new AuthZenSubject { Type = "user", Id = dataset[i] });
-            }
-
-            int nextOffset = offset + slice.Count;
-            string nextToken = nextOffset < dataset.Length
-                ? nextOffset.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                : "";
-
-            return ValueTask.FromResult(new SubjectSearchResult
-            {
-                Results = slice,
-                Page = new AccessSearchPage
+                int offset = 0;
+                if(request.Page?.Token is { Length: > 0 } token && int.TryParse(token, out int parsed))
                 {
-                    NextToken = nextToken,
-                    Count = slice.Count,
-                    Total = dataset.Length,
-                    Properties = new Dictionary<string, object>(StringComparer.Ordinal) { ["source"] = "in-memory" },
-                },
-            });
-        };
+                    offset = parsed;
+                }
+
+                int limit = request.Page?.Limit is int l and > 0 ? l : 50;
+
+                List<AuthZenSubject> slice = [];
+                for(int i = offset; i < dataset.Length && slice.Count < limit; ++i)
+                {
+                    slice.Add(new AuthZenSubject { Type = "user", Id = dataset[i] });
+                }
+
+                int nextOffset = offset + slice.Count;
+                string nextToken = nextOffset < dataset.Length
+                    ? nextOffset.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : "";
+
+                return ValueTask.FromResult(new SubjectSearchResult
+                {
+                    Results = slice,
+                    Page = new AccessSearchPage
+                    {
+                        NextToken = nextToken,
+                        Count = slice.Count,
+                        Total = dataset.Length,
+                        Properties = new Dictionary<string, object>(StringComparer.Ordinal) { ["source"] = "in-memory" },
+                    },
+                });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -599,8 +648,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     public async Task ConfigurationAdvertisesWiredSearchEndpoints()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        WireSearch(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await WireSearchAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -637,20 +686,27 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Publishes the application's contributed capability identifiers in metadata.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-9.1.2">Authorization API §9.1.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task ConfigurationAdvertisesContributedCapabilities()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
-        app.Server.OAuth().ContributeAuthZenMetadataAsync = (_, _, _) =>
-            ValueTask.FromResult(new AuthZenMetadataContribution
-            {
-                Capabilities =
-                [
-                    "urn:example:authzen:capability:reasons",
-                    "urn:example:authzen:capability:search",
-                ],
-            });
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeAuthZenMetadataAsync = (_, _, _) =>
+                ValueTask.FromResult(new AuthZenMetadataContribution
+                {
+                    Capabilities =
+                    [
+                        "urn:example:authzen:capability:reasons",
+                        "urn:example:authzen:capability:search",
+                    ],
+                });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -665,24 +721,33 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Passes assembled metadata to the application signer and embeds its returned token.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-9.1.3">Authorization API §9.1.3</see>.
+    /// </summary>
     [TestMethod]
     public async Task ConfigurationEmbedsSignedMetadataAndSignsAssembledClaims()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = RegisterPdp(app);
+        using VerifierKeyMaterial pdp = await RegisterPdpAsync(app).ConfigureAwait(false);
 
         //The application owns signing (key + algorithm); a real deployment signs
         //via Verifiable.JCose Jws.SignAsync. Here we capture the claim set the
         //library hands over and return a sentinel JWS — the library's contract
         //is "assemble the correct claims, embed the returned JWT".
         JwtPayload? signedClaims = null;
-        app.Server.OAuth().ContributeAuthZenMetadataAsync = (_, _, _) =>
-            ValueTask.FromResult(new AuthZenMetadataContribution { Capabilities = ["urn:example:cap"] });
-        app.Server.OAuth().SignAuthZenMetadataAsync = (claims, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            signedClaims = claims;
-            return ValueTask.FromResult<string?>("header.payload.signature");
-        };
+            candidateIntegration.ContributeAuthZenMetadataAsync = (_, _, _) =>
+                ValueTask.FromResult(new AuthZenMetadataContribution { Capabilities = ["urn:example:cap"] });
+
+            candidateIntegration.SignAuthZenMetadataAsync = (claims, _, _, _) =>
+            {
+                signedClaims = claims;
+
+                return ValueTask.FromResult<string?>("header.payload.signature");
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -704,6 +769,10 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
+    /// <summary>
+    /// Publishes an application-chosen discovery extension linking to the policy metadata location.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-9.2">Authorization API §9.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task CoLocatedPdpAdvertisesAuthZenMetadataInOAuthDiscovery()
     {
@@ -715,23 +784,26 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         const string AuthZenConfigurationField = "authzen_configuration_endpoint";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = app.RegisterClient(
+        using VerifierKeyMaterial pdp = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
+                WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi)).ConfigureAwait(false);
 
-        app.Server.OAuth().ContributeDiscoveryFieldsAsync = (registration, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            //Derive the AuthZEN metadata URL from the issuer with the library's
-            //own well-known-path helper, keeping AS and PDP identities aligned.
-            Uri authZenConfiguration = WellKnownPaths.AuthZenConfiguration.ComputeUri(
-                registration.IssuerUri!.ToString());
+            candidateIntegration.ContributeDiscoveryFieldsAsync = (registration, _, _) =>
+            {
+                //Derive the AuthZEN metadata URL from the issuer with the library's
+                //own well-known-path helper, keeping AS and PDP identities aligned.
+                Uri authZenConfiguration = WellKnownPaths.AuthZenConfiguration.ComputeUri(
+                    registration.IssuerUri!.ToString());
 
-            return ValueTask.FromResult(new DiscoveryDocumentContribution(
-                [new DiscoveryStringField(AuthZenConfigurationField, authZenConfiguration.ToString())]));
-        };
+                return ValueTask.FromResult(new DiscoveryDocumentContribution(
+                    [new DiscoveryStringField(AuthZenConfigurationField, authZenConfiguration.ToString())]));
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -764,70 +836,84 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     }
 
 
-    private static VerifierKeyMaterial RegisterPdp(TestHostShell app) =>
-        app.RegisterClient(
+    private static async Task<VerifierKeyMaterial> RegisterPdpAsync(TestHostShell app) =>
+        await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
-            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi)).ConfigureAwait(false);
 
 
-    private static void WirePdp(TestHostShell app)
+    /// <summary>
+    /// Installs the decision and metadata seams on the host through a requested alteration.
+    /// </summary>
+    private static async Task WirePdpAsync(TestHostShell app)
     {
         //Wire the SHIPPED default STJ parsers (Verifiable.Json) — the e2e flow
         //then exercises the real production parse path, not a test-local one.
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
-
-        //The application's Policy Decision Point: alice may read; everyone else
-        //is denied. A permit carries a reason in its context.
-        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            bool permit = string.Equals(request.Action.Name, "can_read", StringComparison.Ordinal)
-                && string.Equals(request.Subject.Id, "alice@example.com", StringComparison.Ordinal);
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
 
-            return permit
-                ? ValueTask.FromResult(new AccessEvaluationDecision
-                {
-                    Decision = true,
-                    Context = new Dictionary<string, object>(StringComparer.Ordinal) { ["reason"] = "owner" },
-                })
-                : ValueTask.FromResult(AccessEvaluationDecision.Deny);
-        };
+
+            //The application's Policy Decision Point: alice may read; everyone else
+            //is denied. A permit carries a reason in its context.
+
+            candidateIntegration.EvaluateAccessAsync = (request, _, _, _) =>
+            {
+                bool permit = string.Equals(request.Action.Name, "can_read", StringComparison.Ordinal)
+                    && string.Equals(request.Subject.Id, "alice@example.com", StringComparison.Ordinal);
+
+                return permit
+                    ? ValueTask.FromResult(new AccessEvaluationDecision
+                    {
+                        Decision = true,
+                        Context = new Dictionary<string, object>(StringComparer.Ordinal) { ["reason"] = "owner" },
+                    })
+                    : ValueTask.FromResult(AccessEvaluationDecision.Deny);
+            };
+        }).ConfigureAwait(false);
     }
 
 
-    //Wires the §7 Search seams: a uniform parser plus canned enumerations.
-    //Subject search returns two paginated subjects; resource and action search
-    //return single-page results.
-    private static void WireSearch(TestHostShell app)
+    /// <summary>
+    /// Installs the search parsers and paging delegates through a requested alteration.
+    /// </summary>
+    private static async Task WireSearchAsync(TestHostShell app)
     {
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
 
-        app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
-            ValueTask.FromResult(new SubjectSearchResult
-            {
-                Results =
-                [
-                    new AuthZenSubject { Type = "user", Id = "alice@example.com" },
-                    new AuthZenSubject { Type = "user", Id = "bob@example.com" },
-                ],
-                Page = new AccessSearchPage { NextToken = "next-123", Count = 2, Total = 5 },
-            });
 
-        app.Server.OAuth().SearchResourcesAsync = (request, _, _, _) =>
-            ValueTask.FromResult(new ResourceSearchResult
-            {
-                Results = [new AuthZenResource { Type = "account", Id = "123" }],
-            });
+            candidateIntegration.SearchSubjectsAsync = (request, _, _, _) =>
+                ValueTask.FromResult(new SubjectSearchResult
+                {
+                    Results =
+                    [
+                        new AuthZenSubject { Type = "user", Id = "alice@example.com" },
+                        new AuthZenSubject { Type = "user", Id = "bob@example.com" },
+                    ],
+                    Page = new AccessSearchPage { NextToken = "next-123", Count = 2, Total = 5 },
+                });
 
-        app.Server.OAuth().SearchActionsAsync = (request, _, _, _) =>
-            ValueTask.FromResult(new ActionSearchResult
-            {
-                Results =
-                [
-                    new AuthZenAction { Name = "can_read" },
-                    new AuthZenAction { Name = "can_write" },
-                ],
-            });
+
+            candidateIntegration.SearchResourcesAsync = (request, _, _, _) =>
+                ValueTask.FromResult(new ResourceSearchResult
+                {
+                    Results = [new AuthZenResource { Type = "account", Id = "123" }],
+                });
+
+
+            candidateIntegration.SearchActionsAsync = (request, _, _, _) =>
+                ValueTask.FromResult(new ActionSearchResult
+                {
+                    Results =
+                    [
+                        new AuthZenAction { Name = "can_read" },
+                        new AuthZenAction { Name = "can_write" },
+                    ],
+                });
+        }).ConfigureAwait(false);
     }
 
 

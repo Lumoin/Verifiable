@@ -39,7 +39,7 @@ public static class VcalmWorkflowEndpoints
     {
         List<EndpointCandidate> candidates = [];
 
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
         if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmAdministration))
         {
             var vcalm = server?.Vcalm();
@@ -68,7 +68,11 @@ public static class VcalmWorkflowEndpoints
     };
 
 
-    //§3.6.1 POST /workflows.
+    /// <summary>
+    /// Builds the endpoint for §3.6.1 POST /workflows.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildCreateWorkflow() =>
         new()
         {
@@ -84,7 +88,7 @@ public static class VcalmWorkflowEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 ServerHttpResponse? boundaryFailure = CheckRequestBoundary(context, server, out string requestBody);
@@ -141,7 +145,11 @@ public static class VcalmWorkflowEndpoints
         };
 
 
-    //§3.6.2 GET /workflows/{localWorkflowId}.
+    /// <summary>
+    /// Builds the endpoint for §3.6.2 GET /workflows/{localWorkflowId}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildGetWorkflow() =>
         new()
         {
@@ -157,7 +165,7 @@ public static class VcalmWorkflowEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 string? workflowId = VcalmPathMatching.ExtractItemId(context, WellKnownVcalmRouteParameters.WorkflowId);
@@ -184,7 +192,11 @@ public static class VcalmWorkflowEndpoints
         };
 
 
-    //§3.6.7 POST /callbacks/{localCallbackId}.
+    /// <summary>
+    /// Builds the endpoint for §3.6.7 POST /callbacks/{localCallbackId}.
+    /// The handler uses the admitted request wiring for its parser and application delegates.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
+    /// </summary>
     private static EndpointCandidate BuildExchangeStepCallback() =>
         new()
         {
@@ -200,7 +212,7 @@ public static class VcalmWorkflowEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var vcalm = server.Vcalm();
 
                 string? callbackId = VcalmPathMatching.ExtractItemId(context, WellKnownVcalmRouteParameters.CallbackId);

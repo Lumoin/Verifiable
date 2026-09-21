@@ -84,6 +84,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
         //flow.
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = RpEntityId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -109,6 +110,48 @@ internal sealed class FederationAutomaticRegistrationFlowTests
     }
 
 
+    /// <summary>
+    /// Proves automatic registration under <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.1">section 12.1</see>.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
+    /// "A request-derived registration is resolved through the endpoint chain and materialized per request without being committed to ClientRegistrationStore."
+    /// </summary>
+    [TestMethod]
+    public async Task FederationMaterializationKeepsRegistrationRequestScopedOverWire()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        ClientRecord ephemeral = await ResolveAndProjectAsync().ConfigureAwait(false);
+        ClientRecord routing = ephemeral with { AllowedRedirectUris = [] };
+        int materializations = 0;
+        await TestHostShell.AlterAsync(host.Server, integration =>
+        {
+            integration.LoadClientRegistrationAsync = (tenant, _, _) => ValueTask.FromResult<IRegistrationRecord?>(
+                tenant == ephemeral.TenantId ? routing : null);
+            integration.MaterializeRegistrationAsync = (registration, _, _) =>
+            {
+                Assert.AreSame(routing, registration);
+                Assert.IsEmpty(host.RegistrationStore);
+                ++materializations;
+
+                return ValueTask.FromResult(new RegistrationMaterialization { Registration = ephemeral });
+            };
+        }).ConfigureAwait(false);
+        var (StatusCode, Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(host, ephemeral.TenantId.Value,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.ClientId] = RpEntityId,
+                [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = FederationRedirectUri,
+                [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, StatusCode, Body);
+        Assert.AreEqual(1, materializations);
+        Assert.IsEmpty(host.RegistrationStore, "Automatic registration must remain scoped to its request.");
+        Assert.Contains("\"request_uri\":", Body, StringComparison.Ordinal);
+    }
+
+
     [TestMethod]
     public async Task RedirectUriOutsideFederationMetadataIsRejected()
     {
@@ -120,6 +163,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
         //be refused — the AllowedRedirectUris came from the resolved chain.
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = RpEntityId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -138,8 +182,11 @@ internal sealed class FederationAutomaticRegistrationFlowTests
             context,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreNotEqual(201, response.StatusCode,
+        Assert.AreEqual(400, response.StatusCode,
             $"A redirect_uri outside the federation-derived AllowedRedirectUris must not succeed. Body: {response.Body}");
+        Assert.Contains(OAuthErrors.InvalidRequest, response.Body, StringComparison.Ordinal);
+        Assert.Contains("not among the registered redirect URIs", response.Body, StringComparison.Ordinal,
+            $"The refusal must name the federation-derived redirect_uri check. Body: {response.Body}");
     }
 
 
@@ -247,3 +294,4 @@ internal sealed class FederationAutomaticRegistrationFlowTests
         return ephemeral;
     }
 }
+

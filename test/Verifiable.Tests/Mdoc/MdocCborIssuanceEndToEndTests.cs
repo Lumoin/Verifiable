@@ -18,7 +18,7 @@ namespace Verifiable.Tests.Mdoc;
 /// <item><description><see cref="MdocCborIssuance.SignAsync"/> encodes items, computes the MSO digests, signs as COSE_Sign1.</description></item>
 /// <item><description>The wire bytes are emitted via the same <see cref="CoseSerialization.SerializeCoseSign1"/> the signer wrote them with.</description></item>
 /// <item><description><see cref="MdocCborIssuerAuthReader.Read"/> parses the wire bytes back into <see cref="MdocIssuerAuth"/>.</description></item>
-/// <item><description><see cref="MdocCborIssuerAuthVerifier.VerifyAsync"/> validates the signature against the issuer's public key.</description></item>
+/// <item><description><see cref="Verifiable.Core.Model.Mdoc.MdocVerificationExtensions.VerifyAsync(MdocIssuerAuth, PublicKeyMemory, BaseMemoryPool, ParseCoseSign1Delegate, BuildSigStructureDelegate, CancellationToken)"/> validates the signature against the issuer's public key.</description></item>
 /// </list>
 /// <remarks>
 /// <para>

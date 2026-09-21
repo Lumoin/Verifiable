@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Federation;
 /// <para>
 /// Layered above JCose's JWS parsing surface. The caller is expected to
 /// have already invoked
-/// <see cref="JwsParsing.ParseCompact(string, DecodeDelegate, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}, System.Buffers.BaseMemoryPool)"/>
+/// <see cref="JwsParsing.ParseCompact(string, Verifiable.Cryptography.DecodeDelegate, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}, Lumoin.Base.BaseMemoryPool)"/>
 /// (or the JSON-serialised variants) and deserialised the payload bytes
 /// into an <see cref="UnverifiedJwtPayload"/>. This parser inspects
 /// federation-specific structural prerequisites only: the <c>typ</c>
@@ -50,7 +50,7 @@ public static class EntityStatementParser
         //confusion.
         if(!header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
             || typObj is not string typ
-            || !string.Equals(typ, WellKnownFederationMediaTypes.EntityStatementJwt, StringComparison.Ordinal))
+            || !WellKnownFederationMediaTypes.IsEntityStatementJwt(typ))
         {
             return EntityStatementParseResult.Invalid(
                 $"JWT 'typ' header must equal '{WellKnownFederationMediaTypes.EntityStatementJwt}' per RFC 8725 §3.11.");

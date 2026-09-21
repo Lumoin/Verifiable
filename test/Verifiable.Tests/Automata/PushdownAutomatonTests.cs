@@ -553,7 +553,7 @@ internal sealed class PushdownAutomatonTests
         //Step after unsubscribe — observer should not receive the entry.
         _ = await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(0, entries);
+        Assert.IsEmpty(entries);
     }
 
     //Helper methods at end of test class.
@@ -594,3 +594,4 @@ internal sealed class PushdownAutomatonTests
         public void OnCompleted() { }
     }
 }
+

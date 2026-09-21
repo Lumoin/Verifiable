@@ -10,7 +10,7 @@ namespace Verifiable.Cryptography;
 /// <para>
 /// Backend libraries start activities on this source before constructing
 /// <see cref="SensitiveMemory"/> instances. If no OpenTelemetry listener is
-/// configured, <see cref="ActivitySource.StartActivity"/> returns
+/// configured, <see cref="ActivitySource.StartActivity(string, ActivityKind)"/> returns
 /// <see langword="null"/> and the entire path is zero-cost.
 /// </para>
 /// <para>

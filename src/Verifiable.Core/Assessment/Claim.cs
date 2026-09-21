@@ -146,8 +146,6 @@ namespace Verifiable.Core.Assessment
     /// regulatory adherence in complex distributed environments.
     /// </para>
     /// </remarks>
-    /// <param name="Id">An identifier for the claim.</param>
-    /// <param name="IsSuccess">Indicates if this individual validation claim is considered successful.</param>
     public record Claim
     {
         /// <summary>
@@ -186,6 +184,7 @@ namespace Verifiable.Core.Assessment
         /// <param name="id">The identifier for this claim.</param>
         /// <param name="outcome">The outcome of the claim check.</param>
         /// <param name="context">Metadata, or context information, associated with the claim.</param>
+        /// <param name="subClaims">The sub-claims this claim aggregates, or <see cref="NoSubClaims"/> when there are none.</param>
         public Claim(ClaimId id, ClaimOutcome outcome, ClaimContext context, IReadOnlyList<Claim> subClaims)
         {
             ArgumentNullException.ThrowIfNull(context);
@@ -225,6 +224,11 @@ namespace Verifiable.Core.Assessment
     /// </remarks>
     public record FailedClaim: Claim
     {
+        /// <summary>
+        /// Initializes a new <see cref="FailedClaim"/> recording a claim-generation failure.
+        /// </summary>
+        /// <param name="failedRuleIdentifier">The identifier of the rule that failed to generate its claim.</param>
+        /// <param name="failureContext">A human-readable description of what went wrong.</param>
         public FailedClaim(string failedRuleIdentifier, string failureContext) : base(
             ClaimId.FailedClaim,
             ClaimOutcome.Failure,

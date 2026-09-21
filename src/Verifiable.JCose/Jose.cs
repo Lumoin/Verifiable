@@ -121,7 +121,7 @@ public readonly record struct JwsVerificationResult
 /// <para>
 /// <strong>Memory and security.</strong> Every sign and verify path constructs the
 /// JWS signing input (ASCII octets of <c>"&lt;header&gt;.&lt;payload&gt;"</c> per
-/// RFC 7515 §5.1) into a pooled buffer via <see cref="RentSigningInput"/> rather
+/// RFC 7515 §5.1) into a pooled buffer via <see cref="RentSigningInput(string, string, BaseMemoryPool, out int)"/> rather
 /// than heap-allocating a <see cref="byte"/> array.
 /// </para>
 /// <para>
@@ -310,7 +310,7 @@ public static class Jws
     /// <paramref name="unprotectedHeader"/>. This is the building block for serializations that must sign opaque
     /// bytes (for example a media-typed message body) and place a <c>kid</c> in the unprotected header — the two
     /// capabilities the typed-payload
-    /// <see cref="SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// <see cref="SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// overload cannot express. The returned <see cref="JwsMessage"/> is serialized by the caller (compact or JSON).
     /// </summary>
     /// <typeparam name="TJwtPart">The protected-header type.</typeparam>
@@ -416,7 +416,7 @@ public static class Jws
     /// <see cref="VerificationDelegate"/>. The registry-resolving overload
     /// above delegates here after resolving the function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// from <paramref name="publicKey"/>'s <see cref="Lumoin.Base.SensitiveData.Tag"/>.
     /// </summary>
     /// <param name="message">The JWS message to verify.</param>
     /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings.</param>
@@ -872,7 +872,7 @@ public static class Jws
     /// registry-resolving overload above delegates here after resolving the
     /// function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// from <paramref name="publicKey"/>'s <see cref="Lumoin.Base.SensitiveData.Tag"/>.
     /// </summary>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
@@ -1266,11 +1266,13 @@ public static class Jws
     }
 
 
-    //RFC 7515 §4 / §4.1.11: a JWS protected header MUST carry unique parameter names and MUST NOT name a
-    //critical extension this consumer does not understand. Either makes the JWS invalid. Both checks read
-    //the decoded protected-header bytes and never throw, so every verify path can fail closed to false.
+    //RFC 7515 §4 / §4.1.11: a JWS protected header MUST carry unique parameter names — at every nesting
+    //depth, not the top level alone, since a JWS header can carry a nested "jwk" object — and MUST NOT
+    //name a critical extension this consumer does not understand. Either makes the JWS invalid. Both
+    //checks read the decoded protected-header bytes and never throw, so every verify path can fail
+    //closed to false.
     private static bool IsProtectedHeaderAcceptable(ReadOnlySpan<byte> protectedHeaderJson) =>
-        !JwkJsonReader.HasDuplicateTopLevelKeys(protectedHeaderJson)
+        JwkJsonReader.IsWellFormedJsonDocument(protectedHeaderJson)
         && JoseCriticalHeaderValidation.IsSatisfied(protectedHeaderJson);
 
 

@@ -84,7 +84,7 @@ internal sealed class XAdESQualifyingPropertiesDiscoveryTests
             Assert.IsTrue(isDiscovered, $"Discovery must complete but was refused with {error.Failure}.");
             Assert.IsTrue(result.HasQualifyingProperties);
             Assert.AreEqual(0, result.ObjectOrdinal);
-            Assert.HasCount(0, result.QualifyingPropertiesReferences);
+            Assert.IsEmpty(result.QualifyingPropertiesReferences);
         }
     }
 
@@ -119,7 +119,7 @@ internal sealed class XAdESQualifyingPropertiesDiscoveryTests
             Assert.IsTrue(isDiscovered, $"Discovery must complete but was refused with {error.Failure}.");
             Assert.IsFalse(result.HasQualifyingProperties);
             Assert.AreEqual(-1, result.ObjectOrdinal);
-            Assert.HasCount(0, result.QualifyingPropertiesReferences);
+            Assert.IsEmpty(result.QualifyingPropertiesReferences);
         }
     }
 
@@ -802,3 +802,4 @@ internal sealed class XAdESQualifyingPropertiesDiscoveryTests
 
 
 }
+

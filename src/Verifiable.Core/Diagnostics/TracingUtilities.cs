@@ -26,7 +26,7 @@ namespace Verifiable.Core.Diagnostics
 
 
         /// <summary>
-        /// Retrieves the current <see cref="Activity.TraceFlags"/> or generates a new one if none exists.
+        /// Retrieves the current <see cref="Activity.ActivityTraceFlags"/> or generates a new one if none exists.
         /// </summary>
         /// <returns>A string representing not sampled and produced in random flags <c>'02'</c>.</returns>
         public static string GetOrCreateTraceFlags()

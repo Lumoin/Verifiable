@@ -5,7 +5,7 @@ using Verifiable.OAuth.Client;
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// The response from an HTTP endpoint call made via <see cref="SendFormPostDelegate"/>.
+/// The response from an HTTP endpoint call made via <see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,7 +13,7 @@ namespace Verifiable.OAuth;
 /// chooses to surface — HTTP status code, OTel trace context from response
 /// headers, RFC 9457 <c>instance</c> URIs, server-supplied request identifiers.
 /// The library does not mandate which metadata fields are populated; it is the
-/// application's <see cref="SendFormPostDelegate"/> implementation that decides
+/// application's <see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/> implementation that decides
 /// what to capture from the underlying HTTP response.
 /// </para>
 /// <para>

@@ -1,3 +1,5 @@
+using Verifiable.Core.OutboundFetch;
+
 namespace Verifiable.WebFinger;
 
 /// <summary>
@@ -14,17 +16,30 @@ public sealed record WebFingerResolutionResult
     /// <summary>The failure diagnostic when unsuccessful; otherwise <see langword="null"/>.</summary>
     public WebFingerResolutionError? Error { get; init; }
 
+    /// <summary>
+    /// The freshness the JRD response's headers imply, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>, when
+    /// <see cref="IsSuccessful"/> is <see langword="true"/>. Every other outcome leaves this at its default
+    /// value — not storable, zero lifetime — so a caller cannot infer a cacheable lifetime from a query that
+    /// never produced a descriptor.
+    /// </summary>
+    public HttpCacheFreshness Freshness { get; init; }
+
     /// <summary>Whether resolution produced a descriptor.</summary>
     public bool IsSuccessful => Error is null && Jrd is not null;
 
 
     /// <summary>Creates a successful result carrying the resolved descriptor.</summary>
     /// <param name="jrd">The resolved JSON Resource Descriptor.</param>
-    public static WebFingerResolutionResult Success(JsonResourceDescriptor jrd)
+    /// <param name="freshness">
+    /// The freshness the JRD response's headers imply, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </param>
+    public static WebFingerResolutionResult Success(JsonResourceDescriptor jrd, HttpCacheFreshness freshness = default)
     {
         ArgumentNullException.ThrowIfNull(jrd);
 
-        return new WebFingerResolutionResult { Jrd = jrd };
+        return new WebFingerResolutionResult { Jrd = jrd, Freshness = freshness };
     }
 
 

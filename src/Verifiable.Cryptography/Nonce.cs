@@ -76,7 +76,7 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     /// </param>
     /// <param name="lifetime">
     /// Optional OTel activity spanning this nonce's lifetime. Started by the backend;
-    /// stopped on <see cref="Dispose()"/>. Pass <see langword="null"/> when no OTel
+    /// stopped on <see cref="SensitiveMemory.Dispose()"/>. Pass <see langword="null"/> when no OTel
     /// listener is active.
     /// </param>
     public Nonce(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null) : base(sensitiveMemory, tag, lifetime)
@@ -92,7 +92,7 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     /// <returns>The nonce bytes as a read-only span.</returns>
     /// <remarks>
     /// <para>
-    /// This method is not enforced — <see cref="AsReadOnlySpan"/> still provides
+    /// This method is not enforced — <see cref="SensitiveMemory.AsReadOnlySpan"/> still provides
     /// access to the bytes regardless. <see cref="UseNonce"/> exists as an explicit
     /// usage pattern that makes intent clear and makes misuse observable via
     /// <see cref="UseCount"/> and the OTel lifetime span.

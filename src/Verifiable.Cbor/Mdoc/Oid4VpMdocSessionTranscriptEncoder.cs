@@ -47,7 +47,7 @@ public static class Oid4VpMdocSessionTranscriptEncoder
     /// <summary>
     /// Builds the OID4VP SessionTranscript byte sequence that
     /// <see cref="MdocCborDeviceSignedSigner.SignAsync"/> and
-    /// <see cref="MdocCborDeviceSignedVerifier.VerifyAsync"/> consume as
+    /// <see cref="Verifiable.Core.Model.Mdoc.MdocVerificationExtensions.VerifyDeviceSignedAsync"/> consume as
     /// their <c>encodedSessionTranscript</c> argument.
     /// </summary>
     /// <param name="clientId">

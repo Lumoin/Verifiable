@@ -76,8 +76,8 @@ internal sealed class SiopCombinedResponseFlowTests
         {
             await using TestHostShell host = new(TimeProvider);
 
-            using VerifierKeyMaterial rpKeys = host.RegisterClient(
-                RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+            using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+                RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
             string tenant = rpKeys.Registration.TenantId.Value;
 
             //The verifier trusts the credential issuer for the vp_token signature check.
@@ -150,8 +150,8 @@ internal sealed class SiopCombinedResponseFlowTests
         {
             await using TestHostShell host = new(TimeProvider);
 
-            using VerifierKeyMaterial rpKeys = host.RegisterClient(
-                RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+            using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+                RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
             string tenant = rpKeys.Registration.TenantId.Value;
 
             host.RegisterIssuerTrust(IssuerId, issuerPublicKey);
@@ -208,8 +208,8 @@ internal sealed class SiopCombinedResponseFlowTests
         //emits SiopResponsePosted and reaches the verified state exactly as SiopFlowIntegrationTests.
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         string requestHandle = await host.HandleSiopRequestPreparationAsync(

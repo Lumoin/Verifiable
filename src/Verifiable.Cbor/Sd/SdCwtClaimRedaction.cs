@@ -28,7 +28,7 @@ namespace Verifiable.Cbor.Sd;
 /// <item><description>
 /// <strong>Walk and redact</strong> (this class): Walks the CBOR map, creates
 /// <see cref="SdDisclosure"/> objects for disclosable claims, serializes them via
-/// <see cref="SdCwtSerializer.SerializeDisclosure(SdDisclosure)"/>, computes digests via
+/// <see cref="SdCwtSerializer.SerializeDisclosure(SdDisclosure, CborConformanceMode)"/>, computes digests via
 /// <see cref="SdCwtSerializer.ComputeDisclosureDigest(byte[], string, BaseMemoryPool)"/>, and builds the
 /// mandatory claims tree. Format-specific (CBOR).
 /// </description></item>

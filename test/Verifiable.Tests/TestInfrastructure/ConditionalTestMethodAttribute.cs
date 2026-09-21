@@ -88,7 +88,7 @@ internal sealed class ConditionalTestMethodAttribute: TestMethodAttribute
     /// Collects every <see cref="BaseSkipAttribute"/> declared on the test method or its declaring-type
     /// hierarchy. MSTest's <see cref="ITestMethod"/> hands only the method's own attributes through
     /// <see cref="ITestMethod.GetAllAttributes"/>; reaching a class-level skip attribute on an enclosing
-    /// type requires walking <see cref="Type.DeclaringType"/> with <see cref="Type.GetCustomAttributes"/>,
+    /// type requires walking <see cref="Type.DeclaringType"/> with <see cref="System.Reflection.MemberInfo.GetCustomAttributes(bool)"/>,
     /// since MSTest exposes no hierarchy-walking equivalent of its own.
     /// </summary>
     private static List<BaseSkipAttribute> FindSkipAttributes(ITestMethod testMethod)

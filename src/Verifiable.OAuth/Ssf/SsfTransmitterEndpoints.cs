@@ -44,62 +44,77 @@ public static class SsfTransmitterEndpoints
         {
             candidates.Add(BuildSsfConfiguration());
 
-            //Stream Management (§8.1.1) is active per operation only when its
-            //store seam is wired — mirroring the AuthZEN optional-search
-            //pattern: wired → active → advertised, fail-closed otherwise.
-            EndpointServer? server = context.Server;
-            if(server?.OAuth().CreateSsfStreamAsync is not null
+            //SSF 1.0 §8-3: every Stream Management API endpoint MUST authorize the caller
+            //against the Receiver's own streams. Unwired, there is no seam to ask, so no
+            //Stream Management candidate is materialized — fail-closed, the same
+            //materialize-only-when-wired rule the OAuth grant seams use
+            //(AuthCodeEndpoints, client_credentials/token_exchange/jwt_bearer). The
+            //well-known discovery document above stays public per SSF §7.1.1.
+            EndpointServer? server = context.RequestServer;
+            bool authorizationSeamWired = server?.OAuth().AuthorizeSsfRequestAsync is not null;
+
+            //Stream Management (§8.1.1) is active per operation only when both the
+            //authorization seam and its store seam are wired — mirroring the AuthZEN
+            //optional-search pattern: wired → active → advertised, fail-closed otherwise.
+            if(authorizationSeamWired
+                && server?.OAuth().CreateSsfStreamAsync is not null
                 && server?.OAuth().ParseSsfStreamCreateRequestAsync is not null)
             {
                 candidates.Add(BuildStreamCreate());
             }
 
-            if(server?.OAuth().ReadSsfStreamsAsync is not null)
+            if(authorizationSeamWired && server?.OAuth().ReadSsfStreamsAsync is not null)
             {
                 candidates.Add(BuildStreamRead());
             }
 
-            if(server?.OAuth().UpdateSsfStreamAsync is not null
+            if(authorizationSeamWired
+                && server?.OAuth().UpdateSsfStreamAsync is not null
                 && server?.OAuth().ParseSsfStreamUpdateRequestAsync is not null)
             {
                 candidates.Add(BuildStreamUpdate());
             }
 
-            if(server?.OAuth().ReplaceSsfStreamAsync is not null
+            if(authorizationSeamWired
+                && server?.OAuth().ReplaceSsfStreamAsync is not null
                 && server?.OAuth().ParseSsfStreamUpdateRequestAsync is not null)
             {
                 candidates.Add(BuildStreamReplace());
             }
 
-            if(server?.OAuth().DeleteSsfStreamAsync is not null)
+            if(authorizationSeamWired && server?.OAuth().DeleteSsfStreamAsync is not null)
             {
                 candidates.Add(BuildStreamDelete());
             }
 
-            if(server?.OAuth().ReadSsfStreamStatusAsync is not null)
+            if(authorizationSeamWired && server?.OAuth().ReadSsfStreamStatusAsync is not null)
             {
                 candidates.Add(BuildStatusRead());
             }
 
-            if(server?.OAuth().UpdateSsfStreamStatusAsync is not null
+            if(authorizationSeamWired
+                && server?.OAuth().UpdateSsfStreamStatusAsync is not null
                 && server?.OAuth().ParseSsfStreamStatusAsync is not null)
             {
                 candidates.Add(BuildStatusUpdate());
             }
 
-            if(server?.OAuth().AddSsfSubjectAsync is not null
+            if(authorizationSeamWired
+                && server?.OAuth().AddSsfSubjectAsync is not null
                 && server?.OAuth().ParseSsfAddSubjectRequestAsync is not null)
             {
                 candidates.Add(BuildSubjectAdd());
             }
 
-            if(server?.OAuth().RemoveSsfSubjectAsync is not null
+            if(authorizationSeamWired
+                && server?.OAuth().RemoveSsfSubjectAsync is not null
                 && server?.OAuth().ParseSsfRemoveSubjectRequestAsync is not null)
             {
                 candidates.Add(BuildSubjectRemove());
             }
 
-            if(server?.OAuth().TriggerSsfVerificationAsync is not null
+            if(authorizationSeamWired
+                && server?.OAuth().TriggerSsfVerificationAsync is not null
                 && server?.OAuth().ParseSsfVerificationRequestAsync is not null)
             {
                 candidates.Add(BuildVerificationTrigger());
@@ -110,6 +125,10 @@ public static class SsfTransmitterEndpoints
     };
 
 
+    /// <summary>
+    /// Builds the discovery endpoint from the admitted transmitter wiring and metadata contributions.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-7">Shared Signals Framework §7</see>.
+    /// </summary>
     private static EndpointCandidate BuildSsfConfiguration() =>
         new()
         {
@@ -142,7 +161,7 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -289,6 +308,10 @@ public static class SsfTransmitterEndpoints
     }
 
 
+    /// <summary>
+    /// Builds the stream-creation endpoint using the admitted parser and creation store.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.1.1">Shared Signals Framework §8.1.1.1</see>.
+    /// </summary>
     private static EndpointCandidate BuildStreamCreate() =>
         new()
         {
@@ -303,16 +326,17 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
 
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
-                if(denied is not null)
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.CreateStream,
+                    WellKnownScopes.SsfManage, streamId: null, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
                 {
-                    return (null, denied);
+                    return (null, authorization.Denial);
                 }
 
                 //§8.1.1.1: every Receiver-supplied member MAY be absent — an empty
@@ -336,7 +360,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 SsfStreamWriteResult result = await oauth.CreateSsfStreamAsync!(
-                    request, registration, context, ct).ConfigureAwait(false);
+                    request, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
 
                 return result.Outcome switch
                 {
@@ -367,6 +391,10 @@ public static class SsfTransmitterEndpoints
         };
 
 
+    /// <summary>
+    /// Builds the stream-reading endpoint using the admitted stream store.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.1.2">Shared Signals Framework §8.1.1.2</see>.
+    /// </summary>
     private static EndpointCandidate BuildStreamRead() =>
         new()
         {
@@ -381,23 +409,26 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
 
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfRead, ct).ConfigureAwait(false);
-                if(denied is not null)
-                {
-                    return (null, denied);
-                }
-
                 //§8.1.1.2: stream_id query parameter selects one stream; absent
-                //means "list every stream this Receiver has" (possibly empty).
+                //means "list every stream this Receiver has" (possibly empty). Read
+                //before authorizing so the seam can answer 404 for a stream the caller
+                //may not reach, per SSF 1.0 §8-3.
                 string? streamId = ReadStreamId(fields);
 
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.ReadStream,
+                    WellKnownScopes.SsfRead, streamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
+                {
+                    return (null, authorization.Denial);
+                }
+
                 IReadOnlyList<SsfStreamConfiguration>? streams = await oauth.ReadSsfStreamsAsync!(
-                    streamId, registration, context, ct).ConfigureAwait(false);
+                    streamId, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
 
                 if(streams is null)
                 {
@@ -421,24 +452,29 @@ public static class SsfTransmitterEndpoints
         BuildStreamWrite(
             WellKnownEndpointNames.SsfStreamUpdate,
             WellKnownHttpMethods.Patch,
-            static (server, request, registration, context, ct) =>
-                server.OAuth().UpdateSsfStreamAsync!(request, registration, context, ct));
+            SsfRequestOperation.UpdateStream,
+            static (server, request, registration, receiver, context, ct) =>
+                server.OAuth().UpdateSsfStreamAsync!(request, registration, receiver, context, ct));
 
 
     private static EndpointCandidate BuildStreamReplace() =>
         BuildStreamWrite(
             WellKnownEndpointNames.SsfStreamReplace,
             WellKnownHttpMethods.Put,
-            static (server, request, registration, context, ct) =>
-                server.OAuth().ReplaceSsfStreamAsync!(request, registration, context, ct));
+            SsfRequestOperation.ReplaceStream,
+            static (server, request, registration, receiver, context, ct) =>
+                server.OAuth().ReplaceSsfStreamAsync!(request, registration, receiver, context, ct));
 
 
-    //§8.1.1.3 (PATCH) and §8.1.1.4 (PUT) share the wire shape and status-code
-    //mapping; only the store seam differs (merge versus replace semantics).
+    /// <summary>
+    /// Builds a stream-write endpoint, selecting merge or replacement semantics for the requested method.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.1">Shared Signals Framework §8.1.1</see>.
+    /// </summary>
     private static EndpointCandidate BuildStreamWrite(
         string endpointName,
         string httpMethod,
-        Func<EndpointServer, SsfStreamUpdateRequest, ClientRecord, ExchangeContext, CancellationToken, ValueTask<SsfStreamWriteResult>> store) =>
+        SsfRequestOperation operation,
+        Func<EndpointServer, SsfStreamUpdateRequest, ClientRecord, SsfReceiver, ExchangeContext, CancellationToken, ValueTask<SsfStreamWriteResult>> store) =>
         new()
         {
             Name = endpointName,
@@ -452,17 +488,10 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
-
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
-                if(denied is not null)
-                {
-                    return (null, denied);
-                }
 
                 if(req is null || req.Body.IsEmpty || req.Body.Bytes.IsEmpty)
                 {
@@ -479,7 +508,20 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The stream update request body cannot be parsed."));
                 }
 
-                SsfStreamWriteResult result = await store(server, request, registration, context, ct)
+                //§8.1.1.3/§8.1.1.4: the target stream_id rides the request body, so the body
+                //is parsed before authorization runs — this happens before authorization and
+                //reveals nothing about stream state either way, and it lets the decision
+                //answer StreamNotAvailableToReceiver for this stream_id instead of only the
+                //store's own not-found outcome.
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, operation,
+                    WellKnownScopes.SsfManage, request.StreamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
+                {
+                    return (null, authorization.Denial);
+                }
+
+                SsfStreamWriteResult result = await store(server, request, registration, authorization.Receiver!, context, ct)
                     .ConfigureAwait(false);
 
                 return result.Outcome switch
@@ -513,6 +555,10 @@ public static class SsfTransmitterEndpoints
         };
 
 
+    /// <summary>
+    /// Builds the stream-deletion endpoint using the admitted deletion store.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.1.5">Shared Signals Framework §8.1.1.5</see>.
+    /// </summary>
     private static EndpointCandidate BuildStreamDelete() =>
         new()
         {
@@ -527,19 +573,23 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
 
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
-                if(denied is not null)
+                //§8.1.1.5: the stream_id query parameter is REQUIRED. Read before
+                //authorizing so the seam can answer 404 for a stream the caller may not
+                //reach, per SSF 1.0 §8-3.
+                string? streamId = ReadStreamId(fields);
+
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.DeleteStream,
+                    WellKnownScopes.SsfManage, streamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
                 {
-                    return (null, denied);
+                    return (null, authorization.Denial);
                 }
 
-                //§8.1.1.5: the stream_id query parameter is REQUIRED.
-                string? streamId = ReadStreamId(fields);
                 if(string.IsNullOrEmpty(streamId))
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -547,7 +597,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 SsfStreamWriteOutcome outcome = await oauth.DeleteSsfStreamAsync!(
-                    streamId, registration, context, ct).ConfigureAwait(false);
+                    streamId, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
 
                 return outcome switch
                 {
@@ -572,6 +622,10 @@ public static class SsfTransmitterEndpoints
         };
 
 
+    /// <summary>
+    /// Builds the status-reading endpoint using the admitted status store.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.2">Shared Signals Framework §8.1.2</see>.
+    /// </summary>
     private static EndpointCandidate BuildStatusRead() =>
         new()
         {
@@ -586,19 +640,23 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
 
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfRead, ct).ConfigureAwait(false);
-                if(denied is not null)
+                //§8.1.2.1: the stream_id query parameter is REQUIRED. Read before
+                //authorizing so the seam can answer 404 for a stream the caller may not
+                //reach, per SSF 1.0 §8-3.
+                string? streamId = ReadStreamId(fields);
+
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.ReadStatus,
+                    WellKnownScopes.SsfRead, streamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
                 {
-                    return (null, denied);
+                    return (null, authorization.Denial);
                 }
 
-                //§8.1.2.1: the stream_id query parameter is REQUIRED.
-                string? streamId = ReadStreamId(fields);
                 if(string.IsNullOrEmpty(streamId))
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -606,7 +664,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 SsfStreamStatus? status = await oauth.ReadSsfStreamStatusAsync!(
-                    streamId, registration, context, ct).ConfigureAwait(false);
+                    streamId, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
                 if(status is null)
                 {
                     return (null, ServerHttpResponse.NotFound());
@@ -622,6 +680,10 @@ public static class SsfTransmitterEndpoints
         };
 
 
+    /// <summary>
+    /// Builds the status-update endpoint using the admitted parser and status store.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.2">Shared Signals Framework §8.1.2</see>.
+    /// </summary>
     private static EndpointCandidate BuildStatusUpdate() =>
         new()
         {
@@ -636,17 +698,10 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
-
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
-                if(denied is not null)
-                {
-                    return (null, denied);
-                }
 
                 if(req is null || req.Body.IsEmpty || req.Body.Bytes.IsEmpty)
                 {
@@ -663,8 +718,18 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The status update request body cannot be parsed."));
                 }
 
+                //§8.1.2.2: the target stream_id rides the request body, so the body is
+                //parsed before authorization runs — see the remark on BuildStreamWrite.
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.UpdateStatus,
+                    WellKnownScopes.SsfManage, requested.StreamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
+                {
+                    return (null, authorization.Denial);
+                }
+
                 SsfStreamStatusResult result = await oauth.UpdateSsfStreamStatusAsync!(
-                    requested, registration, context, ct).ConfigureAwait(false);
+                    requested, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
 
                 return result.Outcome switch
                 {
@@ -688,6 +753,10 @@ public static class SsfTransmitterEndpoints
         };
 
 
+    /// <summary>
+    /// Builds the subject-addition endpoint using the admitted parser and subject store.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.3">Shared Signals Framework §8.1.3</see>.
+    /// </summary>
     private static EndpointCandidate BuildSubjectAdd() =>
         new()
         {
@@ -702,17 +771,10 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
-
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
-                if(denied is not null)
-                {
-                    return (null, denied);
-                }
 
                 if(req is null || req.Body.IsEmpty || req.Body.Bytes.IsEmpty)
                 {
@@ -729,8 +791,18 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The Add Subject request body cannot be parsed."));
                 }
 
+                //§8.1.3.2: the target stream_id rides the request body, so the body is
+                //parsed before authorization runs — see the remark on BuildStreamWrite.
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.AddSubject,
+                    WellKnownScopes.SsfManage, request.StreamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
+                {
+                    return (null, authorization.Denial);
+                }
+
                 SsfStreamOperationOutcome outcome = await oauth.AddSsfSubjectAsync!(
-                    request, registration, context, ct).ConfigureAwait(false);
+                    request, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
 
                 return outcome switch
                 {
@@ -757,6 +829,10 @@ public static class SsfTransmitterEndpoints
         };
 
 
+    /// <summary>
+    /// Builds the subject-removal endpoint using the admitted parser and subject store.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.3">Shared Signals Framework §8.1.3</see>.
+    /// </summary>
     private static EndpointCandidate BuildSubjectRemove() =>
         new()
         {
@@ -771,17 +847,10 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
-
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
-                if(denied is not null)
-                {
-                    return (null, denied);
-                }
 
                 if(req is null || req.Body.IsEmpty || req.Body.Bytes.IsEmpty)
                 {
@@ -798,8 +867,18 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The Remove Subject request body cannot be parsed."));
                 }
 
+                //§8.1.3.3: the target stream_id rides the request body, so the body is
+                //parsed before authorization runs — see the remark on BuildStreamWrite.
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.RemoveSubject,
+                    WellKnownScopes.SsfManage, request.StreamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
+                {
+                    return (null, authorization.Denial);
+                }
+
                 SsfStreamOperationOutcome outcome = await oauth.RemoveSsfSubjectAsync!(
-                    request, registration, context, ct).ConfigureAwait(false);
+                    request, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
 
                 return outcome switch
                 {
@@ -825,6 +904,10 @@ public static class SsfTransmitterEndpoints
         };
 
 
+    /// <summary>
+    /// Builds the verification endpoint using the admitted parser and verification trigger.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.4">Shared Signals Framework §8.1.4</see>.
+    /// </summary>
     private static EndpointCandidate BuildVerificationTrigger() =>
         new()
         {
@@ -839,17 +922,10 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
-
-                ServerHttpResponse? denied = await AuthorizeAsync(
-                    server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
-                if(denied is not null)
-                {
-                    return (null, denied);
-                }
 
                 if(req is null || req.Body.IsEmpty || req.Body.Bytes.IsEmpty)
                 {
@@ -866,8 +942,18 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The verification request body cannot be parsed."));
                 }
 
+                //§8.1.4.2: the target stream_id rides the request body, so the body is
+                //parsed before authorization runs — see the remark on BuildStreamWrite.
+                SsfAuthorizationOutcome authorization = await AuthorizeAsync(
+                    server, registration, context, SsfRequestOperation.Verify,
+                    WellKnownScopes.SsfManage, request.StreamId, ct).ConfigureAwait(false);
+                if(authorization.Denial is not null)
+                {
+                    return (null, authorization.Denial);
+                }
+
                 SsfStreamOperationOutcome outcome = await oauth.TriggerSsfVerificationAsync!(
-                    request, registration, context, ct).ConfigureAwait(false);
+                    request, registration, authorization.Receiver!, context, ct).ConfigureAwait(false);
 
                 return outcome switch
                 {
@@ -901,47 +987,168 @@ public static class SsfTransmitterEndpoints
             : null;
 
 
-    //CAEP Interoperability Profile §2.7.3: when the authorization seam is wired,
-    //every stream-management request must carry a token granting the operation's
-    //scope (read APIs accept ssf.read, management APIs accept ssf.manage). The
-    //token-validation composition is the application's, behind the seam; an
-    //unset seam leaves the endpoints unauthenticated. The well-known discovery
-    //document stays public per SSF §7.1.1.
-    private static async ValueTask<ServerHttpResponse?> AuthorizeAsync(
+    /// <summary>
+    /// The outcome of <see cref="AuthorizeAsync"/>: either the response the endpoint sends
+    /// back for a denial, or the <see cref="Ssf.SsfReceiver"/> a permit bound the caller to —
+    /// exactly one of the two is set.
+    /// </summary>
+    private sealed record SsfAuthorizationOutcome
+    {
+        /// <summary>The response to return for a denied request; <see langword="null"/> on a permit.</summary>
+        public ServerHttpResponse? Denial { get; init; }
+
+        /// <summary>
+        /// The Receiver every store delegate for this request receives; <see langword="null"/>
+        /// on a denial.
+        /// </summary>
+        public SsfReceiver? Receiver { get; init; }
+
+
+        /// <summary>Builds a denied outcome carrying the response to send.</summary>
+        /// <param name="response">The response the endpoint returns instead of calling its store.</param>
+        /// <returns>An <see cref="SsfAuthorizationOutcome"/> with <see cref="Denial"/> set.</returns>
+        public static SsfAuthorizationOutcome Denied(ServerHttpResponse response) =>
+            new() { Denial = response };
+
+
+        /// <summary>Builds a permitted outcome carrying the bound Receiver.</summary>
+        /// <param name="receiver">The Receiver the store delegates for this request receive.</param>
+        /// <returns>An <see cref="SsfAuthorizationOutcome"/> with <see cref="Receiver"/> set.</returns>
+        public static SsfAuthorizationOutcome Permitted(SsfReceiver receiver) =>
+            new() { Receiver = receiver };
+    }
+
+
+    //SSF 1.0 §8-3: every Stream Management API request calls this before its store
+    //delegate runs. The Builder only materializes a candidate when the seam is
+    //wired (fail-closed), so oauth.AuthorizeSsfRequestAsync is non-null on every
+    //call reachable through dispatch; the null branch below is a defensive
+    //fail-closed fallback, never an observed path.
+    private static async ValueTask<SsfAuthorizationOutcome> AuthorizeAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
+        SsfRequestOperation operation,
         string requiredScope,
+        string? streamId,
         CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
         if(oauth.AuthorizeSsfRequestAsync is null)
         {
-            return null;
+            return SsfAuthorizationOutcome.Denied(await UnauthorizedWithChallengeAsync(
+                server, registration, context, cancellationToken).ConfigureAwait(false));
         }
 
         IncomingRequest? req = context.IncomingRequest;
         if(req is null)
         {
-            return await UnauthorizedWithChallengeAsync(
-                server, registration, context, cancellationToken).ConfigureAwait(false);
+            return SsfAuthorizationOutcome.Denied(await UnauthorizedWithChallengeAsync(
+                server, registration, context, cancellationToken).ConfigureAwait(false));
         }
 
-        SsfRequestAuthorization outcome = await oauth.AuthorizeSsfRequestAsync(
-            req, requiredScope, registration, context, cancellationToken).ConfigureAwait(false);
-
-        return outcome switch
+        SsfRequestDecision? decision;
+        try
         {
-            SsfRequestAuthorization.Authorized => null,
-            SsfRequestAuthorization.Forbidden => ServerHttpResponse.Forbidden(
-                OAuthErrors.InvalidScope, "The granted scope does not permit this operation."),
-            SsfRequestAuthorization.Unauthorized => await UnauthorizedWithChallengeAsync(
+            decision = await oauth.AuthorizeSsfRequestAsync(
+                new SsfRequestEvaluation
+                {
+                    Operation = operation,
+                    RequiredScope = requiredScope,
+                    TenantId = registration.TenantId,
+                    StreamId = streamId,
+                    Request = req
+                },
+                registration, context, cancellationToken).ConfigureAwait(false);
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch(Exception exception)
+        {
+            //The application's own authorization seam is a caller-registered delegate whose
+            //failure vocabulary this endpoint cannot enumerate; any fault it raises surfaces
+            //as this request's own server error, cancellation of its own token excepted
+            //above, the same posture the pushed authorization request refusal takes for its
+            //own transport delegate. No store delegate runs, and SSF 1.0 §8.1.1.1's error
+            //table has no vocabulary for a seam fault, so this is a 500 outside it.
+            _ = (System.Diagnostics.Activity.Current?.AddException(exception));
+
+            return SsfAuthorizationOutcome.Denied(ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, "The Stream Management API request could not be authorized."));
+        }
+
+        //A seam that returns null is the same fail-closed case SsfRequestDecision.DenialReason
+        //already documents for an unset reason: treated as NotAuthorizedForTenant, never a
+        //NullReferenceException reaching the dispatcher.
+        decision ??= new SsfRequestDecision { IsPermitted = false };
+
+        if(decision.IsPermitted)
+        {
+            //decision.Receiver is set by every verdict built through
+            //SsfRequestDecision.Permit(SsfReceiver); a permit assembled by hand without one is
+            //the same misbehaving-seam case as a null decision, and fails closed rather than
+            //reaching a store with no Receiver to bind. A Receiver without an identifier binds
+            //nothing either, so it fails closed the same way.
+            return decision.Receiver is { } receiver && !string.IsNullOrWhiteSpace(receiver.Id)
+                ? SsfAuthorizationOutcome.Permitted(receiver)
+                : SsfAuthorizationOutcome.Denied(ForbiddenForTenant());
+        }
+
+        RecordDenialDescription(decision.DenialDescription);
+
+        return SsfAuthorizationOutcome.Denied(decision.DenialReason switch
+        {
+            SsfRequestDenialReason.AuthenticationRequired => await UnauthorizedWithChallengeAsync(
                 server, registration, context, cancellationToken).ConfigureAwait(false),
 
-            _ => await UnauthorizedWithChallengeAsync(
-                server, registration, context, cancellationToken).ConfigureAwait(false)
-        };
+            SsfRequestDenialReason.InsufficientScope => ServerHttpResponse.Forbidden(
+                OAuthErrors.InvalidScope, "The granted scope does not permit this operation."),
+
+            SsfRequestDenialReason.StreamNotAvailableToReceiver => ServerHttpResponse.NotFound(),
+
+            //NotAuthorizedForTenant, and a denial with no reason set, share this fixed
+            //§8.1.1.x 403 wording.
+            _ => ForbiddenForTenant()
+        });
     }
+
+
+    /// <summary>
+    /// Records the application's own <paramref name="hostDescription"/> for a denied Stream
+    /// Management API request on the dispatch <see cref="System.Diagnostics.Activity"/>,
+    /// for every <see cref="SsfRequestDenialReason"/> alike — mirroring how the pushed-request
+    /// refusal keeps host detail off the wire and on the trace. A <see langword="null"/>
+    /// description (the common case) records nothing.
+    /// </summary>
+    private static void RecordDenialDescription(string? hostDescription)
+    {
+        if(hostDescription is null)
+        {
+            return;
+        }
+
+        _ = (System.Diagnostics.Activity.Current?.AddEvent(
+            new System.Diagnostics.ActivityEvent(
+                OAuthEventNames.SsfRequestDenied,
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    [OAuthEventNames.SsfRequestDenialDescriptionTagName] = hostDescription
+                })));
+    }
+
+
+    /// <summary>
+    /// Builds the fixed, non-revealing 403 for <see cref="SsfRequestDenialReason.NotAuthorizedForTenant"/>
+    /// (SSF 1.0 §8.1.1.1 Create Stream Errors and the parallel per-operation 403 rows). The
+    /// application's own denial description, when it supplied one, already reached the trace
+    /// through <see cref="RecordDenialDescription"/> — this response body is always the same
+    /// fixed sentence, naming no tenant, client or stream.
+    /// </summary>
+    private static ServerHttpResponse ForbiddenForTenant() =>
+        ServerHttpResponse.Forbidden(
+            OAuthErrors.AccessDenied, "The Receiver is not authorized for this tenant.");
 
 
     /// <summary>

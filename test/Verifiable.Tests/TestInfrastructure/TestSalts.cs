@@ -16,10 +16,10 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <remarks>
 /// <para>
 /// Production code allocates salt through the entropy backend (e.g.,
-/// <see cref="Verifiable.Microsoft.MicrosoftEntropyFunctionsAdapter.GenerateSalt"/>) which
+/// <see cref="Verifiable.Microsoft.MicrosoftEntropyFunctions.GenerateSalt"/>) which
 /// stamps full provenance — <see cref="Purpose.Salt"/>, <see cref="ProviderLibrary"/>,
-/// <see cref="CryptoLibrary"/>, <see cref="ProviderClass"/>,
-/// <see cref="ProviderOperation"/> — on the resulting <see cref="Salt.Tag"/>. Tests
+/// <see cref="Verifiable.Cryptography.Provider.CryptoLibrary"/>, <see cref="ProviderClass"/>,
+/// <see cref="ProviderOperation"/> — on the resulting <c>Salt.Tag</c>. Tests
 /// need a parallel path:
 /// </para>
 /// <list type="bullet">

@@ -27,7 +27,7 @@
       MSTest.Sdk resolves the code coverage extension through this property; the value tracks the
       dotnet-coverage tool in .config/dotnet-tools.json so the in-process collector and the CLI agree.
     -->
-    <MicrosoftTestingExtensionsCodeCoverageVersion>18.10.0</MicrosoftTestingExtensionsCodeCoverageVersion>
+    <MicrosoftTestingExtensionsCodeCoverageVersion>18.11.2</MicrosoftTestingExtensionsCodeCoverageVersion>
   </PropertyGroup>
  
   <ItemGroup>

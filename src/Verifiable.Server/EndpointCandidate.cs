@@ -22,7 +22,7 @@ public sealed record EndpointCandidate
 {
     /// <summary>
     /// Stable endpoint role identifier. See
-    /// <see cref="WellKnownEndpointNames"/> for the library's catalogue.
+    /// <c>WellKnownEndpointNames</c> for the library's catalogue.
     /// </summary>
     public required string Name { get; init; }
 
@@ -68,6 +68,15 @@ public sealed record EndpointCandidate
     public required BuildResponseDelegate BuildResponse { get; init; }
 
     /// <summary>
+    /// The endpoint's own pre-correlation check. See
+    /// <see cref="ServerEndpoint.BeforeCorrelationAsync"/> and
+    /// <see cref="BeforeCorrelationDelegate"/> for the full remarks.
+    /// <see langword="null"/> (the default) runs no such check for this
+    /// candidate.
+    /// </summary>
+    public BeforeCorrelationDelegate? BeforeCorrelationAsync { get; init; }
+
+    /// <summary>
     /// Optional correlation-key extractor for endpoints whose handle pattern
     /// differs from the standard OAuth handles. See
     /// <see cref="ServerEndpoint.ExtractCorrelationKey"/>.
@@ -103,4 +112,19 @@ public sealed record EndpointCandidate
     /// <see langword="null"/> falls back to the host-generic description.
     /// </summary>
     public string? HandleNotFoundErrorDescription { get; init; }
+
+    /// <summary>
+    /// The <c>invalid_request</c> description this endpoint's handler answers when
+    /// <see cref="ExtractCorrelationKey"/> — or the standard field it stands in for — yields no
+    /// handle at all, naming the missing parameter this endpoint alone knows. <see langword="null"/>
+    /// falls back to <see cref="EndpointServer"/>'s host-generic description.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> defines
+    /// <c>invalid_request</c> as "the request is missing a required parameter" — a description that
+    /// names the parameter, in the style of the endpoint's own "Missing grant_type." and "Missing
+    /// response_type." refusals, is more useful than the host's generic "Cannot determine correlation
+    /// key." to a caller who does not know this endpoint keys its continuing flow on that field.
+    /// </remarks>
+    public string? MissingCorrelationKeyErrorDescription { get; init; }
 }

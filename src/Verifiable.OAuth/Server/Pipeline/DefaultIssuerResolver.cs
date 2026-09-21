@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// <remarks>
 /// <para>
 /// Applied by every call site in the library when
-/// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/> is not set.
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/> is not set.
 /// Applications that set that delegate bypass this helper entirely; the
 /// library never second-guesses an application-supplied resolver.
 /// </para>
@@ -27,7 +27,7 @@ namespace Verifiable.OAuth.Server.Pipeline;
 ///   </item>
 ///   <item>
 ///     <description>
-///       <see cref="ExchangeContextServerExtensions.Issuer"/> — a request-scoped URI
+///       <c>ExchangeContextServerExtensions.Issuer</c> — a request-scoped URI
 ///       populated by the ASP.NET skin from the incoming request's scheme and
 ///       host. Used when the registration does not declare an issuer,
 ///       accommodating deployments where the URL is derived per-request from
@@ -56,7 +56,7 @@ internal static class DefaultIssuerResolver
     /// <returns>The authoritative issuer URI for this request.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when neither <see cref="ClientRecord.IssuerUri"/> nor
-    /// <see cref="ExchangeContextServerExtensions.Issuer"/> is set, or when the
+    /// <c>ExchangeContextServerExtensions.Issuer</c> is set, or when the
     /// resolved value fails the RFC 9207 §2 / RFC 8414 §2 issuer-identifier shape
     /// (<see cref="IssuerIdentifierValidation.IsValidIssuerShape"/>) — an https URL
     /// with no query or fragment component.
@@ -93,7 +93,7 @@ internal static class DefaultIssuerResolver
     /// Enforces <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/> on a
     /// candidate issuer before it becomes the value this resolver returns. Applied
     /// to both the <see cref="ClientRecord.IssuerUri"/> and
-    /// <see cref="ExchangeContextServerExtensions.Issuer"/> sources so every caller
+    /// <c>ExchangeContextServerExtensions.Issuer</c> sources so every caller
     /// of this default resolver — discovery metadata and the RFC 9207 <c>iss</c>
     /// redirect parameter alike — emits a conformant issuer identifier.
     /// </summary>

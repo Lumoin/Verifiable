@@ -16,7 +16,7 @@ namespace Verifiable.Json;
 /// <see cref="System.Text.Json.Serialization.JsonSerializerContext"/> — and delegate to the
 /// trim-safe <c>JsonTypeInfo&lt;T&gt;</c> overloads.
 /// <para>
-/// Requires <typeparamref name="T"/> to be registered in the resolver. Throws
+/// Requires <c>T</c> to be registered in the resolver. Throws
 /// <see cref="InvalidOperationException"/> if the type is not registered.
 /// </para>
 /// </remarks>

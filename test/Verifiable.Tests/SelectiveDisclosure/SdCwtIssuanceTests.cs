@@ -16,7 +16,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// <remarks>
 /// <para>
 /// These tests exercise the <see cref="SdCwtIssuanceExtensions"/> POCO-based issuance API.
-/// The serializer delegate uses <see cref="CborValueConverter.WriteValue"/> which handles
+/// The serializer delegate uses <see cref="CborValueConverter.WriteValue(Lumoin.Veritas.Cbor.CborWriter, object?)"/> which handles
 /// <c>Dictionary&lt;int, object&gt;</c> natively, matching the system's standard CBOR
 /// serialization path.
 /// </para>
@@ -75,7 +75,7 @@ internal sealed class SdCwtIssuanceTests
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(0, result.Disclosures);
+        Assert.IsEmpty(result.Disclosures);
         Assert.IsGreaterThan(0, result.SignedToken.Length, "Token must still be produced.");
     }
 
@@ -166,3 +166,4 @@ internal sealed class SdCwtIssuanceTests
         }
     }
 }
+

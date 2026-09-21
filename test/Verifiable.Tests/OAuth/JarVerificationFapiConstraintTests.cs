@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -134,6 +135,46 @@ internal sealed class JarVerificationFapiConstraintTests
 
         _ = Assert.IsInstanceOfType<JarRejected>(result);
         Assert.Contains(WellKnownMediaTypes.Jwt.OauthAuthzReqJwt, ((JarRejected)result).Reason);
+    }
+
+
+    /// <summary>
+    /// RFC 7519 §4: "The JWT Claim Names within a Claims Set MUST be unique." A payload that
+    /// repeats <c>client_id</c> — the attacker's value first, the honest value last — is refused
+    /// with the ordinary request-object rejection, never an escaped exception. The payload is
+    /// built by hand (never through <see cref="PayloadSerializer"/>, since a
+    /// <c>Dictionary&lt;string,object&gt;</c> cannot itself carry two entries under the same key)
+    /// and signed over its exact bytes, so only the payload's well-formedness gate — not an
+    /// invalid signature — can be responsible for the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsPayloadWithDuplicateClientIdClaim()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory verificationKey = keys.PublicKey;
+        using PrivateKeyMemory signingKey = keys.PrivateKey;
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        JwtHeader header = JwtHeaderExtensions.ForJar(algorithm, "jar-key-1");
+        string headerB64 = TestSetup.Base64UrlEncoder(HeaderSerializer(header));
+
+        string payloadJson =
+            "{\"client_id\":\"attacker-client\",\"client_id\":\"https://client.example.org\"," +
+            $"\"iat\":{now.ToUnixTimeSeconds()},\"nbf\":{now.ToUnixTimeSeconds()},\"exp\":{now.AddSeconds(30).ToUnixTimeSeconds()}}}";
+        string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+        string jar = $"{headerB64}.{payloadB64}.{signatureB64}";
+
+        JarVerificationResult result = await VerifyAsync(jar, verificationKey).ConfigureAwait(false);
+
+        _ = Assert.IsInstanceOfType<JarRejected>(result);
+        Assert.AreEqual(OAuthErrors.InvalidRequestObject, ((JarRejected)result).ErrorCode);
+        Assert.Contains("duplicate", ((JarRejected)result).Reason);
     }
 
 

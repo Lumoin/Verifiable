@@ -56,7 +56,7 @@ public readonly record struct TrustedListKind(string Value)
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119600_119699/119612/02.04.01_60/ts_119612v020401p.pdf">
 /// ETSI TS 119 612 V2.4.1 clause 5.5.4</see> (current) / clause 5.6.4 (history). The element is typed as an
 /// unrestricted URI rather than a schema enumeration, so this is a wire-value wrapper (like
-/// <see cref="Verifiable.OAuth.Trust.TrustMechanism"/>) carrying the raw URI plus <c>Is*</c> helpers for the
+/// <c>Verifiable.OAuth.Trust.TrustMechanism</c>) carrying the raw URI plus <c>Is*</c> helpers for the
 /// values the specification registers, rather than a closed enum that would reject a forward-compatible one.
 /// </summary>
 public readonly record struct TrustServiceStatus(string Value)

@@ -401,4 +401,21 @@ public static class KeyAgreementFunctionRegistry<TDiscriminator1, TDiscriminator
 
         return multiRecipientAuthenticatedAgreementEncryptMatcher(algorithm, purpose, qualifier);
     }
+
+
+    /// <summary>
+    /// Gets whether <see cref="Initialize"/> has registered the five matchers it takes without a
+    /// default value — key agreement encrypt/decrypt, key derivation, and AEAD encrypt/decrypt. The
+    /// remaining matchers (including <c>kemDecapsulationMatcher</c>) are legitimately <see langword="null"/>
+    /// when a composition has no consumer for them, so they are not part of this check.
+    /// </summary>
+    public static bool IsInitialized
+    {
+        get =>
+            agreementEncryptMatcher is not null
+            && agreementDecryptMatcher is not null
+            && keyDerivationMatcher is not null
+            && aeadEncryptMatcher is not null
+            && aeadDecryptMatcher is not null;
+    }
 }

@@ -24,7 +24,7 @@ namespace Verifiable.Tests.JCose;
 
 /// <summary>
 /// Strict, minted-wire-bytes negatives (and cheap positive twins) for the level-aware
-/// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, BaseMemoryPool, CancellationToken)"/>
+/// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, PkiCertificateMemory?, CancellationToken)"/>
 /// overload and the shared level-scoped rule surface (<see cref="CBAdESLevelRules"/>) it composes, per
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
 /// ETSI TS 119 152-1 V1.1.1</see>, clause 6.3 (Table 14) and Annex A.
@@ -67,7 +67,7 @@ namespace Verifiable.Tests.JCose;
 /// </para>
 /// <para>
 /// <strong>No-throw convention.</strong> Every negative routes through
-/// <see cref="ValidateAtLevelExpectingNoThrowAsync"/>, which fails the test loudly via <see cref="Assert.Fail(string?)"/>
+/// <see cref="ValidateAtLevelExpectingNoThrowAsync(byte[], PublicKeyMemory, AdESBaselineLevel, CancellationToken)"/>, which fails the test loudly via <see cref="Assert.Fail(string?)"/>
 /// if <c>ValidateAsync</c> ever throws on this untrusted input, rather than letting an unexpected exception
 /// surface as an unhandled test-runner error.
 /// </para>
@@ -1272,7 +1272,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
 
 
     /// <summary>
-    /// The level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload's
+    /// The level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, PkiCertificateMemory?, CancellationToken)"/> overload's
     /// malformed-token path -- a <c>sigTst</c> token whose <c>Val</c> bytes cannot be opened as CMS at all
     /// (<see cref="TimestampTokenInfo.ReadFromTokenAsync"/>'s own fail-closed
     /// catch, collected as <see cref="CBAdESTimestampTokenBindingFailureReason.TokenNotRead"/>) -- leaves a
@@ -1320,7 +1320,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
 
 
     /// <summary>
-    /// The level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload's
+    /// The level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, PkiCertificateMemory?, CancellationToken)"/> overload's
     /// violations path -- reaching <see cref="CBAdESLevelRules.CheckReferencesResolveToValidationDataAsync"/>,
     /// collecting CB-A.1.1-30's cross-consistency violation, and
     /// handing the decoded <c>headers</c>/<c>unsignedHeaders</c> to the returned
@@ -1369,10 +1369,10 @@ internal sealed class CBAdESLevelValidationNegativeTests
 
     /// <summary>
     /// A cancellation token that becomes canceled as a side effect of
-    /// <see cref="Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CryptoEventSink?, CancellationToken)"/>'s
+    /// <see cref="Verifiable.JCose.Cose.VerifyAsync(Verifiable.JCose.CoseSign1Message, Verifiable.JCose.BuildSigStructureDelegate, Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.VerificationDelegate, Verifiable.Cryptography.CryptoEventSink?, System.Threading.CancellationToken)"/>'s
     /// own genuine signature verification (step d, BEFORE the level-aware token loop begins -- <c>Cose.VerifyAsync</c>
     /// checks cancellation only at entry, never again after calling <c>verificationDelegate</c>) is observed
-    /// while the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload iterates the
+    /// while the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, PkiCertificateMemory?, CancellationToken)"/> overload iterates the
     /// <c>uHeaders</c> TOKEN LOOP over TWO genuine, separate <c>sigTst</c> instances -- the loop aborts on the
     /// FIRST instance's own <see cref="TimestampTokenInfo.ReadFromTokenAsync"/> call
     /// (its CMS-verify seam's own <see cref="CancellationToken.ThrowIfCancellationRequested"/>) and never
@@ -2102,7 +2102,7 @@ verifyThenCancel,
 
 
     /// <summary>
-    /// Calls the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload over
+    /// Calls the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, PkiCertificateMemory?, CancellationToken)"/> overload over
     /// <see cref="BaseMemoryPool.Shared"/>; see the pool-parameterized overload below for a caller that supplies
     /// its own pool (a <see cref="MeteredHousePool"/> leak-regression test, for instance).
     /// </summary>
@@ -2117,7 +2117,7 @@ verifyThenCancel,
 
 
     /// <summary>
-    /// Calls the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload through the
+    /// Calls the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, TryBuildArchiveTimestampValidationMessageImprintInputDelegate, BaseMemoryPool, ReadOnlyMemory{byte}, ParseCounterSignatureHeaderValueDelegate?, DecodeCBAdESProtectedHeaderDelegate?, BuildCountersignStructureDelegate?, CBAdESResolveCounterSignaturePublicKeyDelegate?, PkiCertificateMemory?, CancellationToken)"/> overload through the
     /// production <see cref="CBAdESSignatureSerialization"/>/<see cref="CoseSerialization"/>/
     /// <see cref="CBAdESLevelMessageImprintAdapters"/> seams, failing the test loudly if the call ever throws —
     /// the explicit no-throw assertion every test in this file relies on.
@@ -2160,8 +2160,7 @@ verifyThenCancel,
         Fail(unexpectedException);
         return default;
 
-        /// <summary>Reports <paramref name="exception"/> as an unconditional test failure and never returns.</summary>
-        /// <param name="exception">The exception <see cref="ValidateAtLevelExpectingNoThrowAsync"/> caught.</param>
+        //Reports the caught exception as an unconditional test failure and never returns.
         [DoesNotReturn]
         static void Fail(Exception? exception) =>
             Assert.Fail($"CBAdESSignatureValidation.ValidateAsync must never throw on untrusted wire bytes; threw {exception?.GetType().Name}: {exception?.Message}");

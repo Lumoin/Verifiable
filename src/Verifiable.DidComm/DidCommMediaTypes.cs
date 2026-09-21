@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
+using Verifiable.JCose;
 
 namespace Verifiable.DidComm;
 
@@ -68,31 +69,16 @@ public static class DidCommMediaTypes
     public static bool IsEncrypted([NotNullWhen(true)] string? mediaType) => Equals(mediaType, Encrypted);
 
 
-    //The 'application/' prefix every DIDComm media-type constant carries (RFC 7515 §4.1.9).
-    private const string ApplicationPrefix = "application/";
-
-    //Media type comparison is case-insensitive per RFC 2045 / RFC 9110 §8.3.1. Per RFC 7515 §4.1.9 and
-    //DIDComm v2.1 §Message Types (the recipient "MUST treat media types not containing / as having the
-    //application/ prefix present"), a candidate with no '/' matches the full constant once the prefix is
-    //restored. Comparison against the constant's post-prefix span keeps the check allocation-free.
-    private static bool Equals(string? mediaTypeA, string mediaTypeB)
-    {
-        if(ReferenceEquals(mediaTypeA, mediaTypeB))
-        {
-            return true;
-        }
-
-        if(mediaTypeA is null)
-        {
-            return false;
-        }
-
-        if(StringComparer.OrdinalIgnoreCase.Equals(mediaTypeA, mediaTypeB))
-        {
-            return true;
-        }
-
-        return !mediaTypeA.Contains('/', StringComparison.Ordinal)
-            && mediaTypeB.AsSpan(ApplicationPrefix.Length).Equals(mediaTypeA, StringComparison.OrdinalIgnoreCase);
-    }
+    /// <summary>
+    /// Compares two media type values through the one
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>
+    /// comparison every <c>typ</c> check in the library shares: case insensitive, with the implicit
+    /// <c>application/</c> prefix for a candidate carrying no <c>/</c> of its own, which is the
+    /// recipient rule DIDComm v2.1 §Message Types states as well. Span based and allocation free.
+    /// </summary>
+    /// <param name="mediaTypeA">The candidate, a media type or a <c>typ</c> value, possibly absent.</param>
+    /// <param name="mediaTypeB">The DIDComm media type constant to compare against.</param>
+    /// <returns><see langword="true"/> when both name the same media type; otherwise, <see langword="false"/>.</returns>
+    private static bool Equals(string? mediaTypeA, string mediaTypeB) =>
+        mediaTypeA is not null && WellKnownMediaTypes.Jwt.Equals(mediaTypeA, mediaTypeB);
 }

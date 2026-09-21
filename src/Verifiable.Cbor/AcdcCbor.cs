@@ -69,6 +69,21 @@ public static class AcdcCbor
             {
                 CborReaderState.StartMap => BeginMap(reader, frame, key),
                 CborReaderState.StartArray => BeginArray(reader, frame, key),
+                CborReaderState.UnsignedInteger => AddScalar(reader, frame, key),
+                CborReaderState.NegativeInteger => AddScalar(reader, frame, key),
+                CborReaderState.ByteString => AddScalar(reader, frame, key),
+                CborReaderState.TextString => AddScalar(reader, frame, key),
+                CborReaderState.Tag => AddScalar(reader, frame, key),
+                CborReaderState.Boolean => AddScalar(reader, frame, key),
+                CborReaderState.Null => AddScalar(reader, frame, key),
+                CborReaderState.Undefined => AddScalar(reader, frame, key),
+                CborReaderState.SimpleValue => AddScalar(reader, frame, key),
+                CborReaderState.HalfPrecisionFloat => AddScalar(reader, frame, key),
+                CborReaderState.SinglePrecisionFloat => AddScalar(reader, frame, key),
+                CborReaderState.DoublePrecisionFloat => AddScalar(reader, frame, key),
+                CborReaderState.EndArray => AddScalar(reader, frame, key),
+                CborReaderState.EndMap => AddScalar(reader, frame, key),
+                CborReaderState.Finished => AddScalar(reader, frame, key),
                 _ => AddScalar(reader, frame, key)
             };
 
@@ -112,6 +127,18 @@ public static class AcdcCbor
             CborReaderState.NegativeInteger => Narrow(reader.ReadInt64()),
             CborReaderState.Boolean => reader.ReadBoolean(),
             CborReaderState.Null => ReadNull(reader),
+            CborReaderState.ByteString => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.StartArray => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.StartMap => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.Tag => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.Undefined => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.SimpleValue => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.HalfPrecisionFloat => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.SinglePrecisionFloat => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.DoublePrecisionFloat => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.EndArray => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.EndMap => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
+            CborReaderState.Finished => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}."),
             _ => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}.")
         };
 

@@ -244,18 +244,18 @@ internal sealed class TrustMarkDelegationEvaluatorTests
     {
         //§7.2.2: a delegation with alg=none must be rejected. The parser refuses it before
         //any payload inspection.
-        UnverifiedJwtHeader header = new(new Dictionary<string, object>
+        UnverifiedJwtHeader header = new()
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkDelegationJwt,
             [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None
-        });
-        UnverifiedJwtPayload payload = new(new Dictionary<string, object>
+        };
+        UnverifiedJwtPayload payload = new()
         {
             [WellKnownJwtClaimNames.Iss] = "https://example.test/tm-owner",
             [WellKnownJwtClaimNames.Sub] = "https://example.test/tm-issuer",
             [WellKnownFederationClaimNames.TrustMarkType] = MarkId,
             [WellKnownJwtClaimNames.Iat] = 1_700_000_000L
-        });
+        };
 
         TrustMarkDelegationParseResult result = TrustMarkDelegationParser.Parse(header, payload);
         Assert.IsNull(result.Delegation, "An alg=none delegation must not parse to a delegation.");

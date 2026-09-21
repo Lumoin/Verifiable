@@ -14,8 +14,8 @@ namespace Verifiable.WebFinger;
 /// family's delegates in a plain object the host stores by concrete type; the host itself depends on
 /// none of it. WebFinger takes no dependency on any other protocol family — the two delegates here are
 /// its complete seam surface, reached without capturing caller/app data in a closure: every endpoint
-/// delegate reads them fresh off <see cref="EndpointServer"/> through the per-request
-/// <see cref="ExchangeContextServerExtensions.Server"/> accessor rather than a captured reference.
+/// delegate reads them from the fixed wiring at
+/// <c>ExchangeContextServerExtensions.RequestServer</c> captured at admission.
 /// </para>
 /// <para>
 /// <see cref="EndpointServer.AddIntegration{T}"/> / <see cref="EndpointServer.GetIntegration{T}"/> are
@@ -30,7 +30,26 @@ public sealed class WebFingerIntegration: ServerIntegration
     /// <see cref="WellKnownWebFingerCapabilityIdentifiers.Endpoint"/> capability does not materialize a
     /// route: fail-closed, since only the application knows its resource store.
     /// </summary>
-    public ResolveWebFingerResourceDelegate? ResolveWebFingerResourceAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveWebFingerResourceDelegate? ResolveWebFingerResourceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the <c>Access-Control-Allow-Origin</c> value for the current request. Optional — when
@@ -39,5 +58,23 @@ public sealed class WebFingerIntegration: ServerIntegration
     /// <see href="https://www.rfc-editor.org/rfc/rfc7033#section-5">RFC 7033 §5</see>'s
     /// SHOULD-support-<c>*</c> guidance.
     /// </summary>
-    public ResolveCorsOriginDelegate? ResolveCorsOriginAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveCorsOriginDelegate? ResolveCorsOriginAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 }

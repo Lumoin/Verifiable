@@ -9,7 +9,7 @@ namespace Verifiable.Cryptography.Provider;
 /// <remarks>
 /// Examples: <c>Verifiable.Microsoft</c>, <c>Verifiable.BouncyCastle</c>.
 /// Used as a <see cref="Lumoin.Base.Tag"/> key so that any code
-/// holding a <see cref="Verifiable.Foundation.SensitiveMemory"/> instance
+/// holding a <see cref="Lumoin.Base.SensitiveMemory"/> instance
 /// can retrieve the full provenance chain without an event subscription.
 /// </remarks>
 [DebuggerDisplay("ProviderLibrary {Name} {Version}")]

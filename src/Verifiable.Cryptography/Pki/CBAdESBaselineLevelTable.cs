@@ -272,7 +272,7 @@ public static class CBAdESBaselineLevelTable
     /// <strong>Reference clause, corrected.</strong> Table 14's own printed
     /// References column for this row reads "Clause 5.3.2" — <see cref="SigPSt"/>'s own clause, the very
     /// next row, almost certainly the copy-paste origin — not "Clause 5.2.6," the clause whose own heading is
-    /// "5.2.6 The <c>adoTst</c> (COSE payload time-stamp) header parameter." <see cref="Reference"/> below
+    /// "5.2.6 The <c>adoTst</c> (COSE payload time-stamp) header parameter." <see cref="AdESTableRow.Reference"/> below
     /// faithfully transcribes Table 14's printed cell ("5.3.2") per this registry's own transcription
     /// discipline; the ruled reading is "5.2.6" — a reading correction, not a change to the data recorded.
     /// </remarks>

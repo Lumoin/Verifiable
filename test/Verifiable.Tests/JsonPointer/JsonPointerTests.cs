@@ -238,7 +238,7 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void AncestorsOfRootIsEmpty()
     {
-        Assert.HasCount(0, Ptr.Root.Ancestors().ToList());
+        Assert.IsEmpty(Ptr.Root.Ancestors().ToList());
     }
 
     [TestMethod]
@@ -619,3 +619,4 @@ internal sealed class JsonPointerTests
         Assert.AreEqual(pointer, reparsed);
     }
 }
+

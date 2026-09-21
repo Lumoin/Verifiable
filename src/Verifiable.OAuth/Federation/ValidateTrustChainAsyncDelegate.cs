@@ -33,7 +33,7 @@ namespace Verifiable.OAuth.Federation;
 /// </returns>
 /// <remarks>
 /// <para>
-/// Pluggable analogue to <see cref="Verifiable.Cryptography.Pki.ValidateCertificateChainDelegate"/>
+/// Pluggable analogue to <see cref="Verifiable.Cryptography.Pki.ValidateCertificateChainAsyncDelegate"/>
 /// on the X.509 side — same shape, same role. Drivers vary along axes
 /// like which JWS verification primitive runs per link, whether
 /// statements get reparsed via the source-gen resolver or

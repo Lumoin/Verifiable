@@ -42,7 +42,7 @@ internal static class SdCwtPipeline
     /// forwards here); this keeps the pipeline a pure parameter-taking body. Matches
     /// <see cref="SignPayloadDelegate"/> exactly — that delegate type (and its method-group
     /// wiring throughout <c>Verifiable.Core</c>'s <c>SdCwtIssuanceExtensions</c> and every
-    /// caller of <see cref="SdCwtIssuance.IssueVerboseAsync"/>) has no <c>CryptoEventSink</c>
+    /// caller of <see cref="SdCwtIssuance.IssueVerboseAsync(System.ReadOnlyMemory{byte}, System.Collections.Generic.IReadOnlySet{Verifiable.Core.Model.SelectiveDisclosure.CredentialPath}, Verifiable.Cryptography.GenerateDisclosureSaltDelegate, Verifiable.Cryptography.PrivateKeyMemory, string, Lumoin.Base.BaseMemoryPool, Verifiable.Cryptography.SigningDelegate, string?, string?, Verifiable.Core.Model.SelectiveDisclosure.DecoyDigestOptions, System.Threading.CancellationToken)"/>) has no <c>CryptoEventSink</c>
     /// slot, so unlike the sink-threaded JOSE/COSE sites this one routes unconditionally to
     /// <see cref="CryptographicKeyEvents.DefaultSink"/> rather than accepting a per-call
     /// override — see <see cref="CryptoEventSink"/> for the two-route rationale.

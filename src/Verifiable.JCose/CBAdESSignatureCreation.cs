@@ -319,14 +319,14 @@ public sealed class CBAdESCoseSignSignatureCreationResult: IDisposable
 /// (<see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
 /// ETSI TS 119 152-1 V1.1.1</see>, clause 6.1's baseline level): composes <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>
 /// over a <see cref="CBAdESProtectedHeaders"/> aggregate, the shared <see cref="CBAdESHeaderRules"/> rule
-/// surface, the <see cref="CBAdESSerializationDelegates"/>-declared CBOR seams, and (for a detached, referenced
+/// surface, the <c>CBAdESSerializationDelegates</c>-declared CBOR seams, and (for a detached, referenced
 /// payload) the <see cref="CBAdESDetachedObjectDereferencing"/> seam.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <strong>Overload flavors mirror <see cref="Cose"/>.</strong> The registry-resolved
 /// <see cref="SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
-/// resolves a <see cref="SigningDelegate"/> from <paramref name="privateKey"/>'s <see cref="Tag"/> through
+/// resolves a <see cref="SigningDelegate"/> from <c>privateKey</c>'s <see cref="Tag"/> through
 /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> and forwards to the explicit-delegate
 /// overload — the same two-flavor split <see cref="Cose"/>'s own <c>SignAsync</c> uses for COSE_Sign1.
 /// </para>
@@ -339,7 +339,7 @@ public sealed class CBAdESCoseSignSignatureCreationResult: IDisposable
 /// "hashM present, no digests yet" input UNREPRESENTABLE through that type, which is exactly why this
 /// orchestrator completes a "hashV-less" input into the final aggregate rather than
 /// receiving one ready-made. This method therefore runs <see cref="CBAdESHeaderRules.EnsureConformant"/> TWICE:
-/// PASS 1, on the caller-supplied <paramref name="headers"/> as-is (whose
+/// PASS 1, on the caller-supplied <c>headers</c> as-is (whose
 /// <see cref="CBAdESProtectedHeaders.DetachedObjects"/> is always <see langword="null"/> at this point — see
 /// the next paragraph), catches every rule that does not depend on <c>sigD</c>'s resolved mechanism (the
 /// x5t/x5ts/x5chain tri-way, the <c>content type</c>/<c>sigD</c> exclusion, the MD5 denylist on
@@ -356,16 +356,16 @@ public sealed class CBAdESCoseSignSignatureCreationResult: IDisposable
 /// </para>
 /// <para>
 /// <strong>This orchestrator is the SOLE producer of <see cref="CBAdESProtectedHeaders.DetachedObjects"/>.</strong>
-/// A caller-supplied <paramref name="headers"/> whose <see cref="CBAdESProtectedHeaders.DetachedObjects"/> is
+/// A caller-supplied <c>headers</c> whose <see cref="CBAdESProtectedHeaders.DetachedObjects"/> is
 /// already non-null is refused with <see cref="ArgumentException"/> — the sigD reference set travels through
-/// <paramref name="payloadInput"/>'s <see cref="CBAdESDetachedSigDPayloadInput"/> arm instead, precisely
+/// <c>payloadInput</c>'s <see cref="CBAdESDetachedSigDPayloadInput"/> arm instead, precisely
 /// because (per the previous paragraph) a caller cannot construct a legal hashV-less
 /// <see cref="CBAdESDetachedObjects"/> for the <see cref="CBAdESDetachedMechanisms.ObjectIdByURIHash"/>
 /// mechanism through that type's own constructor.
 /// </para>
 /// <para>
 /// <strong>Creation is conformant by construction.</strong> When
-/// <paramref name="payloadInput"/> resolves a <c>sigD</c> reference set, this orchestrator auto-adds label
+/// <c>payloadInput</c> resolves a <c>sigD</c> reference set, this orchestrator auto-adds label
 /// <see cref="CBAdESHeaderParameters.SigD"/> (267) to <see cref="CBAdESProtectedHeaders.CriticalLabels"/> if it
 /// is not already present (CB-5.1.10-04) — the caller never has to remember this coupling.
 /// </para>
@@ -398,8 +398,8 @@ public sealed class CBAdESCoseSignSignatureCreationResult: IDisposable
 /// </para>
 /// <para>
 /// <strong>Unknown <c>mId</c> (CB-5.2.6-07/CB-5.2.8-08).</strong> When
-/// <paramref name="payloadInput"/>'s mechanism identifier is neither built-in,
-/// <paramref name="unknownMechanismHandler"/> is invoked to retrieve the COSE Payload; absent a handler, this
+/// <c>payloadInput</c>'s mechanism identifier is neither built-in,
+/// <c>unknownMechanismHandler</c> is invoked to retrieve the COSE Payload; absent a handler, this
 /// method throws <see cref="NotSupportedException"/> citing CB-5.2.6-07. See
 /// <see cref="CBAdESUnknownDetachedObjectMechanismDelegate"/>'s remarks for this extension point's documented
 /// scope limit (payload retrieval only, no per-entry digests).

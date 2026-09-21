@@ -161,6 +161,20 @@ internal sealed class CardSimulatorRsaActiveAuthenticationTests
 
 
     /// <summary>
+    /// <see cref="RecoverableSignatureFunctionRegistry{TDiscriminator1, TDiscriminator2}.IsInitialized"/>
+    /// is <see langword="true"/> once <c>TestSetup</c>'s module initializer has run
+    /// <see cref="RecoverableSignatureFunctionRegistry{TDiscriminator1, TDiscriminator2}.Initialize"/>.
+    /// The process-wide <c>[ModuleInitializer]</c> runs before any test, so only the true-after state
+    /// is observable here without disturbing the other tests' process-wide registration.
+    /// </summary>
+    [TestMethod]
+    public void IsInitializedIsTrueAfterProcessWideSetup()
+    {
+        Assert.IsTrue(RecoverableSignatureFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized);
+    }
+
+
+    /// <summary>
     /// Builds a PKCS#1 <c>RSAPublicKey</c> (a SEQUENCE of the modulus and public exponent) from the raw integers
     /// into a pooled <see cref="RsaPublicKey"/> carrier — the same wire form and carrier EF.DG15 provides — so the
     /// key material lives in a tracked, zeroised buffer rather than a naked array. The caller disposes it.

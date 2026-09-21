@@ -1,6 +1,5 @@
 using CsCheck;
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -23,11 +22,6 @@ namespace Verifiable.Tests.Cryptography;
 /// properties fast while still exercising the composed engine (<see cref="SignatureValidation.ValidateAsync(SignatureValidationInputs,SignatureValidationSeams,SignatureValidationProcessSelection,SignatureValidationCapabilities,DateTimeOffset,BaseMemoryPool,System.Threading.CancellationToken)"/>)
 /// end to end, not a stand-in.
 /// </para>
-/// <para>
-/// CsCheck's <c>Sample</c> callback is synchronous; the asynchronous validation calls inside it are blocked on
-/// with <c>AsTask().GetAwaiter().GetResult()</c>, the idiom already used by
-/// <c>Fido2RegistrationVerifierPropertyTests</c> in this suite.
-/// </para>
 /// </remarks>
 [TestClass]
 internal sealed class SignatureValidationDeterminismPropertyTests
@@ -45,23 +39,21 @@ internal sealed class SignatureValidationDeterminismPropertyTests
     /// Proves <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31910201/01.04.01_60/en_31910201v010401p.pdf">ETSI EN 319 102-1 V1.4.1</see> 5.1.3-determinism-a, 5.1.3-indeterminate-a.
     /// </remarks>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until validation fully completes, so the using declaration's dispose runs strictly after every call returns.")]
     public async Task RerunningValidationWithIdenticalInputsYieldsAnIdenticalConclusion()
     {
         using AnnexAValidationScenario scenario = await AnnexAValidationScenario
             .CreateRevokedCertificateWorldAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Gen.Int[2, 6].Sample(repeatCount =>
+        await Gen.Int[2, 6].SampleAsync(async repeatCount =>
         {
             SignatureValidationIndication? firstIndication = null;
             IReadOnlyList<SignatureValidationSubIndication>? firstSubIndications = null;
             for(int i = 0; i < repeatCount; ++i)
             {
-                using SignatureValidationOutcome outcome = SignatureValidation.ValidateAsync(
+                using SignatureValidationOutcome outcome = await SignatureValidation.ValidateAsync(
                     scenario.Inputs, scenario.Seams, SignatureValidationProcessSelection.SignaturesWithTime,
                     SignatureValidationCapabilities.All, scenario.ValidationTime, BaseMemoryPool.Shared,
-                    TestContext.CancellationToken).AsTask().GetAwaiter().GetResult();
+                    TestContext.CancellationToken).AsTask().ConfigureAwait(false);
 
                 if(firstIndication is null)
                 {
@@ -83,7 +75,7 @@ internal sealed class SignatureValidationDeterminismPropertyTests
             }
 
             return true;
-        });
+        }, threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 
@@ -98,8 +90,6 @@ internal sealed class SignatureValidationDeterminismPropertyTests
     /// Proves <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31910201/01.04.01_60/en_31910201v010401p.pdf">ETSI EN 319 102-1 V1.4.1</see> 5.1.3-determinism-b.
     /// </remarks>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until validation fully completes, so the using declarations' dispose runs strictly after every call returns.")]
     public async Task AddingUnrelatedValidationDataNeverFlipsADeterminateConclusion()
     {
         using AnnexAValidationScenario scenario = await AnnexAValidationScenario
@@ -113,7 +103,7 @@ internal sealed class SignatureValidationDeterminismPropertyTests
                 "Precondition: clause A.3.3 makes this world's with-time result a determinate TOTAL-PASSED, which is exactly the kind of result rule b) protects.");
         }
 
-        Gen.Byte.Array[1, 16].Sample(extraBytes =>
+        await Gen.Byte.Array[1, 16].SampleAsync(async extraBytes =>
         {
             using PkiCertificateMemory extra = MintPlaceholder(PkiCertificateTags.X509Crl, extraBytes);
             SignatureValidationInputs withExtraData = scenario.Inputs with
@@ -121,12 +111,12 @@ internal sealed class SignatureValidationDeterminismPropertyTests
                 CertificateValidationData = [.. scenario.Inputs.CertificateValidationData, extra]
             };
 
-            using SignatureValidationOutcome outcome = SignatureValidation.ValidateAsync(
+            using SignatureValidationOutcome outcome = await SignatureValidation.ValidateAsync(
                 withExtraData, scenario.Seams, SignatureValidationProcessSelection.SignaturesWithTime, SignatureValidationCapabilities.All,
-                scenario.ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask().GetAwaiter().GetResult();
+                scenario.ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask().ConfigureAwait(false);
 
             return outcome.Conclusion.Indication == SignatureValidationIndication.TotalPassed;
-        });
+        }, threads: CsCheckSampling.Threads).ConfigureAwait(false);
     }
 
 

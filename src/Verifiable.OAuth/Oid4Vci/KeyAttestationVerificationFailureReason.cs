@@ -32,5 +32,26 @@ public enum KeyAttestationVerificationFailureReason
     NonceMissing,
 
     /// <summary>The attestation's <c>nonce</c> does not equal the Issuer-provided value (Appendix D.1).</summary>
-    NonceMismatch
+    NonceMismatch,
+
+    /// <summary>
+    /// The Credential Issuer's <c>key_storage</c> constraint is a non-empty array (Appendix D.1) and no
+    /// value in the attestation's verbatim <c>key_storage</c> array is a member of it (Appendix D.2's
+    /// attack-potential-resistance values, or an ecosystem-defined value).
+    /// </summary>
+    KeyStorageConstraintUnsatisfied,
+
+    /// <summary>
+    /// The Credential Issuer's <c>user_authentication</c> constraint is a non-empty array (Appendix D.1)
+    /// and no value in the attestation's verbatim <c>user_authentication</c> array is a member of it
+    /// (Appendix D.2's attack-potential-resistance values, or an ecosystem-defined value).
+    /// </summary>
+    UserAuthenticationConstraintUnsatisfied,
+
+    /// <summary>
+    /// A constrained assurance array (<c>key_storage</c> or <c>user_authentication</c>) is present on the
+    /// attestation but is not readable as a JSON array of strings, so no membership check against it can
+    /// be answered.
+    /// </summary>
+    AssuranceConstraintValuesMalformed
 }

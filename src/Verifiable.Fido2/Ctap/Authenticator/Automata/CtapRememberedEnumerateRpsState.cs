@@ -32,7 +32,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// The time of the last stateful step in this sequence — the originating <c>enumerateRPsBegin</c>, or
 /// the most recent <c>enumerateRPsGetNextRP</c> — compared against the 30-second enumeration timer on
 /// every subsequent <c>enumerateRPsGetNextRP</c>. Always sourced from the simulator's threaded
-/// <see cref="TimeProvider"/>, never <see cref="DateTimeOffset.UtcNow"/>.
+/// <see cref="TimeProvider"/>, never <see cref="TimeProvider.GetUtcNow"/> called on the ambient clock directly.
 /// </param>
 /// <param name="AuthenticatingPinUvAuthProtocol">
 /// The PIN/UV auth protocol whose <c>pinUvAuthToken</c> authenticated the originating

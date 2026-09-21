@@ -312,7 +312,7 @@ internal sealed class XAdESSignaturePolicyQualifiersTests
         using(table)
         {
             Assert.AreEqual(XAdESSigPolicyQualifierKind.Unrecognized, entry.Kind);
-            Assert.HasCount(0, entry.Content.ContentNodeIndices);
+            Assert.IsEmpty(entry.Content.ContentNodeIndices);
         }
     }
 
@@ -337,3 +337,4 @@ internal sealed class XAdESSignaturePolicyQualifiersTests
         Assert.AreEqual(XAdESReadFailure.UnknownCoreAttribute, error.Failure);
     }
 }
+

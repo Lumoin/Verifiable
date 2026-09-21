@@ -134,11 +134,11 @@ public sealed record QualifiedCertificateStatements
 
 /// <summary>
 /// Mints X.509 v3 certificates for the EU-qualified issuance profile with <see cref="AsnWriter"/> only — no
-/// <see cref="System.Security.Cryptography.X509Certificates.CertificateRequest"/>, no platform certificate
+/// <c>System.Security.Cryptography.X509Certificates.CertificateRequest</c>, no platform certificate
 /// type on this surface — in the register of the library's other creation surfaces
 /// (<see cref="CAdESSignatureCreation"/>, <see cref="OcspRequests"/>, <see cref="TimestampRequests"/>): this
 /// type mints artifacts, signed through the same <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-/// seam <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>
+/// seam <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/>
 /// uses, never a behavioral automaton. The minter never generates key material: every certificate's subject
 /// key and every issuer's signing key are caller-supplied.
 /// </summary>
@@ -233,7 +233,7 @@ public static class QualifiedCertificateMinting
     /// Assembles and signs an X.509 v3 certificate from <paramref name="request"/>, resolving the
     /// <see cref="SigningDelegate"/> from <paramref name="issuerPrivateKey"/>'s <see cref="Tag"/> through
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> — the tag-resolving convenience
-    /// mirroring <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>.
+    /// mirroring <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/>.
     /// </summary>
     /// <param name="request">The certificate's to-be-signed fields.</param>
     /// <param name="issuerPrivateKey">The issuer's signing key; its <see cref="Tag"/> resolves both the signing delegate and the signature algorithm identity.</param>

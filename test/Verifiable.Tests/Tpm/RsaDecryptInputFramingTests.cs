@@ -137,7 +137,7 @@ internal sealed class RsaDecryptInputFramingTests
 
     /// <summary>
     /// Table 47's response parses to the <c>TPM2B_PUBLIC_KEY_RSA</c> the wire carried, octet for octet — the
-    /// parser <see cref="TpmResponseCodec.RsaDecrypt"/> installs.
+    /// parser <see cref="TpmResponseCodecExtensions.extension(TpmResponseCodec).RsaDecrypt"/> installs.
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 14.3</see>.
     /// </summary>
     [TestMethod]

@@ -25,7 +25,7 @@ internal sealed class MetadataPolicyMergerTests
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.HasCount(0, result.MergedBlock!.ParameterPolicies);
+        Assert.IsEmpty(result.MergedBlock!.ParameterPolicies);
     }
 
 
@@ -245,3 +245,4 @@ internal sealed class MetadataPolicyMergerTests
         };
     }
 }
+

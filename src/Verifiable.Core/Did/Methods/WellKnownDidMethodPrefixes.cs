@@ -24,10 +24,10 @@ namespace Verifiable.Core.Did.Methods;
 /// </remarks>
 public static class WellKnownDidMethodPrefixes
 {
-    /// <summary>The prefix for <see cref="KeyDidMethod"/>: <c>did:key</c>.</summary>
+    /// <summary>The prefix for <see cref="Verifiable.Core.Did.Methods.Key.KeyDidMethod"/>: <c>did:key</c>.</summary>
     public static string KeyDidMethodPrefix { get; } = "did:key";
 
-    /// <summary>The prefix for <see cref="WebDidMethod"/>: <c>did:web</c>.</summary>
+    /// <summary>The prefix for <see cref="Verifiable.Core.Did.Methods.Web.WebDidMethod"/>: <c>did:web</c>.</summary>
     public static string WebDidMethodPrefix { get; } = "did:web";
 
     /// <summary>The prefix for did:webvh (did:web with a verifiable history): <c>did:webvh</c>.</summary>
@@ -36,13 +36,13 @@ public static class WellKnownDidMethodPrefixes
     /// <summary>The prefix for did:webplus (a JCS web microledger DID, LedgerDomain Draft v0.4): <c>did:webplus</c>.</summary>
     public static string WebPlusDidMethodPrefix { get; } = "did:webplus";
 
-    /// <summary>The prefix for <see cref="EbsiDidMethod"/>: <c>did:ebsi</c>.</summary>
+    /// <summary>The prefix for <see cref="Verifiable.Core.Did.Methods.Ebsi.EbsiDidMethod"/>: <c>did:ebsi</c>.</summary>
     public static string EbsiDidMethodPrefix { get; } = "did:ebsi";
 
     /// <summary>The prefix for <c>did:cheqd</c>.</summary>
     public static string CheqdDidMethodPrefix { get; } = "did:cheqd";
 
-    /// <summary>The prefix for <see cref="PeerDidMethod"/>: <c>did:peer</c>.</summary>
+    /// <summary>The prefix for <see cref="Verifiable.Core.Did.Methods.Peer.PeerDidMethod"/>: <c>did:peer</c>.</summary>
     public static string PeerDidMethodPrefix { get; } = "did:peer";
 
     /// <summary>

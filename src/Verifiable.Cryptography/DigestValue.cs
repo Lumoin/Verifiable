@@ -122,6 +122,7 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
     /// carried in a <see cref="Tag"/>.
     /// </param>
     /// <param name="pool">The memory pool to allocate from.</param>
+    /// <param name="lifetime">The OTel activity whose lifetime spans the computation, or <see langword="null"/> for none.</param>
     /// <returns>A new <see cref="DigestValue"/> containing the computed digest.</returns>
     public static DigestValue Compute(
         ReadOnlySpan<byte> input,
@@ -156,7 +157,7 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
 
     /// <summary>
     /// Tags the OTel lifetime activity with algorithm and output length from the
-    /// <see cref="SensitiveMemory.Tag"/> before the base disposes the memory and
+    /// <see cref="Lumoin.Base.SensitiveData.Tag"/> before the base disposes the memory and
     /// stops the activity.
     /// </summary>
     protected override void Dispose(bool disposing)

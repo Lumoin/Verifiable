@@ -29,6 +29,23 @@ namespace Verifiable.Core.Did.Methods.Peer
         /// <remarks>This is <see cref="WellKnownDidMethodPrefixes.PeerDidMethodPrefix"/> with colon.</remarks>
         public static new string Prefix { get; } = $"{WellKnownDidMethodPrefixes.PeerDidMethodPrefix}:";
 
+        /// <summary>
+        /// The numalgo indicator character for the
+        /// <see href="https://identity.foundation/peer-did-method-spec/">Peer DID Method</see>'s
+        /// numalgo 2 generation algorithm: multiple keys and services encoded as period-separated
+        /// elements. The character immediately following <see cref="Prefix"/> in a <c>did:peer:2</c>
+        /// identifier.
+        /// </summary>
+        public static char Numalgo2Indicator { get; } = '2';
+
+        /// <summary>
+        /// The numalgo indicator character for the
+        /// <see href="https://identity.foundation/peer-did-4/">did:peer:4 specification</see>'s
+        /// self-certifying long-form generation algorithm. The character immediately following
+        /// <see cref="Prefix"/> in a <c>did:peer:4</c> identifier.
+        /// </summary>
+        public static char Numalgo4Indicator { get; } = '4';
+
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PeerDidMethod"/> class using the specified DID string.

@@ -1,17 +1,21 @@
 using Microsoft.AspNetCore.Http;
 using System.Buffers;
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO.Pipelines;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Registration;
 using StringValues = Microsoft.Extensions.Primitives.StringValues;
 
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Bridges a <see cref="Microsoft.AspNetCore.Builder.WebApplication"/>'s HTTPS pipeline to
+/// Bridges a <c>Microsoft.AspNetCore.Builder.WebApplication</c>'s HTTPS pipeline to
 /// <see cref="EndpointServer.DispatchAsync"/>. <see cref="ProcessRequestAsync"/> is mounted directly as
 /// the pipeline's <c>RequestDelegate</c> (<c>app.Run(application.ProcessRequestAsync)</c>): it maps
 /// inbound HTTP requests to the library's <see cref="IncomingRequest"/> and
@@ -37,8 +41,8 @@ namespace Verifiable.Tests.OAuth;
 ///   <item><description>
 ///   Tenant identification is pre-resolved from the path prefix
 ///   (<c>/connect/{segment}/...</c>) and stamped onto
-///   <see cref="ExchangeContext"/> via <see cref="ExchangeContextServerExtensions.SetTenantId"/>
-///   before dispatch. The dispatcher's <see cref="AuthorizationServerIntegration.ExtractTenantIdAsync"/>
+///   <see cref="ExchangeContext"/> via <c>ExchangeContextExtensions.SetTenantId</c>
+///   before dispatch. The dispatcher's <see cref="Verifiable.Server.ServerIntegration.ExtractTenantIdAsync"/>
 ///   then short-circuits on the pre-set value, matching what the
 ///   in-process transport does.
 ///   </description></item>
@@ -63,15 +67,44 @@ internal sealed class AuthorizationServerHttpApplication
     /// </summary>
     public const string TestSubjectHeaderName = "X-Test-Subject-Id";
 
+    /// <summary>The fixture header conveying the per-request region to the context mapper.</summary>
+    public static string TestRegionHeaderName { get; } = "X-Test-Region";
+
+
     /// <summary>The server every incoming request is dispatched to.</summary>
     private EndpointServer Server { get; }
 
 
+    /// <summary>The fixture sink retaining the actual named exception observed over the listener.</summary>
+    private ConcurrentQueue<Exception>? Faults { get; }
+
+
+    /// <summary>The fixture arrival hook awaited before requesting admission.</summary>
+    private Func<Task>? RequestArriving { get; }
+
+
+    /// <summary>
+    /// The hosted server, when known, whose per-grant ordering gate
+    /// (<see cref="HostedAuthorizationServer.EnterGrantOrderGateAsync"/>) this application consults
+    /// after <see cref="RequestArriving"/> and before dispatch. <see langword="null"/> for a skin
+    /// built directly over an <see cref="EndpointServer"/> with no owning host — every such request
+    /// is unordered.
+    /// </summary>
+    private HostedAuthorizationServer? Host { get; }
+
+
     /// <summary>Wraps <paramref name="server"/> so <see cref="ProcessRequestAsync"/> can dispatch to it.</summary>
-    public AuthorizationServerHttpApplication(EndpointServer server)
+    public AuthorizationServerHttpApplication(
+        EndpointServer server,
+        ConcurrentQueue<Exception>? faults = null,
+        Func<Task>? requestArriving = null,
+        HostedAuthorizationServer? host = null)
     {
         ArgumentNullException.ThrowIfNull(server);
         this.Server = server;
+        Faults = faults;
+        RequestArriving = requestArriving;
+        Host = host;
     }
 
 
@@ -109,22 +142,65 @@ internal sealed class AuthorizationServerHttpApplication
             ExchangeContext.SetSubjectId(subjectHeaderValues[0]!);
         }
 
-        ServerHttpResponse response = await Server.DispatchAsync(
-            incomingRequest, ExchangeContext, context.RequestAborted).ConfigureAwait(false);
-
-        //OID4VP JAR endpoint: per the library contract documented on
-        //Oid4VpServerExchangeContextExtensions.Jar, the application (this skin) reads
-        //the signed JWS off context after dispatch and emits it as the response
-        //body. BuildResponse on the JAR endpoint returns an empty body for
-        //exactly this reason.
-        if(string.IsNullOrEmpty(response.Body)
-            && ExchangeContext.Jar is string compactJar)
+        if(context.Request.Headers.TryGetValue(TestRegionHeaderName, out var region))
         {
-            response = response with { Body = compactJar };
+            ExchangeContext["app.region"] = region.ToString();
         }
 
-        await WriteResponseAsync(response, context.Response, context.RequestAborted)
-            .ConfigureAwait(false);
+        if(RequestArriving is not null)
+        {
+            await RequestArriving().ConfigureAwait(false);
+        }
+
+        //The per-grant ordering gate: a request the host's ordering matrix can place
+        //(HostedAuthorizationServer.ResolveOrderingKey) waits its FIFO turn for its (tenant, grant
+        //key) here, before anything of the library runs for it. A request the matrix cannot place,
+        //or a host with ordering off, is never queued.
+        IAsyncDisposable? gateTicket = Host is { IsOrderingRequestsPerGrant: true } host
+            && host.ResolveOrderingKey(incomingRequest, ExchangeContext) is { } orderingKey
+                ? await host.EnterGrantOrderGateAsync(
+                    orderingKey.TenantId, orderingKey.GrantKey, context.RequestAborted).ConfigureAwait(false)
+                : null;
+
+        try
+        {
+            ServerHttpResponse response;
+            try
+            {
+                response = incomingRequest.Method == "POST" && incomingRequest.Path == "/connect/register"
+                    ? await RegistrationEndpoints.HandleCreateAsync(
+                        new TenantId("dynamic-clients"), Encoding.UTF8.GetString(incomingRequest.Body.Bytes.Span),
+                        ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration),
+                        ExchangeContext, Server, context.RequestAborted).ConfigureAwait(false)
+                    : await Server.DispatchAsync(incomingRequest, ExchangeContext, context.RequestAborted).ConfigureAwait(false);
+            }
+            catch(InvalidOperationException exception) when(Faults is not null)
+            {
+                Faults.Enqueue(exception);
+                response = ServerHttpResponse.ServerError(ServerErrors.ServerError, "The server is not ready to serve this request.");
+            }
+
+            //OID4VP JAR endpoint: per the library contract documented on
+            //Oid4VpServerExchangeContextExtensions.Jar, the application (this skin) reads
+            //the signed JWS off context after dispatch and emits it as the response
+            //body. BuildResponse on the JAR endpoint returns an empty body for
+            //exactly this reason.
+            if(string.IsNullOrEmpty(response.Body)
+                && ExchangeContext.Jar is string compactJar)
+            {
+                response = response with { Body = compactJar };
+            }
+
+            await WriteResponseAsync(response, context.Response, context.RequestAborted)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            if(gateTicket is not null)
+            {
+                await gateTicket.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
 
@@ -175,7 +251,7 @@ internal sealed class AuthorizationServerHttpApplication
     /// Parses a per-flow by-reference handle from <c>/connect/{segment}/request/{handle}</c> (the
     /// OID4VP JAR fetch) or <c>/connect/{segment}/siop_request_object/{handle}</c> (the SIOPv2 §9
     /// by-reference Request Object fetch). Returns <see langword="null"/> for any other path. Both
-    /// matchers require <see cref="ExchangeContext.CorrelationKey"/> to be set before dispatch; the
+    /// matchers require <c>ExchangeContextServerExtensions.CorrelationKey</c> to be set before dispatch; the
     /// URL shape and extraction live in this skin so neither matcher is mount-point aware.
     /// </summary>
     private static string? ExtractRequestUriHandleFromPath(string path)

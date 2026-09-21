@@ -24,7 +24,7 @@ public sealed class TimestampRequestContent: IDisposable
     /// <see cref="TimestampRequests.CreateAsync"/> was called with <c>includeNonce: false</c>. Owned by this
     /// instance; its bytes were already consumed (<see cref="Nonce.UseNonce"/>) to embed them in
     /// <see cref="Request"/>, so a later comparison against a response reads
-    /// <see cref="Nonce.AsReadOnlySpan"/> directly rather than calling <see cref="Nonce.UseNonce"/> a second
+    /// <see cref="SensitiveMemory.AsReadOnlySpan"/> directly rather than calling <see cref="Nonce.UseNonce"/> a second
     /// time.
     /// </summary>
     public Nonce? RequestNonce { get; }
@@ -78,7 +78,7 @@ public sealed class TimestampRequestContent: IDisposable
 /// <para>
 /// Mirrors <see cref="OcspRequests"/>'s shape exactly: <see cref="AsnWriter"/> over pooled memory, a nonce drawn
 /// through the entropy provider seam, and an async surface even though today's composition needs no
-/// <c>await</c> — the message-imprint digest arrives pre-computed (see the <paramref name="messageImprintAlgorithm"/>
+/// <c>await</c> — the message-imprint digest arrives pre-computed (see the <c>messageImprintAlgorithm</c>
 /// remarks below), and the registered <see cref="GenerateNonceDelegate"/> happens to complete synchronously.
 /// Composability, not I/O, motivates keeping this <see cref="ValueTask{TResult}"/>-returning: a caller that
 /// composes a time-stamp request into a larger async pipeline (signature creation, archive-time-stamp

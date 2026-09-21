@@ -164,6 +164,63 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
         TpmAlgIdConstants.TPM_ALG_MLKEM => MlKemDetail!.Value.SerializedSize,
         TpmAlgIdConstants.TPM_ALG_KEYEDHASH => KeyedHashDetail!.Value.SerializedSize,
         TpmAlgIdConstants.TPM_ALG_SYMCIPHER => SymDetail!.Value.SerializedSize,
+        TpmAlgIdConstants.TPM_ALG_ERROR => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_TDES => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_HMAC => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_AES => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_MGF1 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_XOR => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA256 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA384 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA512 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_NULL => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SM4 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_RSASSA => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_RSAES => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_OAEP => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_ECDSA => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_ECDH => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_ECDAA => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SM2 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_ECMQV => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_HKDF => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KDF2 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_CMAC => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_CTR => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_OFB => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_CBC => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_CFB => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_ECB => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_CCM => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_GCM => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KW => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KWP => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_EAX => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_LMS => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_XMSS => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
+        TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization."),
         _ => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.")
     };
 
@@ -213,6 +270,63 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
                 SymDetail!.Value.WriteTo(ref writer);
                 break;
             }
+            case TpmAlgIdConstants.TPM_ALG_ERROR:
+            case TpmAlgIdConstants.TPM_ALG_TDES:
+            case TpmAlgIdConstants.TPM_ALG_SHA:
+            case TpmAlgIdConstants.TPM_ALG_HMAC:
+            case TpmAlgIdConstants.TPM_ALG_AES:
+            case TpmAlgIdConstants.TPM_ALG_MGF1:
+            case TpmAlgIdConstants.TPM_ALG_XOR:
+            case TpmAlgIdConstants.TPM_ALG_SHA256:
+            case TpmAlgIdConstants.TPM_ALG_SHA384:
+            case TpmAlgIdConstants.TPM_ALG_SHA512:
+            case TpmAlgIdConstants.TPM_ALG_SHA256_192:
+            case TpmAlgIdConstants.TPM_ALG_NULL:
+            case TpmAlgIdConstants.TPM_ALG_SM3_256:
+            case TpmAlgIdConstants.TPM_ALG_SM4:
+            case TpmAlgIdConstants.TPM_ALG_RSASSA:
+            case TpmAlgIdConstants.TPM_ALG_RSAES:
+            case TpmAlgIdConstants.TPM_ALG_RSAPSS:
+            case TpmAlgIdConstants.TPM_ALG_OAEP:
+            case TpmAlgIdConstants.TPM_ALG_ECDSA:
+            case TpmAlgIdConstants.TPM_ALG_ECDH:
+            case TpmAlgIdConstants.TPM_ALG_ECDAA:
+            case TpmAlgIdConstants.TPM_ALG_SM2:
+            case TpmAlgIdConstants.TPM_ALG_ECSCHNORR:
+            case TpmAlgIdConstants.TPM_ALG_ECMQV:
+            case TpmAlgIdConstants.TPM_ALG_HKDF:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A:
+            case TpmAlgIdConstants.TPM_ALG_KDF2:
+            case TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108:
+            case TpmAlgIdConstants.TPM_ALG_CAMELLIA:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_256:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_384:
+            case TpmAlgIdConstants.TPM_ALG_SHA3_512:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE128:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_192:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_256:
+            case TpmAlgIdConstants.TPM_ALG_SHAKE256_512:
+            case TpmAlgIdConstants.TPM_ALG_CMAC:
+            case TpmAlgIdConstants.TPM_ALG_CTR:
+            case TpmAlgIdConstants.TPM_ALG_OFB:
+            case TpmAlgIdConstants.TPM_ALG_CBC:
+            case TpmAlgIdConstants.TPM_ALG_CFB:
+            case TpmAlgIdConstants.TPM_ALG_ECB:
+            case TpmAlgIdConstants.TPM_ALG_CCM:
+            case TpmAlgIdConstants.TPM_ALG_GCM:
+            case TpmAlgIdConstants.TPM_ALG_KW:
+            case TpmAlgIdConstants.TPM_ALG_KWP:
+            case TpmAlgIdConstants.TPM_ALG_EAX:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA:
+            case TpmAlgIdConstants.TPM_ALG_EDDSA_PH:
+            case TpmAlgIdConstants.TPM_ALG_LMS:
+            case TpmAlgIdConstants.TPM_ALG_XMSS:
+            case TpmAlgIdConstants.TPM_ALG_KEYEDXOF:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF128:
+            case TpmAlgIdConstants.TPM_ALG_KMACXOF256:
+            case TpmAlgIdConstants.TPM_ALG_KMAC128:
+            case TpmAlgIdConstants.TPM_ALG_KMAC256:
             default:
             {
                 throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.");
@@ -263,6 +377,63 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
             Type = type,
             SymDetail = TpmsSymcipherParms.Parse(ref reader)
         },
+        TpmAlgIdConstants.TPM_ALG_ERROR => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_TDES => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_HMAC => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_AES => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_MGF1 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_XOR => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA256 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA384 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA512 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_NULL => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SM4 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_RSASSA => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_RSAES => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_OAEP => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_ECDSA => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_ECDH => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_ECDAA => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SM2 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_ECMQV => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_HKDF => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KDF2 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_CMAC => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_CTR => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_OFB => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_CBC => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_CFB => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_ECB => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_CCM => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_GCM => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KW => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KWP => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_EAX => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_LMS => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_XMSS => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
+        TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing."),
         _ => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing.")
     };
 

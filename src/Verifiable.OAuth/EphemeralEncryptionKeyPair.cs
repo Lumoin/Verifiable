@@ -76,10 +76,9 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
     /// The P-256 exchange public key in uncompressed encoding: <c>0x04 || X || Y</c>.
     /// Tagged with <see cref="CryptoTags.P256ExchangePublicKey"/>.
     /// </param>
-    /// <param name="privateKey">
-    /// The P-256 exchange private key scalar. Tagged with
-    /// <see cref="CryptoTags.P256ExchangePrivateKey"/>. Ownership transfers to the returned
-    /// instance.
+    /// <param name="privateKeyOwner">
+    /// The owner of the P-256 exchange private key scalar bytes. Ownership transfers to the
+    /// returned instance.
     /// </param>
     /// <param name="base64UrlEncoder">Delegate for Base64url encoding.</param>
     /// <param name="pool">Memory pool for intermediate allocations.</param>

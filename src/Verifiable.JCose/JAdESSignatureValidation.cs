@@ -23,7 +23,7 @@ namespace Verifiable.JCose;
 /// message-imprint binding, and any EN 319 102-1 Indication/SubIndication mapping are the level-aware overloads'
 /// territory, not this class's. Certificate-path trust and revocation are never resolved or validated — <c>kid</c> is a
 /// non-authoritative hint and drives no key selection; the caller supplies the verification key by whatever
-/// means it trusts, exactly like <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, CancellationToken)"/>
+/// means it trusts, exactly like <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, BaseMemoryPool, CancellationToken)"/>
 /// does for a plain JWS.
 /// </para>
 /// <para>
@@ -61,13 +61,13 @@ namespace Verifiable.JCose;
 /// <list type="number">
 /// <item><description>Attached payload, no <c>sigD</c>: the wire payload bytes verify the signature directly.</description></item>
 /// <item><description>
-/// Detached payload, no <c>sigD</c>: <paramref name="externalDetachedPayload"/> (of the <c>ValidateAsync</c>
+/// Detached payload, no <c>sigD</c>: <c>externalDetachedPayload</c> (of the <c>ValidateAsync</c>
 /// overloads below) supplies the out-of-band bytes; <see langword="null"/> there is
 /// <see cref="JAdESDetachedObjectUnresolvableFailure"/>.
 /// </description></item>
 /// <item><description>
 /// <c>sigD</c> selects <c>HttpHeaders</c>: the payload is re-canonicalized in-library from
-/// <paramref name="httpHeadersContext"/> (of the <c>ValidateAsync</c> overloads below) via
+/// <c>httpHeadersContext</c> (of the <c>ValidateAsync</c> overloads below) via
 /// <see cref="JAdESDetachedObjectDereferencing.Canonicalize"/> — no dereferencing, no seam; a
 /// missing context or a context missing a referenced header value is <see cref="JAdESDetachedObjectUnresolvableFailure"/>.
 /// </description></item>

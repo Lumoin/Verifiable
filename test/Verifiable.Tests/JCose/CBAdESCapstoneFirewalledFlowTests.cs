@@ -50,11 +50,11 @@ namespace Verifiable.Tests.JCose;
 /// </para>
 /// <para>
 /// <strong>Signing under a Verifiable-native key that is also the certificate's own key.</strong>
-/// <see cref="CBAdESSignatureCreation.SignAsync"/> demands a <see cref="PrivateKeyMemory"/>/<see cref="SigningDelegate"/>
+/// <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> demands a <see cref="PrivateKeyMemory"/>/<see cref="SigningDelegate"/>
 /// pair; <see cref="X509ChainTestRingNode"/> exposes its key as a raw <see cref="ECDsa"/> instead. Rather than
 /// minting two independent, mismatched keys (one for the certificate, one for signing), <see cref="SignWithEcdsaAsync"/>
 /// is a <see cref="SigningDelegate"/> closing over the leaf's own <see cref="ECDsa"/> directly — the
-/// <paramref name="privateKeyBytes"/> parameter every other <see cref="SigningDelegate"/> in this codebase
+/// <c>privateKeyBytes</c> parameter every other <see cref="SigningDelegate"/> in this codebase
 /// consumes is deliberately unused here, so the <see cref="PrivateKeyMemory"/> handed to <c>SignAsync</c> carries
 /// no meaningful bytes of its own (any well-formed placeholder does).
 /// </para>

@@ -250,7 +250,11 @@ internal static class CmsSignedDataTestFactory
 
         //The certificate hash goes into a stack span; the ESS DER is encoded straight into the attribute.
         Span<byte> certificateHash = stackalloc byte[Sha256Length];
-        _ = SHA256.HashData(signerCertificate.RawData, certificateHash);
+        using(DigestValue certificateDigest = CryptographicKeyEvents.ComputeDigest(signerCertificate.RawData, Sha256Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared))
+        {
+            certificateDigest.AsReadOnlySpan().CopyTo(certificateHash);
+        }
+
         var writer = new AsnWriter(AsnEncodingRules.DER);
         WriteSigningCertificateV2(writer, certificateHash, explicitHashAlgorithm: false);
         _ = signer.SignedAttributes.Add(new AsnEncodedData(new Oid(SigningCertificateV2Oid), writer.Encode()));
@@ -280,7 +284,11 @@ internal static class CmsSignedDataTestFactory
         //it is read back through BouncyCastle and hashed into a stack span — no owned buffer.
         SignerInformation bcSigner = new BcCmsSignedData(cades.Encode()).GetSignerInfos().GetSigners().Cast<SignerInformation>().First();
         Span<byte> imprint = stackalloc byte[Sha256Length];
-        _ = SHA256.HashData(bcSigner.GetSignature(), imprint);
+        using(DigestValue imprintDigest = CryptographicKeyEvents.ComputeDigest(bcSigner.GetSignature(), Sha256Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared))
+        {
+            imprintDigest.AsReadOnlySpan().CopyTo(imprint);
+        }
+
         SignedCms token = BuildTimeStampToken(imprint, timestampTime, tsaCertificate);
 
         //An unsigned attribute is not covered by the signature, so attaching the token leaves it valid.
@@ -351,7 +359,11 @@ internal static class CmsSignedDataTestFactory
         {
             //The certificate hash goes into a stack span; the ESS DER is encoded straight into the attribute.
             Span<byte> certificateHash = stackalloc byte[Sha256Length];
-            _ = SHA256.HashData(signerCertificate.RawData, certificateHash);
+            using(DigestValue certificateDigest = CryptographicKeyEvents.ComputeDigest(signerCertificate.RawData, Sha256Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared))
+            {
+                certificateDigest.AsReadOnlySpan().CopyTo(certificateHash);
+            }
+
             if(bindWrongCertificate)
             {
                 certificateHash[0] ^= 0xFF;

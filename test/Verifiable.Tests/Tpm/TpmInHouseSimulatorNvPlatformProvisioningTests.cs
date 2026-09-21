@@ -451,7 +451,7 @@ internal sealed class TpmInHouseSimulatorNvPlatformProvisioningTests
     /// <summary>
     /// The session form's own entry-time enable gate: "Platform Authorization may not be used if phEnable or
     /// phEnableNV is CLEAR" - with <c>phEnable</c> CLEARed, platformAuth is unusable for anything (Part 1, clause
-    /// 10.2), so <see cref="BeginHierarchyAuthorization"/> answers <c>TPM_RC_HIERARCHY</c> before the command
+    /// 10.2), so <c>BeginHierarchyAuthorization</c> answers <c>TPM_RC_HIERARCHY</c> before the command
     /// HMAC is even checked, proving the gate the password form applies at the identical point in its own ladder
     /// also protects the session form.
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clauses 31.1, 5.4 and 24.2.1</see>.

@@ -34,7 +34,7 @@ namespace Verifiable.JCose;
 /// <strong>Why a shared base.</strong>
 /// Before this base existed the four leaves duplicated identical scaffolding
 /// — base constructors, hash code, the <see cref="object"/>-typed
-/// <see cref="Equals(object)"/> override, equality operators. This base
+/// <see cref="object.Equals(object)"/> override, equality operators. This base
 /// absorbs the duplicable parts while preserving the type identities that
 /// give the four leaves their compile-time guarantees.
 /// </para>

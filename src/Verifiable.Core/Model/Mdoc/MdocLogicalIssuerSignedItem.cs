@@ -15,7 +15,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// shape always carries the bytes the MSO commits to. This type represents
 /// the implementation-side construction state between
 /// <see cref="MdocIssuance.BuildDocument"/> and
-/// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/>, where the
+/// <c>Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync</c>, where the
 /// claim data is assembled but the Tag-24 wrapping hasn't happened yet.
 /// </para>
 /// <para>
@@ -27,7 +27,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// </para>
 /// <para>
 /// <see cref="Random"/> ownership: the logical item owns its salt until the
-/// signing step. <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/>
+/// signing step. <c>Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync</c>
 /// transfers ownership to the freshly-constructed
 /// <see cref="MdocIssuerSignedItem"/> on the signed side; the caller must
 /// not dispose the logical item (or the enclosing

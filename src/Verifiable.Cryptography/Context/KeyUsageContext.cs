@@ -93,7 +93,7 @@ public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
     /// <remarks>
     /// Distinct from <see cref="IdTokenIssuance"/> so deployments can rotate or
     /// hardware-back ID-token keys independently from access-token keys, and so
-    /// <see cref="SelectSigningKeyDelegate"/> implementations can branch on the
+    /// <c>SelectSigningKeyDelegate</c> implementations can branch on the
     /// usage when picking a key for a multi-algorithm registration.
     /// </remarks>
     public static KeyUsageContext AccessTokenIssuance { get; } = new(1);

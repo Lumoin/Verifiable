@@ -220,4 +220,14 @@ public static class CryptoFunctionRegistry<TDiscriminator1, TDiscriminator2>
 
         return VerificationMatcher(algorithm, purpose, qualifier);
     }
+
+
+    /// <summary>
+    /// Gets whether <see cref="Initialize"/> (or <see cref="InitializeWithTransformers"/>) has
+    /// registered this registry's signing and verification matchers.
+    /// </summary>
+    public static bool IsInitialized
+    {
+        get => SigningMatcher is not null && VerificationMatcher is not null;
+    }
 }

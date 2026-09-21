@@ -3,7 +3,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <summary>
 /// Logical (pre-signing) counterpart to <see cref="MdocDocument"/> — the
 /// build scaffold produced by <see cref="MdocIssuance.BuildDocument"/> and
-/// consumed by <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/>.
+/// consumed by <c>Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync</c>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,7 +17,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <para>
 /// Disposal cascades through <see cref="IssuerSigned"/> into every item
 /// under every namespace. After a successful
-/// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/>, the
+/// <c>Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync</c>, the
 /// caller must not dispose this document — the items' salts have
 /// transferred to the resulting <see cref="MdocDocument"/>.
 /// </para>

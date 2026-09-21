@@ -1,8 +1,9 @@
 namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
-/// Carries a signed JAR. Transitions from <see cref="ParCompleted"/> to <see cref="JarReady"/>.
-/// Ownership of the <see cref="Jar"/> transfers to the resulting <see cref="JarReady"/> state.
+/// Carries a signed JAR. Transitions from <see cref="States.ParCompletedState"/> to
+/// <see cref="States.JarReadyState"/>. Ownership of the <see cref="Jar"/> transfers to the
+/// resulting <see cref="States.JarReadyState"/> state.
 /// </summary>
 /// <param name="Jar">
 /// The signed authorization request JWT, ready to serve as

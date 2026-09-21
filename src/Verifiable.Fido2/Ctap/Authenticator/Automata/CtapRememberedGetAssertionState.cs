@@ -56,7 +56,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// The time of the last stateful step in this sequence — the originating <c>authenticatorGetAssertion</c>,
 /// or the most recent <c>authenticatorGetNextAssertion</c> — compared against a 30-second timer on every
 /// subsequent <c>authenticatorGetNextAssertion</c> (CTAP 2.3, section 6.3). Always sourced from the
-/// simulator's threaded <see cref="TimeProvider"/>, never <see cref="DateTimeOffset.UtcNow"/>.
+/// simulator's threaded <see cref="TimeProvider"/>, never <see cref="TimeProvider.GetUtcNow"/> read ambiently.
 /// </param>
 /// <param name="AuthenticatingPinUvAuthProtocol">
 /// The PIN/UV auth protocol whose <c>pinUvAuthToken</c> authenticated the originating

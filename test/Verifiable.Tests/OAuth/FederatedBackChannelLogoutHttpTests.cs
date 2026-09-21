@@ -3,12 +3,10 @@ using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Logout;
-using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -108,10 +106,10 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         await using RelyingPartyReceiver rp2 = await RelyingPartyReceiver.StartAsync(
             "https://rp2.example.com", opPublic, OpIssuer, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using VerifierKeyMaterial rp1Material = op.RegisterBackChannelLogoutClient(
-            rp1.ClientId, new Uri(rp1.ClientId), rp1.BackChannelLogoutUri, RpCapabilities);
-        using VerifierKeyMaterial rp2Material = op.RegisterBackChannelLogoutClient(
-            rp2.ClientId, new Uri(rp2.ClientId), rp2.BackChannelLogoutUri, RpCapabilities);
+        using VerifierKeyMaterial rp1Material = await op.RegisterBackChannelLogoutClientAsync(
+            rp1.ClientId, new Uri(rp1.ClientId), rp1.BackChannelLogoutUri, RpCapabilities).ConfigureAwait(false);
+        using VerifierKeyMaterial rp2Material = await op.RegisterBackChannelLogoutClientAsync(
+            rp2.ClientId, new Uri(rp2.ClientId), rp2.BackChannelLogoutUri, RpCapabilities).ConfigureAwait(false);
 
         //SSO: one OP session, an id_token to each RP carrying sub + the shared sid. As
         //each is issued, record the RP in the OP-side session→RP registry the deliver
@@ -130,36 +128,40 @@ internal sealed class FederatedBackChannelLogoutHttpTests
 
         //Wire the OP seams: terminate the local session, then build and POST a Logout
         //Token (aud = that RP's client_id) to every RP in the session over real HTTP.
-        op.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
-        op.Server.OAuth().DeliverBackChannelLogoutAsync = async (subject, sessionId, _, _, ct) =>
+        await TestHostShell.AlterAsync(op.Server, candidateIntegration =>
         {
-            foreach(RegisteredRelyingParty relyingParty in session)
+            candidateIntegration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+
+            candidateIntegration.DeliverBackChannelLogoutAsync = async (subject, sessionId, _, _, ct) =>
             {
-                string logoutToken = await BackChannelLogout.BuildLogoutTokenAsync(
-                    OpIssuer,
-                    relyingParty.ClientId,
-                    jwtId: Guid.NewGuid().ToString("N"),
-                    issuedAt: TimeProvider.GetUtcNow(),
-                    subject: subject,
-                    sessionId: sessionId,
-                    opPrivate,
-                    TestSetup.Base64UrlEncoder,
-                    SecurityEventTestJson.HeaderSerializer,
-                    SecurityEventTestJson.PayloadSerializer,
-                    Pool,
-                    cancellationToken: ct,
-                    signingKeyId: "op-key-1").ConfigureAwait(false);
+                foreach(RegisteredRelyingParty relyingParty in session)
+                {
+                    string logoutToken = await BackChannelLogout.BuildLogoutTokenAsync(
+                        OpIssuer,
+                        relyingParty.ClientId,
+                        jwtId: Guid.NewGuid().ToString("N"),
+                        issuedAt: TimeProvider.GetUtcNow(),
+                        subject: subject,
+                        sessionId: sessionId,
+                        opPrivate,
+                        TestSetup.Base64UrlEncoder,
+                        SecurityEventTestJson.HeaderSerializer,
+                        SecurityEventTestJson.PayloadSerializer,
+                        Pool,
+                        cancellationToken: ct,
+                        signingKeyId: "op-key-1").ConfigureAwait(false);
 
-                using FormUrlEncodedContent content = new(
-                    [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
-                using HttpClient deliveryClient = LoopbackTls.CreatePinnedHttpClient(relyingParty.Certificate);
-                using HttpResponseMessage delivery = await deliveryClient.PostAsync(
-                    relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
+                    using FormUrlEncodedContent content = new(
+                        [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
+                    using HttpClient deliveryClient = LoopbackTls.CreatePinnedHttpClient(relyingParty.Certificate);
+                    using HttpResponseMessage delivery = await deliveryClient.PostAsync(
+                        relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
 
-                Assert.AreEqual(200, (int)delivery.StatusCode,
-                    $"RP '{relyingParty.ClientId}' must acknowledge the Logout Token with 200.");
-            }
-        };
+                    Assert.AreEqual(200, (int)delivery.StatusCode,
+                        $"RP '{relyingParty.ClientId}' must acknowledge the Logout Token with 200.");
+                }
+            };
+        }).ConfigureAwait(false);
 
         //The user logs out at the OP (RP1 initiates RP-Initiated Logout). end_session
         //terminates the local session and drops out to the back-channel fan-out.
@@ -194,77 +196,17 @@ internal sealed class FederatedBackChannelLogoutHttpTests
     private async Task<string> IssueIdTokenAsync(
         TestHostShell host, VerifierKeyMaterial material, string sessionId)
     {
-        string clientId = material.Registration.ClientId;
-        string tenant = material.Registration.TenantId.Value;
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = WellKnownScopes.OpenId, SessionId = sessionId },
+            TestContext.CancellationToken).ConfigureAwait(false);
 
-        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = clientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            tenant, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        using JsonDocument parDoc = JsonDocument.Parse(parResponse.Body);
-        string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
-
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        authorizeContext.SetSessionId(sessionId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            tenant, WellKnownEndpointNames.AuthCodeAuthorize, "GET",
-            new RequestFields
-            {
-                [OAuthRequestParameterNames.ClientId] = clientId,
-                [OAuthRequestParameterNames.RequestUri] = requestUri
-            },
-            authorizeContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
-            tenant, WellKnownEndpointNames.AuthCodeToken, "POST",
-            new RequestFields
-            {
-                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-                [OAuthRequestParameterNames.Code] = code,
-                [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-                [OAuthRequestParameterNames.ClientId] = clientId,
-                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-            },
-            [], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-
-        using JsonDocument tokenDoc = JsonDocument.Parse(tokenResponse.Body);
+        using JsonDocument tokenDoc = JsonDocument.Parse(result.TokenResponse.Body);
 
         return tokenDoc.RootElement.GetProperty("id_token").GetString()!;
     }
 
 
-    /// <summary>Extracts the <c>code</c> query parameter from an authorize redirect Location.</summary>
-    /// <param name="location">The redirect Location header value.</param>
-    /// <returns>The decoded authorization code.</returns>
-    private static string ExtractCode(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Authorize redirect did not carry a code parameter: {location}");
-    }
 }
 
 
@@ -274,7 +216,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
 /// </summary>
 /// <param name="ClientId">The RP's OAuth client identifier.</param>
 /// <param name="BackChannelLogoutUri">The RP's back-channel logout receiver URL.</param>
-/// <param name="Certificate">The self-signed leaf certificate this RP's HTTPS listener presents; the OP-side delivery client pins to this exact certificate (<see cref="LoopbackTls.CreatePinnedHttpClient"/>) rather than trusting a CA — each RP mints its own certificate, so a single shared delivery client cannot pin across RPs.</param>
+/// <param name="Certificate">The self-signed leaf certificate this RP's HTTPS listener presents; the OP-side delivery client pins to this exact certificate (<see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>) rather than trusting a CA — each RP mints its own certificate, so a single shared delivery client cannot pin across RPs.</param>
 internal readonly record struct RegisteredRelyingParty(string ClientId, Uri BackChannelLogoutUri, X509Certificate2 Certificate);
 
 
@@ -311,8 +253,10 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
     /// <summary>This RP's OAuth client identifier — the Logout Token <c>aud</c> it accepts.</summary>
     public string ClientId { get; }
 
+
     /// <summary>The absolute receiver URL the OP delivers this RP's <c>logout_token</c> to.</summary>
     public Uri BackChannelLogoutUri { get; }
+
 
     /// <summary>The self-signed leaf certificate this RP's HTTPS listener presents; the OP-side delivery client pins to this exact certificate rather than trusting a CA.</summary>
     public X509Certificate2 Certificate => Host.Certificate;

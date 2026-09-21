@@ -689,7 +689,7 @@ internal sealed class DisclosureBoundEnforcementTests
     public async Task PolicyBoundingNeverAdoptsTheReturnedSetAsGiven()
     {
         var returnedByAssessor = new HashSet<CredentialPath> { AddressCity, Ssn };
-        var assessor = Assessor<string>("UnboundedProposal", _ => new(returnedByAssessor));
+        var assessor = Assessor<string>("UnboundedProposal", _ => [.. returnedByAssessor]);
 
         var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
@@ -792,7 +792,7 @@ internal sealed class DisclosureBoundEnforcementTests
         AssertLatticeAdmitsSelection(decision);
 
         var selected = SdDisclosureSelection.SelectDisclosures(issuedToken.DisclosurePaths, decision.SelectedPaths);
-        var emittedClaimNames = selected.Select(d => d.ClaimName).ToHashSet(StringComparer.Ordinal);
+        HashSet<string> emittedClaimNames = selected.Select(d => d.ClaimName!).ToHashSet(StringComparer.Ordinal);
 
         Assert.HasCount(2, selected, "The emitted disclosures are the clamped set's disclosures.");
         Assert.Contains("nationality", emittedClaimNames,
@@ -804,8 +804,8 @@ internal sealed class DisclosureBoundEnforcementTests
         using SdToken<string> parsed = SdJwtSerializer.ParseToken(
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
 
-        var claimNamesOnTheWire = parsed.Disclosures
-            .Select(d => d.ClaimName)
+        HashSet<string> claimNamesOnTheWire = parsed.Disclosures
+            .Select(d => d.ClaimName!)
             .ToHashSet(StringComparer.Ordinal);
 
         Assert.Contains("nationality", claimNamesOnTheWire, "The restored mandatory claim is on the wire.");
@@ -825,7 +825,7 @@ internal sealed class DisclosureBoundEnforcementTests
     public async Task ClampIsANoOpForAWellBehavedPipeline()
     {
         var narrowed = new HashSet<CredentialPath> { GivenName };
-        var assessor = Assessor<string>("DataMinimization", _ => new(narrowed));
+        var assessor = Assessor<string>("DataMinimization", _ => [.. narrowed]);
 
         var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
@@ -862,8 +862,6 @@ internal sealed class DisclosureBoundEnforcementTests
     /// M ⊆ S ⊆ A and upward closure from the lattice, so it answers the question without
     /// consulting the computation's account of what it did.
     /// </summary>
-    /// <typeparam name="TCredential">The credential representation the decision carries.</typeparam>
-    /// <param name="decision">The decision whose selected paths are checked.</param>
     /// <summary>
     /// Builds a genuinely parsed, flat SD-JWT token with three top-level disclosures
     /// (<c>given_name</c>, <c>family_name</c>, <c>nationality</c>) — only a parsed token carries

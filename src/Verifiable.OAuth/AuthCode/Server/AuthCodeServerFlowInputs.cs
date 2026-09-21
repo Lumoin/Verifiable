@@ -46,6 +46,12 @@ public abstract record AuthCodeServerFlowInput: FlowInput;
 /// Carried explicitly so the wire value is what was promised at PAR time
 /// rather than a recomputation at response-build time.
 /// </param>
+/// <param name="AcrValues">The requested Authentication Context Class Reference values, space-delimited. <see langword="null"/> when the request carried none.</param>
+/// <param name="MaxAge">The requested maximum authentication age in seconds. <see langword="null"/> when the request carried none.</param>
+/// <param name="Prompt">The requested <c>prompt</c> (space-delimited). <see langword="null"/> when the request carried none.</param>
+/// <param name="State">The client's opaque <c>state</c> value, echoed back at the redirect. <see langword="null"/> when the request carried none.</param>
+/// <param name="AuthorizationDetails">The RFC 9396 <c>authorization_details</c> the request carried, surfaced to the authorization-decision seam. <see langword="null"/> when absent.</param>
+/// <param name="ResponseMode">The requested <c>response_mode</c>. <see langword="null"/> when the request carried none.</param>
 /// <param name="IssuerState">
 /// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> the Wallet echoed, carried verbatim and UNTRUSTED
 /// to the authorization-decision seam. <see langword="null"/> when the request carried none.
@@ -70,6 +76,7 @@ public sealed record ServerParValidated(
     int ExpiresIn,
     string? AcrValues = null,
     int? MaxAge = null,
+    string? Prompt = null,
     string? State = null,
     string? AuthorizationDetails = null,
     string? ResponseMode = null,
@@ -96,7 +103,7 @@ public sealed record ServerParValidated(
 /// <c>CompletedAt + context.AuthorizationCodeLifetime</c> per
 /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>: "A
 /// maximum authorization code lifetime of 10 minutes is RECOMMENDED." Carried explicitly rather
-/// than left for the transition to inherit <see cref="ParRequestReceivedState.ExpiresAt"/> — the
+/// than left for the transition to inherit <see cref="Verifiable.Server.FlowState.ExpiresAt"/> — the
 /// <c>request_uri</c>'s own, typically shorter, lifetime — so the code's expiry is governed by the
 /// authorization-code policy regardless of how much of the <c>request_uri</c> lifetime remained
 /// when the authorize step ran.
@@ -198,14 +205,6 @@ public sealed record ServerTokenExchangeSucceeded(
     /// replay-verification purpose as <see cref="ClientId"/>.
     /// </summary>
     public string? CodeChallengeMethod { get; init; }
-
-    /// <summary>
-    /// The internal flow identifier of the sibling refresh-token state this response also
-    /// issued, or <see langword="null"/> when none was issued. Recorded onto
-    /// <see cref="States.ServerTokenIssuedState.RefreshFlowId"/> so a valid replay of this code
-    /// can revoke the refresh token by deleting its backing record.
-    /// </summary>
-    public string? RefreshFlowId { get; init; }
 
     /// <summary>
     /// The internal flow identifier of the freshly-rotated refresh token this response issued in
@@ -319,6 +318,9 @@ public sealed record ServerFail(
 /// authentication, carried into the access token's <c>acr</c> claim per RFC 9068 §2.2.1
 /// / RFC 9470 §5. <see langword="null"/> when no authentication-context reference was stamped.
 /// </param>
+/// <param name="State">The client's opaque <c>state</c> value, echoed back at the redirect. <see langword="null"/> when the request carried none.</param>
+/// <param name="AuthorizationDetails">The RFC 9396 <c>authorization_details</c> the request carried, surfaced to the authorization-decision seam. <see langword="null"/> when absent.</param>
+/// <param name="ResponseMode">The requested <c>response_mode</c>. <see langword="null"/> when the request carried none.</param>
 /// <param name="IssuerState">
 /// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> the Wallet echoed, carried verbatim and UNTRUSTED
 /// to the authorization-decision seam. <see langword="null"/> when the request carried none.

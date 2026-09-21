@@ -249,10 +249,10 @@ public sealed record XAdESValidationDataServiceViolation(AdESTableRow ServiceRow
 /// <summary>
 /// An unrecognized <c>##other</c> child of <c>UnsignedSignatureProperties</c> was observed — clause
 /// 6's baseline-level classification cannot be reached over content Table 2 carries no row for. Also reported,
-/// defensively, when <see cref="OccurrenceCountFor"/>'s own dictionary lookup finds a
+/// defensively, when <see cref="XAdESLevelRules.OccurrenceCountFor"/>'s own dictionary lookup finds a
 /// <see cref="XAdESQualifyingPropertiesFacts.SignedPropertyOccurrenceCounts"/>/<see cref="XAdESQualifyingPropertiesFacts.UnsignedPropertyOccurrenceCounts"/>
 /// key that names no <see cref="XAdESBaselineLevelTable"/> row at all: a delegate implementation other
-/// than the shipped one that mis-keys a property fails <see cref="Check"/> closed on its own input rather than
+/// than the shipped one that mis-keys a property fails <see cref="XAdESLevelRules.Check"/> closed on its own input rather than
 /// the entry being silently ignored.
 /// </summary>
 /// <param name="Name">The unrecognized element's local name, exact-character, or the unrecognized dictionary key.</param>
@@ -543,7 +543,7 @@ public sealed record XAdESReferencesValidationDataConsistencyViolation(
 /// <summary>
 /// Annex A.1.2/A.1.4's own "shall indicate the same time as the referenced OCSP response's own <c>ProducedAt</c>
 /// field": a resolved <c>OCSPRef</c> entry's <c>OCSPIdentifier/ProducedAt</c> disagrees with the actual candidate
-/// response's own decoded <c>producedAt</c> field (<see cref="XAdESLevelRules.CheckOcspProducedAtConsistencyAsync"/>).
+/// response's own decoded <c>producedAt</c> field (<see cref="XAdESLevelRules.CheckOcspProducedAtConsistencyAsync(XAdESRefsFamilyDigestSurface, IReadOnlyList{XAdESOcspReferenceFact}, IReadOnlyList{PkiCertificateMemory}, BaseMemoryPool, List{XAdESRuleViolation}, CancellationToken)"/>).
 /// Reachable only once resolution itself succeeds — an unresolved reference is
 /// <see cref="XAdESReferencesValidationDataConsistencyViolation"/>'s own finding.
 /// </summary>

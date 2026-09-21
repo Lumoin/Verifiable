@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Siop.Wallet;
 /// present).
 /// </para>
 /// <para>
-/// Signing flows through <see cref="JwtSigningExtensions.SignAsync"/> with the
+/// Signing flows through <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> with the
 /// JWS <c>alg</c> derived from the subject key's <see cref="Tag"/> via
 /// <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/> — the standard
 /// JCose composition shared with KB-JWT issuance and JAR signing. The JWK

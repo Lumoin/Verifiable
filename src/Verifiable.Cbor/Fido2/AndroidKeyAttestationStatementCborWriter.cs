@@ -19,7 +19,7 @@ namespace Verifiable.Cbor.Fido2;
 /// canonical key order (equal-length text-string keys sort bytewise: <c>'a'</c> &lt; <c>'s'</c> &lt;
 /// <c>'x'</c>), with <see cref="CborConformanceMode.Ctap2Canonical"/> per
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-conforming-all-classes">section 2.4: All Conformance
-/// Classes</see>. <paramref name="x5c"/> is written verbatim regardless of element count — the CDDL's
+/// Classes</see>. <c>x5c</c> is written verbatim regardless of element count — the CDDL's
 /// <c>≥1</c>-element shape is <see cref="AndroidKeyAttestation"/>'s verification-procedure concern, not
 /// this codec's, mirroring <see cref="AndroidKeyAttestationStatementCborReader.Parse"/>'s own leniency.
 /// </para>

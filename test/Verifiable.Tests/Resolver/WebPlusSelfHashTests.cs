@@ -7,7 +7,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// Tests for <see cref="WebPlusSelfHash.Verify"/> — the did:webplus self-hash. Anchored on the root DID document
+/// Tests for <see cref="WebPlusSelfHash.VerifyAsync"/> — the did:webplus self-hash. Anchored on the root DID document
 /// from the specification's "Creating and Updating a DID" worked example (LedgerDomain Draft v0.4), whose
 /// <c>selfHash</c> was minted by the independent Rust reference implementation. BLAKE3 is supplied here from
 /// BouncyCastle as an independent oracle (firewall): the verifier reconstructs the hash from the document's JCS

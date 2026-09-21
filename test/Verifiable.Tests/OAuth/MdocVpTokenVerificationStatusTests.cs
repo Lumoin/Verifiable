@@ -918,8 +918,8 @@ internal sealed class MdocVpTokenVerificationStatusTests
         PrivateKeyMemory deviceKey,
         string nonce)
     {
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            HostedVerifierClientId, HostedVerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            HostedVerifierClientId, HostedVerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         Oid4VpWalletClient walletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
             verifierKeys,

@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// <para>
 /// Refresh tokens persist as <see cref="States.ServerRefreshTokenIssuedState"/>
 /// records keyed by a fresh internal <c>flowId</c>. The application's
-/// <see cref="Verifiable.OAuth.Server.ResolveCorrelationKeyDelegate"/> matches
+/// <see cref="Verifiable.Server.ResolveCorrelationKeyDelegate"/> matches
 /// on this flow kind to look up the refresh-token string in the secondary
 /// index it maintains. Sealed singleton accessed via
 /// <c>FlowKind.RefreshToken</c>.
@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// differs — refresh tokens are long-lived per RFC 6749 §6 (typically days
 /// to months), while authorization codes are short-lived single-use handles.
 /// Deployments may back the two with different storage tiers; the discriminator
-/// lets <see cref="Verifiable.OAuth.Server.ResolveCorrelationKeyDelegate"/>
+/// lets <see cref="Verifiable.Server.ResolveCorrelationKeyDelegate"/>
 /// route to the right tier.
 /// </para>
 /// </remarks>

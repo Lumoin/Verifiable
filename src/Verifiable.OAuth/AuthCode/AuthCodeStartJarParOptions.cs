@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Per-call inputs for
-/// <see cref="AuthCodeClient.StartJarParAsync"/> — the JAR-bearing Pushed
+/// <see cref="AuthCodeClient.StartJarParAsync(Verifiable.OAuth.Client.ClientRegistration, AuthCodeStartJarParOptions, System.Threading.CancellationToken)"/> — the JAR-bearing Pushed
 /// Authorization Request flow per RFC 9101 §5 + RFC 9126 §3. The client signs a
 /// JAR carrying the AuthCode-specific claims (PKCE challenge, redirect URI,
 /// scope, state, nonce), POSTs it to the PAR endpoint with an outer

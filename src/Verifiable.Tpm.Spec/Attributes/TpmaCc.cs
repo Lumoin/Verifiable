@@ -184,7 +184,16 @@ public readonly struct TpmaCc: IEquatable<TpmaCc>
     /// <inheritdoc />
     public override int GetHashCode() => Value.GetHashCode();
 
+    /// <summary>Compares two <see cref="TpmaCc"/> values by their raw word.</summary>
+    /// <param name="left">The first value.</param>
+    /// <param name="right">The second value.</param>
+    /// <returns><see langword="true"/> when the two values carry the same raw word.</returns>
     public static bool operator ==(TpmaCc left, TpmaCc right) => left.Equals(right);
+
+    /// <summary>Compares two <see cref="TpmaCc"/> values by their raw word.</summary>
+    /// <param name="left">The first value.</param>
+    /// <param name="right">The second value.</param>
+    /// <returns><see langword="true"/> when the two values carry different raw words.</returns>
     public static bool operator !=(TpmaCc left, TpmaCc right) => !left.Equals(right);
 
     /// <summary>The debugger rendering: the raw word, the command index, the handle count, and whichever attribute bits are set.</summary>

@@ -103,11 +103,23 @@ public sealed class UnverifiedJwtPayload: JoseDictionary, IEquatable<UnverifiedJ
     public override int GetHashCode() => base.GetHashCode();
 
 
+    /// <summary>
+    /// Determines whether <paramref name="left"/> and <paramref name="right"/> are equal, per <see cref="Equals(object?)"/>.
+    /// </summary>
+    /// <param name="left">The left-hand operand, or <see langword="null"/>.</param>
+    /// <param name="right">The right-hand operand, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when both are <see langword="null"/> or <paramref name="left"/> equals <paramref name="right"/>; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator ==(UnverifiedJwtPayload? left, UnverifiedJwtPayload? right) =>
         left is null ? right is null : left.Equals(right);
 
 
+    /// <summary>
+    /// Determines whether <paramref name="left"/> and <paramref name="right"/> are unequal, the negation of <see cref="operator ==(UnverifiedJwtPayload?, UnverifiedJwtPayload?)"/>.
+    /// </summary>
+    /// <param name="left">The left-hand operand, or <see langword="null"/>.</param>
+    /// <param name="right">The right-hand operand, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> and <paramref name="right"/> are not equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator !=(UnverifiedJwtPayload? left, UnverifiedJwtPayload? right) =>
         !(left == right);

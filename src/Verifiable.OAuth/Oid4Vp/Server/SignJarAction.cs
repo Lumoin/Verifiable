@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// claim per RFC 6749 §4.1.1 / RFC 9700 §4.7. The Wallet echoes the value as
 /// the <c>state</c> form field in the direct_post per OID4VP 1.0 §6.1, and
 /// the application's
-/// <see cref="Verifiable.OAuth.Server.AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
+/// <c>Verifiable.OAuth.Server.AuthorizationServerIntegration.ResolveCorrelationKeyAsync</c>
 /// maps it back to the internal flow identifier.
 /// </param>
 /// <param name="Nonce">The transaction nonce to embed in the JAR.</param>

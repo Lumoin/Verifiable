@@ -7,9 +7,7 @@ namespace Verifiable.Tests.Cryptography
     /// <remarks>There should not be code specific to underlying providers.</remarks>
     internal class DidCryptoProviderTests
     {
-        /// <summary>
-        /// A test for loading and rountripping a signing and verifying event.
-        /// </summary>
+        //A test for loading and rountripping a signing and verifying event.
         /*[TestMethod]
         public void DidCoreCanLoadAllCryptoProvidersByReflectionSignAndVerify()
         {

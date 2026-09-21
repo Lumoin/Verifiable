@@ -11,7 +11,7 @@ namespace Verifiable.Fido2;
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-large-blob-extension">W3C Web Authentication
 /// Level 3, section 10.1.5: Large blob storage extension (largeBlob)</see> — client extension
 /// output <c>blob</c>, authentication-only, "present only if read succeeded". Carries the decoded
-/// bytes as a <see cref="TaggedMemory{T}"/> wrapping the <see cref="System.Text.Json"/>-allocated
+/// bytes as a <see cref="TaggedMemory{T}"/> wrapping the <c>System.Text.Json</c>-allocated
 /// array rather than copying it into pooled memory — not pooled, per this codebase's
 /// <see cref="TaggedMemory{T}"/> convention for short-lived deserialization buffers.
 /// </remarks>

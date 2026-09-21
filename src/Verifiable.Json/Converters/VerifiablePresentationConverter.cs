@@ -57,7 +57,7 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
 
-        var hasProof = root.TryGetProperty("proof", out var proofElement)
+        var hasProof = root.TryGetProperty(WellKnownCredentialMemberNames.Proof, out var proofElement)
             && proofElement.ValueKind != JsonValueKind.Null;
 
         var presentation = hasProof || typeToConvert == typeof(DataIntegritySecuredPresentation)
@@ -70,32 +70,32 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
         {
             switch(property.Name)
             {
-                case "@context":
+                case string name when name == WellKnownCredentialMemberNames.Context:
                 {
                     presentation.Context = Deserialize<Context>(property.Value, options);
                     break;
                 }
-                case "id":
+                case string name when name == WellKnownCredentialMemberNames.Id:
                 {
                     presentation.Id = property.Value.GetString();
                     break;
                 }
-                case "type":
+                case string name when name == WellKnownCredentialMemberNames.Type:
                 {
                     presentation.Type = ReadStringList(property.Value);
                     break;
                 }
-                case "holder":
+                case string name when name == WellKnownCredentialMemberNames.Holder:
                 {
                     presentation.Holder = property.Value.GetString();
                     break;
                 }
-                case "verifiableCredential":
+                case string name when name == WellKnownCredentialMemberNames.VerifiableCredential:
                 {
                     ReadCredentialArray(property.Value, presentation, options);
                     break;
                 }
-                case "proof":
+                case string name when name == WellKnownCredentialMemberNames.Proof:
                 {
                     if(hasProof)
                     {
@@ -104,7 +104,7 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
 
                     break;
                 }
-                case "termsOfUse":
+                case string name when name == WellKnownCredentialMemberNames.TermsOfUse:
                 {
                     presentation.TermsOfUse = Deserialize<List<TermsOfUse>>(property.Value, options);
                     break;
@@ -134,36 +134,36 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
 
         if(value.Context is not null)
         {
-            writer.WritePropertyName("@context");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.Context);
             WriteMember(writer, typeof(Context), value.Context, options);
         }
 
         if(value.Id is not null)
         {
-            writer.WriteString("id", value.Id);
+            writer.WriteString(WellKnownCredentialMemberNames.Id, value.Id);
         }
 
         if(value.Type is not null)
         {
-            WriteStringList(writer, "type", value.Type);
+            WriteStringList(writer, WellKnownCredentialMemberNames.Type, value.Type);
         }
 
         if(value.Holder is not null)
         {
-            writer.WriteString("holder", value.Holder);
+            writer.WriteString(WellKnownCredentialMemberNames.Holder, value.Holder);
         }
 
         WriteCredentialArray(writer, value, options);
 
         if(value is DataIntegritySecuredPresentation secured && secured.Proof is not null)
         {
-            writer.WritePropertyName("proof");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.Proof);
             WriteMember(writer, typeof(List<DataIntegrityProof>), secured.Proof, options);
         }
 
         if(value.TermsOfUse is not null)
         {
-            writer.WritePropertyName("termsOfUse");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.TermsOfUse);
             WriteMember(writer, typeof(List<TermsOfUse>), value.TermsOfUse, options);
         }
 
@@ -213,7 +213,7 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
             return false;
         }
 
-        if(!element.TryGetProperty("id", out var idElement)
+        if(!element.TryGetProperty(WellKnownCredentialMemberNames.Id, out var idElement)
             || idElement.ValueKind != JsonValueKind.String)
         {
             return false;
@@ -225,7 +225,7 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
             return false;
         }
 
-        if(!element.TryGetProperty("type", out var typeElement))
+        if(!element.TryGetProperty(WellKnownCredentialMemberNames.Type, out var typeElement))
         {
             return false;
         }
@@ -261,17 +261,17 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
     {
         var enveloped = new EnvelopedVerifiableCredential();
 
-        if(element.TryGetProperty("@context", out var contextElement))
+        if(element.TryGetProperty(WellKnownCredentialMemberNames.Context, out var contextElement))
         {
             enveloped.Context = Deserialize<Context>(contextElement, options);
         }
 
-        if(element.TryGetProperty("id", out var idElement))
+        if(element.TryGetProperty(WellKnownCredentialMemberNames.Id, out var idElement))
         {
             enveloped.Id = idElement.GetString();
         }
 
-        if(element.TryGetProperty("type", out var typeElement))
+        if(element.TryGetProperty(WellKnownCredentialMemberNames.Type, out var typeElement))
         {
             enveloped.Type = ReadStringList(typeElement);
         }
@@ -291,7 +291,7 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
             return;
         }
 
-        writer.WriteStartArray("verifiableCredential");
+        writer.WriteStartArray(WellKnownCredentialMemberNames.VerifiableCredential);
 
         if(credentials is not null)
         {
@@ -321,18 +321,18 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
         //object rides inside the presentation's verifiableCredential array.
         if(enveloped.Context is not null)
         {
-            writer.WritePropertyName("@context");
+            writer.WritePropertyName(WellKnownCredentialMemberNames.Context);
             WriteMember(writer, typeof(Context), enveloped.Context, options);
         }
 
         if(enveloped.Id is not null)
         {
-            writer.WriteString("id", enveloped.Id);
+            writer.WriteString(WellKnownCredentialMemberNames.Id, enveloped.Id);
         }
 
         if(enveloped.Type is not null)
         {
-            WriteStringList(writer, "type", enveloped.Type);
+            WriteStringList(writer, WellKnownCredentialMemberNames.Type, enveloped.Type);
         }
 
         writer.WriteEndObject();

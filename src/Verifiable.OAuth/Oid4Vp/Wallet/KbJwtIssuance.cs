@@ -29,7 +29,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/>.
 /// </para>
 /// <para>
-/// Signing flows through <see cref="JwtSigningExtensions.SignAsync"/>, which
+/// Signing flows through <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>, which
 /// resolves the per-algorithm <c>SigningDelegate</c> from the holder key's
 /// <see cref="Tag"/> via <see cref="CryptoFunctionRegistry{TAlgorithm,TPurpose}"/>.
 /// This is the standard JCose composition pattern shared with token issuance,
@@ -63,6 +63,8 @@ public static class KbJwtIssuance
     /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
     /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
+    /// <param name="transactionDataHashes">Base64url <c>transaction_data</c> hashes to embed, or <see langword="null"/> to omit the claim.</param>
+    /// <param name="transactionDataHashesAlg">The hash algorithm identifier for <paramref name="transactionDataHashes"/>, or <see langword="null"/> when omitted.</param>
     /// <param name="cancellationToken">Cancellation token, propagated through the registry-resolved signing delegate.</param>
     /// <returns>The compact-serialised KB-JWT (<c>header.payload.signature</c>).</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "JwsMessage is disposed via the using statement before the method returns; the returned string is independent of the message.")]

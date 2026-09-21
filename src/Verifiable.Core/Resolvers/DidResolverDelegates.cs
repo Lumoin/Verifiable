@@ -25,6 +25,14 @@ namespace Verifiable.Core.Resolvers;
 ///     (WellKnownDidMethodPrefixes.CheqdDidMethodPrefix, CheqdDidResolver.ResolveAsync)
 /// );
 /// </code>
+/// <para>
+/// A method that dereferences a document over the wire reports the fetch's
+/// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/> on <see cref="DidResolutionMetadata.Freshness"/>.
+/// An application that stores the returned document stores it for that reported lifetime: "A cache MUST NOT
+/// generate a stale response unless it is disconnected or doing so is explicitly permitted by the client or
+/// origin server" (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>).
+/// This library stores nothing itself.
+/// </para>
 /// </remarks>
 public delegate ValueTask<DidResolutionResult> DidMethodResolverDelegate(
     string did,
@@ -47,6 +55,15 @@ public delegate ValueTask<DidResolutionResult> DidMethodResolverDelegate(
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The dereferencing result.</returns>
+/// <remarks>
+/// A dereferencer that fetches content over the wire reports the fetch's
+/// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/> on
+/// <see cref="DidDereferencingMetadata.Freshness"/>. An application that stores the returned content stores
+/// it for that reported lifetime: "A cache MUST NOT generate a stale response unless it is disconnected or
+/// doing so is explicitly permitted by the client or origin server"
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>). This library
+/// stores nothing itself.
+/// </remarks>
 public delegate ValueTask<DidDereferencingResult> DidMethodDereferencerDelegate(
     string baseDid,
     string? path,

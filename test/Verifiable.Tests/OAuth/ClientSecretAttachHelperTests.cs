@@ -95,7 +95,7 @@ internal sealed class ClientSecretAttachHelperTests
         const string clientSecret = "sec:re t+val";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             clientId,
             new Uri("https://machine.example.com"),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -103,10 +103,13 @@ internal sealed class ClientSecretAttachHelperTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(DecodeAndMatchBasicHeader(request, clientId, clientSecret));
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, clientId, clientSecret));
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -140,7 +143,7 @@ internal sealed class ClientSecretAttachHelperTests
     public async Task RequestCarryingBothBasicHeaderAndPostFieldsIsAcceptedWhenTheSeamOnlyChecksOneChannel()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -148,13 +151,16 @@ internal sealed class ClientSecretAttachHelperTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
         //A client_secret_basic-only policy: the seam checks ONLY the Authorization header and never
         //looks at the form fields, yet the endpoint hands both to it unconditionally
         //(AuthCodeEndpoints.cs's ValidateClientCredentialsAsync call sites).
-        app.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(DecodeAndMatchBasicHeader(request, ClientId, ClientSecret));
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, ClientId, ClientSecret));
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -192,7 +198,7 @@ internal sealed class ClientSecretAttachHelperTests
     public async Task RegistrationIdentificationIsUnaffectedByWhatClientAuthenticationWouldReturn()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -200,19 +206,22 @@ internal sealed class ClientSecretAttachHelperTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
         List<string> identifiedClientIds = [];
-        app.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            //Captured regardless of which value THIS call is about to return: this seam is only ever
-            //handed the already-resolved registration, never the other way around.
-            identifiedClientIds.Add(registration.ClientId);
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                //Captured regardless of which value THIS call is about to return: this seam is only ever
+                //handed the already-resolved registration, never the other way around.
+                identifiedClientIds.Add(registration.ClientId);
 
-            return ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
-        };
+                return ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -269,7 +278,7 @@ internal sealed class ClientSecretAttachHelperTests
     public async Task ClientSecretPostRoundTripsOverHttpWire()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -277,12 +286,15 @@ internal sealed class ClientSecretAttachHelperTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -298,39 +310,4 @@ internal sealed class ClientSecretAttachHelperTests
     }
 
 
-    /// <summary>
-    /// The test-side reverse of <see cref="OutgoingHeadersClientAuthExtensions.WithClientSecretBasic"/>:
-    /// base64-decode the <c>Authorization: Basic</c> header, split the pair on the FIRST <c>:</c> (the
-    /// join character the encoder itself never percent-encodes into either half), and reverse
-    /// <c>application/x-www-form-urlencoded</c> (<c>+</c> back to space, then <see cref="Uri.UnescapeDataString"/>
-    /// for the remaining <c>%XX</c> triplets) on each half before comparing.
-    /// </summary>
-    private static bool DecodeAndMatchBasicHeader(IncomingRequest? request, string expectedClientId, string expectedClientSecret)
-    {
-        if(request is null
-            || !request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authorizationHeader)
-            || authorizationHeader is null
-            || !authorizationHeader.StartsWith("Basic ", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        byte[] decoded = Convert.FromBase64String(authorizationHeader["Basic ".Length..]);
-        string pair = Encoding.UTF8.GetString(decoded);
-        int separatorIndex = pair.IndexOf(':', StringComparison.Ordinal);
-        if(separatorIndex < 0)
-        {
-            return false;
-        }
-
-        string decodedClientId = FormUrlDecode(pair[..separatorIndex]);
-        string decodedClientSecret = FormUrlDecode(pair[(separatorIndex + 1)..]);
-
-        return string.Equals(decodedClientId, expectedClientId, StringComparison.Ordinal)
-            && string.Equals(decodedClientSecret, expectedClientSecret, StringComparison.Ordinal);
-    }
-
-
-    /// <summary>Reverses <c>application/x-www-form-urlencoded</c> (RFC 6749 Appendix B) on <paramref name="value"/>: <c>+</c> becomes space, then <see cref="Uri.UnescapeDataString"/> resolves the remaining <c>%XX</c> triplets.</summary>
-    private static string FormUrlDecode(string value) => Uri.UnescapeDataString(value.Replace('+', ' '));
 }

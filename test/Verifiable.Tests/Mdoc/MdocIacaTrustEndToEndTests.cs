@@ -1,4 +1,5 @@
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -23,7 +24,7 @@ namespace Verifiable.Tests.Mdoc;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Uses <see cref="MicrosoftX509Functions.ValidateChain"/> as the
+/// Uses <see cref="MicrosoftX509Functions.ValidateChainAsync"/> as the
 /// underlying chain validator — the same delegate the OAuth/JAR
 /// signature-verification path uses.
 /// </para>
@@ -42,10 +43,10 @@ internal sealed class MdocIacaTrustEndToEndTests
 {
     public required TestContext TestContext { get; set; }
 
-    //Bit-identical to TestClock.CanonicalEpoch.AddDays(-7) (2026-05-25T12:00:00Z) —
+    //Fixed at TestClock.CanonicalEpoch.AddDays(-7) (2026-05-25T12:00:00Z) —
     //the trust delegate's "now" for chain validation; the certs are valid for a
     //wide window (see CreateSelfSignedCa/CreateLeafCertificate) so this is stable.
-    private static DateTimeOffset TrustResolutionValidationTime { get; } = TestClock.CanonicalEpoch.AddDays(-7);
+    private static FakeTimeProvider TrustResolutionTimeProvider { get; } = new(TestClock.CanonicalEpoch.AddDays(-7));
 
     //Family anchor: not a clean single-call TestClock.CanonicalEpoch offset
     //(2026-06-01T12:00:00Z is 7 days 4 hours after this signed instant), so
@@ -100,7 +101,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 validateChain: MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
-                validationTime: TrustResolutionValidationTime,
+                timeProvider: TrustResolutionTimeProvider,
                 pool: BaseMemoryPool.Shared);
 
             //End-to-end: trust resolution + signature verification in one call.
@@ -108,6 +109,73 @@ internal sealed class MdocIacaTrustEndToEndTests
                 trustDelegate, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(isVerified, "IACA-rooted IssuerAuth must verify under the trust delegate.");
+        }
+        finally
+        {
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>
+    /// A delegate <see cref="MdocCborIacaTrustResolver.Create"/> composes once must read the current
+    /// instant at EACH resolution, not the instant it was built at — the same chain that verifies
+    /// while the clock sits inside the leaf's validity window must be refused once that clock has
+    /// moved past the leaf's <c>notAfter</c> (2029-01-01T00:00:00Z, <see cref="CreateLeafCertificate"/>).
+    /// </summary>
+    [TestMethod]
+    public async Task TrustDelegateRefusesAfterClockPassesLeafNotAfter()
+    {
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
+        using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Clock-Moved IACA Root", rootKey);
+        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Clock-Moved mDL Issuer", leafKey, rootCert);
+
+        using PrivateKeyMemory leafPrivateKey = LoadP256PrivateKey(leafKey);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            using MdocDocument issued = await MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt()).SignAsync(
+                new MdocIssuerSigningConfig
+                {
+                    DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
+                    Validity = SampleValidity(),
+                    DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey),
+                    X5Chain = [leafCert.RawData, rootCert.RawData]
+                },
+                leafPrivateKey,
+                BaseMemoryPool.Shared,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            using PkiCertificateMemory rootTrustAnchor = CopyToPkiCertificate(rootCert.RawData);
+
+            //The leaf's notAfter is 2029-01-01T00:00:00Z; the clock starts a day before it, so the
+            //first resolution below is well inside the leaf's validity window.
+            FakeTimeProvider clock = new(new DateTimeOffset(2028, 12, 31, 0, 0, 0, TimeSpan.Zero));
+
+            ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
+                MicrosoftX509Functions.ValidateChainAsync,
+                trustAnchors: [rootTrustAnchor],
+                timeProvider: clock,
+                pool: BaseMemoryPool.Shared);
+
+            using(MdocIacaTrustResolution beforeExpiry = await trustDelegate(
+                issued.IssuerSigned.IssuerAuth, TestContext.CancellationToken).ConfigureAwait(false))
+            {
+                Assert.IsTrue(beforeExpiry.IsTrusted, "The chain must verify while the clock is inside the leaf's validity window.");
+            }
+
+            //Move the SAME clock the delegate reads past the leaf's notAfter.
+            clock.Advance(TimeSpan.FromDays(2));
+
+            using MdocIacaTrustResolution afterExpiry = await trustDelegate(
+                issued.IssuerSigned.IssuerAuth, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(afterExpiry.IsTrusted, "The delegate must refuse the same chain once the clock has passed the leaf's notAfter.");
+            Assert.AreEqual(MdocIacaTrustFailureReason.ChainValidationFailed, afterExpiry.FailureReason);
         }
         finally
         {
@@ -148,7 +216,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
-                validationTime: TrustResolutionValidationTime,
+                timeProvider: TrustResolutionTimeProvider,
                 pool: BaseMemoryPool.Shared);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await issued.VerifyIssuerAuthVerboseAsync(
@@ -207,7 +275,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [imposterAnchor],
-                validationTime: TrustResolutionValidationTime,
+                timeProvider: TrustResolutionTimeProvider,
                 pool: BaseMemoryPool.Shared);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await issued.VerifyIssuerAuthVerboseAsync(
@@ -256,7 +324,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [],
-                validationTime: TrustResolutionValidationTime,
+                timeProvider: TrustResolutionTimeProvider,
                 pool: BaseMemoryPool.Shared);
 
             using MdocIacaTrustResolution resolution = await trustDelegate(
@@ -310,7 +378,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [imposterAnchor],
-                validationTime: TrustResolutionValidationTime,
+                timeProvider: TrustResolutionTimeProvider,
                 pool: BaseMemoryPool.Shared);
 
             using MdocIacaTrustResolution resolution = await trustDelegate(
@@ -358,7 +426,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootAnchor],
-                validationTime: TrustResolutionValidationTime,
+                timeProvider: TrustResolutionTimeProvider,
                 pool: BaseMemoryPool.Shared);
 
             bool isVerified = await issued.VerifyIssuerAuthAsync(

@@ -13,8 +13,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Flow coverage for the <c>Extensions/Seal</c> business-capability verbs (<see cref="TpmDeviceExtensions.SealAsync"/>,
-/// <see cref="TpmDeviceExtensions.UnsealAsync"/>, <see cref="TpmDeviceExtensions.UnsealUnderPolicyAsync"/>) against
+/// Flow coverage for the <c>Extensions/Seal</c> business-capability verbs (<see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions.extension(TpmDevice).SealAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, bool, CancellationToken)"/>,
+/// <see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions.extension(TpmDevice).UnsealAsync(uint, ReadOnlyMemory{byte}, TpmSealedBlob, ReadOnlyMemory{byte}, CancellationToken)"/>, <see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions.extension(TpmDevice).UnsealUnderPolicyAsync(uint, ReadOnlyMemory{byte}, TpmSealedBlob, uint, CancellationToken)"/>) against
 /// the in-house behavioural <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the
 /// same production wire path <see cref="TpmInHouseSimulatorSealTests"/> and <see cref="TpmInHouseSimulatorPcrSealTests"/>
 /// exercise directly with <see cref="CreateInput"/>/<see cref="LoadInput"/>/<see cref="UnsealInput"/>, except every

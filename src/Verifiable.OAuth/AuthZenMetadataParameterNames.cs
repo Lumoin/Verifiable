@@ -15,7 +15,7 @@ namespace Verifiable.OAuth;
 /// <c>"access_evaluation_endpoint"</c>, <c>"search_subject_endpoint"</c>),
 /// not their VALUES. Values are deployment-specific URLs the application
 /// supplies through
-/// <see cref="Server.AuthorizationServerIntegration.ResolveEndpointUriAsync"/>.
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>.
 /// </remarks>
 public static class AuthZenMetadataParameterNames
 {

@@ -14,7 +14,7 @@ namespace Verifiable.Cesr;
 /// <para>
 /// Anchored on the CESR master code table, <see href="https://trustoverip.github.io/kswg-cesr-specification/#master-code-table-for-genusversion--_aaacaa-keriacdc-protocol-stack-version-200">
 /// genus/version <c>-_AAACAA</c></see>. This is the algorithm-agility seam for KERI/CESR key resolution: a
-/// forward-only data table from code to <see cref="CryptoAlgorithm"/> and wire <see cref="Tag"/>s, never a
+/// forward-only data table from code to <see cref="CryptoAlgorithm"/> and wire <see cref="Lumoin.Base.Tag"/>s, never a
 /// switch, so new algorithms register here as the build gains the ability to verify their signatures. An
 /// unmapped code fails closed.
 /// </para>

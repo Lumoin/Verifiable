@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
+using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
@@ -104,7 +105,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// </summary>
     /// <remarks>
     /// Wires the resolver's transport manually with <see cref="HttpClientHandler.AllowAutoRedirect"/>
-    /// explicitly <see langword="false"/> — <see cref="TestHostShell.WireCimdMaterialization"/>'s
+    /// explicitly <see langword="false"/> — <see cref="TestHostShell.WireCimdMaterializationAsync"/>'s
     /// pinned client leaves the framework default (<see langword="true"/>), which would let
     /// <see cref="HttpClient"/> itself silently follow the 302 before the guarded
     /// <see cref="OutboundFetch"/> chokepoint ever saw it, making this test's "never dialed"
@@ -140,17 +141,22 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         noAutoRedirectHandler.AllowAutoRedirect = false;
         using HttpClient documentHttpClient = new(noAutoRedirectHandler);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(documentHttpClient);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport, new ClientIdMetadataDocumentResolverOptions(), app.Time);
+        ResolveClientMetadataDelegate resolve = new ClientMetadataResolutionCache(
+            transport, new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), app.Time)
+            .ResolveDocumentAsync;
 
         HostedAuthorizationServer host = app.Host("default");
-        host.Server.OAuth().MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-        host.Server.OAuth().ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+            candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
 
-            return resolve(clientMetadataUri, context, cancellationToken);
-        };
+            candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+            {
+                context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+
+                return resolve(clientMetadataUri, context, cancellationToken);
+            };
+        }).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await StartParAgainstStubAsync(
             app, new Uri(documentHost.BaseAddress, "/app"), TestContext.CancellationToken).ConfigureAwait(false);
@@ -233,7 +239,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/oauth-client+json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult plainResult = await StartParAgainstStubAsync(
             app, plainDocumentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -283,7 +289,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         await AssertAbortsAndNeverCachedAsync(
             app, documentHost, "/missing-client-id", missingClientIdUri,
@@ -335,7 +341,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         await AssertAbortsAndNeverCachedAsync(
             app, documentHost, "/generic-mismatch", genericMismatchUri,
@@ -369,13 +375,19 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Uri maliciousUri = new("https://169.254.169.254/app");
-        ClientRecord stub = app.RegisterCimdStubClient(maliciousUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(maliciousUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         HostedAuthorizationServer host = app.Host("default");
         AuthorizationServerIntegration oauth = host.Server.OAuth();
-        oauth.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-        oauth.ResolveClientMetadataAsync = ClientIdMetadataDocuments.BuildResolving(
-            spy.Delegate, new ClientIdMetadataDocumentResolverOptions(), app.Time);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
+
+
+            candidateIntegration.ResolveClientMetadataAsync = new ClientMetadataResolutionCache(
+                spy.Delegate, new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), app.Time)
+                .ResolveDocumentAsync;
+        }).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await DriveParForStubAsync(
             app, stub, TestContext.CancellationToken).ConfigureAwait(false);
@@ -389,8 +401,8 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         Activity[] handleActivities = captured
             .Where(a => string.Equals(a.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal))
             .Where(a => a.Tags.Any(t =>
-                string.Equals(t.Key, ServerTagNames.TenantId, StringComparison.Ordinal)
-                && string.Equals(t.Value, stub.TenantId.Value, StringComparison.Ordinal)))
+                string.Equals(t.Key, ServerTagNames.TenantHandle, StringComparison.Ordinal)
+                && string.Equals(t.Value, stub.TenantHandle!.Value.Value, StringComparison.Ordinal)))
             .ToArray();
         Assert.IsGreaterThan(0, handleActivities.Length, "At least one Handle activity for this tenant must be captured.");
         Assert.Contains(
@@ -419,10 +431,15 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         await using TestHostShell productionApp = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
         HostedAuthorizationServer productionHost = productionApp.Host("default");
         using HttpClient productionHttpClient = LoopbackTls.CreatePinnedHttpClient(documentHost.Certificate);
-        productionHost.Server.OAuth().MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-        productionHost.Server.OAuth().ResolveClientMetadataAsync = ClientIdMetadataDocuments.BuildResolving(
-            GuardedHttpClientTransport.BuildSingleHopTransport(productionHttpClient),
-            new ClientIdMetadataDocumentResolverOptions(), productionApp.Time);
+        await TestHostShell.AlterAsync(productionHost.Server, candidateIntegration =>
+        {
+            candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
+
+            candidateIntegration.ResolveClientMetadataAsync = new ClientMetadataResolutionCache(
+                GuardedHttpClientTransport.BuildSingleHopTransport(productionHttpClient),
+                new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), productionApp.Time)
+                .ResolveDocumentAsync;
+        }).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult productionResult = await StartParAgainstStubAsync(
             productionApp, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -431,7 +448,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         //Explicit, scoped test-context relaxation against the SAME document host.
         await using TestHostShell relaxedApp = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        relaxedApp.WireCimdMaterialization("default", documentHost.Certificate);
+        await relaxedApp.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult relaxedResult = await StartParAgainstStubAsync(
             relaxedApp, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -455,20 +472,25 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         HostedAuthorizationServer host = app.Host("default");
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(documentHost.Certificate);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport, new ClientIdMetadataDocumentResolverOptions(), app.Time);
+        ResolveClientMetadataDelegate resolve = new ClientMetadataResolutionCache(
+            transport, new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), app.Time)
+            .ResolveDocumentAsync;
 
         OutboundFetchPolicy denyListPolicy = TestHostShell.LoopbackOutboundFetchPolicy with
         {
             HostDenyList = [documentUri.Host]
         };
-        host.Server.OAuth().MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-        host.Server.OAuth().ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            context.SetOutboundFetchPolicy(denyListPolicy);
+            candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
 
-            return resolve(clientMetadataUri, context, cancellationToken);
-        };
+            candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+            {
+                context.SetOutboundFetchPolicy(denyListPolicy);
+
+                return resolve(clientMetadataUri, context, cancellationToken);
+            };
+        }).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await StartParAgainstStubAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -491,7 +513,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await StartParAgainstStubAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -515,11 +537,11 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         const string vanityClientId = "https://vanity.example.com/my-app";
-        using VerifierKeyMaterial material = app.RegisterClient(
-            vanityClientId, new Uri(vanityClientId), AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterClientAsync(
+            vanityClientId, new Uri(vanityClientId), AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         ClientRecord stub = material.Registration;
         Assert.IsNull(stub.ClientMetadataUri, "The vanity client must not carry a ClientMetadataUri.");
 
@@ -547,8 +569,8 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     public async Task UnknownTenantSegmentFollowsExistingNotFoundBehavior()
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = app.RegisterClient(
-            "opaque-client-1", new Uri("https://opaque.example.com"), AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterClientAsync(
+            "opaque-client-1", new Uri("https://opaque.example.com"), AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = app.Host("default");
 
@@ -592,17 +614,20 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         AuthorizationRequestEvaluation? captured = null;
-        app.Server.OAuth().EvaluateAuthorizationRequestAsync = (evaluation, registration, context, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            captured = evaluation;
+            candidateIntegration.EvaluateAuthorizationRequestAsync = (evaluation, registration, context, ct) =>
+            {
+                captured = evaluation;
 
-            return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-        };
+                return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+            };
+        }).ConfigureAwait(false);
 
-        ClientRecord stub = app.RegisterCimdStubClient(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
                 stub, RedirectUri.OriginalString, PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
@@ -645,17 +670,20 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
 
         ClientRecord? materialized = null;
-        app.Server.OAuth().EvaluateAuthorizationRequestAsync = (evaluation, registration, context, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            materialized = registration;
+            candidateIntegration.EvaluateAuthorizationRequestAsync = (evaluation, registration, context, ct) =>
+            {
+                materialized = registration;
 
-            return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-        };
+                return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+            };
+        }).ConfigureAwait(false);
 
-        ClientRecord stub = app.RegisterCimdStubClient(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
                 stub, RedirectUri.OriginalString, PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
@@ -686,17 +714,20 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         //No WireCimdMaterialization call — this host never fetches CIMD documents at request time.
         //A vanity https:// client_id with a fully populated stored registration models §7.2's
         //pre-registration deployment pattern.
-        using VerifierKeyMaterial material = app.RegisterClient(
-            clientId, new Uri(clientId), AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await app.RegisterClientAsync(
+            clientId, new Uri(clientId), AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         ClientRecord stub = material.Registration;
 
         AuthorizationRequestEvaluation? captured = null;
-        app.Server.OAuth().EvaluateAuthorizationRequestAsync = (evaluation, registration, context, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            captured = evaluation;
+            candidateIntegration.EvaluateAuthorizationRequestAsync = (evaluation, registration, context, ct) =>
+            {
+                captured = evaluation;
 
-            return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-        };
+                return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+            };
+        }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
@@ -760,8 +791,9 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([documentHost.Certificate, logoHost.Certificate]);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport, new ClientIdMetadataDocumentResolverOptions { PrefetchLogo = true }, timeProvider);
+        ResolveClientMetadataDelegate resolve = new ClientMetadataResolutionCache(
+            transport, new ClientIdMetadataDocumentResolverOptions { PrefetchLogo = true }, new JwksUriResolverOptions(), timeProvider)
+            .ResolveDocumentAsync;
 
         ExchangeContext context = [];
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
@@ -801,16 +833,21 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([documentHost.Certificate, logoHost.Certificate]);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport, new ClientIdMetadataDocumentResolverOptions { PrefetchLogo = true }, timeProvider);
+        ResolveClientMetadataDelegate resolve = new ClientMetadataResolutionCache(
+            transport, new ClientIdMetadataDocumentResolverOptions { PrefetchLogo = true }, new JwksUriResolverOptions(), timeProvider)
+            .ResolveDocumentAsync;
 
-        host.Server.OAuth().MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
-        host.Server.OAuth().ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+            candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
 
-            return resolve(clientMetadataUri, context, cancellationToken);
-        };
+            candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+            {
+                context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+
+                return resolve(clientMetadataUri, context, cancellationToken);
+            };
+        }).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await StartParAgainstStubAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -834,7 +871,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate, RequirePrivateKeyJwtOptions);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate, RequirePrivateKeyJwtOptions).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await StartParAgainstStubAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -859,7 +896,19 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate, RequirePrivateKeyJwtOptions);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate, RequirePrivateKeyJwtOptions).ConfigureAwait(false);
+
+        //RFC 9126 §2: the pushed request now authenticates the client too. This test's subject is
+        //the document-validation restriction (CIMD-020), not assertion authentication, so the
+        //declared method is advertised and unconditionally accepted here — isolating the restriction
+        //under test from the separate private_key_jwt authentication proved elsewhere.
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.PrivateKeyJwt];
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await StartParAgainstStubAsync(
             app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
@@ -891,15 +940,15 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         Assert.IsTrue(validation.IsValid, "CIMD-006 is advisory — it must not affect MUST-tier validity.");
 
         await using TestHostShell tolerantApp = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        tolerantApp.WireCimdMaterialization("default", documentHost.Certificate);
+        await tolerantApp.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
         AuthCodeFlowEndpointResult tolerantResult = await StartParAgainstStubAsync(
             tolerantApp, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, tolerantResult.Outcome,
             $"CIMD-006: a query component must be tolerated under default options. ErrorDescription={tolerantResult.ErrorDescription}");
 
         await using TestHostShell strictApp = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        strictApp.WireCimdMaterialization(
-            "default", documentHost.Certificate, new ClientIdMetadataDocumentResolverOptions { TreatAdvisoriesAsErrors = true });
+        await strictApp.WireCimdMaterializationAsync(
+            "default", documentHost.Certificate, new ClientIdMetadataDocumentResolverOptions { TreatAdvisoriesAsErrors = true }).ConfigureAwait(false);
         AuthCodeFlowEndpointResult strictResult = await StartParAgainstStubAsync(
             strictApp, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, strictResult.Outcome,
@@ -923,15 +972,15 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         Assert.IsTrue(validation.IsValid, "CIMD-011 is advisory — it must not affect MUST-tier validity.");
 
         await using TestHostShell tolerantApp = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        tolerantApp.WireCimdMaterialization("default", documentHost.Certificate);
+        await tolerantApp.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
         AuthCodeFlowEndpointResult tolerantResult = await StartParAgainstStubAsync(
             tolerantApp, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, tolerantResult.Outcome,
             $"CIMD-011: a root-path client_id must be tolerated under default options. ErrorDescription={tolerantResult.ErrorDescription}");
 
         await using TestHostShell strictApp = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        strictApp.WireCimdMaterialization(
-            "default", documentHost.Certificate, new ClientIdMetadataDocumentResolverOptions { TreatAdvisoriesAsErrors = true });
+        await strictApp.WireCimdMaterializationAsync(
+            "default", documentHost.Certificate, new ClientIdMetadataDocumentResolverOptions { TreatAdvisoriesAsErrors = true }).ConfigureAwait(false);
         AuthCodeFlowEndpointResult strictResult = await StartParAgainstStubAsync(
             strictApp, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, strictResult.Outcome,
@@ -962,8 +1011,8 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             "application/json");
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate);
-        ClientRecord stub = app.RegisterCimdStubClient(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = app.Host("default");
@@ -996,8 +1045,8 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         Activity[] handleActivities = captured
             .Where(a => string.Equals(a.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal))
             .Where(a => a.Tags.Any(t =>
-                string.Equals(t.Key, ServerTagNames.TenantId, StringComparison.Ordinal)
-                && string.Equals(t.Value, stub.TenantId.Value, StringComparison.Ordinal)))
+                string.Equals(t.Key, ServerTagNames.TenantHandle, StringComparison.Ordinal)
+                && string.Equals(t.Value, stub.TenantHandle!.Value.Value, StringComparison.Ordinal)))
             .ToArray();
         Assert.IsGreaterThan(0, handleActivities.Length, "At least one Handle activity for this tenant must be captured.");
         Assert.Contains(
@@ -1030,8 +1079,8 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
 
     /// <summary>
-    /// Registers a fresh CIMD stub for <paramref name="documentUri"/> on a fresh <see cref="TestHostShell"/>
-    /// already wired with <see cref="TestHostShell.WireCimdMaterialization"/>, drives one PAR attempt, and
+    /// Registers a fresh CIMD stub for <c>documentUri</c> on a fresh <see cref="TestHostShell"/>
+    /// already wired with <see cref="TestHostShell.WireCimdMaterializationAsync"/>, drives one PAR attempt, and
     /// returns the result — the one-shot shape most fetch-contract adversarials need.
     /// </summary>
     private static async Task<AuthCodeFlowEndpointResult> RunSingleAdversarialParAttemptAsync(
@@ -1041,7 +1090,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         ClientIdMetadataDocumentResolverOptions? options = null)
     {
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        app.WireCimdMaterialization("default", documentHost.Certificate, options);
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate, options).ConfigureAwait(false);
 
         Uri documentUri = new(documentHost.BaseAddress, path);
 
@@ -1053,7 +1102,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     private static async Task<AuthCodeFlowEndpointResult> StartParAgainstStubAsync(
         TestHostShell app, Uri documentUri, CancellationToken cancellationToken)
     {
-        ClientRecord stub = app.RegisterCimdStubClient(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         return await DriveParForStubAsync(app, stub, cancellationToken).ConfigureAwait(false);
     }

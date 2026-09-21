@@ -9,7 +9,7 @@ namespace Verifiable.Fido2;
 /// <remarks>
 /// <para>
 /// Sub-ranges (mirrors the grouping convention in
-/// <see cref="Verifiable.OAuth.Validation.ValidationClaimIds"/>):
+/// <c>Verifiable.OAuth.Validation.ValidationClaimIds</c>):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>1200–1219: Registration ceremony checks, per
@@ -18,10 +18,10 @@ namespace Verifiable.Fido2;
 ///   <item><description>1220–1239: Assertion ceremony checks, per
 ///   <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
 ///   Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>.</description></item>
-///   <item><description>1240–1249: Extension output checks (both ceremonies), per
+///   <item><description>1240–1252: Extension output checks (both ceremonies), per
 ///   <see href="https://www.w3.org/TR/webauthn-3/#sctn-extensions">section 9: WebAuthn
 ///   Extensions</see>.</description></item>
-///   <item><description>1250–1299: Reserved for future WebAuthn ceremony checks.</description></item>
+///   <item><description>1253–1299: Reserved for future WebAuthn ceremony checks.</description></item>
 /// </list>
 /// </remarks>
 public static class Fido2ClaimIds
@@ -151,7 +151,7 @@ public static class Fido2ClaimIds
     /// by <see cref="Fido2RegistrationVerifier"/> via the RP-supplied
     /// <see cref="IsCredentialIdUniqueDelegate"/> rather than by a
     /// <see cref="Fido2RegistrationChecks"/> rule, since only the relying party's own credential
-    /// storage can answer it; <see cref="Fido2RegistrationVerifier.VerifyAsync"/> merges this
+    /// storage can answer it; <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, ClaimIssuer{RegistrationCeremonyInput}, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, IReadOnlyList{Verifiable.Cryptography.Pki.PkiCertificateMemory}, DateTimeOffset, string, BaseMemoryPool, IReadOnlyList{string}?, string?, bool, CancellationToken)"/> merges this
     /// claim into the <see cref="ClaimIssueResult"/> it returns.
     /// </remarks>
     public static ClaimId Fido2RegistrationCredentialIdUnique { get; } = ClaimId.Create(1212, "Fido2RegistrationCredentialIdUnique");
@@ -474,4 +474,77 @@ public static class Fido2ClaimIds
     /// extension output, registration-only.
     /// </remarks>
     public static ClaimId Fido2RegistrationMinPinLength { get; } = ClaimId.Create(1247, "Fido2RegistrationMinPinLength");
+
+    /// <summary>
+    /// The registration ceremony's <c>hmac-secret</c> authenticator extension output, at
+    /// <c>authenticatorMakeCredential</c> time, decoded to a CBOR boolean; whether the authenticator
+    /// generated and associated its CredRandom pair with the credential is carried in the claim's
+    /// <see cref="HmacSecretSupportedContext"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-hmac-secret-extension">
+    /// CTAP 2.3, section 12.7: HMAC Secret Extension (hmac-secret)</see> — authenticator extension
+    /// output, <c>authenticatorMakeCredential</c> only.
+    /// </remarks>
+    public static ClaimId Fido2RegistrationHmacSecret { get; } = ClaimId.Create(1248, "Fido2RegistrationHmacSecret");
+
+    /// <summary>
+    /// The <c>hmac-secret</c> authenticator extension output, at <c>authenticatorGetAssertion</c>
+    /// time, or the <c>hmac-secret-mc</c> authenticator extension output, at
+    /// <c>authenticatorMakeCredential</c> time (the same wire shape either way), decoded to a CBOR
+    /// byte string of a length one of the PIN/UV auth protocols allows; the bytes are carried in the
+    /// claim's <see cref="HmacSecretEncryptedOutputContext"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-hmac-secret-extension">
+    /// CTAP 2.3, section 12.7: HMAC Secret Extension (hmac-secret)</see> and
+    /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-hmac-secret-make-cred-extension">
+    /// section 12.8: HMAC Secret MakeCredential Extension (hmac-secret-mc)</see>, whose own
+    /// authenticator extension output is, verbatim, "Same as the hmac secret extension's
+    /// getAssertion output".
+    /// </remarks>
+    public static ClaimId Fido2AssertionHmacSecret { get; } = ClaimId.Create(1249, "Fido2AssertionHmacSecret");
+
+    /// <summary>
+    /// The registration ceremony's decoded <c>prf</c> client extension output carried an
+    /// <c>enabled</c> boolean, recorded here as evidence. Always
+    /// <see cref="Verifiable.Core.Assessment.ClaimOutcome.Success"/> when the identifier is present
+    /// and decodes cleanly — both <see langword="true"/> and <see langword="false"/> are legitimate
+    /// authenticator states, not protocol violations; a malformed decode fails closed via the
+    /// ceremony-level extension-processing claim instead.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication
+    /// Level 3, section 10.1.4: Pseudo-random function extension (prf)</see> — client extension
+    /// output <c>enabled</c>, "only reported during registration and is not present in the case of
+    /// authentication".
+    /// </remarks>
+    public static ClaimId Fido2RegistrationPrfEnabled { get; } = ClaimId.Create(1250, "Fido2RegistrationPrfEnabled");
+
+    /// <summary>
+    /// The registration ceremony's decoded <c>prf</c> client extension output carried a
+    /// <c>results</c> member, meaning the authenticator evaluated the PRF at creation time. The
+    /// secret bytes themselves are never carried here; a relying party that needs them reads the
+    /// same wire bytes again through <c>Verifiable.Json.PrfResultsJsonReader</c>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication
+    /// Level 3, section 10.1.4: Pseudo-random function extension (prf)</see> — client extension
+    /// output <c>results</c>, "Outputs may not be available during registration".
+    /// </remarks>
+    public static ClaimId Fido2RegistrationPrfResultsPresent { get; } = ClaimId.Create(1251, "Fido2RegistrationPrfResultsPresent");
+
+    /// <summary>
+    /// The assertion ceremony's decoded <c>prf</c> client extension output carried a <c>results</c>
+    /// member, meaning the authenticator evaluated the PRF for this assertion. The secret bytes
+    /// themselves are never carried here; a relying party that needs them reads the same wire bytes
+    /// again through <c>Verifiable.Json.PrfResultsJsonReader</c>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-prf-extension">W3C Web Authentication
+    /// Level 3, section 10.1.4: Pseudo-random function extension (prf)</see> — client extension
+    /// output <c>results</c>: "The results of evaluating the PRF for the inputs given in eval or
+    /// evalByCredential."
+    /// </remarks>
+    public static ClaimId Fido2AssertionPrfResultsPresent { get; } = ClaimId.Create(1252, "Fido2AssertionPrfResultsPresent");
 }

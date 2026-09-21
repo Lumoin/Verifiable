@@ -120,9 +120,8 @@ internal static class DpllSolver
         int? unitVariable = null;
         bool unitPolarity = false;
 
-        foreach(var clause in clauses)
+    loop_clause: foreach(var clause in clauses)
         {
-            bool satisfied = false;
             int unassignedCount = 0;
             int lastUnassignedVariable = -1;
             bool lastUnassignedPolarity = false;
@@ -133,8 +132,7 @@ internal static class DpllSolver
                 {
                     if(literal.Positive == value)
                     {
-                        satisfied = true;
-                        break;
+                        continue loop_clause;
                     }
                 }
                 else
@@ -143,11 +141,6 @@ internal static class DpllSolver
                     lastUnassignedVariable = literal.Variable;
                     lastUnassignedPolarity = literal.Positive;
                 }
-            }
-
-            if(satisfied)
-            {
-                continue;
             }
 
             if(unassignedCount == 0)

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Security;
+using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
@@ -885,7 +887,7 @@ internal sealed class JarClientIdentifierTests
         Tests.Federation.MintedChain mintedChain =
             await Tests.Federation.FederationTestRing.BuildDirectChainAsync(
                 verifierNode, anchorNode, now, now.AddHours(1),
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Build the JAR with the openid_federation: prefix and the chain inline in the
         //trust_chain header parameter. The verifier's signing key is reconstructed
@@ -999,5 +1001,104 @@ internal sealed class JarClientIdentifierTests
             "Parsed client_id must include the openid_federation: prefix.");
         Assert.AreEqual(WellKnownResponseModes.DirectPostJwt, parsedRequest.ResponseMode);
         Assert.IsNotNull(parsedRequest.DcqlQuery);
+    }
+
+
+    [TestMethod]
+    public async Task RejectsRequestObjectWithDuplicateKidInProtectedHeader()
+    {
+        //RFC 7515 §4: "Header Parameter names within the JOSE Header MUST be unique." The header
+        //below carries "kid" twice: the attacker's value FIRST, the honest signing key id LAST — the
+        //shape a last-value-wins deserializer would resolve to the honest key while a first-match
+        //reader elsewhere disagrees about which key signed the request. The header and payload are
+        //built by hand, never through JwtHeaderSerializer, and signed over their exact bytes with the
+        //project's own signing primitive, so only the header well-formedness gate — not an invalid
+        //signature — can be responsible for the refusal.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory verificationKey = keys.PublicKey;
+        using PrivateKeyMemory signingKey = keys.PrivateKey;
+
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string headerJson =
+            "{\"alg\":\"" + algorithm + "\",\"typ\":\"oauth-authz-req+jwt\"," +
+            "\"kid\":\"attacker-key\",\"kid\":\"jar-key-1\"}";
+        string payloadJson =
+            "{\"client_id\":\"" + VerifierClientId + "\"," +
+            $"\"iat\":{now.ToUnixTimeSeconds()},\"nbf\":{now.ToUnixTimeSeconds()},\"exp\":{now.AddSeconds(30).ToUnixTimeSeconds()}}}";
+
+        string headerB64 = Encoder(Encoding.UTF8.GetBytes(headerJson));
+        string payloadB64 = Encoder(Encoding.UTF8.GetBytes(payloadJson));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+
+        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureB64 = Encoder(signature.AsReadOnlySpan());
+        string compactJar = $"{headerB64}.{payloadB64}.{signatureB64}";
+
+        _ = await Assert.ThrowsExactlyAsync<SecurityException>(() =>
+            JarExtensions.VerifyAndParseJarAsync(
+                compactJar,
+                verificationKey,
+                Decoder,
+                bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)!,
+                bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)!,
+                json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!,
+                json => JsonSerializer.Deserialize<VerifierClientMetadata>(json, TestSetup.DefaultSerializationOptions)!,
+                StateParameterPolicy.Required,
+                Pool,
+                TestContext.CancellationToken).AsTask());
+    }
+
+
+    [TestMethod]
+    public async Task RejectsRequestObjectWithDuplicateClientIdInPayload()
+    {
+        //RFC 7519 §4: "The JWT Claim Names within a Claims Set MUST be unique." The payload below
+        //repeats "client_id" twice: the attacker's value FIRST, the honest value LAST — the shape
+        //a last-value-wins deserializer would resolve to the honest client while a first-match
+        //reader elsewhere disagrees about which client issued the request. The header and payload
+        //are built by hand, never through JwtHeaderSerializer/JwtPayloadSerializer, and signed
+        //over their exact bytes with the project's own signing primitive, so only the payload
+        //well-formedness gate — not an invalid signature — can be responsible for the refusal.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory verificationKey = keys.PublicKey;
+        using PrivateKeyMemory signingKey = keys.PrivateKey;
+
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string headerJson =
+            "{\"alg\":\"" + algorithm + "\",\"typ\":\"oauth-authz-req+jwt\",\"kid\":\"jar-key-1\"}";
+        string payloadJson =
+            "{\"client_id\":\"attacker-client\",\"client_id\":\"" + VerifierClientId + "\"," +
+            $"\"iat\":{now.ToUnixTimeSeconds()},\"nbf\":{now.ToUnixTimeSeconds()},\"exp\":{now.AddSeconds(30).ToUnixTimeSeconds()}}}";
+
+        string headerB64 = Encoder(Encoding.UTF8.GetBytes(headerJson));
+        string payloadB64 = Encoder(Encoding.UTF8.GetBytes(payloadJson));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+
+        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureB64 = Encoder(signature.AsReadOnlySpan());
+        string compactJar = $"{headerB64}.{payloadB64}.{signatureB64}";
+
+        FormatException exception = await Assert.ThrowsExactlyAsync<FormatException>(() =>
+            JarExtensions.VerifyAndParseJarAsync(
+                compactJar,
+                verificationKey,
+                Decoder,
+                bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)!,
+                bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)!,
+                json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!,
+                json => JsonSerializer.Deserialize<VerifierClientMetadata>(json, TestSetup.DefaultSerializationOptions)!,
+                StateParameterPolicy.Required,
+                Pool,
+                TestContext.CancellationToken).AsTask());
+
+        Assert.Contains("duplicate claim", exception.Message);
     }
 }

@@ -93,7 +93,7 @@ public static class FederationValidationChecks
         ClaimOutcome outcome =
             context.Header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
             && typObj is string typ
-            && string.Equals(typ, WellKnownFederationMediaTypes.EntityStatementJwt, StringComparison.Ordinal)
+            && WellKnownFederationMediaTypes.IsEntityStatementJwt(typ)
                 ? ClaimOutcome.Success
                 : ClaimOutcome.Failure;
 
@@ -300,7 +300,7 @@ public static class FederationValidationChecks
     private static bool IsExplicitRegistrationResponse(UnverifiedJwtHeader header) =>
         header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
         && typObj is string typ
-        && string.Equals(typ, WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt, StringComparison.Ordinal);
+        && WellKnownFederationMediaTypes.IsExplicitRegistrationResponseJwt(typ);
 
 
     /// <summary>

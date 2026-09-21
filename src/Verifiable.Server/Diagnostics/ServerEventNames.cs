@@ -46,4 +46,54 @@ public static class ServerEventNames
     /// A new flow was created with a fresh internal flow identifier.
     /// </summary>
     public static string FlowCreated { get; } = Utf8Constants.ToInternedString(FlowCreatedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="NoMatch"/>.</summary>
+    public static ReadOnlySpan<byte> NoMatchUtf8 => "server.dispatch.no_match"u8;
+
+    /// <summary>
+    /// The dispatcher answered a request with no matched endpoint. Carries
+    /// <see cref="NoMatchCategoryTagName"/> naming the reason from
+    /// <see cref="NoMatchCategories"/>, plus, when the chain was built,
+    /// <see cref="NoMatchCandidateCountTagName"/>, <see cref="NoMatchCapabilityFilteredTagName"/>,
+    /// <see cref="NoMatchEndpointNameUnresolvedTagName"/> and <see cref="NoMatchDeclinedTagName"/>. Recorded only on the dispatch
+    /// <see cref="System.Diagnostics.Activity"/>, never in the response body, which
+    /// stays <see cref="Verifiable.Server.ServerHttpResponse.NotFound()"/>'s empty shape.
+    /// </summary>
+    public static string NoMatch { get; } = Utf8Constants.ToInternedString(NoMatchUtf8);
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key on a
+    /// <see cref="NoMatch"/> event carrying the reason, one of the
+    /// <see cref="NoMatchCategories"/> constants.
+    /// </summary>
+    public static string NoMatchCategoryTagName { get; } = "server.dispatch.no_match_category";
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key on a
+    /// <see cref="NoMatch"/> event carrying the number of endpoint candidates the
+    /// dispatcher walked before answering no match.
+    /// </summary>
+    public static string NoMatchCandidateCountTagName { get; } = "server.dispatch.no_match_candidate_count";
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key on a
+    /// <see cref="NoMatch"/> event carrying the space-separated endpoint names the
+    /// per-request capability filter removed from the chain.
+    /// </summary>
+    public static string NoMatchCapabilityFilteredTagName { get; } = "server.dispatch.no_match_capability_filtered";
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key on a
+    /// <see cref="NoMatch"/> event carrying the space-separated endpoint names whose
+    /// matcher declined the request.
+    /// </summary>
+    public static string NoMatchDeclinedTagName { get; } = "server.dispatch.no_match_declined";
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key on a
+    /// <see cref="NoMatch"/> event carrying the space-separated endpoint names whose
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/> call answered
+    /// <see langword="null"/>.
+    /// </summary>
+    public static string NoMatchEndpointNameUnresolvedTagName { get; } = "server.dispatch.no_match_endpoint_name_unresolved";
 }

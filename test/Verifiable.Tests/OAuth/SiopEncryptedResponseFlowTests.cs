@@ -70,8 +70,8 @@ internal sealed class SiopEncryptedResponseFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         //The RP registers a dedicated encryption key (distinct from the signing key) and retains its
@@ -133,8 +133,8 @@ internal sealed class SiopEncryptedResponseFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         (KeyId encryptionKeyId, PublicKeyMemory rpEncryptionPublicKey) = host.RegisterRpEncryptionKey();
@@ -200,8 +200,8 @@ internal sealed class SiopEncryptedResponseFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         (KeyId encryptionKeyId, PublicKeyMemory rpEncryptionPublicKey) = host.RegisterRpEncryptionKey();
@@ -294,8 +294,8 @@ internal sealed class SiopEncryptedResponseFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         (KeyId encryptionKeyId, PublicKeyMemory rpEncryptionPublicKey) = host.RegisterRpEncryptionKey();
@@ -344,8 +344,8 @@ internal sealed class SiopEncryptedResponseFlowTests
         //emits SiopResponsePosted and reaches the verified state exactly as SiopFlowIntegrationTests.
         await using TestHostShell host = new(TimeProvider);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         string requestHandle = await host.HandleSiopRequestPreparationAsync(
@@ -385,7 +385,7 @@ internal sealed class SiopEncryptedResponseFlowTests
     /// <summary>
     /// The wallet-side encrypt composition: mint a plain JWK-Thumbprint Self-Issued ID Token bound to
     /// the transaction, then wrap it as a compact JWE (ECDH-ES + AES-GCM) to the RP's public encryption
-    /// key with the SAME JWE primitives <see cref="HaipProfile.EncryptResponseAsync(PublicKeyMemory, string, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, KeyAgreementEncryptDelegate, KeyDerivationDelegate, AeadEncryptDelegate, EncodeDelegate, BaseMemoryPool, string, CancellationToken)"/>
+    /// key with the SAME JWE primitives <see cref="HaipProfile.EncryptResponseAsync(PublicKeyMemory, string, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, Verifiable.Cryptography.Aead.KeyAgreementEncryptDelegate, Verifiable.Cryptography.Aead.KeyDerivationDelegate, Verifiable.Cryptography.Aead.AeadEncryptDelegate, EncodeDelegate, BaseMemoryPool, string, string, string, CancellationToken)"/>
     /// uses on the OID4VP wallet side.
     /// </summary>
     private async Task<string> MintAndEncryptIdTokenAsync(

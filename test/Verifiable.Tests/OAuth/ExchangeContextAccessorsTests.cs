@@ -15,9 +15,9 @@ namespace Verifiable.Tests.OAuth;
 /// signatures.
 /// </summary>
 /// <remarks>
-/// The dispatcher places <see cref="ExchangeContextServerExtensions.Server"/> at
+/// The dispatcher places <see cref="Verifiable.Server.ExchangeContextServerExtensions.extension(ExchangeContext).Server"/> at
 /// entry (before the IncomingRequestStage inspection fires), and
-/// <see cref="ExchangeContextServerExtensions.EndpointChain"/> after the chain
+/// <see cref="Verifiable.Server.ExchangeContextServerExtensions.extension(ExchangeContext).EndpointChain"/> after the chain
 /// is built (before the MatchedStage inspection fires). The tests
 /// observe each via the inspection hook to verify the ordering is right.
 /// </remarks>
@@ -39,6 +39,10 @@ internal sealed class ExchangeContextAccessorsTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
 
 
+    /// <summary>
+    /// The incoming-request inspection stage receives the server reference placed on the dispatch context.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#21-prologue-stage">Pipeline §2.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task ContextServerSetAtDispatchEntryVisibleToIncomingRequestStage()
     {
@@ -46,17 +50,21 @@ internal sealed class ExchangeContextAccessorsTests
 
         EndpointServer? observedAtIncomingRequest = null;
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(stage is IncomingRequestStage)
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
             {
-                observedAtIncomingRequest = ctx.Server;
-            }
-            return previousInspect(stage, ctx, ct);
-        };
+                if(stage is IncomingRequestStage)
+                {
+                    observedAtIncomingRequest = ctx.Server;
+                }
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         _ = await host.DispatchAtEndpointAsync(
             keys.Registration.TenantId,
@@ -73,6 +81,10 @@ internal sealed class ExchangeContextAccessorsTests
     }
 
 
+    /// <summary>
+    /// The matched inspection stage receives the endpoint chain built on its dispatch context.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Pipeline §2.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task EndpointChainOnContextVisibleToMatchedStage()
     {
@@ -80,17 +92,21 @@ internal sealed class ExchangeContextAccessorsTests
 
         EndpointChain? observedAtMatched = null;
         InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
-        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            if(stage is MatchedStage)
+            candidateIntegration.InspectAsync = (stage, ctx, ct) =>
             {
-                observedAtMatched = ctx.EndpointChain;
-            }
-            return previousInspect(stage, ctx, ct);
-        };
+                if(stage is MatchedStage)
+                {
+                    observedAtMatched = ctx.EndpointChain;
+                }
 
-        using VerifierKeyMaterial keys = host.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+                return previousInspect(stage, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         _ = await host.DispatchAtEndpointAsync(
             keys.Registration.TenantId,

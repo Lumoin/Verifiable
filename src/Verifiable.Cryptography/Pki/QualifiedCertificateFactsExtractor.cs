@@ -143,7 +143,7 @@ public static class QualifiedCertificateFactsExtractor
     /// Reads the <c>notBefore</c> instant of a <c>Validity</c> sequence per
     /// <see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5">RFC 5280 §4.1.2.5</see>: a
     /// <c>UTCTime</c> for dates through 2049 (two-digit years 00–49 read as 20YY, exactly the
-    /// <see cref="AsnReader.ReadUtcTime(int)"/> default pivot) or a <c>GeneralizedTime</c> from 2050 on.
+    /// <see cref="AsnReader.ReadUtcTime(Asn1Tag?)"/> default pivot) or a <c>GeneralizedTime</c> from 2050 on.
     /// </summary>
     /// <param name="validity">The reader positioned at the <c>Validity</c> sequence's <c>notBefore</c> element.</param>
     /// <returns>The <c>notBefore</c> instant.</returns>
@@ -159,6 +159,40 @@ public static class QualifiedCertificateFactsExtractor
         {
             UniversalTagNumber.UtcTime => validity.ReadUtcTime(),
             UniversalTagNumber.GeneralizedTime => validity.ReadGeneralizedTime(),
+            UniversalTagNumber.EndOfContents => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Boolean => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Integer => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.BitString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.OctetString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Null => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.ObjectIdentifier => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.ObjectDescriptor => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.External => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Real => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Enumerated => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Embedded => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.UTF8String => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.RelativeObjectIdentifier => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Time => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Sequence => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Set => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.NumericString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.PrintableString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.TeletexString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.VideotexString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.IA5String => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.GraphicString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.VisibleString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.GeneralString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.UniversalString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.UnrestrictedCharacterString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.BMPString => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Date => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.TimeOfDay => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.DateTime => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.Duration => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.ObjectIdentifierIRI => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
+            UniversalTagNumber.RelativeObjectIdentifierIRI => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5)."),
             _ => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5).")
         };
     }

@@ -236,7 +236,7 @@ internal sealed class Fido2AssertionOptionsBuilderTests
     }
 
 
-    /// <summary>The appid/largeBlob extension-input carve-outs are null unless the caller opts in.</summary>
+    /// <summary>The appid/largeBlob/prf extension-input carve-outs are null unless the caller opts in.</summary>
     [TestMethod]
     public async Task ExtensionCarveOutsAreNullByDefault()
     {
@@ -245,6 +245,99 @@ internal sealed class Fido2AssertionOptionsBuilderTests
 
         Assert.IsNull(options.AppId);
         Assert.IsNull(options.LargeBlob);
+        Assert.IsNull(options.Prf);
+    }
+
+
+    /// <summary>The prf carve-out's plain <c>eval</c> input is honored when the caller opts in, with no <c>allowCredentials</c> involved.</summary>
+    [TestMethod]
+    public async Task PrfEvalCarveOutIsHonoredWhenSupplied()
+    {
+        Fido2PrfAssertionExtensionInput prf = new()
+        {
+            Eval = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 0xA1, 0xA2, 0xA3 }, Fido2BufferTags.PrfValue) }
+        };
+
+        Fido2AssertionOptionsBuilder builder = new();
+        PublicKeyCredentialRequestOptions options = await builder.BuildAsync(
+            rpId: "example.com", pool: BaseMemoryPool.Shared, prf: prf, cancellationToken: TestContext.CancellationToken);
+
+        Assert.IsTrue(prf.Eval.First.Span.SequenceEqual(options.Prf!.Eval!.First.Span));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#prf-extension">Web Authentication Level 3,
+    /// section 10.1.4</see>: "If evalByCredential is not empty but allowCredentials is empty, return
+    /// a DOMException whose name is “NotSupportedError”." The builder refuses to build such
+    /// options.
+    /// </summary>
+    [TestMethod]
+    public async Task EvalByCredentialWithEmptyAllowCredentialsIsRejected()
+    {
+        using CredentialId keyedId = CredentialId.Create([1, 2, 3], BaseMemoryPool.Shared);
+        Fido2PrfAssertionExtensionInput prf = new()
+        {
+            EvalByCredential = new Dictionary<CredentialId, Fido2PrfValues>
+            {
+                [keyedId] = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 1 }, Fido2BufferTags.PrfValue) }
+            }
+        };
+
+        Fido2AssertionOptionsBuilder builder = new();
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await builder.BuildAsync(
+            rpId: "example.com", pool: BaseMemoryPool.Shared, prf: prf, cancellationToken: TestContext.CancellationToken));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/webauthn-3/#prf-extension">Web Authentication Level 3,
+    /// section 10.1.4</see>: a key of evalByCredential that "does not equal the id of some element
+    /// of allowCredentials" makes the client return a “SyntaxError”. The builder refuses to build
+    /// such options.
+    /// </summary>
+    [TestMethod]
+    public async Task EvalByCredentialKeyNotInAllowCredentialsIsRejected()
+    {
+        using Fido2CredentialRecord allowed = CreateCredentialRecord([4, 5, 6], ["internal"]);
+        using CredentialId unrelatedId = CredentialId.Create([9, 9, 9], BaseMemoryPool.Shared);
+        Fido2PrfAssertionExtensionInput prf = new()
+        {
+            EvalByCredential = new Dictionary<CredentialId, Fido2PrfValues>
+            {
+                [unrelatedId] = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 1 }, Fido2BufferTags.PrfValue) }
+            }
+        };
+
+        Fido2AssertionOptionsBuilder builder = new();
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await builder.BuildAsync(
+            rpId: "example.com", pool: BaseMemoryPool.Shared, allowedCredentials: [allowed], prf: prf, cancellationToken: TestContext.CancellationToken));
+    }
+
+
+    /// <summary>
+    /// The positive counterpart of the two rejection tests above: every <c>evalByCredential</c> key
+    /// names an entry of <c>allowCredentials</c>, so the whole <c>prf</c> input survives unchanged.
+    /// </summary>
+    [TestMethod]
+    public async Task EvalByCredentialMatchingAllowCredentialsSurvives()
+    {
+        using Fido2CredentialRecord allowed = CreateCredentialRecord([7, 8, 9], ["internal"]);
+        Fido2PrfAssertionExtensionInput prf = new()
+        {
+            EvalByCredential = new Dictionary<CredentialId, Fido2PrfValues>
+            {
+                [allowed.Id] = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 2 }, Fido2BufferTags.PrfValue) }
+            }
+        };
+
+        Fido2AssertionOptionsBuilder builder = new();
+        PublicKeyCredentialRequestOptions options = await builder.BuildAsync(
+            rpId: "example.com", pool: BaseMemoryPool.Shared, allowedCredentials: [allowed], prf: prf, cancellationToken: TestContext.CancellationToken);
+
+        Assert.IsNotNull(options.Prf);
+        KeyValuePair<CredentialId, Fido2PrfValues> entry = Assert.ContainsSingle(options.Prf!.EvalByCredential!);
+        Assert.IsTrue(entry.Key.AsReadOnlySpan().SequenceEqual(allowed.Id.AsReadOnlySpan()));
     }
 
 

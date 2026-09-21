@@ -63,26 +63,34 @@ internal sealed class Oid4VciEncryptionConformanceTests
     public async Task PlaintextRequestAskingForEncryptedResponseIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        WireResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await WireResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         //The issuer requires encrypted Credential Requests. The §8.2 "Credential Request
         //encryption MUST be used if credential_response_encryption is included" holds regardless
         //of this flag — the unconditional case is covered separately by
         //PlaintextRequestAskingForEncryptedResponseIsRefusedEvenWhenEncryptionNotRequired.
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new CredentialIssuerMetadataContribution
-            {
-                CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
-                    ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
-                    ["encryption_required"] = true
-                }
-            });
+                    CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
+                        ["encryption_required"] = true
+                    }
+                });
+        }).ConfigureAwait(false);
 
         var walletKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory walletPublic = walletKeys.PublicKey;
@@ -93,8 +101,11 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -133,30 +144,38 @@ internal sealed class Oid4VciEncryptionConformanceTests
     public async Task PlaintextRequestAskingForEncryptedResponseIsRefusedEvenWhenEncryptionNotRequired()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        WireResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await WireResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         //encryption_required is false on BOTH legs — encryption is a Client MAY here, NOT a MUST
         //from the policy. The §8.2 final-sentence MUST is what refuses the plaintext substitution.
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new CredentialIssuerMetadataContribution
-            {
-                CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
-                    ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
-                    ["encryption_required"] = false
-                },
-                CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
-                {
-                    ["alg_values_supported"] = new List<object> { WellKnownJweAlgorithms.EcdhEs },
-                    ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
-                    ["encryption_required"] = false
-                }
-            });
+                    CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
+                        ["encryption_required"] = false
+                    },
+                    CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["alg_values_supported"] = new List<object> { WellKnownJweAlgorithms.EcdhEs },
+                        ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
+                        ["encryption_required"] = false
+                    }
+                });
+        }).ConfigureAwait(false);
 
         var walletKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory walletPublic = walletKeys.PublicKey;
@@ -166,8 +185,11 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -203,23 +225,31 @@ internal sealed class Oid4VciEncryptionConformanceTests
     public async Task PlaintextDeferredRequestAskingForEncryptedResponseIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
-        WireResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await WireResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         //The issuer requires encrypted requests — the §9.1 substitution defense's policy.
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new CredentialIssuerMetadataContribution
-            {
-                CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
-                    ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
-                    ["encryption_required"] = true
-                }
-            });
+                    CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
+                        ["encryption_required"] = true
+                    }
+                });
+        }).ConfigureAwait(false);
 
         var walletKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory walletPublic = walletKeys.PublicKey;
@@ -256,30 +286,40 @@ internal sealed class Oid4VciEncryptionConformanceTests
     public async Task DeferredRequestEncryptionRequiredRefusesAPlainBody()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
 
-        //§9.1: the issuer requires encrypted requests on the request leg.
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new CredentialIssuerMetadataContribution
-            {
-                CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+
+            candidateIntegration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
+
+
+            //§9.1: the issuer requires encrypted requests on the request leg.
+
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
-                    ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
-                    ["encryption_required"] = true
-                }
-            });
+                    CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
+                        ["encryption_required"] = true
+                    }
+                });
+        }).ConfigureAwait(false);
 
         //The issuer's request-decryption key, advertised in real deployments via
         //credential_request_encryption.jwks in the issuer metadata.
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -311,23 +351,31 @@ internal sealed class Oid4VciEncryptionConformanceTests
     public async Task ResponseEncryptionAlgNotAdvertisedIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        WireResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await WireResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         //The issuer advertises ONLY ECDH-ES+A256KW — not the plain ECDH-ES the JWK names.
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new CredentialIssuerMetadataContribution
-            {
-                CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
-                    ["alg_values_supported"] = new List<object> { WellKnownJweAlgorithms.EcdhEsA256Kw },
-                    ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm }
-                }
-            });
+                    CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["alg_values_supported"] = new List<object> { WellKnownJweAlgorithms.EcdhEsA256Kw },
+                        ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm }
+                    }
+                });
+        }).ConfigureAwait(false);
 
         var walletKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory walletPublic = walletKeys.PublicKey;
@@ -337,8 +385,11 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -361,12 +412,17 @@ internal sealed class Oid4VciEncryptionConformanceTests
     public async Task ResponseEncryptionJwkWithoutAlgIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        WireResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await WireResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         var walletKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory walletPublic = walletKeys.PublicKey;
@@ -376,8 +432,11 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -410,12 +469,17 @@ internal sealed class Oid4VciEncryptionConformanceTests
     public async Task ResponseEncryptionJwkKidIsCopiedIntoTheJweHeader()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        WireResponseEncryptionSeam(host);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+        }).ConfigureAwait(false);
+        await WireResponseEncryptionSeamAsync(host).ConfigureAwait(false);
 
         var walletKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory walletPublic = walletKeys.PublicKey;
@@ -425,8 +489,11 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
-            await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         const string ExpectedKid = "wallet-response-key-2026";
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -480,36 +547,39 @@ internal sealed class Oid4VciEncryptionConformanceTests
     /// Wires the issuer's response-encryption seam with real ECDH-ES + AES-GCM, reading the JWE
     /// alg off the request JWK and copying the JWK's kid into the JWE header (§10).
     /// </summary>
-    private static void WireResponseEncryptionSeam(TestHostShell host)
+    private static async Task WireResponseEncryptionSeamAsync(TestHostShell host)
     {
-        host.Server.OAuth().EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            Dictionary<string, object> jwkDict = new(StringComparer.Ordinal);
-            foreach(KeyValuePair<string, object> member in encryption.Jwk!)
+            candidateIntegration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
             {
-                jwkDict[member.Key] = member.Value;
-            }
+                Dictionary<string, object> jwkDict = new(StringComparer.Ordinal);
+                foreach(KeyValuePair<string, object> member in encryption.Jwk!)
+                {
+                    jwkDict[member.Key] = member.Value;
+                }
 
-            var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                jwkDict, Pool, TestSetup.Base64UrlDecoder);
-            Tag recipientTag = Tag.Create(algorithm).With(purpose).With(scheme);
-            using PublicKeyMemory recipientKey = new(keyBytes, recipientTag);
+                var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
+                    jwkDict, Pool, TestSetup.Base64UrlDecoder);
+                Tag recipientTag = Tag.Create(algorithm).With(purpose).With(scheme);
+                using PublicKeyMemory recipientKey = new(keyBytes, recipientTag);
 
-            return await HaipProfile.EncryptResponseAsync(
-                recipientKey,
-                encryption.Enc!,
-                Encoding.UTF8.GetBytes(responseJson).AsMemory(),
-                HeaderSerializer,
-                CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
-                ConcatKdf.DefaultKeyDerivationDelegate,
-                BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                keyManagementAlgorithm: encryption.Alg,
-                keyId: encryption.Kid,
-                cancellationToken: ct).ConfigureAwait(false);
-        };
+                return await HaipProfile.EncryptResponseAsync(
+                    recipientKey,
+                    encryption.Enc!,
+                    Encoding.UTF8.GetBytes(responseJson).AsMemory(),
+                    HeaderSerializer,
+                    CryptoFormatConversions.DefaultTagToEpkCrvConverter,
+                    BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
+                    ConcatKdf.DefaultKeyDerivationDelegate,
+                    BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+                    TestSetup.Base64UrlEncoder,
+                    Pool,
+                    keyManagementAlgorithm: encryption.Alg,
+                    keyId: encryption.Kid,
+                    cancellationToken: ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
     }
 
 
@@ -574,16 +644,22 @@ internal sealed class Oid4VciEncryptionConformanceTests
         });
 
 
+    /// <summary>
+    /// Completes the fixture token exchange and returns an access token for the credential endpoint request.
+    /// </summary>
     private async Task<string> MintAccessTokenAsync(TestHostShell host, VerifierKeyMaterial material)
     {
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

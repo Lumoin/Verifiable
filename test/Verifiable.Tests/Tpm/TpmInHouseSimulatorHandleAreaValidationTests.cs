@@ -448,18 +448,20 @@ internal sealed class TpmInHouseSimulatorHandleAreaValidationTests
 
     /// <summary>
     /// <c>TPM2_PolicySecret()</c>'s <c>authHandle</c>, RESOLVED to a genuinely loaded object that is not one of
-    /// the four hierarchies, stays <c>TPM_RC_HANDLE</c>, handle-encoded to the same index — the standing modelling boundary this simulator
-    /// implements: <c>authHandle</c>'s real wire type, <c>TPMI_DH_ENTITY+</c>, admits hierarchies, NV Indices,
-    /// and ordinary transient/persistent objects, but this simulator resolves only the hierarchies, so a loaded
-    /// non-hierarchy object at <c>authHandle</c> is refused exactly as an unsupported entity kind rather than
-    /// promoted to the clause 5.4 step 2.1 warning a resolved, in-scope object never reaches.
+    /// the four hierarchies, authorizes against that object's OWN authValue — <c>authHandle</c>'s real wire
+    /// type, <c>TPMI_DH_ENTITY+</c>, admits hierarchies, NV Indexes, and ordinary transient/persistent objects
+    /// alike
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3,
+    /// clause 23.4.1: "authEntity ... may be any TPM entity with a handle and an associated authValue ... This
+    /// includes the reserved handles ..., NV Indexes, and loaded objects"</see>). The signing key this test loads
+    /// carries an empty authValue and <c>userWithAuth</c> SET, so the password arm's empty candidate matches it.
     /// </summary>
     [TestMethod]
-    public async Task PolicySecretAuthHandleResolvedToALoadedObjectAnswersHandle()
+    public async Task PolicySecretAuthHandleResolvedToALoadedObjectAuthorizesWithItsOwnAuthValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await HmacKeyHarness.CreateOperationalAsync(
-            nameof(PolicySecretAuthHandleResolvedToALoadedObjectAnswersHandle), pool, TestContext.CancellationToken).ConfigureAwait(false);
+            nameof(PolicySecretAuthHandleResolvedToALoadedObjectAuthorizesWithItsOwnAuthValue), pool, TestContext.CancellationToken).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -478,9 +480,8 @@ internal sealed class TpmInHouseSimulatorHandleAreaValidationTests
             TpmResult<PolicySecretResponse> result = await tpm.PolicySecretWithPasswordAsync(
                 key.ObjectHandle.Value, policySessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(
-                HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), result.ResponseCode,
-                "A loaded, non-hierarchy authHandle designates authHandle, handle 1 of TPM2_PolicySecret()'s own command table: this simulator resolves authHandle only for the permanent hierarchies, so a genuinely loaded object never reaches clause 5.4 step 2.1's warning.");
+            Assert.IsTrue(result.IsSuccess, $"PolicySecret against a loaded object's own (empty) authValue must succeed: '{result.ResponseCode}'.");
+            result.Value.Dispose();
         }
         finally
         {

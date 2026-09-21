@@ -1,6 +1,7 @@
 using CsCheck;
 using System.Buffers;
 using Verifiable.Cesr;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cesr;
 
@@ -81,7 +82,7 @@ internal sealed class CesrCodecPropertyTests
             using CesrParsedPrimitive fromBinary = CesrPrimitiveCodec.DecodeBinary(binary.Memory.Span[..qb2Length], BaseMemoryPool.Shared);
 
             return fromBinary.Code == pair.Code && fromBinary.Raw.SequenceEqual(pair.Raw);
-        });
+        }, threads: CsCheckSampling.Threads);
 
 
     /// <summary>
@@ -95,7 +96,7 @@ internal sealed class CesrCodecPropertyTests
         GenMutatedPrimitive.Sample(text => DecodesOrThrowsCesrFormat(() =>
         {
             using CesrParsedPrimitive _ = CesrPrimitiveCodec.DecodeText(text, BaseMemoryPool.Shared);
-        }));
+        }), threads: CsCheckSampling.Threads);
 
 
     /// <summary>
@@ -108,7 +109,7 @@ internal sealed class CesrCodecPropertyTests
         Gen.Byte.Array[0, 24].Sample(bytes => DecodesOrThrowsCesrFormat(() =>
         {
             using CesrParsedPrimitive _ = CesrPrimitiveCodec.DecodeBinary(bytes, BaseMemoryPool.Shared);
-        }));
+        }), threads: CsCheckSampling.Threads);
 
 
     /// <summary>
@@ -128,7 +129,7 @@ internal sealed class CesrCodecPropertyTests
                 && parsed.TextCharCount == (long)count * 4
                 && parsed.BinaryByteCount >= 0
                 && parsed.TextCharCount >= 0;
-        });
+        }, threads: CsCheckSampling.Threads);
 
 
     //Applies a single edit to a known-valid string: substitute the character at a position, truncate to a position,

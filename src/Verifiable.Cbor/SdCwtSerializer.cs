@@ -146,7 +146,7 @@ public static class SdCwtSerializer
     /// <remarks>
     /// A disclosure's digest is a commitment to the bytes the Issuer hashed, so the binding is
     /// answered against those bytes and never against a re-encoding of the parsed value — this is
-    /// the same rule <see cref="Verifiable.Json.Sd.SdJwtSerializer"/> follows for
+    /// the same rule <c>Verifiable.Json.Sd.SdJwtSerializer</c> follows for
     /// <see href="https://www.rfc-editor.org/rfc/rfc9901">RFC 9901</see> §4.2.3, and it keeps a
     /// validly encoded disclosure that this library would have written differently from failing
     /// to bind.

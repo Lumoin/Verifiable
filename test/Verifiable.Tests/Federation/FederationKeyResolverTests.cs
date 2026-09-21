@@ -93,7 +93,7 @@ internal sealed class FederationKeyResolverTests
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
             minted.Chain, anchor.Identifier.Value, anchor.Kid,
@@ -112,7 +112,7 @@ internal sealed class FederationKeyResolverTests
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
             minted.Chain, subject.Identifier.Value, subject.Kid,
@@ -131,7 +131,7 @@ internal sealed class FederationKeyResolverTests
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
             minted.Chain, "https://example.test/stranger", kid: null,
@@ -159,11 +159,11 @@ internal sealed class FederationKeyResolverTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The to-be-verified statement's header carries alg and typ but NO kid — a stripped/omitted kid.
-        UnverifiedJwtHeader strippedHeader = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        UnverifiedJwtHeader strippedHeader = new()
         {
             [WellKnownJwkMemberNames.Alg] = "ES256",
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt
-        });
+        };
 
         ResolveEntityKeyDelegate resolver = FederationKeyResolver.BuildInChainResolver(
             TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
@@ -243,6 +243,64 @@ internal sealed class FederationKeyResolverTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see> makes
+    /// distinct <c>kid</c> values within a set a SHOULD. A chain statement whose <c>jwks</c> carries two
+    /// keys published under the SAME <c>kid</c> must resolve to a refusal, not silently pick the
+    /// first (or either) of the two — the array's order is attacker-controlled input, not a
+    /// legitimate tiebreaker.
+    /// </summary>
+    [TestMethod]
+    public async Task DuplicateKeyIdInJwksResolvesToNullNotTheFirstKey()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode firstKeyNode = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/issuer"));
+        using FederationTestRingNode secondKeyNode = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/issuer"));
+
+        EntityIdentifier issuer = new("https://example.test/issuer");
+        const string DuplicateKeyId = "duplicated-kid";
+
+        Dictionary<string, object> firstJwk = SingleJwk(firstKeyNode);
+        firstJwk[WellKnownJwkMemberNames.Kid] = DuplicateKeyId;
+        Dictionary<string, object> secondJwk = SingleJwk(secondKeyNode);
+        secondJwk[WellKnownJwkMemberNames.Kid] = DuplicateKeyId;
+
+        Dictionary<string, object> twoKeyJwks = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Keys] = new List<object> { firstJwk, secondJwk }
+        };
+
+        Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Iss] = issuer.Value,
+            [WellKnownJwtClaimNames.Sub] = issuer.Value,
+            [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddHours(1).ToUnixTimeSeconds(),
+            [WellKnownFederationClaimNames.Jwks] = twoKeyJwks
+        };
+
+        EntityConfiguration issuerEc = new()
+        {
+            Issuer = issuer,
+            Subject = issuer,
+            IssuedAt = now,
+            ExpiresAt = now.AddHours(1),
+            Payload = new(payloadDict)
+        };
+
+        TrustChain chain = new() { Statements = [issuerEc] };
+
+        using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
+            chain, issuer.Value, DuplicateKeyId,
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNull(key,
+            "A kid appearing on more than one key in the issuer's jwks must resolve to null, not the first match.");
+    }
+
+
     /// <summary>A kid no key in the issuer's jwks carries resolves to null.</summary>
     [TestMethod]
     public async Task InChainWrongKidResolvesToNull()
@@ -252,7 +310,7 @@ internal sealed class FederationKeyResolverTests
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
 
         MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
-            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+            subject, anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
             minted.Chain, anchor.Identifier.Value, "kid-does-not-exist",

@@ -322,9 +322,9 @@ public static class TpmDeviceExtensions
         /// it needs a loaded decrypt key this verb group cannot generically assume is available (TPM 2.0 Library
         /// Part 1, clause 16.6.11/16.6.12) — salting is what would make the key secret even with an empty
         /// authValue; a caller holding a decrypt key composes a session with
-        /// <see cref="StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/> or its bound-and-salted sibling directly. Against the SAME threat
+        /// <see cref="StartAuthSessionInputExtensions.extension(StartAuthSessionInput).CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, Verifiable.Tpm.Automata.TpmRsaOaepEncryptDelegate, FillEntropyDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/> or its bound-and-salted sibling directly. Against the SAME threat
         /// model (an observer of the StartAuthSession exchange), the explicit low-protection opt-out
-        /// (<see cref="PolicySecretWithPasswordAsync(uint, uint, CancellationToken)"/>, an empty password
+        /// (<see cref="PolicySecretWithPasswordAsync(TpmDevice, uint, uint, CancellationToken)"/>, an empty password
         /// authorization sent in the clear) is no worse — its value is the structural cpHash/nonce binding once
         /// authValues are non-empty and the shorter round trip, not confidentiality against that observer.
         /// </remarks>
@@ -365,9 +365,9 @@ public static class TpmDeviceExtensions
         /// Salting is not the default: it needs a loaded decrypt key this verb group cannot generically assume is
         /// available (TPM 2.0 Library Part 1, clause 16.6.11/16.6.12) — salting is what would make the key secret
         /// even with an empty authValue; a caller holding a decrypt key composes a session with
-        /// <see cref="StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/> or its bound-and-salted sibling directly. Against the SAME threat
+        /// <see cref="StartAuthSessionInputExtensions.extension(StartAuthSessionInput).CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, Verifiable.Tpm.Automata.TpmRsaOaepEncryptDelegate, FillEntropyDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/> or its bound-and-salted sibling directly. Against the SAME threat
         /// model (an observer of the StartAuthSession exchange), the explicit low-protection opt-out
-        /// (<see cref="PolicySecretWithPasswordAsync(uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, CancellationToken)"/>,
+        /// (<see cref="PolicySecretWithPasswordAsync(TpmDevice, uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, CancellationToken)"/>,
         /// an empty password authorization sent in the clear) is no worse — its value is the structural
         /// cpHash/nonce binding once authValues are non-empty and the shorter round trip, not confidentiality
         /// against that observer.
@@ -396,7 +396,7 @@ public static class TpmDeviceExtensions
         /// Runs <c>TPM2_PolicySecret</c> (immediate form: <c>expiration = 0</c>, no ticket produced) over an empty
         /// password authorization session, binding the policy to the authorization of the entity at
         /// <paramref name="authHandle"/>. The explicit low-protection opt-out for
-        /// <see cref="PolicySecretAsync(uint, uint, CancellationToken)"/>.
+        /// <see cref="PolicySecretAsync(TpmDevice, uint, uint, CancellationToken)"/>.
         /// </summary>
         /// <remarks>
         /// A password session carries <paramref name="authHandle"/>'s authorization value — always empty here,
@@ -405,7 +405,7 @@ public static class TpmDeviceExtensions
         /// replayed command. Fine for a hierarchy whose authorization value has not been set and for diagnostics
         /// that want to avoid the bound default's extra StartAuthSession/FlushContext round trip; wrong for
         /// anything security-sensitive, where
-        /// <see cref="PolicySecretAsync(uint, uint, CancellationToken)"/>'s bound HMAC session is the right
+        /// <see cref="PolicySecretAsync(TpmDevice, uint, uint, CancellationToken)"/>'s bound HMAC session is the right
         /// default — its structural cpHash/nonce/attribute binding detects tampering this arm cannot, and it
         /// upgrades automatically to genuinely secret-keyed once <paramref name="authHandle"/>'s authorization
         /// value is non-empty, where this arm cannot authorize at all.
@@ -426,7 +426,7 @@ public static class TpmDeviceExtensions
         /// <paramref name="expiration"/> is negative, minting an authorization ticket whose timeout the policy
         /// session tracks (TPM 2.0 Library Part 3, clause 23.4, clause 23.2.5). The explicit low-protection
         /// opt-out for
-        /// <see cref="PolicySecretAsync(uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, CancellationToken)"/>.
+        /// <see cref="PolicySecretAsync(TpmDevice, uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, CancellationToken)"/>.
         /// </summary>
         /// <remarks>
         /// A password session carries <paramref name="authHandle"/>'s authorization value — always empty here,
@@ -435,7 +435,7 @@ public static class TpmDeviceExtensions
         /// replayed command. Fine for a hierarchy whose authorization value has not been set and for diagnostics
         /// that want to avoid the bound default's extra StartAuthSession/FlushContext round trip; wrong for
         /// anything security-sensitive, where
-        /// <see cref="PolicySecretAsync(uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, CancellationToken)"/>'s
+        /// <see cref="PolicySecretAsync(TpmDevice, uint, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, CancellationToken)"/>'s
         /// bound HMAC session is the right default — its structural cpHash/nonce/attribute binding detects
         /// tampering this arm cannot, and it upgrades automatically to genuinely secret-keyed once
         /// <paramref name="authHandle"/>'s authorization value is non-empty, where this arm cannot authorize at

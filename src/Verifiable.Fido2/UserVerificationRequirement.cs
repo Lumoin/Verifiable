@@ -10,7 +10,7 @@ namespace Verifiable.Fido2;
 /// it is never parsed off the wire by <c>Verifiable.Fido2</c> (only assembled into an options
 /// document by a caller), so — unlike wire-parsed values such as the attestation statement
 /// <c>fmt</c> or client-data <c>type</c> — it is modeled as a plain enum rather than a
-/// <c>WellKnown*</c> string class, mirroring <see cref="Verifiable.OAuth.Pkce.PkceMethod"/>. Wire
+/// <c>WellKnown*</c> string class, mirroring OAuth's own <c>PkceMethod</c> enum. Wire
 /// (de)serialization of the three string values is a JSON-layer concern, via
 /// <see cref="WellKnownUserVerificationRequirements"/>.
 /// </remarks>

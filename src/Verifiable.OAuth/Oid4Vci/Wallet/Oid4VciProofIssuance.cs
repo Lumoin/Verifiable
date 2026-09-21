@@ -1,7 +1,7 @@
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Text;
 using Verifiable.JCose;
+using Verifiable.OAuth.Dpop;
 
 namespace Verifiable.OAuth.Oid4Vci.Wallet;
 
@@ -32,6 +32,11 @@ public static class Oid4VciProofIssuance
     /// constant is the wire contract both sides name from one source.
     /// </summary>
     public static string ProofJwtType { get; } = Utf8Constants.ToInternedString(ProofJwtTypeUtf8);
+
+    /// <summary>Whether <paramref name="typ"/> is <see cref="ProofJwtType"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="ProofJwtType"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsProofJwtType(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, ProofJwtType);
 
 
     /// <summary>
@@ -70,26 +75,23 @@ public static class Oid4VciProofIssuance
         ArgumentNullException.ThrowIfNull(memoryPool);
 
         //The JWS alg is the holder key's algorithm; the header jwk projects the
-        //holder PUBLIC key so the Issuer can both pick the verification algorithm
-        //and reconstruct the verifying key from the proof itself.
+        //holder PUBLIC key through the member set its own kty defines (EC, RSA,
+        //OKP, or AKP) so the Issuer can both pick the verification algorithm and
+        //reconstruct the verifying key from the proof itself.
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
-        JsonWebKey jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
-            holderPublic.Tag.Get<CryptoAlgorithm>(),
-            holderPublic.Tag.Get<Purpose>(),
-            holderPublic.AsReadOnlySpan(),
-            base64UrlEncoder);
+        IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(holderPublic, algorithm, base64UrlEncoder);
+
+        Dictionary<string, object> jwkHeaderMember = new(jwk.Count, StringComparer.Ordinal);
+        foreach(KeyValuePair<string, string> member in jwk)
+        {
+            jwkHeaderMember[member.Key] = member.Value;
+        }
 
         JwtHeader header = new(capacity: 3)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = ProofJwtType,
-            [Oid4VciCredentialParameterNames.Jwk] = new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                [WellKnownJwkMemberNames.Kty] = jwk.Kty!,
-                [WellKnownJwkMemberNames.Crv] = jwk.Crv!,
-                [WellKnownJwkMemberNames.X] = jwk.X!,
-                [WellKnownJwkMemberNames.Y] = jwk.Y!
-            }
+            [Oid4VciCredentialParameterNames.Jwk] = jwkHeaderMember
         };
 
         JwtPayload payload = new(capacity: 3)

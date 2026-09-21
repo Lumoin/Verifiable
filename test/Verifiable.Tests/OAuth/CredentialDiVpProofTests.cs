@@ -104,8 +104,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task HolderSignedDiVpProofVerifiesAndIssues()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -118,15 +118,18 @@ internal sealed class CredentialDiVpProofTests
         DataIntegritySecuredPresentation signedPresentation = await SignPresentationAsync(
             holderDidDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
 
-        WireDiVpExpectationSeam(host, KeyDidResolverSeam);
+        await WireDiVpExpectationSeamAsync(host, KeyDidResolverSeam).ConfigureAwait(false);
         bool seamIssued = false;
-        host.Server.OAuth().IssueCredentialAsync =
-            (request, accessToken, registration, context, ct) =>
-            {
-                seamIssued = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.IssueCredentialAsync =
+                (request, accessToken, registration, context, ct) =>
+                {
+                    seamIssued = true;
 
-                return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-            };
+                    return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -162,8 +165,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task DiVpWithWrongChallengeYieldsInvalidNonce()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -177,8 +180,8 @@ internal sealed class CredentialDiVpProofTests
         DataIntegritySecuredPresentation signedPresentation = await SignPresentationAsync(
             holderDidDocument, holderPrivate, "c-nonce-STALE", issuerIdentifier).ConfigureAwait(false);
 
-        WireDiVpExpectationSeam(host, KeyDidResolverSeam);
-        bool seamConsulted = WireSeamTripwire(host);
+        await WireDiVpExpectationSeamAsync(host, KeyDidResolverSeam).ConfigureAwait(false);
+        bool seamConsulted = await WireSeamTripwireAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -197,8 +200,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task DiVpWithWrongDomainYieldsInvalidProof()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
             TestKeyMaterialProvider.CreateEd25519KeyMaterial();
@@ -210,8 +213,8 @@ internal sealed class CredentialDiVpProofTests
         DataIntegritySecuredPresentation signedPresentation = await SignPresentationAsync(
             holderDidDocument, holderPrivate, CredentialNonce, "https://attacker.example").ConfigureAwait(false);
 
-        WireDiVpExpectationSeam(host, KeyDidResolverSeam);
-        bool seamConsulted = WireSeamTripwire(host);
+        await WireDiVpExpectationSeamAsync(host, KeyDidResolverSeam).ConfigureAwait(false);
+        bool seamConsulted = await WireSeamTripwireAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -230,8 +233,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task DiVpWithTamperedProofValueYieldsInvalidProof()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -247,8 +250,8 @@ internal sealed class CredentialDiVpProofTests
         //Replace the proof value with an invalid one after signing.
         signedPresentation.Proof![0].ProofValue = "zTAMPEREDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
-        WireDiVpExpectationSeam(host, KeyDidResolverSeam);
-        bool seamConsulted = WireSeamTripwire(host);
+        await WireDiVpExpectationSeamAsync(host, KeyDidResolverSeam).ConfigureAwait(false);
+        bool seamConsulted = await WireSeamTripwireAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -267,8 +270,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task DiVpWithWrongProofPurposeYieldsInvalidProof()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -284,8 +287,8 @@ internal sealed class CredentialDiVpProofTests
         //Forge the purpose to assertionMethod — the same key, but not an authentication proof.
         signedPresentation.Proof![0].ProofPurpose = AssertionMethod.Purpose;
 
-        WireDiVpExpectationSeam(host, KeyDidResolverSeam);
-        bool seamConsulted = WireSeamTripwire(host);
+        await WireDiVpExpectationSeamAsync(host, KeyDidResolverSeam).ConfigureAwait(false);
+        bool seamConsulted = await WireSeamTripwireAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -312,8 +315,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task DiVpWithControllerIndirectionHolderIsRefused()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -350,8 +353,8 @@ internal sealed class CredentialDiVpProofTests
             honestHolderDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
 
         DidResolver controllerIndirectionResolver = BuildCannedKeyDidResolver(controllerIndirectionDocument);
-        WireDiVpExpectationSeam(host, controllerIndirectionResolver);
-        bool seamConsulted = WireSeamTripwire(host);
+        await WireDiVpExpectationSeamAsync(host, controllerIndirectionResolver).ConfigureAwait(false);
+        bool seamConsulted = await WireSeamTripwireAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -383,8 +386,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task DiVpParseAndSurfaceDefaultIsUnchangedWhenSeamUnwired()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -398,16 +401,22 @@ internal sealed class CredentialDiVpProofTests
             holderDidDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
 
         //No expectation seam at all — the §F.4 / §F.2 check is entirely the issuance seam's job.
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+        }).ConfigureAwait(false);
 
         CredentialRequest? seenRequest = null;
-        host.Server.OAuth().IssueCredentialAsync =
-            (request, accessToken, registration, context, ct) =>
-            {
-                seenRequest = request;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.IssueCredentialAsync =
+                (request, accessToken, registration, context, ct) =>
+                {
+                    seenRequest = request;
 
-                return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-            };
+                    return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -432,8 +441,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task RemoteDidWebHolderResolvesThroughSsrfPolicyAndVerifies()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -459,15 +468,18 @@ internal sealed class CredentialDiVpProofTests
         using HttpClient httpClient = new(handler, disposeHandler: false);
         DidResolver webResolver = BuildFetchingWebDidResolver(httpClient);
 
-        WireDiVpExpectationSeam(host, webResolver);
+        await WireDiVpExpectationSeamAsync(host, webResolver).ConfigureAwait(false);
         bool seamIssued = false;
-        host.Server.OAuth().IssueCredentialAsync =
-            (request, accessToken, registration, context, ct) =>
-            {
-                seamIssued = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.IssueCredentialAsync =
+                (request, accessToken, registration, context, ct) =>
+                {
+                    seamIssued = true;
 
-                return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-            };
+                    return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
 
@@ -519,8 +531,8 @@ internal sealed class CredentialDiVpProofTests
     public async Task RemoteDidWebHolderResolvesOverRealLoopbackSocketUnderBothPolicies()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
 
         string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
 
@@ -569,15 +581,18 @@ internal sealed class CredentialDiVpProofTests
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(didWebHost.Certificate);
         DidResolver webResolver = BuildLoopbackFetchingWebDidResolver(httpClient, didWebHost.BaseAddress);
 
-        WireDiVpExpectationSeam(host, webResolver);
+        await WireDiVpExpectationSeamAsync(host, webResolver).ConfigureAwait(false);
         bool seamIssued = false;
-        host.Server.OAuth().IssueCredentialAsync =
-            (request, accessToken, registration, context, ct) =>
-            {
-                seamIssued = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.IssueCredentialAsync =
+                (request, accessToken, registration, context, ct) =>
+                {
+                    seamIssued = true;
 
-                return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-            };
+                    return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+                };
+        }).ConfigureAwait(false);
 
         //Assertion A — SSRF blocks. SecureDefault refuses the loopback holder fetch at the chokepoint
         //before any socket contact, so §F.2 verification fails invalid_proof (holder unresolved) and
@@ -647,19 +662,26 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //Wires the opt-in di_vp expectation seam: the expected c_nonce plus the DI verification seams.
-    private static void WireDiVpExpectationSeam(TestHostShell host, DidResolver resolver)
+    /// <summary>
+    /// Installs the expected presentation-binding checks on the admitted credential-issuer wiring.
+    /// </summary>
+    private static async Task WireDiVpExpectationSeamAsync(TestHostShell host, DidResolver resolver)
     {
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().ResolveCredentialProofExpectationAsync =
-            (request, accessToken, registration, context, ct) =>
-                ValueTask.FromResult<CredentialProofExpectation?>(new CredentialProofExpectation
-                {
-                    ExpectedNonce = CredentialNonce,
-                    IsNonceRequired = true,
-                    IsProofRequired = true,
-                    DiVpVerification = BuildDiVpVerification(resolver)
-                });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.ResolveCredentialProofExpectationAsync =
+                (request, accessToken, registration, context, ct) =>
+                    ValueTask.FromResult<CredentialProofExpectation?>(new CredentialProofExpectation
+                    {
+                        ExpectedNonce = CredentialNonce,
+                        IsNonceRequired = true,
+                        IsProofRequired = true,
+                        DiVpVerification = BuildDiVpVerification(resolver)
+                    });
+        }).ConfigureAwait(false);
     }
 
 
@@ -674,6 +696,7 @@ internal sealed class CredentialDiVpProofTests
             Resolver = resolver,
             Canonicalize = JcsCanonicalizer,
             ContextResolver = null,
+            KnownContext = Context.FromIris(Context.Credentials20),
             DecodeProofValue = ProofValueDecoder,
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
@@ -683,17 +706,22 @@ internal sealed class CredentialDiVpProofTests
         };
 
 
-    //Flips a tripwire when issuance runs, proving the di_vp check rejected before the seam.
-    private static bool WireSeamTripwire(TestHostShell host)
+    /// <summary>
+    /// Installs a rejecting proof-verification seam so a test can detect whether proof processing reaches it.
+    /// </summary>
+    private static async Task<bool> WireSeamTripwireAsync(TestHostShell host)
     {
         bool consulted = false;
-        host.Server.OAuth().IssueCredentialAsync =
-            (request, accessToken, registration, context, ct) =>
-            {
-                consulted = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.IssueCredentialAsync =
+                (request, accessToken, registration, context, ct) =>
+                {
+                    consulted = true;
 
-                return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-            };
+                    return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+                };
+        }).ConfigureAwait(false);
 
         return consulted;
     }
@@ -949,11 +977,9 @@ internal sealed class CredentialDiVpProofTests
         await DispatchDiVpAsync(host, material, presentation, []).ConfigureAwait(false);
 
 
-    //Mints the access token via the Pre-Authorized Code grant and dispatches a §8.2 Credential
-    //Request carrying the di_vp presentation to the Credential Endpoint. The credential call's
-    //ExchangeContext is supplied by the caller so a test can place an OutboundFetchPolicy on it —
-    //the validator threads exactly this context into DidResolver.ResolveAsync, so the policy
-    //governs the holder's did:web fetch through the OutboundFetch SSRF chokepoint.
+    /// <summary>
+    /// Submits the configured presentation-proof request and returns the credential endpoint response for assertions.
+    /// </summary>
     private async Task<ServerHttpResponse> DispatchDiVpAsync(
         TestHostShell host,
         VerifierKeyMaterial material,
@@ -963,11 +989,14 @@ internal sealed class CredentialDiVpProofTests
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

@@ -138,6 +138,7 @@ internal static class JsonataTestUtilities
         RandomnessKind.UniformDouble => new RandomnessValue(request.Kind, 0.5d, Guid.Empty, ReadOnlyMemory<byte>.Empty),
         RandomnessKind.Uuid => new RandomnessValue(
             request.Kind, 0d, Guid.Parse("00000000-0000-0000-0000-000000000001"), ReadOnlyMemory<byte>.Empty),
+        RandomnessKind.Bytes => new RandomnessValue(request.Kind, 0d, Guid.Empty, new byte[request.ByteCount]),
         _ => new RandomnessValue(request.Kind, 0d, Guid.Empty, new byte[request.ByteCount])
     };
 }

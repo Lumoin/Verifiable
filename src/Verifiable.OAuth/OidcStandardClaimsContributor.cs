@@ -296,7 +296,7 @@ public static class OidcStandardClaimsContributor
             return ctx.PreResolvedClaims;
         }
 
-        EndpointServer? server = ctx.ExchangeContext.Server;
+        EndpointServer? server = ctx.ExchangeContext.RequestServer;
         ResolveOidcClaimsDelegate? resolve = server?.OAuth().ResolveOidcClaimsAsync;
         if(resolve is null)
         {

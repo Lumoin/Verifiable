@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Infrastructure;
@@ -40,6 +41,66 @@ public static class TpmPolicyDigest
         TpmAlgIdConstants.TPM_ALG_SHA256 => 32,
         TpmAlgIdConstants.TPM_ALG_SHA384 => 48,
         TpmAlgIdConstants.TPM_ALG_SHA512 => 64,
+        TpmAlgIdConstants.TPM_ALG_ERROR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_RSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_TDES => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_HMAC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_AES => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_MGF1 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_XOR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_NULL => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SM4 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_RSASSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_RSAES => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_OAEP => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_ECDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_ECDH => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_ECDAA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SM2 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_ECMQV => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_HKDF => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KDF2 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_ECC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_CMAC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_CTR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_OFB => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_CBC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_CFB => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_ECB => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_CCM => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_GCM => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KW => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KWP => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_EAX => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_LMS => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_XMSS => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_MLKEM => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_MLDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
         _ => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported.")
     };
 
@@ -277,9 +338,9 @@ public static class TpmPolicyDigest
     /// <c>PolicyContextUpdate</c> composed with a <c>PolicyDigestClear</c> reset that precedes it).
     /// </summary>
     /// <remarks>
-    /// Combines <see cref="ExtendForOr"/>'s reset shape (the accumulated digest is <b>discarded</b>, never folded
+    /// Combines <see cref="ExtendForOr(System.Collections.Generic.IReadOnlyList{System.ReadOnlyMemory{byte}}, Verifiable.Tpm.Spec.Constants.TpmAlgIdConstants, System.Span{byte}, Lumoin.Base.BaseMemoryPool)"/>'s reset shape (the accumulated digest is <b>discarded</b>, never folded
     /// in — <paramref name="destination"/> starts from an all-zero digest of the session-hash width, exactly like
-    /// <see cref="ExtendForOr"/> ignoring its own prior digest) with <see cref="ExtendForSecret"/>'s "always run a
+    /// <see cref="ExtendForOr(System.Collections.Generic.IReadOnlyList{System.ReadOnlyMemory{byte}}, Verifiable.Tpm.Spec.Constants.TpmAlgIdConstants, System.Span{byte}, Lumoin.Base.BaseMemoryPool)"/> ignoring its own prior digest) with <see cref="ExtendForSecret"/>'s "always run a
     /// second <paramref name="policyRef"/> hash" shape. This reset is the mechanism that lets an object's fixed
     /// authPolicy accept a policy an authority can revise at will: the result depends only on
     /// <paramref name="keySignName"/> and <paramref name="policyRef"/>, never on whatever policy actually produced
@@ -923,15 +984,76 @@ public static class TpmPolicyDigest
     {
         ArgumentNullException.ThrowIfNull(pool);
 
-        (Tag tag, int length) = policyHashAlgorithm switch
+        (Tag tag, int length, string? qualifier) = policyHashAlgorithm switch
         {
-            TpmAlgIdConstants.TPM_ALG_SHA256 => (CryptoTags.Sha256Digest, 32),
-            TpmAlgIdConstants.TPM_ALG_SHA384 => (CryptoTags.Sha384Digest, 48),
-            TpmAlgIdConstants.TPM_ALG_SHA512 => (CryptoTags.Sha512Digest, 64),
+            TpmAlgIdConstants.TPM_ALG_SHA256 => (CryptoTags.Sha256Digest, 32, null),
+            TpmAlgIdConstants.TPM_ALG_SHA384 => (CryptoTags.Sha384Digest, 48, nameof(HashAlgorithmName.SHA384)),
+            TpmAlgIdConstants.TPM_ALG_SHA512 => (CryptoTags.Sha512Digest, 64, nameof(HashAlgorithmName.SHA512)),
+            TpmAlgIdConstants.TPM_ALG_ERROR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_TDES => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA1 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HMAC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_AES => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MGF1 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_XOR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA256_192 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_NULL => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM3_256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM4 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSASSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSAES => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_RSAPSS => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_OAEP => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDH => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECDAA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SM2 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECSCHNORR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECMQV => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HKDF => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF2 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SYMCIPHER => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CAMELLIA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_384 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHA3_512 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE128 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_192 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_SHAKE256_512 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CMAC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CTR => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_OFB => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CBC => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CFB => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_ECB => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_CCM => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_GCM => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KW => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KWP => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EAX => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_EDDSA_PH => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_LMS => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_XMSS => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KEYEDXOF => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF128 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMACXOF256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMAC128 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_KMAC256 => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MLKEM => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_MLDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
+            TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported."),
             _ => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported.")
         };
 
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(data, length, tag, pool);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(data, length, tag, pool, qualifier);
 
         //Defensive: a pooled digest buffer is not contractually guaranteed to be exactly the requested length
         //(pool implementations are free to over-allocate), so slice before copying into the caller's buffer

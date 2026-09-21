@@ -18,7 +18,7 @@ namespace Verifiable.Server;
 /// Same "dynamic value type" extensibility shape as
 /// <see cref="CapabilityIdentifier"/>: predefined purposes for every
 /// identifier site the library ships live on
-/// <see cref="WellKnownIdentifierPurposes"/>; applications register
+/// <c>WellKnownIdentifierPurposes</c>; applications register
 /// custom purposes via <see cref="Create(string)"/>. Federation and
 /// downstream tracks add their own purposes either as additional
 /// well-known entries or as application-registered URNs.
@@ -52,7 +52,7 @@ public readonly struct IdentifierPurpose: IEquatable<IdentifierPurpose>
     /// <summary>
     /// Registers a purpose identifier from an arbitrary URN-shaped string.
     /// Use for application-defined purposes that aren't covered by the
-    /// library's <see cref="WellKnownIdentifierPurposes"/> set.
+    /// library's <c>WellKnownIdentifierPurposes</c> set.
     /// </summary>
     /// <param name="urn">
     /// The URN-shaped identifier, e.g.

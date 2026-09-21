@@ -203,6 +203,22 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
     private static bool IsAdmittedTag(TpmStConstants tag) => tag switch
     {
         TpmStConstants.TPM_ST_VERIFIED or TpmStConstants.TPM_ST_MESSAGE_VERIFIED or TpmStConstants.TPM_ST_DIGEST_VERIFIED => true,
+        TpmStConstants.TPM_ST_RSP_COMMAND => false,
+        TpmStConstants.TPM_ST_NO_SESSIONS => false,
+        TpmStConstants.TPM_ST_SESSIONS => false,
+        TpmStConstants.TPM_ST_ATTEST_NV => false,
+        TpmStConstants.TPM_ST_ATTEST_COMMAND_AUDIT => false,
+        TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT => false,
+        TpmStConstants.TPM_ST_ATTEST_CERTIFY => false,
+        TpmStConstants.TPM_ST_ATTEST_QUOTE => false,
+        TpmStConstants.TPM_ST_ATTEST_TIME => false,
+        TpmStConstants.TPM_ST_ATTEST_CREATION => false,
+        TpmStConstants.TPM_ST_ATTEST_NV_DIGEST => false,
+        TpmStConstants.TPM_ST_CREATION => false,
+        TpmStConstants.TPM_ST_AUTH_SECRET => false,
+        TpmStConstants.TPM_ST_HASHCHECK => false,
+        TpmStConstants.TPM_ST_AUTH_SIGNED => false,
+        TpmStConstants.TPM_ST_FU_MANIFEST => false,
         _ => false
     };
 

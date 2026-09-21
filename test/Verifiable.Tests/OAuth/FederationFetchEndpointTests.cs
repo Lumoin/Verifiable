@@ -33,6 +33,10 @@ internal sealed class FederationFetchEndpointTests
     private const string SubordinateEntityId = "https://subordinate.example.com";
 
 
+    /// <summary>
+    /// Serves the requested subordinate statement signed by its issuing entity.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.1.2">Federation §8.1.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task FetchEndpointServesSignedSubordinateStatement()
     {
@@ -41,24 +45,28 @@ internal sealed class FederationFetchEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            if(!string.Equals(subject.Value, SubordinateEntityId, StringComparison.Ordinal))
+            candidateIntegration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
             {
-                return ValueTask.FromResult<SubordinateStatementContribution?>(null);
-            }
-
-            return ValueTask.FromResult<SubordinateStatementContribution?>(
-                new SubordinateStatementContribution
+                if(!string.Equals(subject.Value, SubordinateEntityId, StringComparison.Ordinal))
                 {
-                    Jwks = new Dictionary<string, object>(StringComparer.Ordinal)
+
+                    return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+                }
+
+                return ValueTask.FromResult<SubordinateStatementContribution?>(
+                    new SubordinateStatementContribution
                     {
-                        ["keys"] = new List<object>(),
-                    },
-                });
-        };
+                        Jwks = new Dictionary<string, object>(StringComparer.Ordinal)
+                        {
+                            ["keys"] = new List<object>(),
+                        },
+                    });
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -97,6 +105,10 @@ internal sealed class FederationFetchEndpointTests
     }
 
 
+    /// <summary>
+    /// Returns not_found when the requested subordinate has no statement.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>.
+    /// </summary>
     [TestMethod]
     public async Task FetchEndpointReturns404ForUnknownSubordinate()
     {
@@ -105,11 +117,14 @@ internal sealed class FederationFetchEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
 
         //The anchor knows no subordinates → every sub resolves to null.
-        app.Server.OAuth().ResolveSubordinateStatementAsync =
-            (_, _, _, _) => ValueTask.FromResult<SubordinateStatementContribution?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubordinateStatementAsync =
+                (_, _, _, _) => ValueTask.FromResult<SubordinateStatementContribution?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -130,6 +145,10 @@ internal sealed class FederationFetchEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects a fetch that would make a subordinate statement self-issued.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3">Federation §3</see>.
+    /// </summary>
     [TestMethod]
     public async Task FetchEndpointRejectsSubEqualToIssuer()
     {
@@ -138,14 +157,18 @@ internal sealed class FederationFetchEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
 
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveSubordinateStatementAsync = (_, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            delegateInvoked = true;
-            return ValueTask.FromResult<SubordinateStatementContribution?>(null);
-        };
+            candidateIntegration.ResolveSubordinateStatementAsync = (_, _, _, _) =>
+            {
+                delegateInvoked = true;
+
+                return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -165,6 +188,10 @@ internal sealed class FederationFetchEndpointTests
     }
 
 
+    /// <summary>
+    /// Rejects failed client authentication before resolving a subordinate statement.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.8">Federation §8.8</see>.
+    /// </summary>
     [TestMethod]
     public async Task FetchEndpointRejectsWhenClientAuthenticationFails()
     {
@@ -173,20 +200,25 @@ internal sealed class FederationFetchEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
 
         //§8.8: the deployment requires client authentication at this endpoint and
         //the requester fails it. The gate must reject with 401 invalid_client
         //before the subordinate-statement resolver is consulted.
         bool resolverInvoked = false;
-        app.Server.OAuth().ResolveSubordinateStatementAsync = (_, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            resolverInvoked = true;
-            return ValueTask.FromResult<SubordinateStatementContribution?>(null);
-        };
-        app.Server.OAuth().AuthenticateFederationClientAsync = (_, _, _, _, _) =>
-            ValueTask.FromResult<FederationClientAuthenticationResult?>(
-                FederationClientAuthenticationResult.Rejected("No client authentication was presented."));
+            candidateIntegration.ResolveSubordinateStatementAsync = (_, _, _, _) =>
+            {
+                resolverInvoked = true;
+
+                return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+            };
+
+            candidateIntegration.AuthenticateFederationClientAsync = (_, _, _, _, _) =>
+                ValueTask.FromResult<FederationClientAuthenticationResult?>(
+                    FederationClientAuthenticationResult.Rejected("No client authentication was presented."));
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -207,6 +239,10 @@ internal sealed class FederationFetchEndpointTests
     }
 
 
+    /// <summary>
+    /// Serves the fetch when application policy does not require client authentication.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.8">Federation §8.8</see>.
+    /// </summary>
     [TestMethod]
     public async Task FetchEndpointProceedsWhenClientAuthenticationIsNotRequired()
     {
@@ -215,21 +251,26 @@ internal sealed class FederationFetchEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
-            string.Equals(subject.Value, SubordinateEntityId, StringComparison.Ordinal)
-                ? ValueTask.FromResult<SubordinateStatementContribution?>(
-                    new SubordinateStatementContribution
-                    {
-                        Jwks = new Dictionary<string, object>(StringComparer.Ordinal) { ["keys"] = new List<object>() },
-                    })
-                : ValueTask.FromResult<SubordinateStatementContribution?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+                string.Equals(subject.Value, SubordinateEntityId, StringComparison.Ordinal)
+                    ? ValueTask.FromResult<SubordinateStatementContribution?>(
+                        new SubordinateStatementContribution
+                        {
+                            Jwks = new Dictionary<string, object>(StringComparer.Ordinal) { ["keys"] = new List<object>() },
+                        })
+                    : ValueTask.FromResult<SubordinateStatementContribution?>(null);
 
-        //A null result means client authentication is not required at this
-        //endpoint — the request proceeds and is served normally.
-        app.Server.OAuth().AuthenticateFederationClientAsync = (_, _, _, _, _) =>
-            ValueTask.FromResult<FederationClientAuthenticationResult?>(null);
+
+            //A null result means client authentication is not required at this
+            //endpoint — the request proceeds and is served normally.
+
+            candidateIntegration.AuthenticateFederationClientAsync = (_, _, _, _, _) =>
+                ValueTask.FromResult<FederationClientAuthenticationResult?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -245,6 +286,10 @@ internal sealed class FederationFetchEndpointTests
     }
 
 
+    /// <summary>
+    /// Returns a JSON error without invoking resolution when the required subject is missing.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.1.1">Federation §8.1.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task FetchEndpointMissingSubReturnsJsonError()
     {
@@ -253,14 +298,18 @@ internal sealed class FederationFetchEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
 
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveSubordinateStatementAsync = (_, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            delegateInvoked = true;
-            return ValueTask.FromResult<SubordinateStatementContribution?>(null);
-        };
+            candidateIntegration.ResolveSubordinateStatementAsync = (_, _, _, _) =>
+            {
+                delegateInvoked = true;
+
+                return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -288,7 +337,7 @@ internal sealed class FederationFetchEndpointTests
     }
 
 
-    private static VerifierKeyMaterial RegisterAnchor(
+    private static async Task<VerifierKeyMaterial> RegisterAnchorAsync(
         TestHostShell app,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys)
     {
@@ -297,12 +346,12 @@ internal sealed class FederationFetchEndpointTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement);
 
-        return app.RegisterFederationCapableClient(
+        return await app.RegisterFederationCapableClientAsync(
             clientId: AnchorEntityId,
             baseUri: new Uri(AnchorEntityId),
             federationEntityId: new Uri(AnchorEntityId),
             federationSigningKeyPair: anchorKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
     }
 
 

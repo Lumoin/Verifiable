@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Json;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
 
@@ -15,8 +14,8 @@ namespace Verifiable.Tests.Serialization;
 [TestClass]
 internal sealed class DcqlRequirednessTests
 {
-    private static JsonSerializerOptions Strict => new JsonSerializerOptions().ApplyVerifiableDefaults();
-    private static JsonSerializerOptions Lenient => new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+    private static JsonSerializerOptions Strict => new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared);
+    private static JsonSerializerOptions Lenient => new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
 
     private const string MetaAbsentWire =
         """{"credentials":[{"id":"pid","format":"dc+sd-jwt"}]}""";

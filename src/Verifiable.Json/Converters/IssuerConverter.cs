@@ -74,16 +74,16 @@ namespace Verifiable.Json.Converters
 
                     switch(propertyName)
                     {
-                        case "id":
+                        case string memberName when memberName == WellKnownCredentialMemberNames.Id:
                             id = reader.GetString();
                             break;
-                        case "name":
+                        case string memberName when memberName == WellKnownCredentialMemberNames.Name:
                             name = reader.GetString();
                             break;
-                        case "description":
+                        case string memberName when memberName == WellKnownCredentialMemberNames.Description:
                             description = reader.GetString();
                             break;
-                        case "image":
+                        case string memberName when memberName == WellKnownCredentialMemberNames.Image:
                             image = reader.GetString();
                             break;
                         default:
@@ -133,21 +133,21 @@ namespace Verifiable.Json.Converters
             else
             {
                 writer.WriteStartObject();
-                writer.WriteString("id", value.Id);
+                writer.WriteString(WellKnownCredentialMemberNames.Id, value.Id);
 
                 if(value.Name is not null)
                 {
-                    writer.WriteString("name", value.Name);
+                    writer.WriteString(WellKnownCredentialMemberNames.Name, value.Name);
                 }
 
                 if(value.Description is not null)
                 {
-                    writer.WriteString("description", value.Description);
+                    writer.WriteString(WellKnownCredentialMemberNames.Description, value.Description);
                 }
 
                 if(value.Image is not null)
                 {
-                    writer.WriteString("image", value.Image);
+                    writer.WriteString(WellKnownCredentialMemberNames.Image, value.Image);
                 }
 
                 writer.WriteEndObject();

@@ -25,7 +25,7 @@ namespace Verifiable.Tests.Fido2;
 /// entirely" and a fixed 4-byte credential ID; this file supplies the length axis itself, including
 /// both exact valid extremes (1 and 1023 bytes) that
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-attested-credential-data">section 6.5.1</see>'s
-/// wire-parse boundary (<see cref="AuthenticatorDataReader.ReadAttestedCredentialData"/>) never lets
+/// wire-parse boundary (<see cref="AuthenticatorDataReader"/>'s <c>ReadAttestedCredentialData</c> step) never lets
 /// through a real <c>authData</c> parse in the first place, since this rule is what a relying party
 /// that builds <see cref="RegistrationCeremonyInput"/> from a non-wire source (or a future format
 /// whose parser is laxer) would still depend on.

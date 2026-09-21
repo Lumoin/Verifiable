@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Verifiable.OAuth.Federation;
 
 /// <summary>
-/// Result of <see cref="MetadataPolicyApplicator.Apply"/> and its
+/// Result of <see cref="MetadataPolicyApplicator.Apply(System.Collections.Generic.IReadOnlyDictionary{string, object}, EntityTypeMetadataPolicy)"/> and its
 /// raw-dictionary overload. Either carries the effective metadata
 /// (success) or a structured failure reason (constraint violation,
 /// missing essential parameter, malformed operator value).

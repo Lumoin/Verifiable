@@ -250,4 +250,34 @@ internal sealed class DidCommInboundClassifyTests
 
         return Encoding.UTF8.GetBytes($"{{\"protected\":\"{protectedEncoded}\",\"ciphertext\":\"x\"}}");
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7516#section-4">RFC 7516 §4</see>: "Header Parameter
+    /// names ... MUST be unique." The protected header carries <c>enc</c> twice — the attacker's value
+    /// FIRST, the honest value LAST, built by hand rather than through this repository's serializers.
+    /// <see cref="DidCommEncryptedExtensions"/>'s protected-header peek refuses it before the alg/enc
+    /// split ever runs, so the envelope classifies <see cref="DidCommMessageClass.Unknown"/> rather than
+    /// resolving to either dispatch path on the first occurrence.
+    /// </summary>
+    [TestMethod]
+    public void EncryptedEnvelopeWithDuplicateEncInProtectedHeaderClassifiesAsUnknown()
+    {
+        byte[] envelope = EncryptedEnvelopeWithDuplicateEnc("ECDH-ES+A256KW");
+
+        Assert.AreEqual(
+            DidCommMessageClass.Unknown,
+            DidCommInbound.Classify(DidCommMediaTypes.Encrypted, envelope, TestSetup.Base64UrlDecoder, Pool));
+    }
+
+
+    //An encrypted envelope whose protected header repeats "enc": the attacker's value first, the honest
+    //value last.
+    private static byte[] EncryptedEnvelopeWithDuplicateEnc(string algorithm)
+    {
+        string header = $"{{\"alg\":\"{algorithm}\",\"enc\":\"A128GCM\",\"enc\":\"A256CBC-HS512\"}}";
+        string protectedEncoded = Base64Url.EncodeToString(Encoding.UTF8.GetBytes(header));
+
+        return Encoding.UTF8.GetBytes($"{{\"protected\":\"{protectedEncoded}\",\"ciphertext\":\"x\"}}");
+    }
 }

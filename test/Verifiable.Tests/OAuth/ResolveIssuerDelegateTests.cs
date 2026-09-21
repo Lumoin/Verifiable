@@ -26,8 +26,8 @@ namespace Verifiable.Tests.OAuth;
 /// </summary>
 /// <remarks>
 /// The access-token shape tests exercise the JWT factories
-/// (<see cref="JwtHeader.ForAccessToken"/> / <see cref="JwtPayload.ForAccessToken"/>)
-/// composed with <see cref="JwtSigningExtensions.SignAsync"/> directly rather than
+/// (<see cref="JwtHeaderExtensions.ForAccessToken"/> / <see cref="JwtPayloadExtensions.ForAccessToken(string, string, string, DateTimeOffset, DateTimeOffset, string?, IReadOnlyList{string}?, string?, IEnumerable{KeyValuePair{string, object}}?)"/>)
+/// composed with <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> directly rather than
 /// driving the full auth-code + PKCE + token-exchange flow. The wiring through
 /// <c>AuthCodeEndpoints</c> and the producer pipeline is trivial to read in the
 /// source; the behaviour worth asserting is that the signing primitive emits the
@@ -167,13 +167,11 @@ internal sealed class ResolveIssuerDelegateTests
     }
 
 
-    //RFC 9207 §2.3: "The issuer identifier included in the server's metadata
-    //value issuer MUST be identical to the iss parameter's value." Drives a custom
-    //AuthorizationServerIntegration.ResolveIssuerAsync through both the discovery endpoint
-    //and a live Authorize redirect and asserts the two emitted issuer values agree
-    //byte-for-byte — proving the redirect builder routes through the same resolution path
-    //as discovery rather than its own independent ClientRegistration?.IssuerUri fallback.
-
+    /// <summary>
+    /// The authorization redirect and metadata document emit the same resolved issuer string.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9207#section-2.3">RFC 9207 §2.3</see>:
+    /// "The issuer identifier included in the server's metadata value issuer MUST be identical to the iss parameter's value."
+    /// </summary>
     [TestMethod]
     public async Task CustomResolverProducesByteIdenticalIssuerOnMetadataAndRedirect()
     {
@@ -183,12 +181,15 @@ internal sealed class ResolveIssuerDelegateTests
         await using TestHostShell app = new(timeProvider);
         _ = app.SeedTestSubject(subject: "subject-r9207-004");
 
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
-            "client-r9207-004", new Uri("https://client.example.com"));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            "client-r9207-004", new Uri("https://client.example.com")).ConfigureAwait(false);
 
         Uri customIssuer = new("https://custom-resolver.example.com/tenant-x");
-        app.Server.OAuth().ResolveIssuerAsync = (_, _, _) =>
-            ValueTask.FromResult<Uri?>(customIssuer);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveIssuerAsync = (_, _, _) =>
+                ValueTask.FromResult<Uri?>(customIssuer);
+        }).ConfigureAwait(false);
 
         string segment = material.Registration.TenantId.Value;
 
@@ -205,6 +206,7 @@ internal sealed class ResolveIssuerDelegateTests
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = material.Registration.ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -258,10 +260,10 @@ internal sealed class ResolveIssuerDelegateTests
             "2026-04-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
 
         await using TestHostShell host = new(timeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             "client-r9207-002-real-wire",
             new Uri("https://client.example.com"),
-            profile: PolicyProfile.Haip10);
+            profile: PolicyProfile.Haip10).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -352,12 +354,12 @@ internal sealed class ResolveIssuerDelegateTests
             "2026-04-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
 
         await using TestHostShell app = new(timeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(
             "verifier-client",
             new Uri("https://verifier.example"),
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint)).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
 

@@ -28,6 +28,23 @@ namespace Verifiable.Core;
 /// protocol decision made for the tenant carries the tenant's identity explicitly.
 /// </para>
 /// <para>
+/// <strong>A tenant has two identifiers, and this is the internal one.</strong> Everything the
+/// library stores for a tenant — registrations, flow state, correlation keys, key inventories — hangs
+/// off <see cref="TenantId"/>, so it must stay stable for the tenant's whole life. The tenant's public
+/// face is <see cref="TenantHandle"/>: the value bound into its URLs and issuer identifier and shown
+/// on telemetry. Keeping the two apart is what lets an operator give a tenant a fresh public
+/// identifier — after a key compromise, a reorganisation, a move to a custom domain — without
+/// orphaning a single stored record, and what keeps the storage key off every wire and log line.
+/// </para>
+/// <para>
+/// <strong>The key never leaves the process through the library.</strong> It is passed to the
+/// application's own delegates and compared and stored, but no span tag, wire body, token claim,
+/// metadata document or delivered diagnostic carries it, and <see cref="ToString"/> and the debugger
+/// display below deliberately show nothing of <see cref="Value"/>, so a log template that formats a
+/// <see cref="TenantId"/> prints nothing correlatable. A site that genuinely needs the key reads
+/// <see cref="Value"/> explicitly.
+/// </para>
+/// <para>
 /// <strong>Relationship to <see cref="Verifiable.Cryptography.KeyId"/></strong>
 /// </para>
 /// <para>
@@ -37,7 +54,7 @@ namespace Verifiable.Core;
 /// usage contexts and rotation states.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("TenantId={Value}")]
+[DebuggerDisplay("TenantId Length={Value.Length}")]
 public readonly struct TenantId: IEquatable<TenantId>
 {
     /// <summary>
@@ -70,13 +87,24 @@ public readonly struct TenantId: IEquatable<TenantId>
     public override int GetHashCode() => Value.GetHashCode(StringComparison.Ordinal);
 
 
-    /// <inheritdoc />
-    public override string ToString() => Value;
+    /// <summary>
+    /// Returns a fixed, non-identifying representation. <see cref="Value"/> is the storage key and
+    /// never renders through this member; read <see cref="Value"/> explicitly at sites that need it.
+    /// </summary>
+    public override string ToString() => nameof(TenantId);
 
 
+    /// <summary>Compares two tenant identifiers for equality by their ordinal <see cref="Value"/>.</summary>
+    /// <param name="left">The first tenant identifier.</param>
+    /// <param name="right">The second tenant identifier.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> and <paramref name="right"/> carry the same value.</returns>
     public static bool operator ==(TenantId left, TenantId right) => left.Equals(right);
 
 
+    /// <summary>Compares two tenant identifiers for inequality by their ordinal <see cref="Value"/>.</summary>
+    /// <param name="left">The first tenant identifier.</param>
+    /// <param name="right">The second tenant identifier.</param>
+    /// <returns><see langword="true"/> when <paramref name="left"/> and <paramref name="right"/> carry different values.</returns>
     public static bool operator !=(TenantId left, TenantId right) => !(left == right);
 
 

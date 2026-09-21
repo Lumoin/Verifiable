@@ -60,6 +60,7 @@ public static class BouncyCastleEntropyFunctions
     /// <param name="byteLength">The number of random bytes to generate.</param>
     /// <param name="tag">Metadata identifying the purpose and entropy source.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
+    /// <param name="timeProvider">The clock the emitted <see cref="EntropyConsumedEvent"/> is stamped from.</param>
     /// <returns>
     /// The generated <see cref="Nonce"/> and an <see cref="EntropyConsumedEvent"/>.
     /// </returns>
@@ -106,6 +107,7 @@ public static class BouncyCastleEntropyFunctions
     /// <param name="byteLength">The number of random bytes to generate.</param>
     /// <param name="tag">Metadata identifying the purpose and entropy source.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
+    /// <param name="timeProvider">The clock the emitted <see cref="EntropyConsumedEvent"/> is stamped from.</param>
     /// <returns>
     /// The generated <see cref="Salt"/> and an <see cref="EntropyConsumedEvent"/>.
     /// </returns>

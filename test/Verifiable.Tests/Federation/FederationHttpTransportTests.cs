@@ -36,11 +36,17 @@ internal sealed class FederationHttpTransportTests
 
     /// <summary>Builds a single-hop transport that answers with a fixed status and body.</summary>
     private static OutboundTransportDelegate CannedTransport(int statusCode, string body) =>
+        CannedTransport(statusCode, body, HttpHeaderSet.Empty);
+
+
+    /// <summary>Builds a single-hop transport that answers with a fixed status, body, and response headers.</summary>
+    private static OutboundTransportDelegate CannedTransport(int statusCode, string body, HttpHeaderSet headers) =>
         (request, context, cancellationToken) =>
             ValueTask.FromResult(new OutboundResponse
             {
                 StatusCode = statusCode,
                 Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(body), Tag.Empty),
+                Headers = headers
             });
 
 
@@ -76,6 +82,12 @@ internal sealed class FederationHttpTransportTests
     }
 
 
+    /// <summary>
+    /// A non-2xx response surfaces as a null fetch — no statement, and so no
+    /// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/> to report either, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see> (there is no
+    /// document a cache could keep from a fetch that produced nothing).
+    /// </summary>
     [TestMethod]
     public async Task FetchReturnsNullOnNonSuccessStatus()
     {
@@ -96,5 +108,41 @@ internal sealed class FederationHttpTransportTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNull(result, "A non-2xx response must surface as a null fetch.");
+    }
+
+
+    /// <summary>
+    /// A fetched statement's response carrying <c>Cache-Control: max-age</c> reports that many seconds of
+    /// storable freshness on the result, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task FetchReportsMaxAgeAsStorableFreshness()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject =
+            FederationTestRing.CreateNode(new EntityIdentifier("https://leaf.example.com"));
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            subject, now, now.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        FetchEntityStatementDelegate fetch = FederationHttpTransport.BuildFetchEntityStatement(
+            CannedTransport(200, minted.CompactJws, HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.CacheControl, "max-age=180"))),
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared);
+
+        FetchedEntityStatement? result = await fetch(
+            subject.Identifier,
+            new Uri("https://leaf.example.com/federation_fetch"),
+            [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(result, "A 2xx response carrying a signed statement must parse.");
+        Assert.IsTrue(result.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(180), result.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
     }
 }

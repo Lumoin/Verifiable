@@ -63,8 +63,8 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Register the verifier so the AS signs its JAR with the leaf cert key.
-        using VerifierKeyMaterial verifierKeys = app.RegisterJarSigningClient(
-            scheme.ClientId, VerifierBaseUri, scheme.JarSigningKeyPair, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterJarSigningClientAsync(
+            scheme.ClientId, VerifierBaseUri, scheme.JarSigningKeyPair, Oid4VpCapabilities).ConfigureAwait(false);
 
         //Issue the SD-JWT PID the wallet will present, and register issuer trust.
         (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =

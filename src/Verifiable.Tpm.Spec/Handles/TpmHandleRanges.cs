@@ -15,7 +15,6 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
 /// (Part 2: Structures, section "Handles").
-
 /// </para>
 /// </remarks>
 public static class TpmHandleRanges

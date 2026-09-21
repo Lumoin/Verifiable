@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Siop.Server;
 
 /// <summary>
 /// Endpoint-role identifiers the SIOPv2 RP flow passes to
-/// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/> when it needs to embed an
+/// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/> when it needs to embed an
 /// absolute URL in a produced artifact. The SIOP parallel of
 /// <see cref="Verifiable.OAuth.Oid4Vp.Oid4VpEndpointKeys"/>.
 /// </summary>
@@ -22,7 +22,7 @@ public static class SiopVerifierEndpointKeys
     /// <see href="https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#section-9">SIOPv2 §9</see>.
     /// </summary>
     /// <remarks>
-    /// The application's <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/> delegate
+    /// The application's <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/> delegate
     /// composes the absolute URL using the deployment's routing scheme. The library places the
     /// per-flow request handle on <see cref="ExchangeContext"/> via
     /// <see cref="SiopVerifierExchangeContextExtensions.SetSiopRequestHandle"/> before invoking the

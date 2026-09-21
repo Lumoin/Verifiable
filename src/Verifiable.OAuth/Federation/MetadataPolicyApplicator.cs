@@ -81,7 +81,7 @@ public static class MetadataPolicyApplicator
                             $"Operator 'add' for '{locator}' targets a parameter whose declared value is not an array.");
                     }
                 }
-                HashSet<object> seen = new(combined);
+                HashSet<object> seen = [.. combined];
                 foreach(object item in addList)
                 {
                     if(seen.Add(item))
@@ -110,7 +110,7 @@ public static class MetadataPolicyApplicator
 
                 if(effective.TryGetValue(parameterName, out object? currentForOneOf))
                 {
-                    HashSet<object> oneOfSet = new(oneOfList);
+                    HashSet<object> oneOfSet = [.. oneOfList];
                     if(!oneOfSet.Contains(currentForOneOf))
                     {
                         return MetadataPolicyApplyResult.Failed(
@@ -138,7 +138,7 @@ public static class MetadataPolicyApplicator
                             $"Operator 'subset_of' for '{locator}' targets a parameter whose effective value is not an array.");
                     }
 
-                    HashSet<object> subsetOfSet = new(subsetOfList);
+                    HashSet<object> subsetOfSet = [.. subsetOfList];
                     List<object> intersection = [];
                     foreach(object item in currentList)
                     {
@@ -168,7 +168,7 @@ public static class MetadataPolicyApplicator
                             $"Operator 'superset_of' for '{locator}' targets a parameter whose effective value is not an array.");
                     }
 
-                    HashSet<object> currentSet = new(currentList);
+                    HashSet<object> currentSet = [.. currentList];
                     foreach(object item in supersetOfList)
                     {
                         if(!currentSet.Contains(item))

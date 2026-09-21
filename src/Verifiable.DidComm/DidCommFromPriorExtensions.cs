@@ -28,9 +28,9 @@ namespace Verifiable.DidComm;
 /// </para>
 /// <para>
 /// The JWT engine stays in <c>Verifiable.JCose</c> (<see cref="UnsignedJwt"/> +
-/// <see cref="JwtSigningExtensions.SignAsync"/> for mint, <see cref="JwsParsing.ParseCompact"/> for
+/// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> for mint, <see cref="JwsParsing.ParseCompact"/> for
 /// verify); this project orchestrates the rotation semantics and receives the (de)serialization as
-/// injected named delegates, keeping it free of <see cref="System.Text.Json"/>.
+/// injected named delegates, keeping it free of <c>System.Text.Json</c>.
 /// </para>
 /// </remarks>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -101,7 +101,17 @@ public static class DidCommFromPriorExtensions
     /// <paramref name="priorSigningKey"/>'s <see cref="SensitiveData.Tag"/>.
     /// </summary>
     /// <inheritdoc cref="PackFromPriorAsync(DidCommMessage, string, string, PrivateKeyMemory, DateTimeOffset, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// <param name="message">The rotation message. Its <c>from</c> is the new DID (and the JWT <c>sub</c>), or absent for rotate-to-nothing.</param>
+    /// <param name="priorDid">The prior DID — the JWT <c>iss</c>.</param>
+    /// <param name="priorKid">The signing key id — a DID URL with a fragment whose base DID equals <paramref name="priorDid"/>.</param>
+    /// <param name="priorSigningKey">The prior DID's authentication signing key. Its tag selects the JWS <c>alg</c>.</param>
+    /// <param name="rotationTimestamp">The datetime of the DID rotation. Becomes the JWT <c>iat</c>.</param>
+    /// <param name="headerSerializer">Serializer for the JWT protected header.</param>
+    /// <param name="payloadSerializer">Serializer for the JWT payload.</param>
+    /// <param name="base64UrlEncoder">Base64Url encoder.</param>
     /// <param name="signingDelegate">The signing function to use.</param>
+    /// <param name="memoryPool">Memory pool for the signing-input and signature buffers.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask PackFromPriorAsync(
         this DidCommMessage message,
         string priorDid,
@@ -247,10 +257,11 @@ public static class DidCommFromPriorExtensions
         {
             UnverifiedJwsSignature jwsSignature = parsed.Signatures[0];
 
-            //typ MUST be "JWT" (DIDComm v2.1 §DID Rotation JWT header).
+            //typ MUST be "JWT" (DIDComm v2.1 §DID Rotation JWT header), compared as the RFC 7515
+            //§4.1.9 media type it is (case insensitive, implicit "application/" prefix).
             if(!(jwsSignature.ProtectedHeader.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typValue)
                 && typValue is string typ
-                && string.Equals(typ, WellKnownJwkValues.TypeJwt, StringComparison.Ordinal)))
+                && WellKnownJwkValues.IsTypeJwt(typ)))
             {
                 return FromPriorVerificationOutcome.Failed(DidCommRotationError.RotationJwtMalformed);
             }

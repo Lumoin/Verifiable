@@ -58,6 +58,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="outputByteLength">The expected digest length in bytes.</param>
         /// <param name="tag">Metadata identifying the algorithm and purpose.</param>
         /// <param name="pool">The memory pool to allocate from.</param>
+        /// <param name="timeProvider">The time source for the <see cref="DigestComputedEvent"/> timestamp.</param>
         /// <returns>
         /// The computed <see cref="DigestValue"/> and a <see cref="DigestComputedEvent"/>.
         /// </returns>
@@ -134,6 +135,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="outputByteLength">The requested digest length in bytes (32 for BLAKE3-256).</param>
         /// <param name="tag">Metadata identifying the algorithm and purpose.</param>
         /// <param name="pool">The memory pool the digest is rented from.</param>
+        /// <param name="timeProvider">The time source for the <see cref="DigestComputedEvent"/> timestamp.</param>
         /// <param name="context">Unused provenance context, accepted for delegate-shape compatibility.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>The computed <see cref="DigestValue"/> and a <see cref="DigestComputedEvent"/>.</returns>
@@ -210,7 +212,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The 32-byte Ed25519 private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the 64-byte signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Ed25519Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEd25519Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -251,7 +255,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The 64-byte Ed25519 signature to verify.</param>
         /// <param name="publicKeyMaterial">The 32-byte Ed25519 public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyEd25519Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -282,7 +288,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The 32-byte P-256 private key scalar.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the 64-byte signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.P256Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -297,7 +305,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The 64-byte IEEE P1363 signature to verify.</param>
         /// <param name="publicKeyMaterial">The compressed or uncompressed P-256 public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyP256Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -311,7 +321,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The 48-byte P-384 private key scalar.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the 96-byte signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.P384Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -326,7 +338,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The 96-byte IEEE P1363 signature to verify.</param>
         /// <param name="publicKeyMaterial">The compressed or uncompressed P-384 public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyP384Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -340,7 +354,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The 66-byte P-521 private key scalar.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the 132-byte signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.P521Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -355,7 +371,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The 132-byte IEEE P1363 signature to verify.</param>
         /// <param name="publicKeyMaterial">The compressed or uncompressed P-521 public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyP521Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -478,7 +496,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The 32-byte secp256k1 private key scalar.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the 64-byte signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Secp256k1Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -493,7 +513,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The 64-byte IEEE P1363 signature to verify.</param>
         /// <param name="publicKeyMaterial">The compressed or uncompressed secp256k1 public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifySecp256k1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -545,7 +567,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA 2048 private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Rsa2048Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -560,7 +584,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA 2048 public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsa2048Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -574,7 +600,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA 4096 private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Rsa4096Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -589,7 +617,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA 4096 public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsa4096Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -603,7 +633,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha256Pkcs1Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -618,7 +650,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaSha256Pkcs1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -632,7 +666,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha256PssSignature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -647,7 +683,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaSha256PssAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -661,7 +699,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha384Pkcs1Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -676,7 +716,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaSha384Pkcs1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -690,7 +732,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha384PssSignature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -705,7 +749,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaSha384PssAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -719,7 +765,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha512Pkcs1Signature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -734,7 +782,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaSha512Pkcs1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -748,7 +798,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="privateKeyBytes">The DER-encoded RSA private key.</param>
         /// <param name="dataToSign">The data to sign.</param>
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha512PssSignature"/>.</returns>
         public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -763,7 +815,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
         /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaSha512PssAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
@@ -906,6 +960,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="curveName">The SEC curve name (e.g., "secp256r1", "secp256k1").</param>
         /// <param name="signatureTag">The tag identifying the signature algorithm.</param>
         /// <param name="componentSize">The byte length of each signature component (r and s).</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <returns>A pool-allocated signature in IEEE P1363 encoding.</returns>
         private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEcdsaAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, string curveName, Tag signatureTag, int componentSize, TimeProvider timeProvider)
         {
@@ -962,8 +1017,10 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The IEEE P1363-encoded signature (r || s).</param>
         /// <param name="publicKeyMaterial">The SEC1-encoded public key (compressed or uncompressed).</param>
+        /// <param name="algorithm">The <see cref="CryptoAlgorithm"/> stamped on the resulting <see cref="VerificationCompletedEvent"/>.</param>
         /// <param name="curveName">The SEC curve name (e.g., "secp256r1", "secp256k1").</param>
         /// <param name="componentSize">The byte length of each signature component (r and s).</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyEcdsaAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, CryptoAlgorithm algorithm, string curveName, int componentSize, TimeProvider timeProvider)
         {
@@ -1014,6 +1071,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
         /// <param name="digest">The hash digest to use (e.g., SHA-256, SHA-384, SHA-512).</param>
         /// <param name="signatureTag">The tag identifying the signature algorithm.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <returns>A pool-allocated RSA PKCS#1 v1.5 signature.</returns>
         private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaPkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, IDigest digest, Tag signatureTag, TimeProvider timeProvider)
         {
@@ -1049,7 +1107,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA PKCS#1 v1.5 signature to verify.</param>
         /// <param name="publicKeyMaterial">The encoded RSA public key.</param>
+        /// <param name="algorithm">The <see cref="CryptoAlgorithm"/> stamped on the resulting <see cref="VerificationCompletedEvent"/>.</param>
         /// <param name="digest">The hash digest to use (e.g., SHA-256, SHA-384, SHA-512).</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaPkcs1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, CryptoAlgorithm algorithm, IDigest digest, TimeProvider timeProvider)
         {
@@ -1084,6 +1144,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
         /// <param name="digest">The hash digest to use (e.g., SHA-256, SHA-384, SHA-512).</param>
         /// <param name="signatureTag">The tag identifying the signature algorithm.</param>
+        /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <returns>A pool-allocated RSA-PSS signature.</returns>
         private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaPssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, IDigest digest, Tag signatureTag, TimeProvider timeProvider)
         {
@@ -1120,7 +1181,9 @@ namespace Verifiable.BouncyCastle
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA-PSS signature to verify.</param>
         /// <param name="publicKeyMaterial">The encoded RSA public key.</param>
+        /// <param name="algorithm">The <see cref="CryptoAlgorithm"/> stamped on the resulting <see cref="VerificationCompletedEvent"/>.</param>
         /// <param name="digest">The hash digest to use (e.g., SHA-256, SHA-384, SHA-512).</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaPssAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, CryptoAlgorithm algorithm, IDigest digest, TimeProvider timeProvider)
         {

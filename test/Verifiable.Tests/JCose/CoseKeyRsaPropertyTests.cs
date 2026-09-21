@@ -1,6 +1,7 @@
 using CsCheck;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.JCose;
 
@@ -36,6 +37,6 @@ internal sealed class CoseKeyRsaPropertyTests
             {
                 _ = Assert.ThrowsExactly<ArgumentException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

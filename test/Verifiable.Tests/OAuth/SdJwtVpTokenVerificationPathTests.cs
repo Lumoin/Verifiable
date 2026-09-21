@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Text;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
+using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
@@ -549,8 +550,8 @@ internal sealed class SdJwtVpTokenVerificationPathTests
     public async Task FullPresentationFlowSurfacesTheNestedPathOnly()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> holderKeys =
             TestKeyMaterialProvider.CreateEd25519KeyMaterial();
@@ -674,12 +675,15 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
                 s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
-            resolveIssuerKey: _ => issuerPublicKey,
+            resolveIssuerKey: (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(issuerPublicKey),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             decoder: TestSetup.Base64UrlDecoder,
             encoder: TestSetup.Base64UrlEncoder,
             pool: Pool,
             saltReuseSeam: null,
+            parseX5c: null,
+            resolveTrustedAuthorityEvidence: null,
+            context: new ExchangeContext(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
@@ -739,8 +743,8 @@ internal sealed class SdJwtVpTokenVerificationPathTests
     public async Task FullPresentationFlowRefusesACredentialDeclaringNoType()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> holderKeys =
             TestKeyMaterialProvider.CreateEd25519KeyMaterial();
@@ -1362,14 +1366,16 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
                 s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
-            resolveIssuerKey: _ => issuerPublicKey,
+            resolveIssuerKey: (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(issuerPublicKey),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             decoder: TestSetup.Base64UrlDecoder,
             encoder: TestSetup.Base64UrlEncoder,
             pool: Pool,
             saltReuseSeam: null,
-            cancellationToken: cancellationToken,
-            resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence).ConfigureAwait(false);
+            parseX5c: null,
+            resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence,
+            context: new ExchangeContext(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -1390,12 +1396,15 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
                 s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
-            resolveIssuerKey: static _ => null,
+            resolveIssuerKey: static (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             decoder: TestSetup.Base64UrlDecoder,
             encoder: TestSetup.Base64UrlEncoder,
             pool: Pool,
             saltReuseSeam: null,
+            parseX5c: null,
+            resolveTrustedAuthorityEvidence: null,
+            context: new ExchangeContext(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 

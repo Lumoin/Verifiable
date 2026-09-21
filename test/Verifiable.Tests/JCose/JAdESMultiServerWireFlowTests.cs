@@ -36,7 +36,7 @@ namespace Verifiable.Tests.JCose;
 /// <para>
 /// <strong>Object-lifetime discipline.</strong> Every step a signer performs runs inside its own nested block
 /// scope, copying ONLY the serialized wire bytes into an independent <c>byte[]</c> that crosses to the next
-/// step — the verifying party's final level-aware <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PublicKeyMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, JAdESCanonicalizeUnsignedElementDelegate, BaseMemoryPool, CancellationToken)"/>
+/// step — the verifying party's final level-aware <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PublicKeyMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, JAdESCanonicalizeUnsignedElementDelegate, BaseMemoryPool, TryDecodeJAdESCounterSignatureDelegate?, ResolveJAdESCounterSignaturePublicKeyDelegate?, CancellationToken)"/>
 /// call is handed only a plain <c>byte[]</c> reconstructed from the augmented signature's own wire bytes plus
 /// the verifying party's own, independently-known public key — never a creation-side model, message, or
 /// decoded fact.
@@ -60,7 +60,7 @@ internal sealed class JAdESMultiServerWireFlowTests
     /// Mints a JAdES B-B signature, raises it to B-T with a real <c>TimeStampReq</c>/<c>TimeStampResp</c> round
     /// trip to Host A, to B-LT with an <c>anyValData</c> element, then to B-LTA with a SECOND real round trip to
     /// an INDEPENDENT Host B — a verifying party reconstructed from the resulting wire bytes alone then runs the
-    /// level-aware <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PublicKeyMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, JAdESCanonicalizeUnsignedElementDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// level-aware <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PublicKeyMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, AdESBaselineLevel, JAdESCanonicalizeUnsignedElementDelegate, BaseMemoryPool, TryDecodeJAdESCounterSignatureDelegate?, ResolveJAdESCounterSignaturePublicKeyDelegate?, CancellationToken)"/>
     /// at <see cref="AdESBaselineLevel.BLTA"/> and reaches a valid result — proof the JWS signature value, the
     /// <c>sigTst</c> token's message-imprint binding, and the <c>arcTst</c> token's own prefix-bound
     /// message-imprint binding are ALL independently re-verified from wire bytes alone, the <c>sigTst</c>/
@@ -366,7 +366,7 @@ internal sealed class JAdESMultiServerWireFlowTests
 
     /// <summary>
     /// Bridges a <see cref="BinaryHttpHost"/> to a <see cref="FetchTimestampResponseAsyncDelegate"/>-shaped
-    /// responder: wraps the received request octets as a <see cref="TimestampRequest"/>-tagged carrier, calls
+    /// responder: wraps the received request octets as a <see cref="PkiCertificateTags.TimestampRequest"/>-tagged carrier, calls
     /// the responder, and returns its answer as the <c>application/timestamp-reply</c> body. Mirrors
     /// <c>CBAdESMultiServerWireFlowTests.BinaryTsaHostAdapter</c> exactly (transport is format-agnostic).
     /// </summary>

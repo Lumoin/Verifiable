@@ -94,7 +94,7 @@ public static class CompositeClientIdSigningKeyResolver
     /// <remarks>
     /// The trust-anchor public key the attestation is verified against is read
     /// per-call from the threaded
-    /// <see cref="Oid4VpExchangeContextExtensions.VerifierAttestationTrustAnchorKey"/>
+    /// <see cref="Oid4VpExchangeContextExtensions.extension(ExchangeContext).VerifierAttestationTrustAnchorKey"/>
     /// rather than captured, so one handler serves every tenant. The application
     /// owns the key's lifetime; this handler does not dispose it.
     /// </remarks>
@@ -166,9 +166,9 @@ public static class CompositeClientIdSigningKeyResolver
     /// </summary>
     /// <remarks>
     /// The federation trust anchors are read per-call from the threaded
-    /// <see cref="Oid4VpExchangeContextExtensions.OpenIdFederationTrustAnchors"/>
+    /// <see cref="Oid4VpExchangeContextExtensions.extension(ExchangeContext).OpenIdFederationTrustAnchors"/>
     /// and the trust-chain validity instant from
-    /// <see cref="ExchangeContextExtensions.ValidationTime"/>, rather than
+    /// <see cref="ExchangeContextExtensions.extension(ExchangeContext).ValidationTime"/>, rather than
     /// captured, so one handler serves every tenant. The clock-skew tolerance
     /// and the chain-validation algorithm are deployment-stable and stay
     /// captured.
@@ -248,9 +248,9 @@ public static class CompositeClientIdSigningKeyResolver
     /// </summary>
     /// <remarks>
     /// The X.509 trust anchors are read per-call from the threaded
-    /// <see cref="Oid4VpExchangeContextExtensions.X509TrustAnchors"/> and the
+    /// <see cref="Oid4VpExchangeContextExtensions.extension(ExchangeContext).X509TrustAnchors"/> and the
     /// chain-validity instant from
-    /// <see cref="ExchangeContextExtensions.ValidationTime"/>, rather than
+    /// <see cref="ExchangeContextExtensions.extension(ExchangeContext).ValidationTime"/>, rather than
     /// captured, so one handler serves every tenant. The x5c-parse,
     /// chain-validation, and DNS-SAN algorithms are deployment-stable platform
     /// functions and stay captured.
@@ -311,9 +311,9 @@ public static class CompositeClientIdSigningKeyResolver
     /// <para>
     /// Mirrors <see cref="BuildX509SanDnsHandler"/>: the X.509 trust anchors are read
     /// per-call from the threaded
-    /// <see cref="Oid4VpExchangeContextExtensions.X509TrustAnchors"/> and the
+    /// <see cref="Oid4VpExchangeContextExtensions.extension(ExchangeContext).X509TrustAnchors"/> and the
     /// chain-validity instant from
-    /// <see cref="ExchangeContextExtensions.ValidationTime"/>, rather than captured,
+    /// <see cref="ExchangeContextExtensions.extension(ExchangeContext).ValidationTime"/>, rather than captured,
     /// so one handler serves every tenant.
     /// </para>
     /// <para>

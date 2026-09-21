@@ -75,6 +75,12 @@ namespace Verifiable.Server;
 /// perform after entering this state before the next input can be constructed.
 /// States that wait for an external actor return <see cref="NullAction.Instance"/>.
 /// </para>
+/// <para>
+/// A flow may span requests admitted under different wiring. A drain quiesces requests, not retained
+/// flows. The host migrates or forwards stored state and preserves compatible keys and correlation
+/// indexes before replacing storage. Replaced resources may be retired after the drained swap when
+/// that migration or forwarding arrangement permits it.
+/// </para>
 /// </remarks>
 [DebuggerDisplay("{GetType().Name,nq} FlowId={FlowId}")]
 public abstract record FlowState
@@ -85,6 +91,7 @@ public abstract record FlowState
     /// </summary>
     public required string FlowId { get; init; }
 
+
     /// <summary>
     /// The issuer identifier of the authorization server this flow targets.
     /// Set at initiation and immutable. Required for mix-up attack defense per
@@ -92,19 +99,23 @@ public abstract record FlowState
     /// </summary>
     public required string ExpectedIssuer { get; init; }
 
+
     /// <summary>The UTC instant at which this state was entered.</summary>
     public required DateTimeOffset EnteredAt { get; init; }
+
 
     /// <summary>
     /// The UTC instant after which this state must be rejected.
     /// </summary>
     public required DateTimeOffset ExpiresAt { get; init; }
 
+
     /// <summary>
     /// The flow kind that owns this state. Identifies which transition function
     /// and action executor to use when rehydrating the flow from persistent storage.
     /// </summary>
     public required FlowKind Kind { get; init; }
+
 
     /// <summary>
     /// The effectful action the dispatch loop must execute after entering this state.

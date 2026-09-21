@@ -26,7 +26,7 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// The <see cref="TenantId"/> is the opaque identifier the application uses to
 /// distinguish tenants. The library has no opinion on what it means at the wire
-/// layer — the application's <see cref="AuthorizationServerIntegration.ExtractTenantIdAsync"/>
+/// layer — the application's <see cref="Verifiable.Server.ServerIntegration.ExtractTenantIdAsync"/>
 /// delegate decides whether tenants are identified by URL path segment, subdomain,
 /// Host header, mTLS certificate subject, or any combination of these. The same
 /// <see cref="TenantId"/> value flows through every storage delegate, scoping
@@ -63,7 +63,7 @@ namespace Verifiable.OAuth.Server;
 /// through <see cref="AuthorizationServerCryptography.SigningKeyResolver"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ClientRecord ClientId={ClientId} TenantId={TenantId}")]
+[DebuggerDisplay("ClientRecord ClientId={ClientId} TenantHandle={TenantHandle}")]
 public sealed record ClientRecord: IRegistrationRecord
 {
     /// <summary>
@@ -72,6 +72,22 @@ public sealed record ClientRecord: IRegistrationRecord
     /// <see cref="IRegistrationRecord"/> seam.
     /// </summary>
     IReadOnlySet<CapabilityIdentifier> IRegistrationRecord.AllowedCapabilities => AllowedCapabilities;
+
+    /// <summary>
+    /// The per-registration storage revision, beginning at one and increasing on each replacement.
+    /// Registration updates compare the loaded revision before committing the next value so
+    /// concurrent RFC 7592 §2.2 requests cannot silently overwrite an accepted update.
+    /// </summary>
+    public long Revision { get; init; } = 1;
+
+
+    /// <summary>The complete accepted dynamic registration metadata, with copied immutable collections, for RFC 7592 section 3 responses.</summary>
+    public ClientMetadata? RegisteredMetadata { get; init; }
+
+
+    /// <summary>The absolute client configuration URI resolved before initial persistence and retained across management responses.</summary>
+    public Uri? RegistrationClientUri { get; init; }
+
 
     /// <summary>
     /// The client identifier. May be an opaque string, a CIMD URL, or a DID.
@@ -85,6 +101,18 @@ public sealed record ClientRecord: IRegistrationRecord
     /// per-tenant lookups and writes.
     /// </summary>
     public required TenantId TenantId { get; init; }
+
+    /// <summary>
+    /// The tenant's public identifier — the one bound into its URLs and issuer identifier and the only
+    /// tenant-shaped value the host writes to a span or delivers in an event — as distinct from
+    /// <see cref="TenantId"/>, the internal key the stores hang off. The two exist so a tenant's public
+    /// name can change without orphaning its records and so the key never leaves the process; see
+    /// <see cref="Verifiable.Core.TenantHandle"/>. Set at registration time, exactly as
+    /// <see cref="TenantId"/> is; the library never derives it. <see langword="null"/> when the
+    /// application assigned none, in which case the host emits no tenant-shaped tag for this
+    /// registration's requests rather than falling back to the key.
+    /// </summary>
+    public TenantHandle? TenantHandle { get; init; }
 
     /// <summary>
     /// The capabilities this client is allowed to use.
@@ -199,8 +227,8 @@ public sealed record ClientRecord: IRegistrationRecord
     /// it at registration time.
     /// </summary>
     /// <remarks>
-    /// Read by <see cref="DefaultIssuerResolver"/> when
-    /// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/> is not set.
+    /// Read by <see cref="Verifiable.OAuth.Server.Pipeline.DefaultIssuerResolver"/> when
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/> is not set.
     /// Applications supplying their own resolver may ignore this field.
     /// </remarks>
     public Uri? IssuerUri { get; init; }

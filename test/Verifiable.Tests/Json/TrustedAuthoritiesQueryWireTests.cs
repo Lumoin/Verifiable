@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Json;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Json;
 
@@ -35,7 +34,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void EachRegisteredTypeExampleEntryRoundTrips(string type, string value)
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         string json = $$"""{"type":"{{type}}","values":["{{value}}"]}""";
 
         TrustedAuthoritiesQuery read = JsonSerializerExtensions.Deserialize<TrustedAuthoritiesQuery>(json, options)!;
@@ -76,7 +75,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void AnEntryWithoutValuesIsRefused()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         const string json = """{"type":"aki"}""";
 
         _ = Assert.ThrowsExactly<JsonException>(
@@ -94,7 +93,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void AnEntryWithAnEmptyValuesArrayIsRefused()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         const string json = """{"type":"aki","values":[]}""";
 
         _ = Assert.ThrowsExactly<JsonException>(
@@ -111,7 +110,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void AnEntryWhoseValuesElementIsNotAStringIsRefused()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         const string json = """{"type":"aki","values":["a",1]}""";
 
         _ = Assert.ThrowsExactly<JsonException>(
@@ -128,7 +127,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void AnEntryWhoseTypeIsNotAStringIsRefused()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         const string json = """{"type":5,"values":["a"]}""";
 
         _ = Assert.ThrowsExactly<JsonException>(
@@ -146,7 +145,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void AnEntryThatIsNotAnObjectIsRefused()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         const string json = "\"aki\"";
 
         _ = Assert.ThrowsExactly<JsonException>(
@@ -164,7 +163,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void AnEmptyTrustedAuthoritiesArrayOnACredentialQueryIsRefused()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         const string json = """{"id":"c","format":"mso_mdoc","trusted_authorities":[]}""";
 
         _ = Assert.ThrowsExactly<JsonException>(
@@ -182,7 +181,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
     [TestMethod]
     public void ACredentialQueryWithoutTrustedAuthoritiesReadsWithNull()
     {
-        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(BaseMemoryPool.Shared, requireDcqlMeta: false);
         const string json = """{"id":"c","format":"mso_mdoc"}""";
 
         CredentialQuery read = JsonSerializerExtensions.Deserialize<CredentialQuery>(json, options)!;

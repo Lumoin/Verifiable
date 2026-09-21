@@ -50,7 +50,7 @@ namespace Verifiable.Cryptography;
 /// <para>
 /// <strong>The digest recomputation trusts the registry.</strong> <see cref="TryBindByCertificateDigestAsync"/> recomputes its digest
 /// through the ambient <c>ComputeDigestDelegate</c> registry
-/// (<see cref="CryptographicKeyEvents.ComputeDigestAsync"/>). Re-registering that delegate at process startup
+/// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(System.Buffers.ReadOnlySequence{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>). Re-registering that delegate at process startup
 /// would defeat this gate — but it would equally defeat every digest computation in the library, so this is a
 /// trusted-startup property of the crypto registry, not a hole specific to this kernel.
 /// </para>

@@ -35,7 +35,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 ///       disclosures, plus the disclosures themselves. The holder receives both the JWT and
 ///       all disclosures. Unlike BBS-2023, SD-JWT uses hash-based redaction rather than a
 ///       single multi-message signature with proof derivation.
-///       See <see cref="Verifiable.JCose.Sd.SdJwtToken"/>.
+///       See <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdToken{TEnvelope}"/>.
 ///     </description>
 ///   </item>
 ///   <item>

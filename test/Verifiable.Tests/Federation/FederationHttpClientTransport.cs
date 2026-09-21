@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Federation;
 /// transport-agnostic library discipline: the
 /// <c>Verifiable.OAuth.Federation</c> library defines delegate signatures
 /// only; concrete <see cref="HttpClient"/> wiring is application or test
-/// code. <see cref="HttpClientTransport"/> (under <c>OAuth/</c>) is the
+/// code. <see cref="Verifiable.Tests.OAuth.HttpClientTransport"/> (under <c>OAuth/</c>) is the
 /// precedent for the OAuth client surface; this is its federation peer.
 /// </summary>
 /// <remarks>
@@ -30,7 +30,7 @@ internal static class FederationHttpClientTransport
 {
     /// <summary>
     /// Builds a <see cref="FetchEntityStatementDelegate"/> that GETs the
-    /// entity statement JWS from <paramref name="fetchEndpoint"/> with the
+    /// entity statement JWS from the requested endpoint over <paramref name="httpClient"/> with the
     /// subject in the <c>sub</c> query parameter per §8.1.
     /// </summary>
     public static FetchEntityStatementDelegate BuildFetchEntityStatement(HttpClient httpClient)

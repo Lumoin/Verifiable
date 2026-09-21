@@ -23,8 +23,8 @@ public static class AuthorizationServerMetadataValidation
     /// <remarks>
     /// This is the §3.3 issuer-match check only. <c>jwks_uri</c> reachability — the other half
     /// of an onboarding inspector's readiness verdict — is a separate runtime/SSRF-policy
-    /// concern handled by the application's
-    /// <see cref="ResolveAuthorizationServerJwksDelegate"/>, not a pure string comparison.
+    /// concern handled by the application's own JWKS-resolving fetch delegate, not a pure
+    /// string comparison.
     /// </remarks>
     /// <param name="metadata">The fetched and parsed metadata.</param>
     /// <param name="expectedIssuerIdentifier">

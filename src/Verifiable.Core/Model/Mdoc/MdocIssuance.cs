@@ -10,7 +10,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <remarks>
 /// <para>
 /// Mirrors the params-in / result-out shape of
-/// <see cref="Verifiable.Core.SelectiveDisclosure.SdIssuance.IssueAsync"/>:
+/// <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdIssuance.IssueAsync"/>:
 /// no stateful builder, no fields to wire up, no encoder coupling. The
 /// caller decides up-front what claims to commit and binds the salt
 /// delegate to its entropy backend; this function generates the random
@@ -23,7 +23,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// build-scaffold shape: items have no <c>WireBytes</c>, and there is no
 /// <c>IssuerAuth</c>. ISO/IEC 18013-5 does not model an unsigned mdoc on
 /// the wire; the logical type exists purely as the transient between this
-/// function and <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/>.
+/// function and <c>MdocCborIssuance.SignAsync</c>.
 /// </para>
 /// <para>
 /// Wire-shape extension points the SD-* pipelines reach for —
@@ -64,7 +64,7 @@ public static class MdocIssuance
     /// <returns>
     /// The assembled logical document. The caller owns the returned
     /// document and must dispose it if signing fails; on successful
-    /// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance.SignAsync"/>,
+    /// <c>MdocCborIssuance.SignAsync</c>,
     /// salt ownership transfers to the signed document and the logical
     /// document must not be disposed.
     /// </returns>

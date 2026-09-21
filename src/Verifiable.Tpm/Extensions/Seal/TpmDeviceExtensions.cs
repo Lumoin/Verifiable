@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -37,7 +38,7 @@ namespace Verifiable.Tpm.Extensions.Seal;
 /// AEAD delegates contract; a TPM refusal rides the returned <see cref="TpmResult{T}"/> as for every other verb.
 /// </para>
 /// <para>
-/// <b>Parent constraint.</b> <paramref name="parentHandle"/> (all three verbs) must be a loaded, restricted
+/// <b>Parent constraint.</b> <c>parentHandle</c> (all three verbs) must be a loaded, restricted
 /// storage key (<c>TPMA_OBJECT.restricted</c> and <c>decrypt</c> set) — the same constraint
 /// <see cref="Tpm2bPublic.CreateEccStorageParentTemplate"/> satisfies and the seal flow tests build with
 /// <c>CreatePrimaryInput.ForEccStorageParent</c>. A non-storage parent (for example a signing key) is rejected
@@ -164,6 +165,144 @@ public static class TpmDeviceExtensions
         }
 
         /// <summary>
+        /// Seals <paramref name="data"/> into a new object whose authorization policy is a single
+        /// <c>TPM2_PolicySecret</c> assertion pointing at the PIN Fail Index <paramref name="pinIndexHandle"/> —
+        /// the specification's own composition for a per-secret guess budget (TPM 2.0 Library Part 1, clause
+        /// 34.2.7: "The nominal use of a PIN Index is to reference the Index in an entity's policy in
+        /// TPM2_PolicySecret()"; clause 34.2.8.2: "A key or object has localized Dictionary Attack protection if
+        /// its policy has a TPM2_PolicySecret() assertion pointing to an PIN Fail NV Index").
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The sealed object carries a POLICY, not an authValue: <see cref="SealAsync"/>'s <c>sealAuth</c> is
+        /// forced empty here, so there is nothing for the TPM's global dictionary-attack counter to fail
+        /// against on this object — only the Index's own <c>pinCount</c> can move, and only when a later
+        /// <see cref="UnsealUnderPinAsync"/>/<see cref="UnsealUnderPinWithPasswordAsync"/> call runs
+        /// <c>TPM2_PolicySecret</c> against it. This is the opposite of <c>TPM2_PolicyNV</c>: that command
+        /// compares the Index's stored bytes and never moves <c>pinCount</c> itself (Part 3, clause 23.9); only
+        /// an authValue-authorized access to the Index — which <c>TPM2_PolicySecret</c> against a PIN Fail Index
+        /// always is — does (Part 1, clause 34.2.6.6).
+        /// </para>
+        /// <para>
+        /// Computing the digest needs only <paramref name="pinIndexName"/> (the fold is
+        /// <c>H(H(zeros || TPM_CC_PolicySecret || pinIndexName) || emptyPolicyRef)</c>, TPM 2.0 Library Part 3,
+        /// clause 23.4); <paramref name="pinIndexHandle"/> is carried for symmetry with
+        /// <see cref="UnsealUnderPinAsync"/>, which does need the live handle to run the command against.
+        /// </para>
+        /// </remarks>
+        /// <param name="parentHandle">The loaded storage-parent handle (see the type's parent-constraint remarks).</param>
+        /// <param name="parentAuth">The parent's authorization value, or empty when the parent has no auth set.</param>
+        /// <param name="data">The secret to seal — at most <see cref="Tpm2bSensitiveData.MaxSize"/> octets; a wider secret takes <see cref="SealEnvelopeUnderPinAsync"/>.</param>
+        /// <param name="pinIndexHandle">The PIN Fail NV Index the sealed object's policy will reference.</param>
+        /// <param name="pinIndexName">The Index's current Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>, from <c>NV_ReadPublic</c>) — what the policy digest actually binds to.</param>
+        /// <param name="noDa">Whether the sealed object is exempt from the TPM's global dictionary-attack lockout counter; defaults to <see langword="false"/> exactly as <see cref="SealAsync"/>'s does — the object carries no authValue to brute-force, but a caller with a specific reason may still choose otherwise.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result containing the sealed blob to persist, or an error.</returns>
+        public ValueTask<TpmResult<TpmSealedBlob>> SealUnderPinAsync(
+            uint parentHandle,
+            ReadOnlyMemory<byte> parentAuth,
+            ReadOnlyMemory<byte> data,
+            uint pinIndexHandle,
+            ReadOnlyMemory<byte> pinIndexName,
+            bool noDa = false,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            _ = pinIndexHandle;
+
+            return SealUnderPinCoreAsync(device, parentHandle, parentAuth, data, pinIndexName, noDa, cancellationToken);
+        }
+
+        /// <summary>
+        /// Recovers the secret sealed by <see cref="SealUnderPinAsync"/>: proves <paramref name="candidatePin"/>
+        /// against <paramref name="pinIndexHandle"/> by running <c>TPM2_PolicySecret</c> on a fresh policy
+        /// session, then hands that session to <see cref="UnsealUnderPolicyAsync"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The <c>TPM2_PolicySecret</c> leg's own USER-role authorization of <paramref name="pinIndexHandle"/>
+        /// runs over an UNBOUND HMAC session with <paramref name="candidatePin"/> set as its authValue term — the
+        /// secure default, mirroring <c>PolicySecretAsync</c>'s own bound-HMAC convention except for the bind:
+        /// TPM 2.0 Library Part 1, clause 34.2.8.3 states plainly, "If a PIN Pass or PIN Fail Index is referenced
+        /// as a bind entity, the TPM must return TPM_RC_HANDLE. Otherwise, the sequence in which the TPM
+        /// processes authorizations would enable a hammering attack on the Index" — so this session is never
+        /// bound to <paramref name="pinIndexHandle"/>, the same shape <c>VerifyPinAsync</c>'s own default arm
+        /// composes. Use <see cref="UnsealUnderPinWithPasswordAsync"/> for the plaintext opt-out.
+        /// </para>
+        /// <para>
+        /// <b>What a wrong PIN does.</b> A wrong <paramref name="candidatePin"/> fails the HMAC, and
+        /// <c>TPM2_PolicySecret</c> answers with the simulator's own refusal for that leg; the policy session
+        /// never reaches a state <see cref="UnsealUnderPolicyAsync"/> would accept, so this method returns that
+        /// failure directly. Per Part 3, clause 23.4 ("If the authorization check fails, then the normal
+        /// dictionary attack logic is invoked. If authEntity references a NV PIN Fail index, a failing
+        /// authorization check increments pinCount") and Part 1, clause 34.2.8.2, <paramref name="pinIndexHandle"/>'s
+        /// own <c>pinCount</c> is incremented; the TPM's GLOBAL dictionary-attack counter is untouched, because
+        /// <c>TPMA_NV_NO_DA</c> is mandated on every PIN Fail Index this library defines (Part 2, clause 13.4) and
+        /// the sealed object itself carries no authValue for that counter to fail against (see
+        /// <see cref="SealUnderPinAsync"/>'s own remarks). A correct PIN below <c>pinLimit</c> resets
+        /// <paramref name="pinIndexHandle"/>'s <c>pinCount</c> to zero (Part 1, clause 34.2.8.2).
+        /// </para>
+        /// <para>
+        /// The policy session this method starts is always flushed, on every path — success, a failed
+        /// <c>TPM2_PolicySecret</c>, or a failed <c>TPM2_StartAuthSession</c> — exactly as <see cref="UnsealAsync"/>
+        /// always flushes its loaded transient object.
+        /// </para>
+        /// </remarks>
+        /// <param name="parentHandle">The loaded storage-parent handle that wrapped <paramref name="sealedBlob"/>.</param>
+        /// <param name="parentAuth">The parent's authorization value, or empty when the parent has no auth set.</param>
+        /// <param name="sealedBlob">The sealed blob a prior <see cref="SealUnderPinAsync"/> call produced.</param>
+        /// <param name="pinIndexHandle">The PIN Fail NV Index <paramref name="sealedBlob"/>'s policy references.</param>
+        /// <param name="candidatePin">The candidate PIN to prove as <paramref name="pinIndexHandle"/>'s authValue.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result containing the Unseal response (dispose it to release the recovered secret), or the failing command's error.</returns>
+        public ValueTask<TpmResult<UnsealResponse>> UnsealUnderPinAsync(
+            uint parentHandle,
+            ReadOnlyMemory<byte> parentAuth,
+            TpmSealedBlob sealedBlob,
+            uint pinIndexHandle,
+            ReadOnlyMemory<byte> candidatePin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            ArgumentNullException.ThrowIfNull(sealedBlob);
+
+            return UnsealUnderPinCoreAsync(device, parentHandle, parentAuth, sealedBlob, pinIndexHandle, candidatePin, usePassword: false, cancellationToken);
+        }
+
+        /// <summary>
+        /// The explicit low-protection opt-out for <see cref="UnsealUnderPinAsync"/>: proves
+        /// <paramref name="candidatePin"/> over a plaintext <c>TPM2_PolicySecret</c> password authorization rather
+        /// than a bound HMAC session.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="candidatePin"/> is sent in the clear on the <c>TPM2_PolicySecret</c> leg, with no
+        /// cpHash/rpHash HMAC integrity at all. Fine for a trusted bus and for diagnostics; wrong for anything
+        /// security-sensitive, where <see cref="UnsealUnderPinAsync"/>'s bound HMAC default is the right choice.
+        /// The <c>pinCount</c>/global-counter effects are identical either way — the channel choice affects only
+        /// how <paramref name="candidatePin"/> travels, never what it proves.
+        /// </remarks>
+        /// <param name="parentHandle">The loaded storage-parent handle that wrapped <paramref name="sealedBlob"/>.</param>
+        /// <param name="parentAuth">The parent's authorization value, or empty when the parent has no auth set.</param>
+        /// <param name="sealedBlob">The sealed blob a prior <see cref="SealUnderPinAsync"/> call produced.</param>
+        /// <param name="pinIndexHandle">The PIN Fail NV Index <paramref name="sealedBlob"/>'s policy references.</param>
+        /// <param name="candidatePin">The candidate PIN to prove as <paramref name="pinIndexHandle"/>'s authValue.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result containing the Unseal response (dispose it to release the recovered secret), or the failing command's error.</returns>
+        public ValueTask<TpmResult<UnsealResponse>> UnsealUnderPinWithPasswordAsync(
+            uint parentHandle,
+            ReadOnlyMemory<byte> parentAuth,
+            TpmSealedBlob sealedBlob,
+            uint pinIndexHandle,
+            ReadOnlyMemory<byte> candidatePin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            ArgumentNullException.ThrowIfNull(sealedBlob);
+
+            return UnsealUnderPinCoreAsync(device, parentHandle, parentAuth, sealedBlob, pinIndexHandle, candidatePin, usePassword: true, cancellationToken);
+        }
+
+        /// <summary>
         /// Seals <paramref name="data"/> of any width under the loaded storage parent at
         /// <paramref name="parentHandle"/> as an envelope: the TPM seals a fresh 256-bit content-encryption key
         /// (composing <see cref="SealAsync"/>), and the data rides under that key through
@@ -211,7 +350,7 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// Seals <paramref name="data"/> of any width as an envelope exactly as
-        /// <see cref="SealEnvelopeAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AeadEncryptDelegate, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
+        /// <see cref="SealEnvelopeAsync(TpmDevice, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AeadEncryptDelegate, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
         /// does, resolving the authenticated-encryption function from the registered key-agreement functions
         /// (<see cref="CryptoAlgorithm.Aes256"/> / <see cref="Purpose.Encryption"/>: AES-256-GCM).
         /// </summary>
@@ -267,7 +406,7 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// Recovers the data sealed in <paramref name="envelope"/> by password exactly as
-        /// <see cref="UnsealEnvelopeAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, ReadOnlyMemory{byte}, AeadDecryptDelegate, CancellationToken)"/>
+        /// <see cref="UnsealEnvelopeAsync(TpmDevice, uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, ReadOnlyMemory{byte}, AeadDecryptDelegate, CancellationToken)"/>
         /// does, resolving the authenticated-decryption function from the registered key-agreement functions
         /// (<see cref="CryptoAlgorithm.Aes256"/> / <see cref="Purpose.Encryption"/>: AES-256-GCM).
         /// </summary>
@@ -323,7 +462,7 @@ public static class TpmDeviceExtensions
         /// <summary>
         /// Recovers the data sealed in <paramref name="envelope"/> under an already-satisfied policy session
         /// exactly as
-        /// <see cref="UnsealEnvelopeUnderPolicyAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, uint, AeadDecryptDelegate, CancellationToken)"/>
+        /// <see cref="UnsealEnvelopeUnderPolicyAsync(TpmDevice, uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, uint, AeadDecryptDelegate, CancellationToken)"/>
         /// does, resolving the authenticated-decryption function from the registered key-agreement functions
         /// (<see cref="CryptoAlgorithm.Aes256"/> / <see cref="Purpose.Encryption"/>: AES-256-GCM).
         /// </summary>
@@ -344,6 +483,91 @@ public static class TpmDeviceExtensions
             ArgumentNullException.ThrowIfNull(device);
 
             return device.UnsealEnvelopeUnderPolicyAsync(parentHandle, parentAuth, envelope, policySession, ResolveEnvelopeDecrypt(), cancellationToken);
+        }
+
+        /// <summary>
+        /// Seals <paramref name="data"/> of any width as an envelope exactly as
+        /// <see cref="SealEnvelopeAsync(TpmDevice, uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
+        /// does, except the content key's policy is <see cref="SealUnderPinAsync"/>'s single
+        /// <c>TPM2_PolicySecret</c>-over-a-PIN-Fail-Index assertion — the same per-secret guess budget lifted to
+        /// a payload wider than <see cref="Tpm2bSensitiveData.MaxSize"/>.
+        /// </summary>
+        /// <param name="parentHandle">The loaded storage-parent handle (see the type's parent-constraint remarks).</param>
+        /// <param name="parentAuth">The parent's authorization value, or empty when the parent has no auth set.</param>
+        /// <param name="data">The secret to protect, of any width.</param>
+        /// <param name="pinIndexHandle">The PIN Fail NV Index the sealed content key's policy will reference; carried for symmetry with <see cref="UnsealEnvelopeUnderPinAsync"/> (see <see cref="SealUnderPinAsync"/>'s remarks).</param>
+        /// <param name="pinIndexName">The Index's current Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>, from <c>NV_ReadPublic</c>).</param>
+        /// <param name="noDa">Whether the sealed content key is exempt from the TPM's global dictionary-attack lockout counter; defaults to <see langword="false"/> exactly as <see cref="SealUnderPinAsync"/>'s does.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result containing the envelope to persist, or the TPM's refusal of the content key's seal.</returns>
+        public ValueTask<TpmResult<TpmSealedEnvelope>> SealEnvelopeUnderPinAsync(
+            uint parentHandle,
+            ReadOnlyMemory<byte> parentAuth,
+            ReadOnlyMemory<byte> data,
+            uint pinIndexHandle,
+            ReadOnlyMemory<byte> pinIndexName,
+            bool noDa = false,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            _ = pinIndexHandle;
+
+            return SealEnvelopeUnderPinCoreAsync(device, parentHandle, parentAuth, data, pinIndexName, ResolveEnvelopeEncrypt(), noDa, cancellationToken);
+        }
+
+        /// <summary>
+        /// Recovers the data sealed by <see cref="SealEnvelopeUnderPinAsync"/>: proves
+        /// <paramref name="candidatePin"/> against <paramref name="pinIndexHandle"/> exactly as
+        /// <see cref="UnsealUnderPinAsync"/> does, then opens the envelope under the recovered content key.
+        /// </summary>
+        /// <param name="parentHandle">The loaded storage-parent handle that wrapped the envelope's content key.</param>
+        /// <param name="parentAuth">The parent's authorization value, or empty when the parent has no auth set.</param>
+        /// <param name="envelope">The envelope a prior <see cref="SealEnvelopeUnderPinAsync"/> call produced.</param>
+        /// <param name="pinIndexHandle">The PIN Fail NV Index the envelope's content key policy references.</param>
+        /// <param name="candidatePin">The candidate PIN to prove as <paramref name="pinIndexHandle"/>'s authValue.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result containing the recovered data (dispose it to release the plaintext), or the failing command's error.</returns>
+        /// <exception cref="CryptographicException">The envelope's sealed object is not a 256-bit content key, or the ciphertext failed authentication under it.</exception>
+        public ValueTask<TpmResult<DecryptedContent>> UnsealEnvelopeUnderPinAsync(
+            uint parentHandle,
+            ReadOnlyMemory<byte> parentAuth,
+            TpmSealedEnvelope envelope,
+            uint pinIndexHandle,
+            ReadOnlyMemory<byte> candidatePin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            ArgumentNullException.ThrowIfNull(envelope);
+
+            return UnsealEnvelopeUnderPinCoreAsync(
+                device, parentHandle, parentAuth, envelope, pinIndexHandle, candidatePin, ResolveEnvelopeDecrypt(), usePassword: false, cancellationToken);
+        }
+
+        /// <summary>
+        /// The explicit low-protection opt-out for <see cref="UnsealEnvelopeUnderPinAsync"/>, mirroring
+        /// <see cref="UnsealUnderPinWithPasswordAsync"/>'s plaintext <c>TPM2_PolicySecret</c> password channel.
+        /// </summary>
+        /// <param name="parentHandle">The loaded storage-parent handle that wrapped the envelope's content key.</param>
+        /// <param name="parentAuth">The parent's authorization value, or empty when the parent has no auth set.</param>
+        /// <param name="envelope">The envelope a prior <see cref="SealEnvelopeUnderPinAsync"/> call produced.</param>
+        /// <param name="pinIndexHandle">The PIN Fail NV Index the envelope's content key policy references.</param>
+        /// <param name="candidatePin">The candidate PIN to prove as <paramref name="pinIndexHandle"/>'s authValue.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result containing the recovered data (dispose it to release the plaintext), or the failing command's error.</returns>
+        /// <exception cref="CryptographicException">The envelope's sealed object is not a 256-bit content key, or the ciphertext failed authentication under it.</exception>
+        public ValueTask<TpmResult<DecryptedContent>> UnsealEnvelopeUnderPinWithPasswordAsync(
+            uint parentHandle,
+            ReadOnlyMemory<byte> parentAuth,
+            TpmSealedEnvelope envelope,
+            uint pinIndexHandle,
+            ReadOnlyMemory<byte> candidatePin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            ArgumentNullException.ThrowIfNull(envelope);
+
+            return UnsealEnvelopeUnderPinCoreAsync(
+                device, parentHandle, parentAuth, envelope, pinIndexHandle, candidatePin, ResolveEnvelopeDecrypt(), usePassword: true, cancellationToken);
         }
     }
 
@@ -474,6 +698,341 @@ public static class TpmDeviceExtensions
     }
 
     /// <summary>
+    /// The seal half of <see cref="TpmDeviceExtensions.extension(TpmDevice).SealUnderPinAsync"/>: computes the
+    /// PIN Fail Index's single-assertion policy digest host-side, then seals through the plain
+    /// <see cref="SealCoreAsync"/> core with an empty <c>sealAuth</c>.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="parentHandle">The loaded storage-parent handle.</param>
+    /// <param name="parentAuth">The parent's authorization value.</param>
+    /// <param name="data">The secret to seal.</param>
+    /// <param name="pinIndexName">The PIN Fail Index's current Name.</param>
+    /// <param name="noDa">Whether the sealed object is exempt from dictionary-attack protection.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result containing the sealed blob, or an error.</returns>
+    private static ValueTask<TpmResult<TpmSealedBlob>> SealUnderPinCoreAsync(
+        TpmDevice device,
+        uint parentHandle,
+        ReadOnlyMemory<byte> parentAuth,
+        ReadOnlyMemory<byte> data,
+        ReadOnlyMemory<byte> pinIndexName,
+        bool noDa,
+        CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = device.Pool;
+        using IMemoryOwner<byte> digestOwner = ComputePinPolicyDigest(pinIndexName, pool, out int digestSize);
+
+        return SealCoreAsync(device, parentHandle, parentAuth, data, ReadOnlyMemory<byte>.Empty, digestOwner.Memory[..digestSize], noDa, cancellationToken);
+    }
+
+    /// <summary>
+    /// The seal half of <see cref="TpmDeviceExtensions.extension(TpmDevice).SealEnvelopeUnderPinAsync"/>: computes
+    /// the same policy digest <see cref="SealUnderPinCoreAsync"/> does, then seals the envelope's content key
+    /// through the plain <see cref="SealEnvelopeCoreAsync"/> core with an empty <c>sealAuth</c>.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="parentHandle">The loaded storage-parent handle.</param>
+    /// <param name="parentAuth">The parent's authorization value.</param>
+    /// <param name="data">The secret to protect, of any width.</param>
+    /// <param name="pinIndexName">The PIN Fail Index's current Name.</param>
+    /// <param name="aeadEncrypt">The authenticated-encryption function.</param>
+    /// <param name="noDa">Whether the sealed content key is exempt from dictionary-attack protection.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result containing the envelope, or the TPM's refusal of the content key's seal.</returns>
+    private static ValueTask<TpmResult<TpmSealedEnvelope>> SealEnvelopeUnderPinCoreAsync(
+        TpmDevice device,
+        uint parentHandle,
+        ReadOnlyMemory<byte> parentAuth,
+        ReadOnlyMemory<byte> data,
+        ReadOnlyMemory<byte> pinIndexName,
+        AeadEncryptDelegate aeadEncrypt,
+        bool noDa,
+        CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = device.Pool;
+        using IMemoryOwner<byte> digestOwner = ComputePinPolicyDigest(pinIndexName, pool, out int digestSize);
+
+        return SealEnvelopeCoreAsync(
+            device, parentHandle, parentAuth, data, ReadOnlyMemory<byte>.Empty, aeadEncrypt, digestOwner.Memory[..digestSize], noDa, cancellationToken);
+    }
+
+    /// <summary>
+    /// Predicts the policyDigest a single <c>TPM2_PolicySecret</c> assertion against a PIN Fail Index produces
+    /// on a fresh session — <c>H(H(zeros || TPM_CC_PolicySecret || pinIndexName) || emptyPolicyRef)</c> (TPM 2.0
+    /// Library Part 3, clause 23.4) — the digest <see cref="SealUnderPinCoreAsync"/>/
+    /// <see cref="SealEnvelopeUnderPinCoreAsync"/> set as the sealed object's <c>authPolicy</c>.
+    /// </summary>
+    /// <param name="pinIndexName">The PIN Fail Index's current Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>).</param>
+    /// <param name="pool">The memory pool the digest and its fold scratch buffers are rented from.</param>
+    /// <param name="digestSize">Receives the digest's size in octets.</param>
+    /// <returns>The pooled buffer holding the digest's first <paramref name="digestSize"/> octets; the caller disposes it.</returns>
+    private static IMemoryOwner<byte> ComputePinPolicyDigest(ReadOnlyMemory<byte> pinIndexName, BaseMemoryPool pool, out int digestSize)
+    {
+        digestSize = TpmPolicyDigest.Size(SealHashAlgorithm);
+        IMemoryOwner<byte> owner = pool.Rent(digestSize);
+        Span<byte> digest = owner.Memory.Span[..digestSize];
+        digest.Clear();
+        _ = TpmPolicyDigest.ExtendForSecret(digest, pinIndexName.Span, ReadOnlySpan<byte>.Empty, SealHashAlgorithm, digest, pool);
+
+        return owner;
+    }
+
+    /// <summary>
+    /// The unseal half of <see cref="TpmDeviceExtensions.extension(TpmDevice).UnsealUnderPinAsync"/> and
+    /// <see cref="TpmDeviceExtensions.extension(TpmDevice).UnsealUnderPinWithPasswordAsync"/>: authorizes the PIN
+    /// Fail policy session through <see cref="AuthorizePinPolicySessionAsync"/>, hands it to the plain
+    /// <see cref="UnsealUnderPolicyCoreAsync"/> core, and flushes the session on every path.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="parentHandle">The loaded storage-parent handle.</param>
+    /// <param name="parentAuth">The parent's authorization value.</param>
+    /// <param name="sealedBlob">The sealed blob to recover.</param>
+    /// <param name="pinIndexHandle">The PIN Fail Index the sealed blob's policy references.</param>
+    /// <param name="candidatePin">The candidate PIN to prove as the Index's authValue.</param>
+    /// <param name="usePassword"><see langword="true"/> to prove the candidate over a plaintext password session; <see langword="false"/> for the bound-HMAC default.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result containing the Unseal response, or the failing command's error.</returns>
+    private static async ValueTask<TpmResult<UnsealResponse>> UnsealUnderPinCoreAsync(
+        TpmDevice device,
+        uint parentHandle,
+        ReadOnlyMemory<byte> parentAuth,
+        TpmSealedBlob sealedBlob,
+        uint pinIndexHandle,
+        ReadOnlyMemory<byte> candidatePin,
+        bool usePassword,
+        CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = device.Pool;
+        TpmResult<uint> sessionResult = await AuthorizePinPolicySessionAsync(
+            device, pinIndexHandle, candidatePin, usePassword, cancellationToken).ConfigureAwait(false);
+
+        if(!sessionResult.IsSuccess)
+        {
+            return sessionResult.Map<UnsealResponse>(_ => null!);
+        }
+
+        uint policySessionHandle = sessionResult.Value;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
+
+        try
+        {
+            return await UnsealUnderPolicyCoreAsync(device, parentHandle, parentAuth, sealedBlob, policySessionHandle, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await FlushTransientHandleAsync(device, registry, policySessionHandle, pool, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The unseal half of <see cref="TpmDeviceExtensions.extension(TpmDevice).UnsealEnvelopeUnderPinAsync"/> and
+    /// <see cref="TpmDeviceExtensions.extension(TpmDevice).UnsealEnvelopeUnderPinWithPasswordAsync"/>: the same
+    /// composition <see cref="UnsealUnderPinCoreAsync"/> runs, against the plain
+    /// <see cref="UnsealEnvelopeUnderPolicyCoreAsync"/> core.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="parentHandle">The loaded storage-parent handle.</param>
+    /// <param name="parentAuth">The parent's authorization value.</param>
+    /// <param name="envelope">The envelope to open.</param>
+    /// <param name="pinIndexHandle">The PIN Fail Index the envelope's content key policy references.</param>
+    /// <param name="candidatePin">The candidate PIN to prove as the Index's authValue.</param>
+    /// <param name="aeadDecrypt">The authenticated-decryption function.</param>
+    /// <param name="usePassword"><see langword="true"/> to prove the candidate over a plaintext password session; <see langword="false"/> for the bound-HMAC default.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result containing the recovered data, or the failing command's error.</returns>
+    private static async ValueTask<TpmResult<DecryptedContent>> UnsealEnvelopeUnderPinCoreAsync(
+        TpmDevice device,
+        uint parentHandle,
+        ReadOnlyMemory<byte> parentAuth,
+        TpmSealedEnvelope envelope,
+        uint pinIndexHandle,
+        ReadOnlyMemory<byte> candidatePin,
+        AeadDecryptDelegate aeadDecrypt,
+        bool usePassword,
+        CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = device.Pool;
+        TpmResult<uint> sessionResult = await AuthorizePinPolicySessionAsync(
+            device, pinIndexHandle, candidatePin, usePassword, cancellationToken).ConfigureAwait(false);
+
+        if(!sessionResult.IsSuccess)
+        {
+            return sessionResult.Map<DecryptedContent>(_ => null!);
+        }
+
+        uint policySessionHandle = sessionResult.Value;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
+
+        try
+        {
+            return await UnsealEnvelopeUnderPolicyCoreAsync(
+                device, parentHandle, parentAuth, envelope, policySessionHandle, aeadDecrypt, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await FlushTransientHandleAsync(device, registry, policySessionHandle, pool, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Starts a fresh policy session and runs <c>TPM2_PolicySecret</c> against <paramref name="pinIndexHandle"/>
+    /// with <paramref name="candidatePin"/> as that leg's authValue — the shared composition behind
+    /// <see cref="UnsealUnderPinCoreAsync"/> and <see cref="UnsealEnvelopeUnderPinCoreAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// On a failed <c>TPM2_PolicySecret</c> (a wrong <paramref name="candidatePin"/>), the started policy
+    /// session is flushed before returning the failure — it never reaches a state a caller could use. On
+    /// success, the policy session is left open; the caller owns and flushes it.
+    /// </remarks>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="pinIndexHandle">The PIN Fail Index to authorize against.</param>
+    /// <param name="candidatePin">The candidate PIN to prove as the Index's authValue.</param>
+    /// <param name="usePassword"><see langword="true"/> to prove the candidate over a plaintext password session; <see langword="false"/> for the bound-HMAC default.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result containing the authorized policy session's handle, or the failing command's error.</returns>
+    private static async ValueTask<TpmResult<uint>> AuthorizePinPolicySessionAsync(
+        TpmDevice device,
+        uint pinIndexHandle,
+        ReadOnlyMemory<byte> candidatePin,
+        bool usePassword,
+        CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = device.Pool;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_ReadPublic, TpmResponseCodec.NvReadPublic);
+        _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicySecret, TpmResponseCodec.PolicySecret);
+        _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
+
+        StartAuthSessionInput policyStartInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SealHashAlgorithm, device.Rng, pool);
+        TpmResult<StartAuthSessionResponse> policyStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
+            device, policyStartInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+
+        if(!policyStartResult.IsSuccess)
+        {
+            return policyStartResult.Map<uint>(_ => 0u);
+        }
+
+        using StartAuthSessionResponse policyStarted = policyStartResult.Value;
+        uint policySessionHandle = policyStarted.SessionHandle.Value;
+
+        TpmResult<PolicySecretResponse> secretResult = usePassword
+            ? await RunPolicySecretWithPasswordAsync(device, pool, registry, pinIndexHandle, policySessionHandle, candidatePin, cancellationToken).ConfigureAwait(false)
+            : await RunPolicySecretOverHmacAsync(device, pool, registry, pinIndexHandle, policySessionHandle, candidatePin, cancellationToken).ConfigureAwait(false);
+
+        if(!secretResult.IsSuccess)
+        {
+            await FlushTransientHandleAsync(device, registry, policySessionHandle, pool, cancellationToken).ConfigureAwait(false);
+
+            return secretResult.Map<uint>(_ => 0u);
+        }
+
+        secretResult.Value.Dispose();
+
+        return TpmResult<uint>.Success(policySessionHandle);
+    }
+
+    /// <summary>
+    /// Runs <c>TPM2_PolicySecret</c> against <paramref name="pinIndexHandle"/> over an UNBOUND HMAC session with
+    /// <paramref name="candidatePin"/> set as its authValue term afterward — never bound to the Index itself,
+    /// since TPM 2.0 Library Part 1, clause 34.2.8.3 requires the TPM to refuse that with <c>TPM_RC_HANDLE</c>
+    /// ("If a PIN Pass or PIN Fail Index is referenced as a bind entity, the TPM must return TPM_RC_HANDLE").
+    /// The composed authorizing session is always flushed, mirroring <c>VerifyPinAsync</c>'s own default arm.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="registry">The response codec registry, already carrying the commands this composes.</param>
+    /// <param name="pinIndexHandle">The PIN Fail Index to authorize against.</param>
+    /// <param name="policySessionHandle">The policy session <c>TPM2_PolicySecret</c> extends.</param>
+    /// <param name="candidatePin">The candidate PIN to prove as the Index's authValue.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result containing the PolicySecret response (dispose it), or an error.</returns>
+    private static async ValueTask<TpmResult<PolicySecretResponse>> RunPolicySecretOverHmacAsync(
+        TpmDevice device,
+        BaseMemoryPool pool,
+        TpmResponseRegistry registry,
+        uint pinIndexHandle,
+        uint policySessionHandle,
+        ReadOnlyMemory<byte> candidatePin,
+        CancellationToken cancellationToken)
+    {
+        //PolicySecret's cpHash is computed over authEntity's Name (Part 1, clause 15.7, equation 15), which an
+        //HMAC session always needs; an NV Index's Name is nameAlg || H(TPMS_NV_PUBLIC), not a fixed 4-octet
+        //handle value the executor could derive on its own, so it is read fresh via NV_ReadPublic - the same
+        //shape VerifyPinAsync's own default arm resolves its Index's Name with.
+        TpmResult<NvReadPublicResponse> nameResult = await device.NvReadPublicAsync(pinIndexHandle, cancellationToken).ConfigureAwait(false);
+        if(!nameResult.IsSuccess)
+        {
+            return nameResult.Map<PolicySecretResponse>(_ => null!);
+        }
+
+        ReadOnlyMemory<byte> pinIndexName;
+        using(NvReadPublicResponse namePublic = nameResult.Value)
+        {
+            pinIndexName = namePublic.NvName.Span.ToArray();
+        }
+
+        StartAuthSessionInput authStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SealHashAlgorithm, device.Rng, pool);
+        TpmResult<StartAuthSessionResponse> authStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
+            device, authStartInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+
+        if(!authStartResult.IsSuccess)
+        {
+            return authStartResult.Map<PolicySecretResponse>(_ => null!);
+        }
+
+        StartAuthSessionResponse authStarted = authStartResult.Value;
+        uint authSessionHandle = authStarted.SessionHandle.Value;
+
+        try
+        {
+            using TpmSession authSession = new(new TpmHandle(authSessionHandle), authStarted.NonceTPM, SealHashAlgorithm, device.Rng, pool);
+            authSession.SetAuthValue(candidatePin.Span, pool);
+
+            using PolicySecretInput secretInput = PolicySecretInput.CreateImmediate(pinIndexHandle, policySessionHandle, pool);
+            ReadOnlyMemory<byte>[] handleNames = [pinIndexName, ReadOnlyMemory<byte>.Empty];
+
+            return await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
+                device, secretInput, [authSession], handleNames, pool, registry, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await FlushTransientHandleAsync(device, registry, authSessionHandle, pool, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The explicit low-protection opt-out for <see cref="RunPolicySecretOverHmacAsync"/>: runs
+    /// <c>TPM2_PolicySecret</c> against <paramref name="pinIndexHandle"/> over a plaintext password session
+    /// whose authValue is <paramref name="candidatePin"/>.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="registry">The response codec registry, already carrying <c>TPM_CC_PolicySecret</c>.</param>
+    /// <param name="pinIndexHandle">The PIN Fail Index to authorize against.</param>
+    /// <param name="policySessionHandle">The policy session <c>TPM2_PolicySecret</c> extends.</param>
+    /// <param name="candidatePin">The candidate PIN to prove as the Index's authValue.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result containing the PolicySecret response (dispose it), or an error.</returns>
+    private static async ValueTask<TpmResult<PolicySecretResponse>> RunPolicySecretWithPasswordAsync(
+        TpmDevice device,
+        BaseMemoryPool pool,
+        TpmResponseRegistry registry,
+        uint pinIndexHandle,
+        uint policySessionHandle,
+        ReadOnlyMemory<byte> candidatePin,
+        CancellationToken cancellationToken)
+    {
+        using TpmPasswordSession authSession = TpmPasswordSession.Create(candidatePin.Span, pool);
+        using PolicySecretInput secretInput = PolicySecretInput.CreateImmediate(pinIndexHandle, policySessionHandle, pool);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
+            device, secretInput, [authSession], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// The seal half of the envelope composition: draws the content key, seals it through
     /// <see cref="SealCoreAsync"/>, and encrypts the data under it with the serialized sealed key as the
     /// additional authenticated data.
@@ -588,6 +1147,7 @@ public static class TpmDeviceExtensions
     /// <param name="envelope">The envelope to open.</param>
     /// <param name="unsealResult">The unseal of the envelope's content key.</param>
     /// <param name="aeadDecrypt">The authenticated-decryption function.</param>
+    /// <param name="pool">The memory pool the recovered content key and plaintext are carried in.</param>
     /// <param name="cancellationToken">A token observed across the decryption.</param>
     /// <returns>A result containing the recovered data, or the unseal's own refusal.</returns>
     /// <exception cref="CryptographicException">The unsealed object is not a 256-bit content key, or the ciphertext failed authentication.</exception>

@@ -9,6 +9,7 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
@@ -22,9 +23,8 @@ namespace Verifiable.Tests.Fido2;
 /// Shared test-vector builders for the WebAuthn L3 attestation-verification tests: mints an
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-packed-attestation-cert-requirements">section 8.2.1</see>
 /// conformant attestation certificate chain, assembles <see cref="AttestationVerificationRequest"/> instances
-/// from parsed-view members, and signs the <c>authenticatorData || clientDataHash</c> transcript with an
-/// independent oracle (raw <see cref="ECDsa"/>, never the library's own signing seam) so the verifier under
-/// test is exercised against genuinely external wire material.
+/// from parsed-view members, and signs the <c>authenticatorData || clientDataHash</c> transcript through the
+/// registered signing seams, minting each algorithm-matrix fixture's wire-shaped signature.
 /// </summary>
 internal static class Fido2AttestationTestVectors
 {
@@ -339,7 +339,7 @@ internal static class Fido2AttestationTestVectors
     /// <summary>
     /// Mints an RSA-keyed leaf attestation certificate — the certified RS256 packed-attestation matrix
     /// fixture, where the leaf key family must match the statement's <c>alg</c>. Mirrors
-    /// <see cref="CreateLeafAttestationCertificate(X509Certificate2, ECDsa, bool, string?, Guid?, string?, string?, string?, bool, DateTimeOffset?, DateTimeOffset?)"/>
+    /// <see cref="CreateLeafAttestationCertificate(X509Certificate2, ECDsa, bool, string?, Guid?, string?, string?, string?, bool, DateTimeOffset?, DateTimeOffset?, IReadOnlyList{X509Extension}?)"/>
     /// exactly, save for the RSA key and PKCS#1 v1.5/SHA-256 signature algorithm.
     /// </summary>
     /// <param name="issuerCertificate">The issuing CA certificate (private key attached, e.g. from <see cref="CreateSelfSignedCa"/>).</param>
@@ -588,7 +588,7 @@ internal static class Fido2AttestationTestVectors
     /// </param>
     /// <param name="rawBytes">The raw <c>authData</c> bytes, an independent buffer with the same content as what the returned view was built from.</param>
     /// <returns>
-    /// The parsed view. Its <see cref="Fido2.AuthenticatorData.RpIdHash"/> and, when present, attested
+    /// The parsed view. Its <see cref="AuthenticatorData.RpIdHash"/> and, when present, attested
     /// credential data are owned pooled carriers; the caller owns and disposes the returned instance.
     /// </returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -648,10 +648,8 @@ internal static class Fido2AttestationTestVectors
 
 
     /// <summary>
-    /// Signs <paramref name="toBeSigned"/> with a raw <see cref="ECDsa"/> P-256 key — the independent oracle that
-    /// mints attestation statements without going through the library's own signing seam, so the verifier under
-    /// test is exercised against genuinely external wire material. Uses the ASN.1 DER <c>Ecdsa-Sig-Value</c>
-    /// encoding
+    /// Signs <paramref name="toBeSigned"/> through the registered P-256 <see cref="SigningDelegate"/>, then
+    /// re-encodes the fixed-width IEEE P1363 result as the ASN.1 DER <c>Ecdsa-Sig-Value</c> encoding
     /// (<see href="https://datatracker.ietf.org/doc/html/rfc3279#section-2.2.3">RFC 3279 section 2.2.3</see>),
     /// the wire format
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-signature-attestation-types">WebAuthn L3 section
@@ -661,12 +659,21 @@ internal static class Fido2AttestationTestVectors
     /// <param name="key">The P-256 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
     /// <returns>The ASN.1 DER-encoded <c>Ecdsa-Sig-Value</c> ECDSA/SHA-256 signature bytes.</returns>
-    internal static byte[] SignWithEcdsaP256(ECDsa key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithEcdsaP256(ECDsa key, byte[] toBeSigned)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        return key.SignData(toBeSigned, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
+        byte[] exportedPrivateKey = key.ExportParameters(true).D!;
+        using IMemoryOwner<byte> privateKeyOwner = BaseMemoryPool.Shared.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
+        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+        using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
+
+        return derOwner.Memory.Span[..derLength].ToArray();
     }
 
 
@@ -677,12 +684,21 @@ internal static class Fido2AttestationTestVectors
     /// <param name="key">The P-384 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
     /// <returns>The ASN.1 DER-encoded <c>Ecdsa-Sig-Value</c> ECDSA/SHA-384 signature bytes.</returns>
-    internal static byte[] SignWithEcdsaP384(ECDsa key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithEcdsaP384(ECDsa key, byte[] toBeSigned)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        return key.SignData(toBeSigned, HashAlgorithmName.SHA384, DSASignatureFormat.Rfc3279DerSequence);
+        byte[] exportedPrivateKey = key.ExportParameters(true).D!;
+        using IMemoryOwner<byte> privateKeyOwner = BaseMemoryPool.Shared.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P384, Purpose.Signing);
+        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+        using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
+
+        return derOwner.Memory.Span[..derLength].ToArray();
     }
 
 
@@ -693,29 +709,46 @@ internal static class Fido2AttestationTestVectors
     /// <param name="key">The P-521 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
     /// <returns>The ASN.1 DER-encoded <c>Ecdsa-Sig-Value</c> ECDSA/SHA-512 signature bytes.</returns>
-    internal static byte[] SignWithEcdsaP521(ECDsa key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithEcdsaP521(ECDsa key, byte[] toBeSigned)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        return key.SignData(toBeSigned, HashAlgorithmName.SHA512, DSASignatureFormat.Rfc3279DerSequence);
+        byte[] exportedPrivateKey = key.ExportParameters(true).D!;
+        using IMemoryOwner<byte> privateKeyOwner = BaseMemoryPool.Shared.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P521, Purpose.Signing);
+        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+        using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
+
+        return derOwner.Memory.Span[..derLength].ToArray();
     }
 
 
     /// <summary>
-    /// Signs <paramref name="toBeSigned"/> with a raw <see cref="RSA"/> key using PKCS#1 v1.5/SHA-256 —
-    /// the independent oracle for the RS256 packed-attestation algorithm-matrix fixture. Section
+    /// Signs <paramref name="toBeSigned"/> through the registered RSASSA-PKCS1-v1.5/SHA-256
+    /// <see cref="SigningDelegate"/> — the RS256 packed-attestation algorithm-matrix fixture. Section
     /// 6.5.5 leaves RSA signatures "not ASN.1 wrapped", so the raw signature is returned unchanged.
     /// </summary>
     /// <param name="key">The RSA private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
     /// <returns>The raw RSASSA-PKCS1-v1_5/SHA-256 signature bytes.</returns>
-    internal static byte[] SignWithRsaPkcs1Sha256(RSA key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithRsaPkcs1Sha256(RSA key, byte[] toBeSigned)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        return key.SignData(toBeSigned, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        byte[] exportedPrivateKey = key.ExportRSAPrivateKey();
+        using IMemoryOwner<byte> privateKeyOwner = BaseMemoryPool.Shared.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
+        using Signature signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+
+        return signature.AsReadOnlySpan().ToArray();
     }
 
 

@@ -275,6 +275,9 @@ public static class CBAdESSignatureSerialization
                 case CoseHeaderTextLabel textLabel:
                     writer.WriteTextString(textLabel.Value);
                     break;
+
+                default:
+                    break;
             }
 
             writer.WriteEncodedValue(Value.Span);
@@ -284,18 +287,15 @@ public static class CBAdESSignatureSerialization
 
         return EncodedCoseProtectedHeader.FromBytes(buffer.WrittenSpan, pool);
 
-        /// <summary>
-        /// Compares <paramref name="left"/> and <paramref name="right"/> under the RFC 8949 §4.2.3 canonical
-        /// map-key ordering (length-first, then bytewise-lexicographic) over each label's OWN canonical CBOR
-        /// encoding — the general <c>label: int / tstr</c> union's ordering, not merely the
-        /// integer-only ordering <see cref="CborReaderExtensions.ReadAscendingMapKey"/> implements. The .NET
-        /// <see cref="CborConformanceMode.RfcCanonical"/> writer re-sorts the map's entries itself at
-        /// <see cref="CborWriter.WriteEndMap"/>, so this explicit sort is documentation-of-intent, not the sole
-        /// mechanism producing canonical wire order.
-        /// </summary>
-        /// <param name="left">The first label to compare.</param>
-        /// <param name="right">The second label to compare.</param>
-        /// <returns>A negative value, zero, or a positive value per the usual <see cref="IComparer{T}"/> contract.</returns>
+        //Compares left and right under the RFC 8949 §4.2.3 canonical
+        //map-key ordering (length-first, then bytewise-lexicographic) over each label's OWN canonical CBOR
+        //encoding -- the general label: int / tstr union's ordering, not merely the
+        //integer-only ordering CborReaderExtensions.ReadAscendingMapKey implements. The .NET
+        //CborConformanceMode.RfcCanonical writer re-sorts the map's entries itself at
+        //CborWriter.WriteEndMap, so this explicit sort is documentation-of-intent, not the sole
+        //mechanism producing canonical wire order.
+        //left: the first label to compare. right: the second label to compare.
+        //Returns a negative value, zero, or a positive value per the usual IComparer{T} contract.
         static int CompareByCanonicalLabelEncoding(CoseHeaderLabel left, CoseHeaderLabel right)
         {
             byte[] leftEncoded = EncodeLabelCanonical(left);
@@ -316,6 +316,9 @@ public static class CBAdESSignatureSerialization
 
                     case CoseHeaderTextLabel textLabel:
                         labelWriter.WriteTextString(textLabel.Value);
+                        break;
+
+                    default:
                         break;
                 }
 
@@ -380,7 +383,7 @@ public static class CBAdESSignatureSerialization
     /// <c>bstr</c> framing and returns only the encapsulated <c>UHeaderInstance</c> map's own content bytes,
     /// untouched. That content is placed into the returned dictionary exactly as
     /// <see cref="EncodeCBAdESUnprotectedHeader"/>'s own output shape requires, so the SAME downstream
-    /// general-purpose writer (<see cref="CborValueConverter.WriteValue"/>) re-wraps it in a FRESH <c>bstr</c>
+    /// general-purpose writer (<see cref="CborValueConverter.WriteValue(Lumoin.Veritas.Cbor.CborWriter, object?)"/>) re-wraps it in a FRESH <c>bstr</c>
     /// at final serialize time — never a double-wrap, since neither delegate ever hands that writer an
     /// already-framed item. The freshly-written framing is byte-identical to the original: <see cref="ParseCBAdESSign1"/>
     /// reads the augmented signature's raw input under <see cref="CborConformanceMode.RfcCanonical"/>, so every
@@ -391,7 +394,7 @@ public static class CBAdESSignatureSerialization
     /// e.g. <see cref="CBAdESSerialization.WriteTDate"/>'s whole-second, forced-<c>Z</c> writer normalizing a
     /// sub-second or non-<c>Z</c>-offset wire <c>tdate</c>) — and this method never performs that re-encode for
     /// a retained element at all; it only ever freshly encodes the genuinely NEW element
-    /// <paramref name="newElement" />'s remarks below name.
+    /// <c>newElement</c>'s remarks below name.
     /// </para>
     /// <para>
     /// <strong>The count-parity guard below is defense-in-depth, not a reachable
@@ -799,29 +802,23 @@ public static class CBAdESSignatureSerialization
         }
 
 
-        /// <summary>
-        /// Reads the next protected-header map entry's key as a <see cref="CoseHeaderLabel"/> — the general COSE
-        /// <c>label: int / tstr</c> union (RFC 9052 §1.4) this outer map's own label space uses, unlike the
-        /// integer-only component internals <see cref="CborReaderExtensions.ReadAscendingMapKey"/> serves.
-        /// The key's own ENCODED bytes (<c>CborReader.ReadEncodedValue</c>) are read first and
-        /// compared against <paramref name="previousKeyBytes"/> under RFC 8949 §4.2.3's canonical (length-first,
-        /// then bytewise-lexicographic) ordering — the same comparison the write side and
-        /// <see cref="CborReaderExtensions.ReadAscendingMapKey"/> apply, just over already-encoded bytes rather
-        /// than a re-encoded <see langword="int"/> — which also rejects a duplicate key (identical encoded bytes
-        /// never sort strictly after themselves). A naive "every integer key before every text key" shortcut
-        /// would be WRONG here: a short text key can sort before a longer integer key (e.g. a 2-byte <c>tstr</c>
-        /// key sorts before the 3-byte encoding of integer label 268) — this reader never assumes an arm-based
-        /// ordering, only the byte-level one RFC 8949 actually defines.
-        /// </summary>
-        /// <param name="reader">The CBOR reader, positioned at the next map entry's key.</param>
-        /// <param name="previousKeyBytes">
-        /// The previously read key's encoded bytes, or <see langword="null"/> before the first entry. Updated to
-        /// the newly read key's encoded bytes on return.
-        /// </param>
-        /// <returns>The decoded label.</returns>
-        /// <exception cref="CborContentException">
-        /// The key does not sort strictly after <paramref name="previousKeyBytes"/> under canonical order.
-        /// </exception>
+        //Reads the next protected-header map entry's key as a CoseHeaderLabel -- the general COSE
+        //label: int / tstr union (RFC 9052 §1.4) this outer map's own label space uses, unlike the
+        //integer-only component internals CborReaderExtensions.ReadAscendingMapKey serves.
+        //The key's own ENCODED bytes (CborReader.ReadEncodedValue) are read first and
+        //compared against previousKeyBytes under RFC 8949 §4.2.3's canonical (length-first,
+        //then bytewise-lexicographic) ordering -- the same comparison the write side and
+        //CborReaderExtensions.ReadAscendingMapKey apply, just over already-encoded bytes rather
+        //than a re-encoded int -- which also rejects a duplicate key (identical encoded bytes
+        //never sort strictly after themselves). A naive "every integer key before every text key" shortcut
+        //would be WRONG here: a short text key can sort before a longer integer key (e.g. a 2-byte tstr
+        //key sorts before the 3-byte encoding of integer label 268) -- this reader never assumes an arm-based
+        //ordering, only the byte-level one RFC 8949 actually defines.
+        //reader: the CBOR reader, positioned at the next map entry's key.
+        //previousKeyBytes: the previously read key's encoded bytes, or null before the first entry. Updated to
+        //the newly read key's encoded bytes on return.
+        //Returns the decoded label.
+        //Throws CborContentException when the key does not sort strictly after previousKeyBytes under canonical order.
         static CoseHeaderLabel ReadProtectedHeaderMapKey(CborReader reader, ref byte[]? previousKeyBytes)
         {
             ReadOnlyMemory<byte> keyBytes = reader.ReadEncodedValue();
@@ -1033,15 +1030,13 @@ public static class CBAdESSignatureSerialization
         }
 
 
-        /// <summary>
-        /// Reads the next protected-header map entry's key as a <see cref="CoseHeaderLabel"/> — mirrors
-        /// <see cref="ParseCBAdESSign1"/>'s own identically-named local function exactly (RFC 9052 §1.4's
-        /// general <c>label: int / tstr</c> union, RFC 8949 §4.2.3 canonical key ordering over the ENCODED
-        /// bytes).
-        /// </summary>
-        /// <param name="reader">The CBOR reader, positioned at the next map entry's key.</param>
-        /// <param name="previousKeyBytes">The previously read key's encoded bytes, or <see langword="null"/> before the first entry.</param>
-        /// <returns>The decoded label.</returns>
+        //Reads the next protected-header map entry's key as a CoseHeaderLabel -- mirrors
+        //ParseCBAdESSign1's own identically-named local function exactly (RFC 9052 §1.4's
+        //general label: int / tstr union, RFC 8949 §4.2.3 canonical key ordering over the ENCODED
+        //bytes).
+        //reader: the CBOR reader, positioned at the next map entry's key.
+        //previousKeyBytes: the previously read key's encoded bytes, or null before the first entry.
+        //Returns the decoded label.
         static CoseHeaderLabel ReadProtectedHeaderMapKey(CborReader reader, ref byte[]? previousKeyBytes)
         {
             ReadOnlyMemory<byte> keyBytes = reader.ReadEncodedValue();
@@ -1271,7 +1266,7 @@ public static class CBAdESSignatureSerialization
     /// </summary>
     /// <remarks>
     /// Otherwise identical to <see cref="CoseSerialization.SerializeCoseSign1"/> — same tag-18 envelope, same
-    /// unprotected-header-map writing (<see cref="CborValueConverter.WriteValue"/>), same pool-routed
+    /// unprotected-header-map writing (<see cref="CborValueConverter.WriteValue(Lumoin.Veritas.Cbor.CborWriter, object?)"/>), same pool-routed
     /// <see cref="EncodedCoseSign1"/> output — the payload branch is the only difference.
     /// </remarks>
     public static SerializeCBAdESSign1Delegate SerializeCBAdESSign1 { get; } = static (message, payloadIsDetached, pool) =>
@@ -1428,6 +1423,23 @@ public static class CBAdESSignatureSerialization
         {
             CborReaderState.TextString => new CBAdESContentTypeText(reader.ReadTextString()),
             CborReaderState.UnsignedInteger => new CBAdESContentTypeNumeric(reader.ReadUInt32()),
+            CborReaderState.NegativeInteger or
+            CborReaderState.ByteString or
+            CborReaderState.StartArray or
+            CborReaderState.StartMap or
+            CborReaderState.Tag or
+            CborReaderState.Boolean or
+            CborReaderState.Null or
+            CborReaderState.Undefined or
+            CborReaderState.SimpleValue or
+            CborReaderState.HalfPrecisionFloat or
+            CborReaderState.SinglePrecisionFloat or
+            CborReaderState.DoublePrecisionFloat or
+            CborReaderState.EndArray or
+            CborReaderState.EndMap or
+            CborReaderState.Finished =>
+                throw new CborContentException(
+                    $"content type: expected tstr or uint (IETF RFC 9052 section 3.1), got {state}."),
             _ => throw new CborContentException(
                 $"content type: expected tstr or uint (IETF RFC 9052 section 3.1), got {state}.")
         };
@@ -1527,6 +1539,20 @@ public static class CBAdESSignatureSerialization
                     DateTimeOffset.FromUnixTimeSeconds(numericDateReader.ReadInt64()),
                 CborReaderState.HalfPrecisionFloat or CborReaderState.SinglePrecisionFloat or CborReaderState.DoublePrecisionFloat =>
                     DateTimeOffset.UnixEpoch.AddSeconds(numericDateReader.ReadDouble()),
+                CborReaderState.ByteString or
+                CborReaderState.TextString or
+                CborReaderState.StartArray or
+                CborReaderState.StartMap or
+                CborReaderState.Tag or
+                CborReaderState.Boolean or
+                CborReaderState.Null or
+                CborReaderState.Undefined or
+                CborReaderState.SimpleValue or
+                CborReaderState.EndArray or
+                CborReaderState.EndMap or
+                CborReaderState.Finished =>
+                    throw new CborContentException(
+                        $"NumericDate: expected an integer or floating-point value (IETF RFC 8392 section 2), got {state}."),
                 _ => throw new CborContentException(
                     $"NumericDate: expected an integer or floating-point value (IETF RFC 8392 section 2), got {state}.")
             };

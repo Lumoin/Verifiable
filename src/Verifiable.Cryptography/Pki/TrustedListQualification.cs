@@ -60,6 +60,17 @@ public static class TrustedListQualification
     /// <paramref name="certificate"/> for <paramref name="serviceTypeIdentifier"/> at
     /// <paramref name="evaluationTime"/>, per clause 4.3 (PRO-4.3.4-03 through PRO-4.3.4-11).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// PRO-4.3.4-03 (b): the state applicable at the evaluation time is the service's current information
+    /// when the evaluation time is at or after its start, else the first (newest-first) history instance
+    /// whose start is at or before the evaluation time.
+    /// </para>
+    /// <para>
+    /// PRO-4.3.4-05 through PRO-4.3.4-10: among matches asserting a given additional-service-information
+    /// type, an identical-status pair adds the warning and a differing-status pair adds the error.
+    /// </para>
+    /// </remarks>
     /// <param name="trustedList">The authenticated member state trusted list (see the type remarks: clauses 4.1/4.2 are the caller's obligation).</param>
     /// <param name="certificate">The certificate to match (<c>CERT</c>). The caller retains ownership.</param>
     /// <param name="serviceTypeIdentifier">The service type to match (<c>TLS-Sti</c>).</param>
@@ -165,7 +176,6 @@ public static class TrustedListQualification
         };
 
 
-        /// <summary>PRO-4.3.4-03 (b): the current information when the evaluation time is at or after its start, else the first (newest-first) history instance whose start is at or before the evaluation time.</summary>
         static TrustServiceStateAtTime? SelectStateAtTime(TrustService service, DateTimeOffset evaluationTime)
         {
             if(evaluationTime >= service.StatusStartingTime)
@@ -185,7 +195,6 @@ public static class TrustedListQualification
         }
 
 
-        /// <summary>PRO-4.3.4-05 through PRO-4.3.4-10: among matches asserting <paramref name="informationType"/>, an identical-status pair adds the warning and a differing-status pair adds the error.</summary>
         static void AddDuplicationIndications(
             List<MatchedServiceInformation> matches,
             List<TrustedListQualificationSubStatus> subStatuses,
@@ -236,7 +245,6 @@ public static class TrustedListQualification
         }
 
 
-        /// <summary>PRO-4.3.4-11: whether two matches carry provider names that are not value-equal.</summary>
         static bool HasProviderNameConflict(List<MatchedServiceInformation> matches)
         {
             for(int i = 1; i < matches.Count; ++i)
@@ -251,7 +259,6 @@ public static class TrustedListQualification
         }
 
 
-        /// <summary>Compares two localized-name lists by value (language and text, ordinal).</summary>
         static bool LocalizedTextListsEqual(IReadOnlyList<LocalizedText> first, IReadOnlyList<LocalizedText> second)
         {
             if(first.Count != second.Count)
@@ -351,7 +358,6 @@ public static class TrustedListQualification
         return firstPass.ToResult();
 
 
-        /// <summary>PRO-4.4.4-36 (a): set equality of the indication multisets (each side is duplicate-free by construction).</summary>
         static bool IndicationSetsEqual(List<EuQualifiedCertificateIndication> first, List<EuQualifiedCertificateIndication> second)
         {
             if(first.Count != second.Count)
@@ -571,6 +577,12 @@ public static class TrustedListQualification
     /// trust service provider for <paramref name="serviceTypeIdentifier"/> at
     /// <paramref name="evaluationTime"/> according to <paramref name="trustedList"/>, per clause 4.6.
     /// </summary>
+    /// <remarks>
+    /// PRO-4.6.4-07's service-key comparison extracts a comparable public-key representation from a
+    /// match's digital identity by walking its certificate entries via the library's managed certificate
+    /// reader, taking the first entry that yields one; an entry whose key material the reader does not
+    /// recognise contributes nothing and the walk continues to the next.
+    /// </remarks>
     /// <param name="trustedList">The authenticated trusted list of the member state named by the certificate's SUBJECT country (PRO-4.6.4-02; see the type remarks).</param>
     /// <param name="certificate">The trust service token signer's certificate (<c>CERT</c>). The caller retains ownership.</param>
     /// <param name="certificateFacts">The certificate's extracted facts.</param>
@@ -708,7 +720,6 @@ public static class TrustedListQualification
         };
 
 
-        /// <summary>PRO-4.6.4-07: whether two matches carry recognisably different public keys in their digital identities.</summary>
         static bool HasDifferingServiceKeys(IReadOnlyList<MatchedServiceInformation> matches)
         {
             for(int i = 1; i < matches.Count; ++i)
@@ -725,7 +736,6 @@ public static class TrustedListQualification
         }
 
 
-        /// <summary>Extracts a comparable public-key representation from the identity's first certificate entry via the managed reader; false when none is recognised.</summary>
         static bool TryGetComparableKey(ServiceDigitalIdentity identity, out ReadOnlyMemory<byte> key)
         {
             foreach(ServiceDigitalIdentityEntry entry in identity.Entries)
@@ -759,7 +769,6 @@ public static class TrustedListQualification
         }
 
 
-        /// <summary>PRO-4.6.4-08: whether any subject organization name identifies any matched provider by legal or trade name.</summary>
         static bool AnyNameMatches(IReadOnlyList<string> organizationNames, IReadOnlyList<MatchedServiceInformation> matches)
         {
             foreach(string organizationName in organizationNames)
@@ -1053,7 +1062,6 @@ public static class TrustedListQualification
         return pass;
 
 
-        /// <summary>PRO-4.4.4-32 / Table 4: classifies one two-by-two combination and records its sub-status.</summary>
         static void ClassifyPair(EuQualifiedCertificateIndication first, EuQualifiedCertificateIndication second, SinglePassDetermination pass, ref bool anyPairError, ref bool anyPairWarning)
         {
             bool firstPositive = IsPositive(first);
@@ -1072,14 +1080,12 @@ public static class TrustedListQualification
         }
 
 
-        /// <summary>Whether the indication asserts a qualified status (Table 4's error-generating class).</summary>
         static bool IsPositive(EuQualifiedCertificateIndication indication) =>
             indication is EuQualifiedCertificateIndication.QualifiedForESignature
                 or EuQualifiedCertificateIndication.QualifiedForESeal
                 or EuQualifiedCertificateIndication.QualifiedForWebsiteAuthentication;
 
 
-        /// <summary>Whether the indication is one of the indeterminate values (Table 4's warning-generating class).</summary>
         static bool IsIndeterminate(EuQualifiedCertificateIndication indication) =>
             indication is EuQualifiedCertificateIndication.IndeterminateForESignature
                 or EuQualifiedCertificateIndication.IndeterminateForESeal
@@ -1283,7 +1289,6 @@ public static class TrustedListQualification
         return notQualified;
 
 
-        /// <summary>Whether every declared type equals <paramref name="relevantType"/> (duplicates permitted).</summary>
         static bool AllTypesAre(IReadOnlyList<EuQualifiedCertificateType> types, EuQualifiedCertificateType relevantType)
         {
             foreach(EuQualifiedCertificateType type in types)

@@ -224,6 +224,27 @@ internal sealed class PeerDidGeneratorTests
     }
 
 
+    /// <summary>
+    /// <see cref="PeerDidMethod.Numalgo4Indicator"/> and <see cref="PeerDidMethod.Numalgo2Indicator"/>
+    /// name the exact character each generator places immediately after
+    /// <see cref="PeerDidMethod.Prefix"/> — a transposition of either constant would still compile
+    /// but would mint an identifier for the wrong algorithm.
+    /// </summary>
+    [TestMethod]
+    public void GeneratedIndicatorCharactersMatchTheirNamedConstants()
+    {
+        string numalgo4Did = PeerDidGenerator.GenerateNumalgo4(
+            NewInputDocument(), SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared);
+        Assert.AreEqual(PeerDidMethod.Numalgo4Indicator, numalgo4Did[PeerDidMethod.Prefix.Length]);
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using PublicKeyMemory key = DecodeMultibaseKey(SigningKey, pool);
+        string numalgo2Did = PeerDidGenerator.GenerateNumalgo2(
+            [new PeerDidPurposedKey(key, PeerDidPurpose.Authentication)], [], pool);
+        Assert.AreEqual(PeerDidMethod.Numalgo2Indicator, numalgo2Did[PeerDidMethod.Prefix.Length]);
+    }
+
+
     [TestMethod]
     public void GenerateNumalgo2ProducesSpecGoldenVector()
     {

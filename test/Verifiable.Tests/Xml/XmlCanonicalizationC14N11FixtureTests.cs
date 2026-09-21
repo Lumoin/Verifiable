@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Xml;
 /// <summary>
 /// The worked examples of <see href="https://www.w3.org/TR/2008/REC-xml-c14n11-20080502/">Canonical XML
 /// 1.1</see> section 3, transcribed from the raw specification HTML and asserted byte-exact against
-/// <see cref="XmlCanonicalization.TryCanonicalize"/>. Examples whose inputs carry a document type
+/// <see cref="XmlCanonicalization.TryCanonicalize(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, Verifiable.Xml.XmlCanonicalizationAlgorithm, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>. Examples whose inputs carry a document type
 /// declaration are adapted: the DOCTYPE line or lines and every DTD-derived expectation are dropped and
 /// the rest kept verbatim, with the delta stated in each test's own documentation. Section 3.5 exists to
 /// demonstrate DTD entity replacement and has no DOCTYPE-free remainder, so it has no fixture here.

@@ -3,7 +3,7 @@ namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Carries the authorization code from the redirect callback. Transitions from
-/// <see cref="ParCompleted"/> to <see cref="AuthorizationCodeReceived"/>.
+/// <see cref="Verifiable.OAuth.AuthCode.States.ParCompletedState"/> to <see cref="Verifiable.OAuth.AuthCode.States.AuthorizationCodeReceivedState"/>.
 /// </summary>
 /// <param name="Code">The authorization code from the redirect.</param>
 /// <param name="State">

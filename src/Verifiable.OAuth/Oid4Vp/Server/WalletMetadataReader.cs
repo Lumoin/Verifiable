@@ -47,6 +47,15 @@ public static class WalletMetadataReader
 
         ReadOnlySpan<byte> bytes = Encoding.UTF8.GetBytes(walletMetadataJson);
 
+        //RFC 8259 §4 uniqueness posture applied to Wallet-posted metadata: a repeated "jwks" would let
+        //this reader select the first occurrence — the Wallet's claimed JAR-encryption key — while a
+        //duplicate second occurrence goes unnoticed, so the document is gated for well-formedness before
+        //either member is read.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(bytes))
+        {
+            return (null, null);
+        }
+
         string? jwksJson = JwkJsonReader.ExtractObjectAsString(bytes, "jwks"u8);
         string? enc = JwkJsonReader.ExtractStringValue(
             bytes, "authorization_encrypted_response_enc"u8);
@@ -79,6 +88,13 @@ public static class WalletMetadataReader
         }
 
         ReadOnlySpan<byte> bytes = Encoding.UTF8.GetBytes(walletMetadataJson);
+
+        //RFC 8259 §4 uniqueness posture applied to Wallet-posted metadata: gate the whole document for
+        //well-formedness before any member below is read, the same posture ParseForJarEncryption applies.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(bytes))
+        {
+            return "the document is not well-formed JSON, or contains a duplicate member name";
+        }
 
         if(JwkJsonReader.ExtractObjectAsString(bytes, "vp_formats_supported"u8) is null)
         {

@@ -821,7 +821,7 @@ public sealed record TpmContextSaveAction(
 /// </summary>
 /// <param name="Context">The parsed <c>TPMS_CONTEXT</c> — TRANSFERRED from the accepted <see cref="TpmContextLoadRequested"/>; the effect disposes it once every field it needs has been read out.</param>
 /// <param name="TotalResetCount">The Reset epoch (<see cref="TpmSimulatorState.TotalResetCount"/>) folded into both the confidentiality key derivation and the integrity HMAC's <c>resetValue</c> term — this TPM's own current value, read at declare time so a save-then-load within one command still binds to the same epoch.</param>
-/// <param name="ClearCount">The Restart epoch (<see cref="TpmSimulatorState.ClearCount"/>), read only when <see cref="Structures.TpmsContext.SavedHandle"/> is the <c>stClear</c> Transient Object arm.</param>
+/// <param name="ClearCount">The Restart epoch (<see cref="TpmSimulatorState.ClearCount"/>), read only when <see cref="Verifiable.Tpm.Spec.Structures.TpmsContext.SavedHandle"/> is the <c>stClear</c> Transient Object arm.</param>
 /// <param name="Request">The parsed request the resuming transition frames a response for.</param>
 public sealed record TpmContextLoadAction(
     TpmsContext Context,
@@ -1880,7 +1880,7 @@ public sealed record TpmComputeNvIndexNameAction(
 /// <c>TPM2_NV_Write()</c>, <c>TPM2_NV_DefineSpace()</c>, <c>TPM2_NV_UndefineSpace()</c>,
 /// <c>TPM2_NV_Increment()</c>, <c>TPM2_NV_Extend()</c>, <c>TPM2_NV_SetBits()</c>, <c>TPM2_NV_WriteLock()</c> and
 /// <c>TPM2_NV_ReadLock()</c> since none of them
-/// carries more than the one optional response parameter <see cref="ParameterArea"/> represents (TPM 2.0
+/// carries more than the one optional response parameter <see cref="ReadWindow"/> represents (TPM 2.0
 /// Library Part 3's own response schematics), nor more than the one authorizing session an entry is owed for
 /// (Part 1, clause 15.6.1).
 /// <c>TPM2_NV_Certify()</c> is the NV command that has both at once — a
@@ -1892,7 +1892,7 @@ public sealed record TpmComputeNvIndexNameAction(
 /// Index, riding this action the way the hierarchy commands do. Emitted by each command's
 /// <c>Continue…OverSession</c> once its command-HMAC
 /// has verified and any business-logic checks (range, attribute gates) have already passed; the effectful loop
-/// computes rpHash over <see cref="ParameterArea"/>, rolls a fresh nonceTPM, and computes the response HMAC
+/// computes rpHash over <see cref="ReadWindow"/>, rolls a fresh nonceTPM, and computes the response HMAC
 /// keyed on the SAME <c>sessionKey ‖ authValue</c> the command-HMAC verification used (Part 1, clause 16.6.5),
 /// feeding the result back as a <see cref="TpmNvSessionResponseFramed"/> input.
 /// </summary>
@@ -2339,6 +2339,13 @@ public sealed record TpmMintPolicySecretTicketAction(
 /// <param name="ObjectName">The Name of the object to be duplicated (<see cref="TpmPolicyDigestFold.DuplicationSelect"/>) — an owned <c>TPM2B_NAME</c> carrier (TPM 2.0 Library Part 2, clause 10.4.3, Table 105) the transition transferred out of the request; the effect folds it into the policyDigest only when <see cref="IsObjectIncluded"/> is SET, hashes it into the nameHash it latches either way, and is its terminal owner. The dispose-immune empty sentinel for every other formula.</param>
 /// <param name="NewParentName">The Name of the new parent (<see cref="TpmPolicyDigestFold.DuplicationSelect"/>) — an owned <c>TPM2B_NAME</c> carrier the transition transferred out of the request; the effect is its terminal owner. The dispose-immune empty sentinel for every other formula.</param>
 /// <param name="IsObjectIncluded">Whether <c>includeObject</c> was YES (<see cref="TpmPolicyDigestFold.DuplicationSelect"/>): the object Name is folded into the policyDigest and the octet is folded as 1; otherwise only the new parent Name and a 0 octet are folded (TPM 2.0 Library Part 3, clause 23.15).</param>
+/// <param name="OwnedNameTerm">
+/// A freshly computed Name the fold reads through <see cref="NameTerm"/> but nobody else owns — an NV Index's
+/// or a loaded object's Name resolved for <see cref="TpmPolicyDigestFold.Secret"/> just for this call, unlike a
+/// permanent handle's raw bytes or a durable object's own long-lived <c>Name</c> field. <see langword="null"/>
+/// for every caller whose <see cref="NameTerm"/> needs no release of its own; the effect is its terminal owner
+/// otherwise.
+/// </param>
 public sealed record TpmFoldPolicyDigestAction(
     TpmPolicyDigestFold Fold,
     TpmiShPolicy PolicySession,
@@ -2364,7 +2371,8 @@ public sealed record TpmFoldPolicyDigestAction(
     bool IsNvWrittenRequired,
     Tpm2bName ObjectName,
     Tpm2bName NewParentName,
-    bool IsObjectIncluded): TpmAction;
+    bool IsObjectIncluded,
+    Tpm2bName? OwnedNameTerm = null): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must roll the authorizing session's nonceTPM and frame a real response session
@@ -2954,7 +2962,7 @@ public sealed record TpmEncapsulateAction(
 /// The transition resolves <c>keyHandle</c> against the loaded-object table and folds its private key,
 /// public point, and curve into this action, so the effect needs no automaton state and captures nothing.
 /// <see cref="Ciphertext"/> is public data (the peer's ephemeral point), so it rides a plain pooled carrier
-/// rather than <see cref="Verifiable.Cryptography.SensitiveMemory"/> — mirroring <see cref="Verifiable.Tpm.Spec.Structures.Tpm2bKemCiphertext"/>'s own carrier shape.
+/// rather than <see cref="SensitiveMemory"/> — mirroring <see cref="Verifiable.Tpm.Spec.Structures.Tpm2bKemCiphertext"/>'s own carrier shape.
 /// </remarks>
 /// <param name="PrivateKey">The KEM key's retained private scalar, unsigned big-endian — a borrowed reference to the carrier the durable object state owns; the effect reads it at the ECDH primitive and never disposes it.</param>
 /// <param name="PublicPoint">The KEM key's retained public point, SEC1 uncompressed — <c>pkR_serialized</c>, folded into <c>kem_context</c> exactly as the encapsulation side folds it.</param>

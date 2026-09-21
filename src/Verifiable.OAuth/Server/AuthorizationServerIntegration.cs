@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
@@ -24,53 +25,220 @@ namespace Verifiable.OAuth.Server;
 /// The seams are set at construction and altered while serving through the requested,
 /// drained, candidate-validated alteration operation described in
 /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration</see>.
-/// That operation is specified for the following implementation commits; the setters today
-/// provide neither a publication barrier nor validation invalidation. <see cref="Validate"/>
-/// reports missing delegates by name in a single error message.
+/// A serving setter throws a named configuration fault. Candidate validation names missing
+/// delegates before a complete wiring copy is published. Delegates share application resources;
+/// the application owns their synchronization and retirement after requests drain.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerIntegration Validated={IsValidated}")]
 public sealed class AuthorizationServerIntegration: ServerIntegration
 {
+    /// <summary>Preserves RFC 7592 section 2.1 authentication refusal at the configured management URI when its client is absent.</summary>
+    /// <param name="tenantId">The resolved tenant whose record is absent.</param>
+    /// <param name="context">The admitted request context.</param>
+    /// <param name="cancellationToken">Cancellation of endpoint URI resolution.</param>
+    public override async ValueTask<ServerHttpResponse> ResolveMissingRegistrationAsync(
+        TenantId tenantId, ExchangeContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if(ValidateRegistrationAccessTokenAsync is not null && ResolveEndpointUriAsync is not null)
+        {
+            ClientRecord route = new()
+            {
+                ClientId = string.Empty,
+                TenantId = tenantId,
+                AllowedCapabilities = [],
+                AllowedRedirectUris = [],
+                AllowedScopes = [],
+                TokenLifetimes = System.Collections.Immutable.ImmutableDictionary<string, TimeSpan>.Empty,
+                SigningKeys = System.Collections.Immutable.ImmutableDictionary<Verifiable.Cryptography.Context.KeyUsageContext, SigningKeySet>.Empty
+            };
+            Uri? uri = await ResolveEndpointUriAsync(WellKnownEndpointNames.RegistrationRegister,
+                route, context, cancellationToken).ConfigureAwait(false);
+            if(uri is { IsAbsoluteUri: true } && context.IncomingRequest is { } request
+                && PathEquals.Equals(request.Path, uri.AbsolutePath))
+            {
+
+                return ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, "Registration access token is invalid.");
+            }
+        }
+
+        return await base.ResolveMissingRegistrationAsync(tenantId, context, cancellationToken).ConfigureAwait(false);
+    }
+
+
     /// <summary>
     /// The cryptographic-material delegate group (signing, verification, decryption, JWKS
     /// assembly) the OAuth/OpenID endpoints and token producers use.
     /// </summary>
-    public AuthorizationServerCryptography Cryptography { get; set; } = new();
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// <para>Candidate assignments copy this container and refuse components attached to another server.
+    /// Application resources and delegate targets remain shared references.</para>
+    /// </remarks>
+    public AuthorizationServerCryptography Cryptography
+    {
+        get;
+        set
+        {
+            WithComponentLocks([this, value], () =>
+            {
+                EnsureMutable();
+                field = AdoptComponent(value)!;
+            });
+        }
+    } = new();
+
 
     /// <summary>
     /// The encoding, decoding, hashing, and JWT-serialization delegate group the OAuth/OpenID
     /// endpoints use.
     /// </summary>
-    public AuthorizationServerCodecs Codecs { get; set; } = new();
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// <para>Candidate assignments copy this container and refuse components attached to another server.
+    /// Application resources and delegate targets remain shared references.</para>
+    /// </remarks>
+    public AuthorizationServerCodecs Codecs
+    {
+        get;
+        set
+        {
+            WithComponentLocks([this, value], () =>
+            {
+                EnsureMutable();
+                field = AdoptComponent(value)!;
+            });
+        }
+    } = new();
+
 
     /// <summary>
     /// The token producers that compose the response of a token-issuing endpoint.
     /// </summary>
-    public TokenProducerSet TokenProducers { get; set; } = TokenProducerSet.Empty;
+    /// <remarks>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
+    /// <para>
+    /// Membership and order are immutable. Producer delegates retain shared application targets whose
+    /// synchronization and lifetime remain application responsibilities.
+    /// </para>
+    /// </remarks>
+    public TokenProducerSet TokenProducers
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    } = TokenProducerSet.Empty;
+
 
     /// <summary>
     /// The composed claim-contribution issuer that emits the additional claims merged into
     /// token payloads.
     /// </summary>
-    public Verifiable.Core.Assessment.ClaimIssuer<ClaimContributionTarget>? ClaimIssuer { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Verifiable.Core.Assessment.ClaimIssuer<ClaimContributionTarget>? ClaimIssuer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Drives effectful work between pure PDA transitions for OAuth flows that emit
     /// <see cref="OAuthAction"/> values (e.g. the OID4VP Verifier flow).
     /// </summary>
-    public OAuthActionExecutor? ActionExecutor { get; set; }
+    /// <remarks>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
+    /// <para>
+    /// The host action bridge must resolve this executor from context.RequestServer so direct endpoint
+    /// actions and the generic flow loop use the same admitted registry.
+    /// </para>
+    /// <para>Candidate assignments copy this container and refuse components attached to another server.
+    /// Application resources and delegate targets remain shared references.</para>
+    /// </remarks>
+    public OAuthActionExecutor? ActionExecutor
+    {
+        get;
+        set
+        {
+            WithComponentLocks([this, value], () =>
+            {
+                EnsureMutable();
+                field = AdoptComponent(value);
+            });
+        }
+    }
+
 
     /// <summary>
-    /// The timing policy applied across all OAuth artifact-issuance and timing-claim
-    /// validation sites. Defaults to <see cref="TimingPolicy.Default"/>.
+    /// The deployment defaults consulted by selected timing sites. Policy profiles and token producers
+    /// also define independent defaults and registration overrides. Defaults to <see cref="TimingPolicy.Default"/>.
     /// </summary>
-    public TimingPolicy Timings { get; set; } = TimingPolicy.Default;
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public TimingPolicy Timings
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    } = TimingPolicy.Default;
+
 
     /// <summary>
     /// The memory pool every OAuth/OpenID endpoint handler rents its transient
     /// signing/verification/parsing buffers from. Required at construction: the
-    /// compiler enforces its presence, and <see cref="Validate"/> checks the delegates only.
+    /// compiler enforces its presence, and <see cref="Validate"/> refuses a null pool.
+    /// The host keeps the pool alive until requests using its wiring complete.
     /// </summary>
     public required BaseMemoryPool MemoryPool { get; init; }
 
@@ -78,41 +246,86 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <summary>
     /// Loads a <see cref="ClientRecord"/> by tenant identifier. Required.
     /// </summary>
+    /// <remarks>
+    /// Aliases LoadRegistrationAsync and follows its validation invalidation and serving setter rule.
+    /// The route resolves the tenant; this delegate selects the EFFECTIVE registration for it,
+    /// reading the incoming request off the <see cref="ExchangeContext"/> it is called with when
+    /// the application serves several clients under one tenant route. Its return value is the
+    /// SELECTED registration for the request: the OAuth endpoint families that read a
+    /// caller-presented <c>client_id</c> identify it against that registration before consuming or
+    /// mutating any grant-bearing record; client authentication validates the declared
+    /// authentication method's own credentials, separately. The
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OID4VCI
+    /// 1.0 §6.1</see> Pre-Authorized Code grant's Token Request is the one exception: its wallet
+    /// identifier is a class the application vouches for through
+    /// <see cref="ValidatePreAuthorizedCodeAsync"/>, never a library comparison against this
+    /// selected registration.
+    /// </remarks>
     public LoadRegistrationDelegate? LoadClientRegistrationAsync
     {
         get => LoadRegistrationAsync;
         set => LoadRegistrationAsync = value;
     }
 
-    /// <summary>
-    /// Resolves the authorization server's issuer URI (the <c>iss</c> claim and
-    /// the base URL advertised in discovery). Optional. When
-    /// <see langword="null"/>, the library uses <see cref="DefaultIssuerResolver"/>
-    /// which reads <see cref="ClientRecord.IssuerUri"/> first and falls
-    /// back to <see cref="ExchangeContextServerExtensions.Issuer"/> on the request
-    /// context.
-    /// </summary>
-    //ResolveIssuerAsync is the host-generic base seam (ResolveServerIssuerDelegate over
-    //IRegistrationRecord); the OAuth wiring adapts its ClientRecord resolver to it.
 
     /// <summary>
     /// Maps the authenticated end-user identifier to the subject identifier
     /// emitted in tokens for a registration — public (identity) or pairwise
     /// (per-sector hash) per OIDC Core §8. Wire to
-    /// <see cref="DefaultSubjectIdentifierResolver.PublicAsync"/> for the
+    /// <see cref="Verifiable.OAuth.Server.Pipeline.DefaultSubjectIdentifierResolver.PublicAsync"/> for the
     /// identity default.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A structural slot the UserInfo wiring resolves the subject identifier
     /// through.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ResolveSubjectIdentifierDelegate? ResolveSubjectIdentifierAsync { get; set; }
+    public ResolveSubjectIdentifierDelegate? ResolveSubjectIdentifierAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Fetches and validates Client ID Metadata Documents for CIMD clients.
     /// Optional.
     /// </summary>
-    public ResolveClientMetadataDelegate? ResolveClientMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveClientMetadataDelegate? ResolveClientMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses an incoming RFC 7591 client metadata document body into a typed
@@ -123,7 +336,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseParResponse"/> and
     /// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseTokenResponse"/>.
     /// </summary>
-    public ParseClientMetadataServerDelegate? ParseClientMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseClientMetadataServerDelegate? ParseClientMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Validates a bearer token presented at an RFC 7592 management endpoint.
@@ -132,20 +364,60 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// advertised — the application implements the constant-time comparison
     /// against its persisted form.
     /// </summary>
-    public ValidateRegistrationAccessTokenDelegate? ValidateRegistrationAccessTokenAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ValidateRegistrationAccessTokenDelegate? ValidateRegistrationAccessTokenAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Contributes additional fields to the discovery document
     /// (<c>/.well-known/openid-configuration</c> and equivalents). Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The library's discovery endpoint emits its base OAuth 2.0 and OIDC fields
     /// first, then merges the contributed fields over the top. Applications use
     /// this delegate to advertise OIDC, FAPI, OID4VP, OID4VCI, OpenID Federation
     /// or deployment-specific capability fields without replacing the discovery
     /// endpoint.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ContributeDiscoveryFieldsDelegate? ContributeDiscoveryFieldsAsync { get; set; }
+    public ContributeDiscoveryFieldsDelegate? ContributeDiscoveryFieldsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Contributes the per-entity-type metadata blocks, authority hints, and
@@ -154,19 +426,41 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishEntityConfiguration"/>.
     /// The library emits the EC's structural claims (<c>iss</c>, <c>sub</c>,
     /// <c>iat</c>, <c>exp</c>, <c>jwks</c>) on its own; this delegate supplies
     /// the per-entity-type metadata blocks and federation extension claims.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ContributeFederationMetadataDelegate? ContributeFederationMetadataAsync { get; set; }
+    public ContributeFederationMetadataDelegate? ContributeFederationMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the Subordinate Statement body the issuing entity asserts
     /// about a queried subject. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement"/>.
     /// The library emits the SS's structural claims and signs the result;
@@ -174,14 +468,35 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// metadata-policy / metadata / constraints / extension claims.
     /// Return <see langword="null"/> when the queried subject is not a
     /// known subordinate — the endpoint then responds 404.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ResolveSubordinateStatementDelegate? ResolveSubordinateStatementAsync { get; set; }
+    public ResolveSubordinateStatementDelegate? ResolveSubordinateStatementAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the immediate subordinates the issuing entity lists at its
     /// <c>federation_list_endpoint</c>. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.ListSubordinates"/>.
     /// The library matches the request, parses the optional
@@ -189,14 +504,35 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// as the unsigned JSON array OpenID Federation 1.0 §8.2 mandates; this
     /// delegate supplies the membership list itself. Returning an empty
     /// list is valid — the endpoint then responds with an empty JSON array.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ResolveSubordinateListDelegate? ResolveSubordinateListAsync { get; set; }
+    public ResolveSubordinateListDelegate? ResolveSubordinateListAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves a subject's effective metadata, trust chain, and trust marks
     /// for the <c>federation_resolve_endpoint</c>. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.ResolveTrustChain"/>.
     /// The library matches the request, parses the <c>sub</c> / <c>anchor</c>
@@ -205,14 +541,35 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// resolver's federation signing key; this delegate supplies the
     /// resolution result. Return <see langword="null"/> when the subject
     /// cannot be resolved — the endpoint then responds 404.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ResolveSubjectTrustChainDelegate? ResolveSubjectTrustChainAsync { get; set; }
+    public ResolveSubjectTrustChainDelegate? ResolveSubjectTrustChainAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Processes a Relying Party's explicit client registration request at the
     /// <c>federation_registration_endpoint</c>. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly"/>.
     /// The library hands the RP's posted Entity Configuration (raw compact
@@ -221,8 +578,28 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// signs it with the OP's federation signing key. Return
     /// <see langword="null"/> when the RP cannot be registered — the endpoint
     /// then responds 400.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ResolveExplicitRegistrationDelegate? ResolveExplicitRegistrationAsync { get; set; }
+    public ResolveExplicitRegistrationDelegate? ResolveExplicitRegistrationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the entity's historical (rotated and revoked) Federation
@@ -230,6 +607,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishHistoricalKeys"/>.
     /// The library matches the request, assembles the OpenID Federation 1.0
@@ -238,14 +616,35 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// federation signing key; this delegate supplies the historical
     /// <c>keys</c> array itself. Return <see langword="null"/> when the entity
     /// has no historical keys to publish — the endpoint then responds 404.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ResolveHistoricalKeysDelegate? ResolveHistoricalKeysAsync { get; set; }
+    public ResolveHistoricalKeysDelegate? ResolveHistoricalKeysAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the Trust Mark JWT the issuing entity serves at its
     /// <c>federation_trust_mark_endpoint</c>. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishTrustMark"/>.
     /// The library matches the request, parses the <c>trust_mark_type</c> and
@@ -255,14 +654,35 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// This delegate supplies the Trust Mark JWT itself. Return
     /// <see langword="null"/> when the entity has no Trust Mark of the queried
     /// type for the queried subject — the endpoint then responds 404.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public Federation.ResolveTrustMarkDelegate? ResolveTrustMarkAsync { get; set; }
+    public Federation.ResolveTrustMarkDelegate? ResolveTrustMarkAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the entities holding a given Trust Mark type the issuing entity
     /// lists at its <c>federation_trust_mark_list_endpoint</c>. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishTrustMarkedList"/>.
     /// The library matches the request, parses the REQUIRED <c>trust_mark_type</c>
@@ -272,14 +692,35 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// valid — the endpoint then responds with an empty JSON array. Return
     /// <see langword="null"/> when the issuer does not know the queried Trust Mark
     /// type — the endpoint then responds 404.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public Federation.ResolveTrustMarkedListDelegate? ResolveTrustMarkedListAsync { get; set; }
+    public Federation.ResolveTrustMarkedListDelegate? ResolveTrustMarkedListAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves the status of a Trust Mark the issuing entity reports at its
     /// <c>federation_trust_mark_status_endpoint</c>. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishTrustMarkStatus"/>.
     /// The library matches the POST request, reads the <c>trust_mark</c> form
@@ -289,14 +730,35 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// key; this delegate supplies the status string itself. Return
     /// <see langword="null"/> when the issuer does not know the queried Trust
     /// Mark — the endpoint then responds 404.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public Federation.ResolveTrustMarkStatusDelegate? ResolveTrustMarkStatusAsync { get; set; }
+    public Federation.ResolveTrustMarkStatusDelegate? ResolveTrustMarkStatusAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Gates the federation endpoints on OpenID Federation 1.0 §8.8 client
     /// authentication. Optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// When set, the library invokes this at the start of each federation
     /// endpoint it serves (fetch, list, resolve, trust mark, trust marked
     /// listing, trust mark status, historical keys), before producing the
@@ -308,8 +770,28 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// a failed result rejects the request with HTTP 401 <c>invalid_client</c>,
     /// and <see langword="null"/> means client authentication is not required at
     /// that endpoint so the request proceeds.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public Federation.AuthenticateFederationClientDelegate? AuthenticateFederationClientAsync { get; set; }
+    public Federation.AuthenticateFederationClientDelegate? AuthenticateFederationClientAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses an OpenID AuthZEN Authorization API 1.0 Access Evaluation
@@ -321,7 +803,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// (that project depends on this one, so it cannot be named by
     /// <c>cref</c> here).
     /// </summary>
-    public ParseAccessEvaluationRequestDelegate? ParseAccessEvaluationRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseAccessEvaluationRequestDelegate? ParseAccessEvaluationRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses an OpenID AuthZEN Authorization API 1.0 Access Evaluations API
@@ -336,7 +837,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// single-evaluation PDP seam <see cref="EvaluateAccessAsync"/> is reused
     /// for each resolved item.
     /// </summary>
-    public ParseAccessEvaluationsRequestDelegate? ParseAccessEvaluationsRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseAccessEvaluationsRequestDelegate? ParseAccessEvaluationsRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The Policy Decision Point seam — evaluates a parsed AuthZEN Access
@@ -344,7 +864,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/> is
     /// advertised. The library owns the wire; this delegate owns the policy.
     /// </summary>
-    public EvaluateAccessDelegate? EvaluateAccessAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public EvaluateAccessDelegate? EvaluateAccessAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses an OpenID AuthZEN Authorization API 1.0 Search API request JSON
@@ -355,53 +894,205 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// (that project depends on this one, so it cannot be named by
     /// <c>cref</c> here).
     /// </summary>
-    public ParseAccessSearchRequestDelegate? ParseAccessSearchRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseAccessSearchRequestDelegate? ParseAccessSearchRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The Subject Search seam (§7). Optional — wiring it activates and
     /// advertises the <c>search_subject_endpoint</c>. The library owns the
     /// wire; this delegate owns enumeration and paging.
     /// </summary>
-    public SearchSubjectsDelegate? SearchSubjectsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public SearchSubjectsDelegate? SearchSubjectsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The Resource Search seam (§7). Optional — wiring it activates and
     /// advertises the <c>search_resource_endpoint</c>.
     /// </summary>
-    public SearchResourcesDelegate? SearchResourcesAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public SearchResourcesDelegate? SearchResourcesAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The Action Search seam (§7). Optional — wiring it activates and
     /// advertises the <c>search_action_endpoint</c>.
     /// </summary>
-    public SearchActionsDelegate? SearchActionsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public SearchActionsDelegate? SearchActionsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Contributes application-supplied values (currently <c>capabilities</c>)
     /// to the AuthZEN §9.1 PDP metadata document. Optional.
     /// </summary>
-    public ContributeAuthZenMetadataDelegate? ContributeAuthZenMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ContributeAuthZenMetadataDelegate? ContributeAuthZenMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Signs the assembled AuthZEN §9.1 PDP metadata as a <c>signed_metadata</c>
     /// JWT. Optional — when set, the returned JWT is embedded in the metadata
     /// document. The application owns the signing key and algorithm.
     /// </summary>
-    public SignAuthZenMetadataDelegate? SignAuthZenMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public SignAuthZenMetadataDelegate? SignAuthZenMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Contributes application-supplied values (delivery methods, critical subject
     /// members, authorization schemes, default subjects) to the Shared Signals
     /// Transmitter Configuration Metadata document (SSF 1.0 §7.1). Optional.
     /// </summary>
-    public ContributeSsfTransmitterMetadataDelegate? ContributeSsfTransmitterMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ContributeSsfTransmitterMetadataDelegate? ContributeSsfTransmitterMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Contributes application-supplied values (authorization servers, scopes,
     /// bearer methods, human-readable fields, feature booleans) to the OAuth 2.0
     /// Protected Resource Metadata document (RFC 9728 §2). Optional.
     /// </summary>
-    public ContributeProtectedResourceMetadataDelegate? ContributeProtectedResourceMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ContributeProtectedResourceMetadataDelegate? ContributeProtectedResourceMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Signs the assembled RFC 9728 Protected Resource Metadata as a
@@ -409,78 +1100,443 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// is embedded in the metadata document. The application owns the signing
     /// key, the algorithm, and the spec-required <c>iss</c> claim.
     /// </summary>
-    public SignProtectedResourceMetadataDelegate? SignProtectedResourceMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public SignProtectedResourceMetadataDelegate? SignProtectedResourceMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a Create Stream request body (SSF §8.1.1.1). Wire the shipped
     /// default with <c>UseDefaultSsfJsonParsing</c>.
     /// </summary>
-    public Ssf.ParseSsfStreamCreateRequestDelegate? ParseSsfStreamCreateRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ParseSsfStreamCreateRequestDelegate? ParseSsfStreamCreateRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses an Update/Replace Stream request body (SSF §8.1.1.3/§8.1.1.4).
     /// Wire the shipped default with <c>UseDefaultSsfJsonParsing</c>.
     /// </summary>
-    public Ssf.ParseSsfStreamUpdateRequestDelegate? ParseSsfStreamUpdateRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ParseSsfStreamUpdateRequestDelegate? ParseSsfStreamUpdateRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The Transmitter's stream store: create (SSF §8.1.1.1). Optional — wiring it
     /// (with the create parser) activates and advertises the Configuration Endpoint.
     /// </summary>
-    public Ssf.CreateSsfStreamDelegate? CreateSsfStreamAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.CreateSsfStreamDelegate? CreateSsfStreamAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: read one or all (SSF §8.1.1.2). Optional.</summary>
-    public Ssf.ReadSsfStreamsDelegate? ReadSsfStreamsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ReadSsfStreamsDelegate? ReadSsfStreamsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: PATCH update (SSF §8.1.1.3). Optional.</summary>
-    public Ssf.UpdateSsfStreamDelegate? UpdateSsfStreamAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.UpdateSsfStreamDelegate? UpdateSsfStreamAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: PUT replace (SSF §8.1.1.4). Optional.</summary>
-    public Ssf.ReplaceSsfStreamDelegate? ReplaceSsfStreamAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ReplaceSsfStreamDelegate? ReplaceSsfStreamAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: delete (SSF §8.1.1.5). Optional.</summary>
-    public Ssf.DeleteSsfStreamDelegate? DeleteSsfStreamAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.DeleteSsfStreamDelegate? DeleteSsfStreamAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>Parses a Stream Status update body (SSF §8.1.2.2). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
-    public Ssf.ParseSsfStreamStatusDelegate? ParseSsfStreamStatusAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ParseSsfStreamStatusDelegate? ParseSsfStreamStatusAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>Parses an Add Subject body (SSF §8.1.3.2). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
-    public Ssf.ParseSsfAddSubjectRequestDelegate? ParseSsfAddSubjectRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ParseSsfAddSubjectRequestDelegate? ParseSsfAddSubjectRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>Parses a Remove Subject body (SSF §8.1.3.3). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
-    public Ssf.ParseSsfRemoveSubjectRequestDelegate? ParseSsfRemoveSubjectRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ParseSsfRemoveSubjectRequestDelegate? ParseSsfRemoveSubjectRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>Parses a Trigger Verification body (SSF §8.1.4.2). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
-    public Ssf.ParseSsfVerificationRequestDelegate? ParseSsfVerificationRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ParseSsfVerificationRequestDelegate? ParseSsfVerificationRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: read status (SSF §8.1.2.1). Optional.</summary>
-    public Ssf.ReadSsfStreamStatusDelegate? ReadSsfStreamStatusAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.ReadSsfStreamStatusDelegate? ReadSsfStreamStatusAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: update status (SSF §8.1.2.2). Optional.</summary>
-    public Ssf.UpdateSsfStreamStatusDelegate? UpdateSsfStreamStatusAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.UpdateSsfStreamStatusDelegate? UpdateSsfStreamStatusAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: add a subject (SSF §8.1.3.2). Optional.</summary>
-    public Ssf.AddSsfSubjectDelegate? AddSsfSubjectAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.AddSsfSubjectDelegate? AddSsfSubjectAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's stream store: remove a subject (SSF §8.1.3.3). Optional.</summary>
-    public Ssf.RemoveSsfSubjectDelegate? RemoveSsfSubjectAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.RemoveSsfSubjectDelegate? RemoveSsfSubjectAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>The Transmitter's verification trigger (SSF §8.1.4.2). Optional.</summary>
-    public Ssf.TriggerSsfVerificationDelegate? TriggerSsfVerificationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.TriggerSsfVerificationDelegate? TriggerSsfVerificationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
-    /// Authorizes stream-management requests (Bearer token + <c>ssf.read</c>/<c>ssf.manage</c>
-    /// scope per CAEP Interoperability Profile §2.7.3). Optional — unset leaves the
-    /// stream-management endpoints unauthenticated.
+    /// Authorizes stream-management requests: Bearer token validity, the
+    /// <c>ssf.read</c>/<c>ssf.manage</c> scope per CAEP Interoperability Profile §2.7.3, and the
+    /// caller's authority on the request's tenant per
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8-3">SSF 1.0 §8</see>.
+    /// Optional — unset means the Stream Management API candidates are not built at all
+    /// (fail-closed), the same materialize-only-when-wired rule the grant seams use; the
+    /// well-known discovery document stays public per SSF §7.1.1 regardless.
     /// </summary>
-    public Ssf.AuthorizeSsfRequestDelegate? AuthorizeSsfRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Ssf.AuthorizeSsfRequestDelegate? AuthorizeSsfRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Authenticates a confidential client for the <c>client_credentials</c> grant
     /// (RFC 6749 §4.4). The grant endpoint activates only when this seam is wired —
     /// the application owns credential storage and the authentication method.
     /// </summary>
-    public ValidateClientCredentialsDelegate? ValidateClientCredentialsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ValidateClientCredentialsDelegate? ValidateClientCredentialsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The client authentication methods this token endpoint actually judges — the
@@ -495,7 +1551,31 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// advertisement and the endpoint's judgment are the one set the deployment
     /// declares, never two independently maintained facts.
     /// </summary>
-    public IReadOnlyCollection<ClientAuthenticationMethod> ClientAuthenticationMethodsSupported { get; set; } =
+    /// <remarks>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
+    /// <para>
+    /// Assignment copies the declaration into an immutable array so edits to the caller collection cannot
+    /// change admitted discovery or authentication behavior.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyCollection<ClientAuthenticationMethod> ClientAuthenticationMethodsSupported
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value is null ? null! : value.ToImmutableArray();
+            }
+        }
+    } =
         [ClientAuthenticationMethod.None];
 
     /// <summary>
@@ -514,7 +1594,31 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// 8414, Section 2: "The value "none" MUST NOT be used.") — <see cref="Validate"/>
     /// enforces both.
     /// </summary>
-    public IReadOnlyCollection<string> ClientAssertionSigningAlgorithmsSupported { get; set; } = [];
+    /// <remarks>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
+    /// <para>
+    /// Assignment copies the declaration into an immutable array retained by admitted requests.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyCollection<string> ClientAssertionSigningAlgorithmsSupported
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value is null ? null! : value.ToImmutableArray();
+            }
+        }
+    } = [];
+
 
     /// <summary>
     /// Validates a Token Exchange <c>subject_token</c> (RFC 8693 §2.1) and returns its accepted
@@ -526,7 +1630,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// trust authority: it owns which issuers and keys it accepts, and any remote key fetch is its
     /// concern (the library takes no <c>System.Net.*</c> dependency).
     /// </summary>
-    public ValidateTokenExchangeTokenDelegate? ValidateTokenExchangeTokenAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ValidateTokenExchangeTokenDelegate? ValidateTokenExchangeTokenAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Decides whether a validated Token Exchange <c>subject_token</c> may be exchanged for the
@@ -538,7 +1661,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// "which entities are permitted to impersonate other entities" (§2.1); a <see langword="null"/>
     /// return denies the exchange and the endpoint answers <c>invalid_target</c> (§2.2.2).
     /// </summary>
-    public AuthorizeTokenExchangeDelegate? AuthorizeTokenExchangeAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public AuthorizeTokenExchangeDelegate? AuthorizeTokenExchangeAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Validates a JWT Bearer authorization-grant <c>assertion</c> (RFC 7523 §2.1/§3.1) and returns
@@ -556,7 +1698,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// credentials the endpoint validates them through <see cref="ValidateClientCredentialsAsync"/>, but
     /// the grant does not require that seam — the assertion is the grant.
     /// </summary>
-    public ValidateJwtBearerAssertionDelegate? ValidateJwtBearerAssertionAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ValidateJwtBearerAssertionDelegate? ValidateJwtBearerAssertionAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Revokes a token at the RFC 7009 revocation endpoint on behalf of an
@@ -568,7 +1729,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// token was killed. The application owns the token store and the
     /// refresh-to-access cascade.
     /// </summary>
-    public RevokeTokenDelegate? RevokeTokenAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public RevokeTokenDelegate? RevokeTokenAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Revokes one issued token by its persisted <c>jti</c> for the library-driven revocation
@@ -577,7 +1757,52 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// documented degradation when this is left unwired. Distinct from
     /// <see cref="RevokeTokenAsync"/>, which answers the client-driven RFC 7009 request.
     /// </summary>
-    public RevokeIssuedTokenDelegate? RevokeIssuedTokenAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public RevokeIssuedTokenDelegate? RevokeIssuedTokenAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Reads every retained record of one grant in a single call for a VALID code replay or
+    /// refresh reuse to revoke. Required — see <see cref="LoadGrantFlowStatesDelegate"/> for the
+    /// full contract.
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public LoadGrantFlowStatesDelegate? LoadGrantFlowStatesAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Introspects a token at the RFC 7662 introspection endpoint on behalf of an
@@ -590,7 +1815,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// application owns the token store; the library owns the wire shape and the
     /// inactive-discloses-nothing rule.
     /// </summary>
-    public IntrospectTokenDelegate? IntrospectTokenAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public IntrospectTokenDelegate? IntrospectTokenAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Mints a fresh OID4VCI 1.0 §7 <c>c_nonce</c>. The Nonce Endpoint activates only when the
@@ -599,7 +1843,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// break every key-bound Credential Request. The application owns the nonce store so it can
     /// validate the nonce later at the Credential Endpoint.
     /// </summary>
-    public IssueCredentialNonceDelegate? IssueCredentialNonceAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public IssueCredentialNonceDelegate? IssueCredentialNonceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Validates an OID4VCI 1.0 §6 Pre-Authorized Code grant. The grant activates only when
@@ -609,7 +1872,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// pre-authorized code store, so it resolves the subject and distinguishes the §6.3 error
     /// cases the library cannot.
     /// </summary>
-    public ValidatePreAuthorizedCodeDelegate? ValidatePreAuthorizedCodeAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ValidatePreAuthorizedCodeDelegate? ValidatePreAuthorizedCodeAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses an OID4VCI 1.0 §8.2 Credential Request body into the neutral
@@ -620,7 +1902,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// wired by <c>Verifiable.Json.Oid4Vci.CredentialRequestJsonExtensions.UseDefaultCredentialRequestJsonParsing</c>
     /// (that project depends on this one, so it cannot be named by <c>cref</c> here).
     /// </summary>
-    public ParseCredentialRequestDelegate? ParseCredentialRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseCredentialRequestDelegate? ParseCredentialRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses an RFC 9396 <c>authorization_details</c> request parameter into the neutral
@@ -633,7 +1934,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// is wired by <c>Verifiable.Json.Oid4Vci.AuthorizationDetailsJsonExtensions.UseDefaultAuthorizationDetailsJsonParsing</c>
     /// (that project depends on this one, so it cannot be named by <c>cref</c> here).
     /// </summary>
-    public ParseAuthorizationDetailListDelegate? ParseAuthorizationDetailsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseAuthorizationDetailListDelegate? ParseAuthorizationDetailsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// The RFC 9396 authorization details <c>type</c> → handler registry the AS dispatches
@@ -644,7 +1964,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <see cref="AuthorizationDetailTypeRegistry.RegisteredTypes"/> is what the AS metadata
     /// advertises as <c>authorization_details_types_supported</c> (§10).
     /// </summary>
-    public AuthorizationDetailTypeRegistry AuthorizationDetailTypes { get; } =
+    /// <remarks>
+    /// Register additional types during construction or on the candidate registry. A serving Register call
+    /// throws a named configuration fault; discarded candidates do not change live membership.
+    /// </remarks>
+    public AuthorizationDetailTypeRegistry AuthorizationDetailTypes { get; private set; } =
         CreateDefaultAuthorizationDetailTypeRegistry();
 
     /// <summary>
@@ -655,7 +1979,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <c>invalid_authorization_details</c> (fail-closed — the library cannot mint Credential
     /// Dataset identifiers). The application owns the configuration catalog and dataset store.
     /// </summary>
-    public ResolveCredentialAuthorizationDelegate? ResolveCredentialAuthorizationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveCredentialAuthorizationDelegate? ResolveCredentialAuthorizationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Issues an OID4VCI 1.0 §8 Credential. The Credential Endpoint activates only when the
@@ -666,7 +2009,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <c>c_nonce</c> store), the supported Credential Configurations, and the signing key; the
     /// library owns bearer-token validation and the wire shape.
     /// </summary>
-    public IssueCredentialDelegate? IssueCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public IssueCredentialDelegate? IssueCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves what a §8 Credential Request's <c>jwt</c> key proof(s) must satisfy (the expected
@@ -680,7 +2042,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// unchanged. The application owns the <c>c_nonce</c> store and its single-use retirement
     /// either way.
     /// </summary>
-    public ResolveCredentialProofExpectationDelegate? ResolveCredentialProofExpectationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveCredentialProofExpectationDelegate? ResolveCredentialProofExpectationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Encrypts an OID4VCI 1.0 §10 (Deferred) Credential Response to the Wallet-supplied key.
@@ -688,14 +2069,52 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// refused with <c>invalid_encryption_parameters</c> (fail-closed: §8.3 forbids answering
     /// such a request in clear).
     /// </summary>
-    public EncryptCredentialResponseDelegate? EncryptCredentialResponseAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public EncryptCredentialResponseDelegate? EncryptCredentialResponseAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Decrypts an OID4VCI 1.0 §10 encrypted Credential Request with the Issuer's key from
     /// <c>credential_request_encryption.jwks</c>. Optional — when unwired, a compact-JWE
     /// request body is refused with <c>invalid_credential_request</c>.
     /// </summary>
-    public DecryptCredentialRequestDelegate? DecryptCredentialRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public DecryptCredentialRequestDelegate? DecryptCredentialRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves an OID4VCI 1.0 §9 Deferred Credential Request from the application's
@@ -704,7 +2123,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// is allowed and this seam is wired — fail-closed: an advertised endpoint without the
     /// store could only refuse every <c>transaction_id</c>.
     /// </summary>
-    public ResolveDeferredCredentialDelegate? ResolveDeferredCredentialAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveDeferredCredentialDelegate? ResolveDeferredCredentialAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Processes an OID4VCI 1.0 §11.1 Notification Request. The Notification Endpoint activates
@@ -712,7 +2150,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// capability is allowed and this seam is wired — fail-closed: an advertised endpoint
     /// without the <c>notification_id</c> store could only reject every notification.
     /// </summary>
-    public ProcessCredentialNotificationDelegate? ProcessCredentialNotificationAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ProcessCredentialNotificationDelegate? ProcessCredentialNotificationAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves an OID4VCI 1.0 §4.1.3 by-reference Credential Offer from the application's offer
@@ -721,7 +2178,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// allowed and this seam is wired — fail-closed: only the application's offer store, keyed by
     /// the id the <c>credential_offer_uri</c> carries, can produce the offer the Wallet fetches.
     /// </summary>
-    public ResolveCredentialOfferDelegate? ResolveCredentialOfferAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveCredentialOfferDelegate? ResolveCredentialOfferAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Contributes the application-owned values of the OID4VCI 1.0 §12.2 Credential Issuer
@@ -732,7 +2208,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// allowed and this seam is wired — the document's REQUIRED
     /// <c>credential_configurations_supported</c> is application data the library cannot derive.
     /// </summary>
-    public ContributeCredentialIssuerMetadataDelegate? ContributeCredentialIssuerMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ContributeCredentialIssuerMetadataDelegate? ContributeCredentialIssuerMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Signs the assembled OID4VCI 1.0 §12.2.3 Credential Issuer Metadata as a
@@ -740,7 +2235,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// document. The application owns the signing key, the algorithm, and the §12.2.3
     /// structural claims (<c>typ</c>, <c>sub</c>, <c>iat</c>).
     /// </summary>
-    public SignCredentialIssuerMetadataDelegate? SignCredentialIssuerMetadataAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public SignCredentialIssuerMetadataDelegate? SignCredentialIssuerMetadataAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Parses a Global Token Revocation request body
@@ -752,7 +2266,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// is wired by <c>Verifiable.Json.Logout.GlobalTokenRevocationJsonExtensions.UseDefaultGlobalTokenRevocationJsonParsing</c>
     /// (that project depends on this one, so it cannot be named by <c>cref</c> here).
     /// </summary>
-    public ParseGlobalTokenRevocationRequestDelegate? ParseGlobalTokenRevocationRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ParseGlobalTokenRevocationRequestDelegate? ParseGlobalTokenRevocationRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Revokes all of a subject's tokens for a Global Token Revocation command
@@ -764,7 +2297,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// application owns the fan-out (revoke the subject's grants, optionally emit a
     /// CAEP <c>session-revoked</c> signal); the library owns the wire.
     /// </summary>
-    public RevokeSubjectTokensDelegate? RevokeSubjectTokensAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public RevokeSubjectTokensDelegate? RevokeSubjectTokensAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Terminates the End-User's authentication session for an RP-Initiated Logout
@@ -774,7 +2326,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// (the endpoint must verify the <c>id_token_hint</c>). The application owns the
     /// session store and the cascade.
     /// </summary>
-    public TerminateSessionDelegate? TerminateSessionAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public TerminateSessionDelegate? TerminateSessionAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Terminates a session identified only by a <c>logout_hint</c> — the sessionless
@@ -783,7 +2354,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <c>end_session_endpoint</c> still requires an <c>id_token_hint</c>; wiring it enables
     /// the sessionless branch. The application resolves the opaque hint to a session.
     /// </summary>
-    public TerminateSessionByHintDelegate? TerminateSessionByHintAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public TerminateSessionByHintDelegate? TerminateSessionByHintAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Fans a terminated session out to registered RPs as an OIDC Back-Channel Logout
@@ -792,50 +2382,34 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// the fan-out the end-session endpoint runs after <see cref="TerminateSessionAsync"/>. The
     /// application owns the session→RP list, builds each Logout Token, and delivers it.
     /// </summary>
-    public DeliverBackChannelLogoutDelegate? DeliverBackChannelLogoutAsync { get; set; }
-
-    /// <summary>
-    /// Classifies a raw token string into a typed
-    /// <see cref="Verifiable.JCose.JoseTokenShape"/> by structural inspection.
-    /// Optional.
-    /// </summary>
     /// <remarks>
-    /// <para>
-    /// Required only when token-aware matchers are registered (introspection,
-    /// revocation, userinfo, OID4VCI proof endpoints). Endpoints whose
-    /// matchers do not consume tokens (PAR, JAR, direct_post, JWKS, discovery)
-    /// run without this delegate set.
-    /// </para>
-    /// <para>
-    /// Applications typically wire
-    /// <see cref="Verifiable.JCose.JoseTokenClassifier.ClassifyAsync"/> as
-    /// the implementation, supplying their Base64Url decoder, JOSE header
-    /// deserializer, and memory pool. Deployments that issue non-JOSE token
-    /// shapes (paseto, biscuit, macaroon) supply their own classifier or
-    /// wrap the JCose default with a pre-classification step that
-    /// recognizes their shapes first.
-    /// </para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
     /// </remarks>
-    public ClassifyTokenDelegate? ClassifyTokenAsync { get; set; }
+    public DeliverBackChannelLogoutDelegate? DeliverBackChannelLogoutAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
-    /// <summary>
-    /// Resolves the per-request policy values for the loaded registration and
-    /// populates them on the <see cref="ExchangeContext"/> at dispatch entry.
-    /// Required.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The dispatcher invokes this delegate once per request after the
-    /// registration is loaded but before any matcher executes. Matchers,
-    /// validators, and token producers downstream consult policy via the
-    /// typed extensions in <see cref="PolicyExchangeContextExtensions"/>.
-    /// </para>
-    /// <para>
-    /// Wire to <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/> for the
-    /// library's named-profile dispatch (<c>strict</c>, <c>haip</c>,
-    /// <c>rfc6749</c>), or supply a custom delegate for bespoke policy.
-    /// </para>
-    /// </remarks>
+
+    //Resolves the per-request policy values for the loaded registration and populates them on the
+    //ExchangeContext at dispatch entry. Required. The dispatcher invokes this delegate once per
+    //request after the registration is loaded but before any matcher executes. Matchers, validators,
+    //and token producers downstream consult policy via the typed extensions in
+    //PolicyExchangeContextExtensions. Wire to PolicyProfiles.DefaultResolvePolicyAsync for the
+    //library's named-profile dispatch (strict, haip, rfc6749), or supply a custom delegate for
+    //bespoke policy.
     //ResolvePolicyAsync is the host-generic base seam (ResolveServerPolicyDelegate over
     //IRegistrationRecord); the OAuth wiring adapts its ClientRecord resolver to it.
 
@@ -852,8 +2426,26 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// the audience(s) this delegate returns to populate the <c>aud</c> claim
     /// per <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>.
     /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public ResolveAccessTokenAudienceDelegate? ResolveAccessTokenAudienceAsync { get; set; }
+    public ResolveAccessTokenAudienceDelegate? ResolveAccessTokenAudienceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -863,7 +2455,25 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// shape. Required when any registration's <see cref="PolicyProfile"/>
     /// requires DPoP (HAIP 1.0, FAPI 2.0).
     /// </summary>
-    public Verifiable.OAuth.Dpop.ValidateDpopProofDelegate? ValidateDpopProofAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Verifiable.OAuth.Dpop.ValidateDpopProofDelegate? ValidateDpopProofAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -872,7 +2482,25 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// nonce. Library default backing:
     /// <see cref="Verifiable.OAuth.Dpop.DefaultDpopNonceIssuance.IssueAsync"/>.
     /// </summary>
-    public Verifiable.OAuth.Dpop.IssueDpopNonceDelegate? IssueDpopNonceAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Verifiable.OAuth.Dpop.IssueDpopNonceDelegate? IssueDpopNonceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -880,7 +2508,25 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <see cref="Verifiable.OAuth.Dpop.DefaultDpopNonceValidation.ValidateAsync"/>.
     /// Issuance and validation must agree on the wire format.
     /// </summary>
-    public Verifiable.OAuth.Dpop.ValidateDpopNonceDelegate? ValidateDpopNonceAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Verifiable.OAuth.Dpop.ValidateDpopNonceDelegate? ValidateDpopNonceAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -891,7 +2537,25 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// delegate. Multi-instance deployments wire a Vault/KMS-backed
     /// implementation per the same contract.
     /// </summary>
-    public ResolveServerHmacKeyDelegate? ResolveServerHmacKeyAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveServerHmacKeyDelegate? ResolveServerHmacKeyAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -906,7 +2570,25 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// (typically for HS256 access-token verifiers in a private federation,
     /// not for DPoP nonce keys which are server-internal).
     /// </summary>
-    public GetHmacKeySetDelegate? GetHmacKeySetAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public GetHmacKeySetDelegate? GetHmacKeySetAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -914,7 +2596,25 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <see langword="null"/>, the library uses the kid of the first entry
     /// in the keyset's <see cref="Keys.KeySet.Current"/> list.
     /// </summary>
-    public SelectHmacKeyDelegate? SelectHmacKeyAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public SelectHmacKeyDelegate? SelectHmacKeyAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -922,10 +2622,28 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// Consumed by <see cref="Oidc10IdTokenProducer"/> during ID Token
     /// issuance and by the UserInfo endpoint per OIDC Core §5.3. Required
     /// when the application's <see cref="TokenProducer"/> list includes
-    /// <see cref="TokenProducer.Oidc10IdToken"/> or when the UserInfo
+    /// <c>TokenProducer.Oidc10IdToken</c> or when the UserInfo
     /// endpoint is registered.
     /// </summary>
-    public ResolveOidcClaimsDelegate? ResolveOidcClaimsAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveOidcClaimsDelegate? ResolveOidcClaimsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -934,34 +2652,99 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// deny on any requested/established fact — an unsatisfied <c>acr</c> (RFC 9470 §5
     /// step-up), resource-owner consent, or deployment policy — and the library maps a
     /// denial to its OAuth error. See <see cref="EvaluateAuthorizationRequestDelegate"/>
-    /// for the contract. Unset means the authorization server applies no additional
+    /// for the delegate documentation. Unset means the authorization server applies no additional
     /// decision at this point (the achieved <c>acr</c> is still conveyed in the issued
     /// tokens, and the resource server's step-up challenge remains the backstop). The
     /// temporal <c>max_age</c> recency requirement is enforced by the library directly (it
     /// needs no deployment semantics) and does not go through this seam.
     /// </summary>
-    public EvaluateAuthorizationRequestDelegate? EvaluateAuthorizationRequestAsync { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public EvaluateAuthorizationRequestDelegate? EvaluateAuthorizationRequestAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>Copies nested containers while preserving the instance registration-event stream.</summary>
+    protected override WiringComponent CloneCore()
+    {
+        AuthorizationServerIntegration copy = (AuthorizationServerIntegration)base.CloneCore();
+        copy.Cryptography = Cryptography is null ? null! : CopyComponent(Cryptography);
+        copy.Codecs = Codecs is null ? null! : CopyComponent(Codecs);
+        copy.ActionExecutor = ActionExecutor is null ? null : CopyComponent(ActionExecutor);
+        copy.AuthorizationDetailTypes = CopyComponent(AuthorizationDetailTypes);
+
+        return copy;
+    }
+
+
+    /// <summary>The nested containers frozen and invalidated with the authorization wiring.</summary>
+    protected override IEnumerable<WiringComponent> Children
+    {
+        get
+        {
+            if(Cryptography is not null)
+            {
+                yield return Cryptography;
+            }
+
+            if(Codecs is not null)
+            {
+                yield return Codecs;
+            }
+
+            if(ActionExecutor is not null)
+            {
+                yield return ActionExecutor;
+            }
+
+            yield return AuthorizationDetailTypes;
+        }
+    }
 
 
     /// <summary>
     /// Validates that the required delegates on this group are set.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The required host seams include <see cref="ServerIntegration.DeleteFlowStateAsync"/>.
     /// A valid code replay or refresh reuse deletes the claimed live refresh record even when
     /// <see cref="RevokeIssuedTokenAsync"/> is unavailable, implementing the refresh-token part of
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>'s
     /// "SHOULD revoke (when possible)" and OAuth 2.1 draft-16 §4.3.1 family revocation.
+    /// </para>
+    /// <para>
+    /// Checks required host seams, nested groups, authentication declarations and enabled feature dependencies.
+    /// Success describes the current wiring only. It cannot validate application storage atomicity,
+    /// cryptographic behavior, policy correctness, or mutable delegate targets.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when one or more required delegates are missing.
     /// </exception>
     public override void Validate()
     {
+        IsValidated = false;
         var missing = new List<string>();
 
         CollectMissingHostSeams(missing);
         if(ResolveSubjectIdentifierAsync is null) { missing.Add(nameof(ResolveSubjectIdentifierAsync)); }
+        if(LoadGrantFlowStatesAsync is null) { missing.Add(nameof(LoadGrantFlowStatesAsync)); }
 
         if(missing.Count > 0)
         {
@@ -972,9 +2755,132 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
             throw new InvalidOperationException(sb.ToString());
         }
 
+        if(Cryptography is null)
+        {
+            missing.Add(nameof(Cryptography));
+        }
+        if(Codecs is null)
+        {
+            missing.Add(nameof(Codecs));
+        }
+        if(MemoryPool is null)
+        {
+            missing.Add(nameof(MemoryPool));
+        }
+        if(Timings is null)
+        {
+            missing.Add(nameof(Timings));
+        }
+        if(TokenProducers is null)
+        {
+            missing.Add(nameof(TokenProducers));
+        }
+        if(ClientAuthenticationMethodsSupported is null)
+        {
+            missing.Add(nameof(ClientAuthenticationMethodsSupported));
+        }
+        if(ClientAssertionSigningAlgorithmsSupported is null)
+        {
+            missing.Add(nameof(ClientAssertionSigningAlgorithmsSupported));
+        }
+
+        if(missing.Count > 0)
+        {
+            throw new InvalidOperationException($"AuthorizationServerIntegration requires {string.Join(", ", missing)}.");
+        }
+
+        Cryptography!.Validate();
+        Codecs!.Validate();
         ValidateClientAuthenticationDeclaration();
+        ValidateFeatureDependencies();
+        AuthorizationDetailTypes.Validate();
 
         IsValidated = true;
+    }
+
+
+    /// <summary>Requires authorization-family helpers to use the same primary host integration.</summary>
+    /// <param name="primaryIntegration">The composition's validated shared host operations.</param>
+    public override void ValidateFamily(ServerIntegration primaryIntegration)
+    {
+        if(!ReferenceEquals(this, primaryIntegration))
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration must be EndpointServer.Integration and its registered authorization family together.");
+        }
+
+        Validate();
+    }
+
+
+    /// <summary>
+    /// Checks coupled optional operations without requiring disabled endpoint modules, including the
+    /// <see cref="ParseAuthorizationDetailsAsync"/> / <see cref="ResolveCredentialAuthorizationAsync"/>
+    /// pairing.
+    /// </summary>
+    /// <remarks>
+    /// RFC 9396 §5: "The AS MUST refuse to process any unknown authorization details type or
+    /// authorization details not conforming to the respective type definition. The AS MUST abort
+    /// processing and respond with an error <c>invalid_authorization_details</c>..." — both seams,
+    /// wired or not, already answer that same wire error independently of each other, so a deployment
+    /// that half-wires the pair gets no composition-time signal, only a wallet's first request. The two
+    /// checks below close that gap for the two shapes this composition can never validly reach: a
+    /// resolver with no parser feeding it, and a parser wired for the built-in <c>openid_credential</c>
+    /// type with no resolver to decide it. A deployment that also registered a further authorization
+    /// details type has visibly signaled it uses the parameter for something other than credential
+    /// issuance, so the second check stays silent for it.
+    /// </remarks>
+    private void ValidateFeatureDependencies()
+    {
+        if(ResolveCredentialAuthorizationAsync is not null && ParseAuthorizationDetailsAsync is null)
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync requires ParseAuthorizationDetailsAsync.");
+        }
+
+        if(ParseAuthorizationDetailsAsync is not null
+            && ResolveCredentialAuthorizationAsync is null
+            && AuthorizationDetailTypes.RegisteredTypes.Count == 1
+            && AuthorizationDetailTypes.IsRegistered(AuthorizationDetailsTypeValues.OpenIdCredential))
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration.ParseAuthorizationDetailsAsync requires ResolveCredentialAuthorizationAsync when no authorization details type beyond the built-in openid_credential is registered.");
+        }
+
+        if((ParseClientMetadataAsync is not null || ValidateRegistrationAccessTokenAsync is not null)
+            && ClientRegistrationStore is null)
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration registration requires ClientRegistrationStore.");
+        }
+
+
+        foreach(TokenProducer producer in TokenProducers)
+        {
+            if(producer is null || string.IsNullOrEmpty(producer.Name) || string.IsNullOrEmpty(producer.ResponseField)
+                || producer.IsApplicable is null || producer.BuildAsync is null)
+            {
+                throw new InvalidOperationException("TokenProducers requires Name, ResponseField, IsApplicable and BuildAsync for every producer.");
+            }
+        }
+
+        if(TokenProducers.Contains(TokenProducer.Oidc10IdToken) && ClaimIssuer is null)
+        {
+            throw new InvalidOperationException("TokenProducers.Oidc10IdToken requires ClaimIssuer for the mandatory subject claim.");
+        }
+
+        if((ValidateTokenExchangeTokenAsync is not null || AuthorizeTokenExchangeAsync is not null)
+            && (ValidateTokenExchangeTokenAsync is null || AuthorizeTokenExchangeAsync is null || ValidateClientCredentialsAsync is null))
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration token exchange requires ValidateTokenExchangeTokenAsync, AuthorizeTokenExchangeAsync and ValidateClientCredentialsAsync.");
+        }
+
+        if(ValidateDpopProofAsync is not null
+            && (IssueDpopNonceAsync is null || ValidateDpopNonceAsync is null || ResolveServerHmacKeyAsync is null || GetHmacKeySetAsync is null))
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration DPoP requires IssueDpopNonceAsync, ValidateDpopNonceAsync, ResolveServerHmacKeyAsync and GetHmacKeySetAsync.");
+        }
+
+        if(IssueCredentialAsync is not null && ParseCredentialRequestAsync is null)
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration.IssueCredentialAsync requires ParseCredentialRequestAsync.");
+        }
     }
 
 
@@ -1009,22 +2915,22 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
                 + "for a token endpoint that accepts only PKCE-only public clients.");
         }
 
-        bool declaresNonNoneMethod = false;
-        bool declaresJwtAssertionMethod = false;
+        bool hasNonNoneMethod = false;
+        bool hasJwtAssertionMethod = false;
         foreach(ClientAuthenticationMethod method in ClientAuthenticationMethodsSupported)
         {
             if(method != ClientAuthenticationMethod.None)
             {
-                declaresNonNoneMethod = true;
+                hasNonNoneMethod = true;
             }
 
             if(method == ClientAuthenticationMethod.PrivateKeyJwt || method == ClientAuthenticationMethod.ClientSecretJwt)
             {
-                declaresJwtAssertionMethod = true;
+                hasJwtAssertionMethod = true;
             }
         }
 
-        if(declaresNonNoneMethod && ValidateClientCredentialsAsync is null)
+        if(hasNonNoneMethod && ValidateClientCredentialsAsync is null)
         {
             throw new InvalidOperationException(
                 "AuthorizationServerIntegration.ClientAuthenticationMethodsSupported declares a "
@@ -1034,7 +2940,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
                 + "this token endpoint never actually checks.");
         }
 
-        if(declaresJwtAssertionMethod && ClientAssertionSigningAlgorithmsSupported.Count == 0)
+        if(hasJwtAssertionMethod && ClientAssertionSigningAlgorithmsSupported.Count == 0)
         {
             throw new InvalidOperationException(
                 $"AuthorizationServerIntegration.{nameof(ClientAuthenticationMethodsSupported)} declares "
@@ -1071,18 +2977,51 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     }
 
 
-    private EventSubject ClientRegistrationEventSubject { get; } = new();
+    /// <summary>
+    /// The authoritative store for registration operations, required when registration parsing
+    /// or management-token validation is configured. Store completion precedes optional observers.
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate; a serving setter throws a named
+    /// InvalidOperationException. Store data changes under traffic through its atomic operations.
+    /// </remarks>
+    public IClientRegistrationStore? ClientRegistrationStore
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
-    /// The instance-scoped event stream for client registration lifecycle events.
+    /// The registration-event subject shared by the serving integration and its candidate copies.
+    /// Subscription membership belongs to the stream and survives accepted or rejected candidates.
     /// </summary>
+    private EventSubject ClientRegistrationEventSubject { get; } = new();
+
+
+    /// <summary>The instance-scoped stream of immutable registration notifications.</summary>
+    /// <remarks>
+    /// Delivery invokes each captured subscription once. An optional observer exception is isolated
+    /// and reported through InspectAsync; diagnostics at that stage are also isolated. Concurrent
+    /// emitters may call the same observer concurrently, without ordering or replay. Disposal removes
+    /// only its unique entry and cannot cancel delivery already captured by an emission. Persistence
+    /// must commit before notification. Capability signals require an application state effect.
+    /// A callback may queue RequestAlterationAsync and return without awaiting its own dispatch drain.
+    /// </remarks>
     public IObservable<ClientRegistrationEvent> Events => ClientRegistrationEventSubject;
 
 
-    /// <summary>Emits a <see cref="ClientRegistered"/> event.</summary>
-    public void RegisterClient(
+    /// <summary>Notifies optional observers after the caller commits the registration operation.</summary>
+    /// <remarks>Delivery follows the isolation and concurrent membership rules of <see cref="Events"/>.</remarks>
+    public ValueTask RegisterClientAsync(
         ClientRecord registration,
-        RegistrationAccessToken accessToken,
         ExchangeContext context,
         TimeProvider timeProvider)
     {
@@ -1090,20 +3029,18 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        ClientRegistrationEventSubject.Emit(new ClientRegistered
+        return ClientRegistrationEventSubject.EmitAsync(new ClientRegistered
         {
-            ClientId = registration.ClientId,
-            TenantId = registration.TenantId,
+            EventId = ClientRegistrationEventSubject.NextEventId(),
+            Projection = ClientRegistrationProjection.From(registration),
             OccurredAt = timeProvider.GetUtcNow(),
-            Context = context,
-            Registration = registration,
-            AccessToken = accessToken
-        });
+        }, InspectAsync, context);
     }
 
 
-    /// <summary>Emits a <see cref="ClientUpdated"/> event.</summary>
-    public void UpdateClient(
+    /// <summary>Notifies optional observers after the caller commits the registration operation.</summary>
+    /// <remarks>Delivery follows the isolation and concurrent membership rules of <see cref="Events"/>.</remarks>
+    public ValueTask UpdateClientAsync(
         ClientRecord previous,
         ClientRecord current,
         ExchangeContext context,
@@ -1114,20 +3051,19 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        ClientRegistrationEventSubject.Emit(new ClientUpdated
+        return ClientRegistrationEventSubject.EmitAsync(new ClientUpdated
         {
-            ClientId = current.ClientId,
-            TenantId = current.TenantId,
+            EventId = ClientRegistrationEventSubject.NextEventId(),
+            Projection = ClientRegistrationProjection.From(current),
             OccurredAt = timeProvider.GetUtcNow(),
-            Context = context,
-            Previous = previous,
-            Current = current
-        });
+            Previous = ClientRegistrationProjection.From(previous),
+        }, InspectAsync, context);
     }
 
 
-    /// <summary>Emits a <see cref="ClientDeregistered"/> event.</summary>
-    public void DeregisterClient(
+    /// <summary>Emits a tombstone one revision beyond the atomically deleted record after storage commitment.</summary>
+    /// <remarks>Pass the final removed record; delivery follows the isolation and concurrent membership rules of <see cref="Events"/>.</remarks>
+    public ValueTask DeregisterClientAsync(
         ClientRecord registration,
         string reason,
         ExchangeContext context,
@@ -1138,19 +3074,19 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        ClientRegistrationEventSubject.Emit(new ClientDeregistered
+        return ClientRegistrationEventSubject.EmitAsync(new ClientDeregistered
         {
-            ClientId = registration.ClientId,
-            TenantId = registration.TenantId,
+            EventId = ClientRegistrationEventSubject.NextEventId(),
+            Projection = ClientRegistrationProjection.From(registration) with { Revision = checked(registration.Revision + 1) },
             OccurredAt = timeProvider.GetUtcNow(),
-            Context = context,
-            Reason = reason
-        });
+            Reason = reason,
+        }, InspectAsync, context);
     }
 
 
-    /// <summary>Emits a <see cref="CapabilityGranted"/> event.</summary>
-    public void GrantCapability(
+    /// <summary>Signals a capability change requiring an application state effect before reachability changes.</summary>
+    /// <remarks>Delivery follows the isolation and concurrent membership rules of <see cref="Events"/>.</remarks>
+    public ValueTask GrantCapabilityAsync(
         ClientRecord registration,
         CapabilityIdentifier capability,
         ExchangeContext context,
@@ -1160,114 +3096,138 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        ClientRegistrationEventSubject.Emit(new CapabilityGranted
+        return ClientRegistrationEventSubject.EmitAsync(new CapabilityGranted
         {
-            ClientId = registration.ClientId,
-            TenantId = registration.TenantId,
+            EventId = ClientRegistrationEventSubject.NextEventId(),
+            Projection = ClientRegistrationProjection.From(registration),
             OccurredAt = timeProvider.GetUtcNow(),
-            Context = context,
-            Capability = capability
-        });
-    }
-
-
-    /// <summary>Emits a <see cref="CapabilityRevoked"/> event.</summary>
-    public void RevokeCapability(
-        ClientRecord registration,
-        CapabilityIdentifier capability,
-        string reason,
-        ExchangeContext context,
-        TimeProvider timeProvider)
-    {
-        ArgumentNullException.ThrowIfNull(registration);
-        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(timeProvider);
-
-        ClientRegistrationEventSubject.Emit(new CapabilityRevoked
-        {
-            ClientId = registration.ClientId,
-            TenantId = registration.TenantId,
-            OccurredAt = timeProvider.GetUtcNow(),
-            Context = context,
             Capability = capability,
-            Reason = reason
-        });
+        }, InspectAsync, context);
     }
 
 
-    //Instance-scoped copy-on-write event subject. Each integration has its own.
+    /// <summary>Signals a capability change requiring an application state effect before reachability changes.</summary>
+    /// <remarks>Delivery follows the isolation and concurrent membership rules of <see cref="Events"/>.</remarks>
+    public ValueTask RevokeCapabilityAsync(
+        ClientRecord registration,
+        CapabilityIdentifier capability,
+        string reason,
+        ExchangeContext context,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        return ClientRegistrationEventSubject.EmitAsync(new CapabilityRevoked
+        {
+            EventId = ClientRegistrationEventSubject.NextEventId(),
+            Projection = ClientRegistrationProjection.From(registration),
+            OccurredAt = timeProvider.GetUtcNow(),
+            Capability = capability,
+            Reason = reason,
+        }, InspectAsync, context);
+    }
+
+
+    /// <summary>The copied subscription membership shared by this stream's integration views.</summary>
     private sealed class EventSubject: IObservable<ClientRegistrationEvent>
     {
-        private volatile IObserver<ClientRegistrationEvent>[] observers = [];
-
-        /// <summary>
-        /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
-        /// </summary>
-        private readonly object gate = new();
+        /// <summary>A field enables volatile publication of immutable membership arrays across emitters.</summary>
+        private volatile Subscription[] subscriptions = [];
 
 
+        /// <summary>A field permits atomic increment of the stream-local event identity without application I/O after commitment.</summary>
+        private long eventSequence;
+
+
+        /// <summary>Allocates a unique event identifier within this instance-scoped stream.</summary>
+        public long NextEventId()
+        {
+
+            return Interlocked.Increment(ref eventSequence);
+        }
+
+
+        /// <summary>The stable synchronization target for publishing subscription membership.</summary>
+        private object Gate { get; } = new();
+
+
+        /// <summary>Creates one unique entry even when the observer already has another subscription.</summary>
         public IDisposable Subscribe(IObserver<ClientRegistrationEvent> observer)
         {
             ArgumentNullException.ThrowIfNull(observer);
-
-            lock(gate)
+            Subscription subscription = new(this, observer);
+            lock(Gate)
             {
-                IObserver<ClientRegistrationEvent>[] current = observers;
-                IObserver<ClientRegistrationEvent>[] updated =
-                    new IObserver<ClientRegistrationEvent>[current.Length + 1];
-                current.CopyTo(updated, 0);
-                updated[current.Length] = observer;
-                observers = updated;
+                subscriptions = [.. subscriptions, subscription];
             }
 
-            return new Subscription(this, observer);
+            return subscription;
         }
 
 
-        public void Emit(ClientRegistrationEvent value)
+        /// <summary>Delivers to the captured entries and reports each isolated observer exception.</summary>
+        public async ValueTask EmitAsync(ClientRegistrationEvent value, InspectDelegate? inspect, ExchangeContext context)
         {
-            IObserver<ClientRegistrationEvent>[] current = observers;
-            foreach(IObserver<ClientRegistrationEvent> observer in current)
+            Subscription[] current = subscriptions;
+            foreach(Subscription subscription in current)
             {
-                observer.OnNext(value);
+                try
+                {
+                    subscription.Observer.OnNext(value);
+                }
+                catch(Exception exception)
+                {
+                    if(inspect is not null)
+                    {
+                        try
+                        {
+                            await inspect(new RegistrationObserverFailureStage(value, exception),
+                                [], CancellationToken.None).ConfigureAwait(false);
+                        }
+                        catch(Exception)
+                        {
+                            //A diagnostic failure cannot change the committed result or stop delivery.
+                        }
+                    }
+                }
             }
         }
 
 
-        private void Remove(IObserver<ClientRegistrationEvent> observer)
+        /// <summary>Removes this exact token under one lock, making repeated concurrent disposal idempotent.</summary>
+        private void Remove(Subscription subscription)
         {
-            lock(gate)
+            lock(Gate)
             {
-                IObserver<ClientRegistrationEvent>[] current = observers;
-                int index = Array.IndexOf(current, observer);
+                int index = Array.IndexOf(subscriptions, subscription);
                 if(index < 0)
                 {
+
                     return;
                 }
 
-                IObserver<ClientRegistrationEvent>[] updated =
-                    new IObserver<ClientRegistrationEvent>[current.Length - 1];
-                Array.Copy(current, 0, updated, 0, index);
-                Array.Copy(current, index + 1, updated, index, current.Length - index - 1);
-                observers = updated;
+                Subscription[] updated = new Subscription[subscriptions.Length - 1];
+                Array.Copy(subscriptions, 0, updated, 0, index);
+                Array.Copy(subscriptions, index + 1, updated, index, subscriptions.Length - index - 1);
+                subscriptions = updated;
             }
         }
 
 
-        private sealed class Subscription(
-            EventSubject subject,
-            IObserver<ClientRegistrationEvent> observer): IDisposable
+        /// <summary>The unique identity of one subscription, independent of observer equality.</summary>
+        private sealed class Subscription(EventSubject subject, IObserver<ClientRegistrationEvent> observer): IDisposable
         {
-            private bool disposed;
+            /// <summary>The observer captured by this subscription.</summary>
+            public IObserver<ClientRegistrationEvent> Observer { get; } = observer;
 
+
+            /// <summary>Removes only this membership token; repeated calls have no effect.</summary>
             public void Dispose()
             {
-                if(!disposed)
-                {
-                    subject.Remove(observer);
-                    disposed = true;
-                }
+                subject.Remove(this);
             }
         }
     }

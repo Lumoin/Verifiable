@@ -49,7 +49,7 @@ internal sealed class FederationTrustMarkEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial issuerKeys = RegisterIssuer(app, issuerEntityId, federationKeys);
+        using VerifierKeyMaterial issuerKeys = await RegisterIssuerAsync(app, issuerEntityId, federationKeys).ConfigureAwait(false);
 
         EntityTypeIdentifier markType = new("https://issuer.example.com/marks/onboarded");
         EntityIdentifier subject = new("https://leaf.example.com");
@@ -58,13 +58,16 @@ internal sealed class FederationTrustMarkEndpointTests
         EntityTypeIdentifier? observedType = null;
         EntityIdentifier? observedSubject = null;
 
-        app.Server.OAuth().ResolveTrustMarkAsync = (trustMarkType, sub, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            observedType = trustMarkType;
-            observedSubject = sub;
+            candidateIntegration.ResolveTrustMarkAsync = (trustMarkType, sub, _, _, _) =>
+            {
+                observedType = trustMarkType;
+                observedSubject = sub;
 
-            return ValueTask.FromResult<string?>(TrustMarkJws);
-        };
+                return ValueTask.FromResult<string?>(TrustMarkJws);
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -108,10 +111,13 @@ internal sealed class FederationTrustMarkEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial issuerKeys = RegisterIssuer(app, issuerEntityId, federationKeys);
+        using VerifierKeyMaterial issuerKeys = await RegisterIssuerAsync(app, issuerEntityId, federationKeys).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveTrustMarkAsync =
-            (_, _, _, _, _) => ValueTask.FromResult<string?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveTrustMarkAsync =
+                (_, _, _, _, _) => ValueTask.FromResult<string?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -148,14 +154,18 @@ internal sealed class FederationTrustMarkEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial issuerKeys = RegisterIssuer(app, issuerEntityId, federationKeys);
+        using VerifierKeyMaterial issuerKeys = await RegisterIssuerAsync(app, issuerEntityId, federationKeys).ConfigureAwait(false);
 
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveTrustMarkAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            delegateInvoked = true;
-            return ValueTask.FromResult<string?>("eyJ0rust.mark.jwt");
-        };
+            candidateIntegration.ResolveTrustMarkAsync = (_, _, _, _, _) =>
+            {
+                delegateInvoked = true;
+
+                return ValueTask.FromResult<string?>("eyJ0rust.mark.jwt");
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -183,7 +193,7 @@ internal sealed class FederationTrustMarkEndpointTests
     /// <see cref="WellKnownFederationCapabilityIdentifiers.PublishTrustMark"/>
     /// capability and a federation signing key.
     /// </summary>
-    private static VerifierKeyMaterial RegisterIssuer(
+    private static async Task<VerifierKeyMaterial> RegisterIssuerAsync(
         TestHostShell app,
         Uri issuerEntityId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys)
@@ -193,11 +203,11 @@ internal sealed class FederationTrustMarkEndpointTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownFederationCapabilityIdentifiers.PublishTrustMark);
 
-        return app.RegisterFederationCapableClient(
+        return await app.RegisterFederationCapableClientAsync(
             clientId: issuerEntityId.ToString(),
             baseUri: issuerEntityId,
             federationEntityId: issuerEntityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
     }
 }

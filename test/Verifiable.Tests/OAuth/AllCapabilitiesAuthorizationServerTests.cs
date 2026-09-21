@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -11,7 +10,6 @@ using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
-using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Ssf;
@@ -97,50 +95,69 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             .Add(WellKnownCapabilityIdentifiers.FederationBase);
 
 
+    /// <summary>
+    /// Checks that discovery fields correspond to the enabled endpoint capabilities and supplied metadata operations.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task EverythingEnabledDiscoveryDocumentIsCoherent()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities).ConfigureAwait(false);
 
         //ValidateDpopProofAsync is the gate for advertising dpop_signing_alg_values_supported.
-        _ = host.EnableDpop();
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         //ValidateClientCredentialsAsync is the gate for the client_credentials
         //grant — without it the grant endpoint does not exist (fail-closed).
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
 
-        //RevokeTokenAsync + ValidateClientCredentialsAsync together gate the RFC 7009
-        //revocation endpoint — both must be wired for revocation_endpoint to be advertised.
-        host.Server.OAuth().RevokeTokenAsync = static (_, _, _, _, _) =>
-            ValueTask.CompletedTask;
 
-        //Global Token Revocation: capability + the default JSON parse seam + the
-        //revoke-subject seam + client auth gate the endpoint — wiring them advertises
-        //global_token_revocation_endpoint.
-        _ = host.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
-        host.Server.OAuth().RevokeSubjectTokensAsync = static (_, _, _, _) =>
-            ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
+            //RevokeTokenAsync + ValidateClientCredentialsAsync together gate the RFC 7009
+            //revocation endpoint — both must be wired for revocation_endpoint to be advertised.
 
-        //RP-Initiated Logout: capability + TerminateSessionAsync + the (host-wired)
-        //verification-key resolver gate the end_session endpoint — wiring the seam
-        //advertises end_session_endpoint.
-        host.Server.OAuth().TerminateSessionAsync = static (_, _, _, _, _) =>
-            ValueTask.CompletedTask;
+            candidateIntegration.RevokeTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.CompletedTask;
 
-        //Back-Channel Logout: capability + the deliver (fan-out) seam advertise
-        //backchannel_logout_supported / backchannel_logout_session_supported.
-        host.Server.OAuth().DeliverBackChannelLogoutAsync = static (_, _, _, _, _) =>
-            ValueTask.CompletedTask;
 
-        //CIMD: capability + the resolver seam advertise client_id_metadata_document_supported.
-        //Discovery emission only checks the seam for non-null-ness (privacy §9.1 — discovery
-        //requests never trigger a client-document fetch), so a throwing lambda proves that.
-        host.Server.OAuth().ResolveClientMetadataAsync = (uri, context, ct) =>
-            throw new NotImplementedException(
-                "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+            //Global Token Revocation: capability + the default JSON parse seam + the
+            //revoke-subject seam + client auth gate the endpoint — wiring them advertises
+            //global_token_revocation_endpoint.
+
+            _ = candidateIntegration.UseDefaultGlobalTokenRevocationJsonParsing();
+
+
+            candidateIntegration.RevokeSubjectTokensAsync = static (_, _, _, _) =>
+                ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
+
+
+            //RP-Initiated Logout: capability + TerminateSessionAsync + the (host-wired)
+            //verification-key resolver gate the end_session endpoint — wiring the seam
+            //advertises end_session_endpoint.
+
+            candidateIntegration.TerminateSessionAsync = static (_, _, _, _, _) =>
+                ValueTask.CompletedTask;
+
+
+            //Back-Channel Logout: capability + the deliver (fan-out) seam advertise
+            //backchannel_logout_supported / backchannel_logout_session_supported.
+
+            candidateIntegration.DeliverBackChannelLogoutAsync = static (_, _, _, _, _) =>
+                ValueTask.CompletedTask;
+
+
+            //CIMD: capability + the resolver seam advertise client_id_metadata_document_supported.
+            //Discovery emission only checks the seam for non-null-ness (privacy §9.1 — discovery
+            //requests never trigger a client-document fetch), so a throwing lambda proves that.
+
+            candidateIntegration.ResolveClientMetadataAsync = (uri, context, ct) =>
+                throw new NotImplementedException(
+                    "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -236,20 +253,27 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     }
 
 
+    /// <summary>
+    /// Checks that the transmitter configuration response preserves its supported delivery methods and authorization metadata.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-7.1">Shared Signals Framework §7.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task SsfTransmitterConfigurationIsServedAndConformant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new SsfTransmitterMetadataContribution
-            {
-                DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp],
-                AuthorizationSchemeSpecUrns = ["urn:ietf:rfc:6749"],
-                DefaultSubjects = SsfMetadataParameterNames.DefaultSubjectsNone
-            });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new SsfTransmitterMetadataContribution
+                {
+                    DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp],
+                    AuthorizationSchemeSpecUrns = ["urn:ietf:rfc:6749"],
+                    DefaultSubjects = SsfMetadataParameterNames.DefaultSubjectsNone
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -279,27 +303,36 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     }
 
 
+    /// <summary>
+    /// Checks that the resource metadata matches its resource identifier and the authorization server advertises that resource.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 §3.3</see>.
+    /// </summary>
     [TestMethod]
     public async Task ProtectedResourceMetadataIsServedAndConformant()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataContribution
-            {
-                ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
-                BearerMethodsSupported = [Verifiable.OAuth.ProtectedResource.BearerMethodValues.Header]
-            });
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataContribution
+                {
+                    ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
+                    BearerMethodsSupported = [Verifiable.OAuth.ProtectedResource.BearerMethodValues.Header]
+                });
 
-        //RFC 9728 §4: the co-located AS enumerates its protected resources in
-        //its own metadata through the existing discovery-fields seam.
-        host.Server.OAuth().ContributeDiscoveryFieldsAsync = static (registration, _, _) =>
-            ValueTask.FromResult(new DiscoveryDocumentContribution(
-                [new DiscoveryStringArrayField(
-                    AuthorizationServerMetadataParameterNames.ProtectedResources,
-                    [registration.IssuerUri!.OriginalString])]));
+
+            //RFC 9728 §4: the co-located AS enumerates its protected resources in
+            //its own metadata through the existing discovery-fields seam.
+
+            candidateIntegration.ContributeDiscoveryFieldsAsync = static (registration, _, _) =>
+                ValueTask.FromResult(new DiscoveryDocumentContribution(
+                    [new DiscoveryStringArrayField(
+                        AuthorizationServerMetadataParameterNames.ProtectedResources,
+                        [registration.IssuerUri!.OriginalString])]));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -348,9 +381,9 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: TokenServerCapabilities);
-        _ = host.EnableDpop();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: TokenServerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         //Auth Code + PKCE + PAR -> token. The core OAuth/OIDC flow must still work with the
         //full capability surface registered — proving no inter-capability interference.
@@ -403,10 +436,10 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
-            capabilities: TokenServerWithPresentationAndFederation);
-        _ = host.EnableDpop();
+            capabilities: TokenServerWithPresentationAndFederation).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         //With the OID4VP-verifier and Federation matchers co-registered alongside the
         //token-flow matchers on one host, an Auth Code + PKCE token request must still be
@@ -439,12 +472,12 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         TestHostShell app = run.App;
 
         _ = app.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial tokenClient = app.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: TokenServerCapabilities);
-        _ = app.EnableDpop();
+        using VerifierKeyMaterial tokenClient = await app.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: TokenServerCapabilities).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
 
-        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
 
         //--- A live VP presentation must reach the OID4VP verifier ---
         (Uri requestUri, string parHandle) = await app.HandleParAsync(
@@ -487,54 +520,12 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     private async Task<ServerHttpResponse> DriveCodeExchangeAsync(
         TestHostShell host, VerifierKeyMaterial material, string scope)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = scope
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = scope },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
 
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-
-        return await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
+        return result.TokenResponse;
     }
 
 
@@ -543,24 +534,6 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         using JsonDocument doc = JsonDocument.Parse(body);
         return doc.RootElement.GetProperty(property).GetString()
             ?? throw new InvalidOperationException($"Body property '{property}' was null. Body: {body}");
-    }
-
-
-    private static string ExtractCode(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Authorize redirect did not carry a code parameter: {location}");
     }
 
 

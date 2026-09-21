@@ -51,10 +51,10 @@ namespace Verifiable.Tests.Vcalm;
 /// </list>
 /// <para>
 /// The Kestrel listener contends for sockets with the other HTTP lifecycle tests under the assembly's
-/// in-force <see cref="Microsoft.VisualStudio.TestTools.UnitTesting.ParallelizeAttribute"/> defaults
+/// in-force <c>Microsoft.VisualStudio.TestTools.UnitTesting.ParallelizeAttribute</c> defaults
 /// (the bare <c>[assembly: Parallelize]</c> in <c>Properties/AssemblyProperties.cs</c>): <c>Workers</c>
 /// resolves to <see cref="System.Environment.ProcessorCount"/> and <c>Scope</c> is
-/// <see cref="Microsoft.VisualStudio.TestTools.UnitTesting.ExecutionScope.ClassLevel"/> — the
+/// <c>Microsoft.VisualStudio.TestTools.UnitTesting.ExecutionScope.ClassLevel</c> — the
 /// <c>config.runsettings</c> file's own <c>Workers</c>/<c>Scope</c> values are not in force under the
 /// direct <c>Microsoft.Testing.Platform</c> runner this suite uses. It
 /// passes in isolation like <see cref="Verifiable.Tests.OAuth.MultiHostHttpLifecycleTests"/>. The
@@ -228,17 +228,20 @@ internal sealed class VcalmConformanceBridgeTests
     {
         //RegisterDpopClient supplies the AccessTokenIssuance signing keys and the ScopeToAudience
         //mapping the RFC 9068 producer needs; the plain RegisterClient helper does not.
-        VerifierKeyMaterial hostMaterial = app.RegisterDpopClient(
+        VerifierKeyMaterial hostMaterial = await app.RegisterDpopClientAsync(
             ClientId, ClientBaseUri,
             profile: PolicyProfile.Rfc6749WithPkce,
-            capabilities: ConformanceCapabilities);
+            capabilities: ConformanceCapabilities).ConfigureAwait(false);
         OwnedKeys.Add(hostMaterial);
 
         //client_secret_post (RFC 6749 §2.3.1): the application owns the secret store and comparison.
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue("client_secret", out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue("client_secret", out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
         //The VCALM issuer identity: an Ed25519 did:key controller the eddsa-rdfc-2022 descriptor signs as.
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeyPair =
@@ -257,55 +260,71 @@ internal sealed class VcalmConformanceBridgeTests
         string issuerDid = issuerDidDocument.Id!.ToString();
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
-
-        vcalm.VcalmCredentialIssuance = new VcalmCredentialIssuance
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            ConfiguredIssuer = issuerDid,
-            SigningDescriptors =
-            [
-                new VcalmProofDescriptor
-                {
-                    PrivateKey = issuerKeyPair.PrivateKey,
-                    VerificationMethodId = verificationMethodId,
-                    Cryptosuite = EddsaRdfc2022CryptosuiteInfo.Instance,
-                    Canonicalize = RdfcCanonicalizer,
-                    ContextResolver = ContextResolver,
-                    EncodeProofValue = ProofValueCodecs.EncodeBase58Btc,
-                    SerializeCredential = SerializeCredential,
-                    DeserializeCredential = DeserializeCredential,
-                    SerializeProofOptions = SerializeProofOptions,
-                    Encoder = TestSetup.Base58Encoder,
-                    ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
-                }
-            ],
-            ExistingProofHandling = VcalmExistingProofHandling.Error,
-            SupportsMandatoryPointers = false,
-            MemoryPool = Pool
-        };
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
-        vcalm.StoreVcalmIssuedCredentialAsync = (credentialId, json, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            CredentialStore[credentialId] = new VcalmStoredCredential { VerifiableCredentialJson = json };
+            candidateIntegration.VcalmCredentialIssuance = new VcalmCredentialIssuance
+            {
+                ConfiguredIssuer = issuerDid,
+                SigningDescriptors =
+                [
+                    new VcalmProofDescriptor
+                    {
+                        PrivateKey = issuerKeyPair.PrivateKey,
+                        VerificationMethodId = verificationMethodId,
+                        Cryptosuite = EddsaRdfc2022CryptosuiteInfo.Instance,
+                        Canonicalize = RdfcCanonicalizer,
+                        ContextResolver = ContextResolver,
+                        EncodeProofValue = ProofValueCodecs.EncodeBase58Btc,
+                        SerializeCredential = SerializeCredential,
+                        DeserializeCredential = DeserializeCredential,
+                        SerializeProofOptions = SerializeProofOptions,
+                        Encoder = TestSetup.Base58Encoder,
+                        ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
+                    }
+                ],
+                ExistingProofHandling = VcalmExistingProofHandling.Error,
+                SupportsMandatoryPointers = false,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
 
-            return ValueTask.CompletedTask;
-        };
-        vcalm.LoadVcalmIssuedCredentialAsync = (credentialId, _, _) =>
-            ValueTask.FromResult(CredentialStore.GetValueOrDefault(credentialId));
-
-        vcalm.VcalmCredentialVerification = new VcalmCredentialVerification
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Resolver = KeyDidResolverSeam,
-            Canonicalize = RdfcCanonicalizer,
-            ContextResolver = ContextResolver,
-            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-            SerializeCredential = SerializeCredential,
-            SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
-            SerializeProofOptions = SerializeProofOptions,
-            Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            MemoryPool = Pool
-        };
+            candidateIntegration.StoreVcalmIssuedCredentialAsync = (credentialId, json, _, _) =>
+            {
+                CredentialStore[credentialId] = new VcalmStoredCredential { VerifiableCredentialJson = json };
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadVcalmIssuedCredentialAsync = (credentialId, _, _) =>
+                ValueTask.FromResult(CredentialStore.GetValueOrDefault(credentialId));
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmCredentialVerification = new VcalmCredentialVerification
+            {
+                Resolver = KeyDidResolverSeam,
+                Canonicalize = RdfcCanonicalizer,
+                ContextResolver = ContextResolver,
+                KnownContext = VcalmWireFixtures.CredentialKnownContext,
+                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                SerializeCredential = SerializeCredential,
+                SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
+                SerializeProofOptions = SerializeProofOptions,
+                Decoder = TestSetup.Base58Decoder,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
 
         await app.StartVcalmConformanceHostAsync(
             "default", hostMaterial.Registration, TestContext.CancellationToken).ConfigureAwait(false);

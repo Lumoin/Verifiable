@@ -23,8 +23,8 @@ namespace Verifiable.OAuth;
 /// any future shape that fits the "build header and payload, then sign" model.
 /// </para>
 /// <para>
-/// The library ships <see cref="TokenProducer.Rfc9068AccessToken"/> and
-/// <see cref="TokenProducer.Oidc10IdToken"/> via extension blocks on
+/// The library ships <c>TokenProducer.Rfc9068AccessToken</c> and
+/// <c>TokenProducer.Oidc10IdToken</c> via extension blocks on
 /// <see cref="TokenProducer"/>. Applications add their own producers via their
 /// own extension blocks following the same shape:
 /// </para>
@@ -47,7 +47,7 @@ namespace Verifiable.OAuth;
 /// producer's <see cref="BuildAsync"/>. The producer composes the JCose header
 /// and payload with all values already known, returning a
 /// <see cref="TokenProducerOutput"/>. The endpoint then signs via
-/// <see cref="UnsignedJwt.SignAsync"/>.
+/// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>.
 /// </para>
 /// <para>
 /// This separation keeps key handling at one well-defined site and producers
@@ -148,7 +148,7 @@ public delegate ValueTask<bool> TokenProducerIsApplicableDelegate(
 /// <param name="context">
 /// The per-request issuance context. Producers reach the active
 /// <see cref="EndpointServer"/> via
-/// <see cref="ExchangeContextServerExtensions.Server"/> on
+/// <c>RequestServer</c> on
 /// <see cref="IssuanceContext.Context"/>.
 /// </param>
 /// <param name="signingKeyId">The signing <see cref="KeyId"/> resolved by the endpoint.</param>

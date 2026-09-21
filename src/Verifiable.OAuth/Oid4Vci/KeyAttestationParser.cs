@@ -18,8 +18,11 @@ public static class KeyAttestationParser
     /// <summary>
     /// Parses <paramref name="compactAttestation"/> (a compact <c>key-attestation+jwt</c>) into
     /// <paramref name="attestation"/>. Returns <see langword="false"/> when the input is not a
-    /// two-or-three-part JWT, the <c>typ</c> header is not <c>key-attestation+jwt</c>, or the
-    /// REQUIRED <c>attested_keys</c> array is absent.
+    /// two-or-three-part JWT, the <c>typ</c> header does not name the <c>key-attestation+jwt</c>
+    /// media type — the long form <c>application/key-attestation+jwt</c> and any casing of either
+    /// spelling name that same media type per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see> — or
+    /// the REQUIRED <c>attested_keys</c> array is absent.
     /// </summary>
     /// <param name="compactAttestation">The compact JWS key attestation.</param>
     /// <param name="base64UrlDecoder">Base64url decoder for the header and body segments.</param>
@@ -48,14 +51,28 @@ public static class KeyAttestationParser
         }
 
         using IMemoryOwner<byte> headerOwner = base64UrlDecoder(segments[0], pool);
-        string? typ = JwkJsonReader.ExtractStringValue(headerOwner.Memory.Span, WellKnownJoseHeaderNames.TypUtf8);
-        if(!string.Equals(typ, AttestationProofParameterNames.KeyAttestationJwtType, StringComparison.Ordinal))
+        ReadOnlySpan<byte> header = headerOwner.Memory.Span;
+
+        using IMemoryOwner<byte> bodyOwner = base64UrlDecoder(segments[1], pool);
+        ReadOnlySpan<byte> body = bodyOwner.Memory.Span;
+
+        //RFC 7515 §4 / RFC 7519 §4: gate both the header and the body for well-formedness — a repeated
+        //name at any nesting depth — before extracting a single field from either, so typ/attested_keys
+        //selection below never runs against a first occurrence while a duplicate second occurrence goes
+        //unnoticed.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(header) || !JwkJsonReader.IsWellFormedJsonDocument(body))
         {
             return false;
         }
 
-        using IMemoryOwner<byte> bodyOwner = base64UrlDecoder(segments[1], pool);
-        ReadOnlySpan<byte> body = bodyOwner.Memory.Span;
+        //RFC 7515 §4.1.9: the typ compares as the media type it is — case insensitive, and with the
+        //implicit "application/" prefix when the wire value carries no '/' of its own. A missing typ
+        //is a refusal, checked before the media-type comparison so a null header is never handed to it.
+        string? typ = JwkJsonReader.ExtractStringValue(header, WellKnownJoseHeaderNames.TypUtf8);
+        if(typ is null || !AttestationProofParameterNames.IsKeyAttestationJwtType(typ))
+        {
+            return false;
+        }
 
         string? attestedKeys = JwkJsonReader.ExtractArrayAsString(
             body, AttestationProofParameterNames.AttestedKeysUtf8);

@@ -1,5 +1,6 @@
 using CsCheck;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
 {
@@ -42,7 +43,7 @@ namespace Verifiable.Tests.Cryptography
                     //Ensure the decompressed Y matches the original Y.
                     Assert.AreSequenceEqual(publicKeyY, decompressedY);
                 }
-            });
+            }, threads: CsCheckSampling.Threads);
         }
     }
 }

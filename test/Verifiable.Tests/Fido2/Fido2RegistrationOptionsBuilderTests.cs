@@ -395,7 +395,7 @@ internal sealed class Fido2RegistrationOptionsBuilderTests
     }
 
 
-    /// <summary>The appidExclude/largeBlob extension-input carve-outs are null unless the caller opts in.</summary>
+    /// <summary>The appidExclude/largeBlob/prf extension-input carve-outs are null unless the caller opts in.</summary>
     [TestMethod]
     public async Task ExtensionCarveOutsAreNullByDefault()
     {
@@ -406,21 +406,28 @@ internal sealed class Fido2RegistrationOptionsBuilderTests
 
         Assert.IsNull(options.AppIdExclude);
         Assert.IsNull(options.LargeBlob);
+        Assert.IsNull(options.Prf);
     }
 
 
-    /// <summary>The appidExclude/largeBlob extension-input carve-outs are populated when the caller opts in.</summary>
+    /// <summary>The appidExclude/largeBlob/prf extension-input carve-outs are populated when the caller opts in.</summary>
     [TestMethod]
     public async Task ExtensionCarveOutsAreHonoredWhenSupplied()
     {
+        Fido2PrfRegistrationExtensionInput prf = new()
+        {
+            Eval = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 1, 2, 3 }, Fido2BufferTags.PrfValue) }
+        };
+
         Fido2RegistrationOptionsBuilder builder = new();
         PublicKeyCredentialCreationOptions options = await builder.BuildAsync(
             rpId: "example.com", rpName: null, userId: UserId, userName: "alexm", userDisplayName: null, pool: BaseMemoryPool.Shared,
             appIdExclude: "https://example.com/appid.json",
-            largeBlobSupport: LargeBlobSupport.Preferred, cancellationToken: TestContext.CancellationToken);
+            largeBlobSupport: LargeBlobSupport.Preferred, prf: prf, cancellationToken: TestContext.CancellationToken);
 
         Assert.AreEqual("https://example.com/appid.json", options.AppIdExclude);
         Assert.AreEqual(LargeBlobSupport.Preferred, options.LargeBlob!.Support);
+        Assert.IsTrue(prf.Eval.First.Span.SequenceEqual(options.Prf!.Eval.First.Span));
     }
 
 

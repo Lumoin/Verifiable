@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Constructed via the <see cref="OAuthClient.AuthCode"/> extension property
+/// Constructed via the <c>AuthCode</c> extension property
 /// on <see cref="OAuthClient"/>. The struct is cheap to materialise (one
 /// reference field) and carries no per-AS state — every protocol method
 /// takes a <see cref="ClientRegistration"/> as its first parameter,
@@ -46,7 +46,7 @@ public readonly struct AuthCodeClient
 
     /// <summary>
     /// Creates a new Authorization Code client over the supplied
-    /// infrastructure. Internal — use <see cref="OAuthClient.AuthCode"/>
+    /// infrastructure. Internal — use <c>AuthCode</c>
     /// to access an instance.
     /// </summary>
     internal AuthCodeClient(OAuthClientInfrastructure infrastructure)
@@ -87,7 +87,11 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="redirectUri">The redirect URI to use for this call.</param>
+    /// <param name="additionalFields">Additional fields to include in the PAR request body.</param>
     /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> StartParAsync(
         ClientRegistration registration,
         Uri redirectUri,
@@ -98,6 +102,10 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="redirectUri">The redirect URI to use for this call.</param>
+    /// <param name="additionalFields">Additional fields to include in the PAR request body.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
     /// <param name="resource">
     /// The RFC 8707 §2 <c>resource</c> indicator(s) to request. Each entry MUST be one absolute
     /// URI — several indicators are several list entries, threaded to
@@ -105,6 +113,7 @@ public readonly struct AuthCodeClient
     /// as genuinely REPEATED wire occurrences, never one occurrence carrying several
     /// space-joined URIs. <see langword="null"/> or empty omits the parameter entirely.
     /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> StartParAsync(
         ClientRegistration registration,
         Uri redirectUri,
@@ -119,6 +128,62 @@ public readonly struct AuthCodeClient
 
         return AuthCodeFlowHandlers.HandleParAsync(
             additionalFields.Fields, redirectUri, Infrastructure, registration, context, resource, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Starts a plain (non-PAR, non-JAR) authorization request per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>:
+    /// generates a fresh PKCE verifier and challenge and returns a redirect straight to the
+    /// authorization endpoint carrying <c>response_type</c>, <c>client_id</c>, <c>redirect_uri</c>,
+    /// <c>scope</c>, and <c>state</c>, plus <c>code_challenge</c>/<c>code_challenge_method</c> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see> — no pushed
+    /// authorization request is sent. Refused before anything is built when the resolved
+    /// authorization server metadata's <see cref="AuthorizationServerMetadata.RequirePushedAuthorizationRequests"/>
+    /// is set (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-5">RFC 9126 §5</see>).
+    /// </summary>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="redirectUri">
+    /// The redirect URI to use for this call. Per RFC 6749 §3.1.2.3, the client picks one of the
+    /// AS's allow-listed URIs at request time; this value rides the authorization redirect and is
+    /// persisted into the <see cref="Verifiable.OAuth.AuthCode.States.ParCompletedState"/> for later
+    /// use at token exchange.
+    /// </param>
+    /// <param name="additionalFields">
+    /// Additional fields to include on the authorization redirect's query (for example
+    /// <c>acr_values</c>). May be <see cref="OAuthFormEncodedFields.Empty"/>. A field named after one
+    /// this call mints itself — <c>response_type</c>, <c>client_id</c>, <c>redirect_uri</c>,
+    /// <c>scope</c>, <c>state</c>, <c>code_challenge</c>, <c>code_challenge_method</c>, or
+    /// <c>resource</c> — is dropped rather than allowed to override it.
+    /// </param>
+    /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
+    /// <param name="resource">
+    /// The RFC 8707 §2 <c>resource</c> indicator(s) to request. Each entry MUST be one absolute
+    /// URI — several indicators are several list entries, each becoming its own repeated occurrence
+    /// on the redirect query, never one occurrence carrying several space-joined URIs.
+    /// <see langword="null"/> or empty omits the parameter entirely.
+    /// </param>
+    /// <param name="requestLifetime">
+    /// How long this pending authorization stays redeemable at
+    /// <see cref="HandleCallbackAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>
+    /// before it expires. RFC 6749 §4.1.1 defines no lifetime for this leg, so the caller decides.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public ValueTask<AuthCodeFlowEndpointResult> StartAsync(
+        ClientRegistration registration,
+        Uri redirectUri,
+        OAuthFormEncodedFields additionalFields,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
+        TimeSpan requestLifetime,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(redirectUri);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return AuthCodeFlowHandlers.HandleDirectAuthorizeStartAsync(
+            additionalFields.Fields, redirectUri, Infrastructure, registration, context, resource, requestLifetime, cancellationToken);
     }
 
 
@@ -141,7 +206,13 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="HandleCallbackAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="callbackParams">
+    /// The query parameters from the authorization callback redirect.
+    /// Must include <c>code</c>, <c>state</c>, and (for HAIP) <c>iss</c>.
+    /// </param>
     /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> HandleCallbackAsync(
         ClientRegistration registration,
         OAuthFormEncodedFields callbackParams,
@@ -181,7 +252,13 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="ExchangeTokenAsync(ClientRegistration, string, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="flowId">
+    /// The flow identifier (the <c>state</c> value) that correlates this token
+    /// request with the original PAR.
+    /// </param>
     /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> ExchangeTokenAsync(
         ClientRegistration registration,
         string flowId,
@@ -260,7 +337,10 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="RefreshAsync(ClientRegistration, RefreshTokenRequest, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="request">The refresh token request.</param>
     /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> RefreshAsync(
         ClientRegistration registration,
         RefreshTokenRequest request,
@@ -315,7 +395,12 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="RevokeAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="fields">
+    /// The revocation request fields. Must include <c>token</c>.
+    /// </param>
     /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> RevokeAsync(
         ClientRegistration registration,
         OAuthFormEncodedFields fields,
@@ -348,7 +433,10 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="StartJarParAsync(ClientRegistration, AuthCodeStartJarParOptions, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="jarOptions">Per-call inputs including signing key and serialisers.</param>
     /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> StartJarParAsync(
         ClientRegistration registration,
         AuthCodeStartJarParOptions jarOptions,
@@ -380,7 +468,10 @@ public readonly struct AuthCodeClient
 
 
     /// <inheritdoc cref="StartJarAuthorizeAsync(ClientRegistration, AuthCodeStartJarAuthorizeOptions, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="jarOptions">Per-call inputs including signing key and serialisers.</param>
     /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> StartJarAuthorizeAsync(
         ClientRegistration registration,
         AuthCodeStartJarAuthorizeOptions jarOptions,

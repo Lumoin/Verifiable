@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Server;
 /// <remarks>
 /// <para>
 /// Policy values are resolved at dispatch entry by
-/// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/>. The
+/// <see cref="Verifiable.Server.ServerIntegration.ResolvePolicyAsync"/>. The
 /// underlying keys are defined in <see cref="PolicyContextKeys"/> and remain
 /// stable across versions.
 /// </para>
@@ -73,21 +73,6 @@ public static class PolicyExchangeContextExtensions
         public void SetJarLifetimeCeiling(TimeSpan value)
         {
             context[PolicyContextKeys.JarLifetimeCeiling] = value;
-        }
-
-
-        /// <summary>
-        /// Gets the accepted PKCE method set. Defaults to
-        /// <see cref="PkceMethodSet.S256Only"/> (FAPI 2.0 / HAIP).
-        /// </summary>
-        public PkceMethodSet AllowedPkceMethods =>
-            context.TryGetValue(PolicyContextKeys.AllowedPkceMethods, out object? v)
-                && v is PkceMethodSet s ? s : PkceMethodSet.S256Only;
-
-        /// <summary>Sets the accepted PKCE method set.</summary>
-        public void SetAllowedPkceMethods(PkceMethodSet value)
-        {
-            context[PolicyContextKeys.AllowedPkceMethods] = value;
         }
 
 
@@ -184,12 +169,12 @@ public static class PolicyExchangeContextExtensions
         /// <summary>
         /// Gets the clock-skew tolerance as a nullable value: the per-flow policy
         /// value when set, otherwise <see langword="null"/>. The nullable sibling
-        /// of <see cref="ClockSkewTolerance"/> for the
+        /// of <c>ClockSkewTolerance</c> for the
         /// "policy override, else <see cref="Verifiable.OAuth.Validation.ValidationContext.ClockSkew"/> field"
-        /// pattern — mirrors <see cref="KbJwtMaxAgeWindow"/>. Validators that want
+        /// pattern — mirrors <c>KbJwtMaxAgeWindow</c>. Validators that want
         /// the per-flow value with a ValidationContext fallback read this; callers
         /// wanting the unconditional 60-second default read
-        /// <see cref="ClockSkewTolerance"/>.
+        /// <c>ClockSkewTolerance</c>.
         /// </summary>
         public TimeSpan? ClockSkewToleranceOverride =>
             context.TryGetValue(PolicyContextKeys.ClockSkewTolerance, out object? v)
@@ -271,7 +256,7 @@ public static class PolicyExchangeContextExtensions
         /// Gets whether <c>scope</c> is required on PKCE PAR / direct
         /// Authorize / JAR requests. Defaults to <see langword="true"/>.
         /// </summary>
-        /// <remarks>A ternary for the reason stated on <see cref="EmitIssOnRedirect"/>.</remarks>
+        /// <remarks>A ternary for the reason stated on <c>EmitIssOnRedirect</c>.</remarks>
         public bool ScopeRequiredOnRequest =>
             context.TryGetValue(PolicyContextKeys.ScopeRequiredOnRequest, out object? v)
                 && v is bool b ? b : true;
@@ -289,7 +274,7 @@ public static class PolicyExchangeContextExtensions
         /// paths and requires the client to push the request first. Defaults to
         /// <see langword="true"/> (FAPI 2.0 §5.2.2 mandates PAR).
         /// </summary>
-        /// <remarks>A ternary for the reason stated on <see cref="EmitIssOnRedirect"/>.</remarks>
+        /// <remarks>A ternary for the reason stated on <c>EmitIssOnRedirect</c>.</remarks>
         public bool RequirePushedAuthorizationRequests =>
             context.TryGetValue(PolicyContextKeys.RequirePushedAuthorizationRequests, out object? v)
                 && v is bool b ? b : true;
@@ -412,9 +397,9 @@ public static class PolicyExchangeContextExtensions
         /// misconfiguration that maps <c>localhost</c> off the loopback interface.
         /// </summary>
         /// <remarks>
-        /// See <see cref="EmitIssOnRedirect"/>'s remark for why a "defaults false" getter here would
+        /// See <c>EmitIssOnRedirect</c>'s remark for why a "defaults false" getter here would
         /// read as a ternary elsewhere in this file; this one instead mirrors
-        /// <see cref="EnforceMinimumSaltLength"/>'s "observe, do not reject by default" shape, since
+        /// <c>EnforceMinimumSaltLength</c>'s "observe, do not reject by default" shape, since
         /// both default to the safer, narrower reading.
         /// </remarks>
         public bool IsLocalhostNameAcceptedForLoopbackRedirects =>

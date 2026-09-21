@@ -5,6 +5,11 @@ using Verifiable.JCose;
 
 namespace Verifiable.Core.Model.Did
 {
+    /// <summary>
+    /// Well-known key format types recognized by <see cref="KeyFormatFactory"/>, each backed by
+    /// a <see cref="Type"/> so a caller can select a format without depending on the format's
+    /// own assembly at compile time.
+    /// </summary>
     public static class WellKnownKeyFormats
     {
         /// <summary>
@@ -50,7 +55,7 @@ namespace Verifiable.Core.Model.Did
     ///
     /// <para>This enumeration codifies a set of formats that are widely recognized and applied within the community.
     /// This allows for the use of a curated set of formats when constructing the actual key format representation.
-    /// The selection of a suitable format is guided by the <see cref="KeyFormatSelector"/> function.</para>
+    /// The selection of a suitable format is guided by the <see cref="KeyFormatTypeSelector"/> function.</para>
     ///
     /// The choice of a key format can be influenced by several factors:
     /// <list type="number">
@@ -74,7 +79,8 @@ namespace Verifiable.Core.Model.Did
     public static class KeyFormatFactory
     {
         /// <summary>
-        /// Returns a delegate that creates a <see cref="KeyFormat"/> based on the provided <paramref name="format"/> and <paramref name="keyMaterial"/>.
+        /// Gets or sets the delegate that creates a <see cref="KeyFormat"/> from a well-known format
+        /// <see cref="Type"/> and the key material to encode.
         /// </summary>
         public static KeyFormatCreator DefaultKeyFormatCreator { get; set; } = (format, keyMaterial, pool) =>
         {

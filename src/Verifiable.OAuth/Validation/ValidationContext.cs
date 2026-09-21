@@ -77,7 +77,7 @@ public sealed record ValidationContext
     /// </summary>
     /// <remarks>
     /// Application code that owns the active
-    /// <see cref="Verifiable.OAuth.Server.EndpointServer"/> should pass
+    /// <see cref="Verifiable.Server.EndpointServer"/> should pass
     /// <c>oauth.Timings.ClockSkewTolerance</c> here so all validation sites
     /// in the deployment share one source of truth. See
     /// <see cref="Verifiable.OAuth.Server.TimingPolicy.ClockSkewTolerance"/>.
@@ -90,10 +90,10 @@ public sealed record ValidationContext
     /// </summary>
     /// <remarks>
     /// The per-call fallback for the resolved
-    /// <see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.KbJwtMaxAgeWindow"/>
+    /// <c>PolicyExchangeContextExtensions.KbJwtMaxAgeWindow</c>
     /// policy: the KB-JWT <c>iat</c> freshness check uses the policy window when
     /// set, otherwise this value. Application code owning the active
-    /// <see cref="Verifiable.OAuth.Server.EndpointServer"/> aligns it with
+    /// <see cref="Verifiable.Server.EndpointServer"/> aligns it with
     /// the deployment's KB-JWT freshness policy.
     /// </remarks>
     public TimeSpan KbJwtMaxAge { get; init; } = TimeSpan.FromMinutes(5);
@@ -131,7 +131,7 @@ public sealed record ValidationContext
     /// SD-JWT VC §2.2.2.1</see> and designated REQUIRED in
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-18#section-2.2.2.3">
     /// §2.2.2.3</see> for a <c>dc+sd-jwt</c> credential). Derived in the verify
-    /// step from <see cref="Oid4Vp.Server.VpTokenParsed.CredentialType"/>. Defaults to
+    /// step from <see cref="Oid4Vp.Server.VpCredentialClaims.CredentialType"/>. Defaults to
     /// <see langword="true"/> so the axis is a no-op for validators that do not include
     /// <see cref="Oid4Vp.Server"/>'s credential-type-present rule.
     /// </summary>
@@ -157,7 +157,7 @@ public sealed record ValidationContext
     /// over-disclosure) so the axis is a no-op for validators that do not include
     /// <see cref="Oid4Vp.Server"/>'s no-over-disclosure rule. Enforcement is
     /// policy-gated — see
-    /// <see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.EnforceNoOverDisclosure"/>.
+    /// <c>PolicyExchangeContextExtensions.EnforceNoOverDisclosure</c>.
     /// </summary>
     public bool DcqlOverDisclosed { get; init; }
 
@@ -168,7 +168,7 @@ public sealed record ValidationContext
     /// raw number flows through so the consumer can judge it against whatever threshold applies; the
     /// <see cref="Oid4Vp.Server"/> salt-length rule compares it against
     /// <see cref="Verifiable.Cryptography.Salt.RecommendedByteLength"/> and only fails when enforcement
-    /// is opted in (<see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.EnforceMinimumSaltLength"/>),
+    /// is opted in (<c>PolicyExchangeContextExtensions.EnforceMinimumSaltLength</c>),
     /// since RFC 9901 §9.3 RECOMMENDS rather than mandates the length.
     /// </summary>
     public int? MinimumDisclosureSaltLengthBytes { get; init; }

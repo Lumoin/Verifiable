@@ -9,7 +9,11 @@ public enum DpopProofValidationFailureReason
     /// <summary>The proof string is not parseable as a compact JWS.</summary>
     Malformed,
 
-    /// <summary>The <c>typ</c> header is missing or not <c>dpop+jwt</c>.</summary>
+    /// <summary>
+    /// The <c>typ</c> header is missing or does not name the <c>dpop+jwt</c> media type; the long
+    /// form <c>application/dpop+jwt</c> and any casing of either spelling name that same media type
+    /// per <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>.
+    /// </summary>
     InvalidTyp,
 
     /// <summary>The <c>alg</c> header is missing or not an acceptable algorithm.</summary>

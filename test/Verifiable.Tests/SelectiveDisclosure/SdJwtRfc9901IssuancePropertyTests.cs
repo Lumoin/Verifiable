@@ -11,7 +11,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// </summary>
 /// <remarks>
 /// <para>
-/// These tests verify structural invariants of <see cref="SdJwtClaimRedaction.Redact"/>
+/// These tests verify structural invariants of <see cref="SdJwtClaimRedaction.Redact(string, System.Collections.Generic.IReadOnlySet{Verifiable.Core.Model.SelectiveDisclosure.CredentialPath}, Verifiable.Cryptography.GenerateDisclosureSaltDelegate)"/>
 /// that hold regardless of the specific claim names, values, or subset of disclosable
 /// paths chosen. CsCheck generates random claim maps and path subsets, automatically
 /// shrinking to minimal counterexamples on failure.
@@ -66,7 +66,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             var (_, disclosures) = SdJwtClaimRedaction.Redact(json, paths, TestSalts.DefaultGenerator());
 
             Assert.HasCount(disclosable.Count, disclosures);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -95,7 +95,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
                     inMandatory ^ inDisclosure,
                     $"Claim '{key}' must appear in exactly one of mandatory or disclosures.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -121,7 +121,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
                     Assert.AreEqual(claims[key], mandatory[key]?.ToString(), $"Value changed for '{key}'.");
                 }
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -135,9 +135,9 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             var (mandatory, disclosures) = SdJwtClaimRedaction.Redact(
                 json, new HashSet<CredentialPath>(), TestSalts.DefaultGenerator());
 
-            Assert.HasCount(0, disclosures);
+            Assert.IsEmpty(disclosures);
             Assert.HasCount(claims.Count, mandatory);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -153,9 +153,9 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
 
             var (mandatory, disclosures) = SdJwtClaimRedaction.Redact(json, paths, TestSalts.DefaultGenerator());
 
-            Assert.HasCount(0, mandatory);
+            Assert.IsEmpty(mandatory);
             Assert.HasCount(claims.Count, disclosures);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -187,7 +187,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             Assert.HasCount(1, disclosures);
             Assert.AreEqual(shortName, disclosures[0].ClaimName);
             Assert.IsTrue(mandatory.ContainsKey(longName), $"'{longName}' must remain mandatory.");
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -222,7 +222,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
                         $"Non-disclosable leaf '{key}' missing from mandatory nested object.");
                 }
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -243,7 +243,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             var saltSet = new HashSet<string>(
                 disclosures.Select(d => Convert.ToHexString(d.Salt.AsReadOnlySpan())));
             Assert.HasCount(disclosures.Count, saltSet);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -266,7 +266,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             {
                 Assert.Contains(key, disclosureNames, $"Disclosure for '{key}' not found.");
             }
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -296,8 +296,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
 
     private static HashSet<CredentialPath> ToCredentialPaths(IEnumerable<string> propertyNames)
     {
-        return new(
-            propertyNames.Select(k => CredentialPath.FromJsonPointer($"/{EscapeJsonPointer(k)}")));
+        return [.. propertyNames.Select(k => CredentialPath.FromJsonPointer($"/{EscapeJsonPointer(k)}"))];
     }
 
 
@@ -308,3 +307,4 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             .Replace("/", "~1", StringComparison.Ordinal);
     }
 }
+

@@ -44,11 +44,32 @@ internal sealed class RedirectUriMatchingTests
     private const string ClientId = "https://client.example.com";
     private static Uri ClientBaseUri { get; } = new(ClientId);
 
-    /// <summary>The redirect URI <see cref="TestHostShell.RegisterDpopClient"/> registers by default.</summary>
+    /// <summary>The redirect URI <see cref="TestHostShell.RegisterDpopClientAsync"/> registers by default.</summary>
     private static Uri RegisteredRedirectUri { get; } = new("https://client.example.com/callback");
 
     /// <summary>The authenticated subject Part D's Authorize dispatches assert as already signed in.</summary>
     private const string LoopbackSubjectId = "subject-loopback-fallback";
+
+
+    /// <summary>
+    /// The library's loopback fallback independently requires a verifier-concealing method per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.1.1">RFC 9700 §2.1.1</see>:
+    /// "When using PKCE, clients SHOULD use PKCE code challenge methods that do not expose
+    /// the PKCE verifier in the authorization request." A public client's plain method is refused
+    /// even when only the port differs under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8252#section-7.3">RFC 8252 §7.3</see>.
+    /// </summary>
+    [TestMethod]
+    public void LoopbackFallbackRefusesPlainPkceIndependently()
+    {
+        ExchangeContext context = [];
+
+        bool isAccepted = Verifiable.OAuth.AuthCode.AuthCodeEndpoints.IsAcceptableRedirectUri(
+            [new Uri("http://127.0.0.1/cb")], new Uri("http://127.0.0.1:49152/cb"),
+            null, WellKnownCodeChallengeMethods.Plain, context);
+
+        Assert.IsFalse(isAccepted, "The loopback fallback independently requires S256 for a public client.");
+    }
 
 
     [TestMethod]
@@ -195,8 +216,8 @@ internal sealed class RedirectUriMatchingTests
     public async Task ParRejectsDefaultPortVariantOfRegisteredRedirectUri()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         //Same authority under Uri equality, different octets under simple string comparison.
         string portVariant = "https://client.example.com:443/callback";
@@ -216,8 +237,8 @@ internal sealed class RedirectUriMatchingTests
     public async Task ParAcceptsExactRegisteredRedirectUri()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         ServerHttpResponse response = await PushAsync(
             host, material, redirectUri: RegisteredRedirectUri.OriginalString).ConfigureAwait(false);
@@ -239,15 +260,16 @@ internal sealed class RedirectUriMatchingTests
     public async Task AuthorizeRedirectEchoesOriginalStringSoADefaultPortRedirectUriRedeemsSuccessfully()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         const string portRestatedRedirectUri = "https://client.example.com:443/callback";
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri(portRestatedRedirectUri)), tokenEndpointAuthMethod: null);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri(portRestatedRedirectUri)), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -292,6 +314,7 @@ internal sealed class RedirectUriMatchingTests
 
         RequestFields fields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -624,10 +647,10 @@ internal sealed class RedirectUriMatchingTests
     public async Task PublicPkceClientCompletesFullJourneyWithEphemeralLoopbackPort()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         const string ephemeralRedirectUri = "http://127.0.0.1:54321/cb";
 
@@ -662,10 +685,10 @@ internal sealed class RedirectUriMatchingTests
     public async Task TokenExchangePresentingADifferentPortThanAuthorizeIsInvalidGrant()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         (string code, PkceParameters pkce) = await DriveLoopbackParAndAuthorizeAsync(
             host, material, "http://127.0.0.1:54321/cb").ConfigureAwait(false);
@@ -689,12 +712,22 @@ internal sealed class RedirectUriMatchingTests
     public async Task ConfidentialClientCannotUseTheLoopbackFallbackAtPar()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
-        host.SetRedirectUrisAndAuthMethod(
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
             material,
             ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")),
-            tokenEndpointAuthMethod: ClientAuthenticationMethod.ClientSecretBasic);
+            tokenEndpointAuthMethod: ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
+
+        //RFC 9126 §2: the pushed request now authenticates the client before the redirect_uri check
+        //this test is about; a validator that accepts unconditionally isolates that check the same
+        //way the in-process dispatch this test already uses isolates it from real network I/O.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.ClientSecretBasic];
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse parResponse = await PushAsync(
             host, material, redirectUri: "http://127.0.0.1:54321/cb").ConfigureAwait(false);
@@ -719,6 +752,7 @@ internal sealed class RedirectUriMatchingTests
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -833,13 +867,14 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireEphemeralLoopbackPortsCompleteTheFullJourney()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
-        int portA = BindEphemeralLoopbackPort(IPAddress.Loopback);
-        int portB = BindEphemeralLoopbackPort(IPAddress.Loopback);
+        int[] ports = BindEphemeralLoopbackPorts(IPAddress.Loopback, 2);
+        int portA = ports[0];
+        int portB = ports[1];
         Assert.AreNotEqual(portA, portB,
             "The two OS-assigned ephemeral ports must genuinely differ to prove the any-port allowance twice over.");
 
@@ -873,10 +908,10 @@ internal sealed class RedirectUriMatchingTests
         }
 
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://[::1]/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://[::1]/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         Uri redirectUri = new($"http://[::1]:{port}/cb");
         AuthCodeFlowDriveResult result = await DriveLoopbackJourneyOverRealWireAsync(
@@ -895,10 +930,10 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireHttpsLoopbackRedirectGetsNoAnyPortAllowance()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         int port = BindEphemeralLoopbackPort(IPAddress.Loopback);
         (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
@@ -924,10 +959,10 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireLocalhostIsRefusedByDefaultAndAcceptedUnderExplicitOptIn()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://localhost/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://localhost/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         int port = BindEphemeralLoopbackPort(IPAddress.Loopback);
         Uri redirectUri = new($"http://localhost:{port}/cb");
@@ -939,13 +974,16 @@ internal sealed class RedirectUriMatchingTests
         Assert.AreEqual(400, StatusCode, Body);
         Assert.Contains(OAuthErrors.InvalidRequest, Body, StringComparison.Ordinal);
 
-        host.Server.OAuth().ResolvePolicyAsync = (_, policyContext, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            PolicyProfiles.ApplyRfc6749WithPkce(policyContext);
-            policyContext.SetIsLocalhostNameAcceptedForLoopbackRedirects(true);
+            candidateIntegration.ResolvePolicyAsync = (_, policyContext, _) =>
+            {
+                PolicyProfiles.ApplyRfc6749WithPkce(policyContext);
+                policyContext.SetIsLocalhostNameAcceptedForLoopbackRedirects(true);
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         AuthCodeFlowDriveResult accepted = await DriveLoopbackJourneyOverRealWireAsync(
             host, material, redirectUri).ConfigureAwait(false);
@@ -964,8 +1002,8 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireNonLoopbackHostWithADifferentPortIsRefused()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
 
         (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
             host, material.Registration.TenantId.Value,
@@ -988,11 +1026,11 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireRegisteredRedirectUriWithFragmentIsRefusedAtPar()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
         const string fragmentRedirectUri = "https://client.example.com/cb#x";
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri(fragmentRedirectUri)), tokenEndpointAuthMethod: null);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri(fragmentRedirectUri)), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
             host, material.Registration.TenantId.Value,
@@ -1014,10 +1052,10 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireDirectAuthorizeAcceptsEphemeralLoopbackPort()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -1054,10 +1092,10 @@ internal sealed class RedirectUriMatchingTests
     {
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         await using TestHostShell host = new(timeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            LoopbackClientId, LoopbackClientBaseUri, LoopbackCapabilities, PolicyProfile.Rfc6749WithPkce);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, LoopbackCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -1086,34 +1124,6 @@ internal sealed class RedirectUriMatchingTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.1.1">RFC 9700 §2.1.1</see>'s
-    /// S256 gate on the loopback fallback: under a policy that accepts <c>plain</c>
-    /// (<see cref="PkceMethodSet.S256AndPlain"/>), a <c>plain</c>-challenge PAR request for an
-    /// ephemeral loopback port is still refused the fallback over the real wire — the S256 gate on
-    /// the fallback is narrower than the deployment's general PKCE-method policy.
-    /// </summary>
-    [TestMethod]
-    public async Task RealWirePlainPkceCannotUseTheLoopbackFallbackAtPar()
-    {
-        await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
-
-        int port = BindEphemeralLoopbackPort(IPAddress.Loopback);
-        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
-            host, material.Registration.TenantId.Value,
-            BuildLoopbackParFields(LoopbackClientId, $"http://127.0.0.1:{port}/cb", "plain"),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(400, StatusCode, Body);
-        Assert.Contains(OAuthErrors.InvalidRequest, Body, StringComparison.Ordinal);
-        Assert.Contains("not among the registered redirect URIs", Body, StringComparison.Ordinal);
-    }
-
-
-    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see> over
     /// the real wire: a token request whose <c>redirect_uri</c> is ordinal-identical to the value
     /// Authorize persisted is accepted; one naming a DIFFERENT loopback port is refused
@@ -1123,13 +1133,14 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireTokenRedirectUriIdenticalIsAcceptedAndPortSubstitutionIsInvalidGrant()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
-        int portA = BindEphemeralLoopbackPort(IPAddress.Loopback);
-        int portB = BindEphemeralLoopbackPort(IPAddress.Loopback);
+        int[] tokenPorts = BindEphemeralLoopbackPorts(IPAddress.Loopback, 2);
+        int portA = tokenPorts[0];
+        int portB = tokenPorts[1];
         Assert.AreNotEqual(portA, portB);
 
         Uri redirectUriA = new($"http://127.0.0.1:{portA}/cb");
@@ -1167,10 +1178,10 @@ internal sealed class RedirectUriMatchingTests
     public async Task RealWireTokenRedirectUriAbsentWithPkceBoundCodeIsAccepted()
     {
         await using TestHostShell host = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities);
-        host.SetRedirectUrisAndAuthMethod(
-            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            LoopbackClientId, LoopbackClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LoopbackCapabilities).ConfigureAwait(false);
+        await host.SetRedirectUrisAndAuthMethodAsync(
+            material, ImmutableHashSet.Create(new Uri("http://127.0.0.1/cb")), tokenEndpointAuthMethod: null).ConfigureAwait(false);
 
         int port = BindEphemeralLoopbackPort(IPAddress.Loopback);
         Uri redirectUri = new($"http://127.0.0.1:{port}/cb");
@@ -1216,6 +1227,41 @@ internal sealed class RedirectUriMatchingTests
             port = -1;
 
             return false;
+        }
+    }
+
+
+    /// <summary>
+    /// Binds <paramref name="count"/> loopback listeners on <paramref name="address"/> all AT THE
+    /// SAME TIME, reads every bound port, and only then releases all of them: the operating system
+    /// guarantees distinct ephemeral ports only among sockets that are bound concurrently, so binding
+    /// and releasing one listener before requesting the next can hand back a port already given out.
+    /// </summary>
+    private static int[] BindEphemeralLoopbackPorts(IPAddress address, int count)
+    {
+        TcpListener?[] listeners = new TcpListener?[count];
+        try
+        {
+            for(int i = 0; i < count; i++)
+            {
+                listeners[i] = new TcpListener(address, 0);
+                listeners[i]!.Start();
+            }
+
+            int[] ports = new int[count];
+            for(int i = 0; i < count; i++)
+            {
+                ports[i] = ((IPEndPoint)listeners[i]!.LocalEndpoint).Port;
+            }
+
+            return ports;
+        }
+        finally
+        {
+            foreach(TcpListener? listener in listeners)
+            {
+                listener?.Stop();
+            }
         }
     }
 
@@ -1276,6 +1322,7 @@ internal sealed class RedirectUriMatchingTests
 
         return new(StringComparer.Ordinal)
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = clientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = codeChallengeMethod,

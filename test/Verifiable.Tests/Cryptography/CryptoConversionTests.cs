@@ -7,7 +7,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
-    /// Tests for <see cref="VerifiableCryptoFormatConversions" />.
+    /// Tests for <see cref="CryptoFormatConversions" />.
     /// </summary>
     [TestClass]
     internal sealed class CryptoConversionTests

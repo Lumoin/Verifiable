@@ -274,4 +274,38 @@ internal sealed class DataIntegrityTests
         Assert.IsNotNull(decodedCredential);
         Assert.AreEqual(UnsignedCredential.Id, decodedCredential.Id);
     }
+
+
+    /// <summary>
+    /// Proves that <see cref="CanonicalizationTestUtilities.CredentialsExamplesV2ContextSha256"/> is
+    /// the actual digest of the embedded context text it names, not a value computed from that same
+    /// text: a hand edit to <see cref="CanonicalizationTestUtilities.CredentialsExamplesV2ContextJson"/>
+    /// that changed its bytes would fail this assertion instead of silently re-deriving a new "expected" hash.
+    /// </summary>
+    [TestMethod]
+    public void EmbeddedCredentialsExamplesV2ContextMatchesRecordedDigest()
+    {
+        var actualHash = CanonicalizationTestUtilities.ComputeContextHash(CanonicalizationTestUtilities.CredentialsExamplesV2ContextJson);
+
+        Assert.AreEqual(CanonicalizationTestUtilities.CredentialsExamplesV2ContextSha256, actualHash);
+    }
+
+
+    /// <summary>
+    /// Proves that <see cref="CanonicalizationTestUtilities.CredentialsV2ContextSha256"/> is the
+    /// actual digest of the embedded base context text it names, not a value computed from that
+    /// same text: a hand edit to <see cref="EmbeddedContextDocuments.CredentialsV2ContextJson"/>
+    /// that changed its bytes would fail this assertion instead of silently re-deriving a new
+    /// "expected" hash. Appendix B.1 Base Context states: "Implementations MUST treat the base
+    /// context value, located at https://www.w3.org/ns/credentials/v2, as already retrieved; the
+    /// following value is the hexadecimal encoded SHA2-256 digest value of the base context file:
+    /// 59955ced6697d61e03f2b2556febe5308ab16842846f5b586d7f1f7adec92734".
+    /// </summary>
+    [TestMethod]
+    public void EmbeddedCredentialsV2ContextMatchesRecordedDigest()
+    {
+        var actualHash = CanonicalizationTestUtilities.ComputeContextHash(EmbeddedContextDocuments.CredentialsV2ContextJson);
+
+        Assert.AreEqual(CanonicalizationTestUtilities.CredentialsV2ContextSha256, actualHash);
+    }
 }

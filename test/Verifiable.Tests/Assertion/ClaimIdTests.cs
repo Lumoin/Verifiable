@@ -47,6 +47,7 @@ namespace Verifiable.Tests.Assertion
         /// Ensures that each ClaimId static instance has a unique non-empty description.
         /// This test helps guard against potential copy-paste errors or inadvertent duplications
         /// which could arise during library development.
+        /// </summary>
         [TestMethod]
         public void AllStaticInstancesHaveUniqueNonEmptyDescriptions()
         {

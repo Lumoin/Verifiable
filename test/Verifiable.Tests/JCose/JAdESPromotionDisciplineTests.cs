@@ -90,7 +90,7 @@ internal sealed class JAdESPromotionDisciplineTests
     /// <summary>
     /// <see cref="JAdESValidationResult"/> has no public constructor, and its <c>Success</c>/<c>Failed</c>
     /// minting factories are non-public -- the ONLY public route to an instance carrying a non-null
-    /// <see cref="JAdESValidationResult.Verified"/> is <see cref="JAdESSignatureValidation.ValidateAsync"/>
+    /// <see cref="JAdESValidationResult.Verified"/> is <see cref="JAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, TryParseJAdESMessageDelegate, DecodeJAdESProtectedHeaderDelegate, DetectJAdESX5tPresenceDelegate, TryParseJAdESEtsiUDelegate, PublicKeyMemory, DecodeDelegate, EncodeDelegate, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, JAdESHttpHeadersCanonicalizationContext?, JAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
     /// itself, which performs the actual cryptographic check before minting one. Proved as a source scan of
     /// the declaring file's own declaration lines.
     /// </summary>

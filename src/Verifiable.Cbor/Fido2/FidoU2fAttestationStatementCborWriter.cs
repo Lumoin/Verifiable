@@ -19,7 +19,7 @@ namespace Verifiable.Cbor.Fido2;
 /// (equal-length text-string keys sort bytewise: <c>'s'</c> &lt; <c>'x'</c>, so <c>sig</c> precedes
 /// <c>x5c</c>), with <see cref="CborConformanceMode.Ctap2Canonical"/> per
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-conforming-all-classes">section 2.4: All Conformance
-/// Classes</see>. <paramref name="x5c"/> is REQUIRED to carry exactly one certificate, mirroring
+/// Classes</see>. <c>x5c</c> is REQUIRED to carry exactly one certificate, mirroring
 /// <see cref="FidoU2fAttestationStatementCborReader.Parse"/>'s own section 8.6 verification procedure
 /// step 2 enforcement ("Check that x5c has exactly one element").
 /// </para>

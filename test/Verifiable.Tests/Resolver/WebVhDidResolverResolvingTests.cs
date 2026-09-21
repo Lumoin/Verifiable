@@ -19,7 +19,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// End-to-end tests for <see cref="WebVhDidResolver.Build"/> — the full did:webvh resolver that fetches the
+/// End-to-end tests for <see cref="WebVhDidResolver.Build(Verifiable.Core.OutboundFetch.OutboundTransportDelegate, WebVhLineParser, WebVhWitnessFileParser, WebVhDocumentIdentityReader, WebVhStateDeserializer, WebVhCanonicalizer, EncodeDelegate, DecodeDelegate, BaseMemoryPool, TimeProvider)"/> — the full did:webvh resolver that fetches the
 /// <c>did.jsonl</c> through the guarded <see cref="OutboundFetch"/> chokepoint, replays and verifies every
 /// entry, and returns the resolved <see cref="DidDocument"/>. Logs are minted by <see cref="WebVhTestLog"/>
 /// (executing the spec's Create/Update steps) and served by a faked transport, so genesis, updates, key
@@ -53,6 +53,56 @@ internal sealed class WebVhDidResolverResolvingTests
         Assert.AreEqual(log.Did, result.Document!.Id?.ToString());
         Assert.AreEqual(log.VersionIds[^1], result.DocumentMetadata.VersionId);
         Assert.IsFalse(result.DocumentMetadata.Deactivated);
+    }
+
+
+    /// <summary>
+    /// A <c>did.jsonl</c> response carrying <c>Cache-Control: max-age</c> reports that many seconds of
+    /// storable freshness on the resolution metadata, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [WebVhDidResolver.Resolve(log.Did)] = (200, string.Join('\n', log.Lines))
+        });
+        transport.ResponseHeaders[WebVhDidResolver.Resolve(log.Did)] =
+            HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.CacheControl, "max-age=120"));
+
+        DidResolutionResult result = await ResolveAsync(log.Did, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful, $"A minted did:webvh genesis log MUST resolve. Error: {result.ResolutionMetadata.Error?.Type}.");
+        Assert.IsTrue(result.ResolutionMetadata.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(120), result.ResolutionMetadata.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
+    }
+
+
+    /// <summary>
+    /// A non-200 <c>did.jsonl</c> fetch reports non-storable freshness — there is no document a cache could
+    /// keep, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ANon200ResponseReportsNonStorableFreshness()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [WebVhDidResolver.Resolve(log.Did)] = (404, null)
+        });
+
+        DidResolutionResult result = await ResolveAsync(log.Did, transport).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "did:webvh resolution against a not-found log MUST fail.");
+        Assert.IsFalse(result.ResolutionMetadata.Freshness.IsStorable,
+            "A resolution that never reached a document reports no storable freshness.");
     }
 
 
@@ -1027,6 +1077,120 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A transport that throws while fetching the primary DID Log still reports notFound (did:webvh v1.0,
+    /// Read: L848-849), and the Detail tells apart WHICH of the three retrieval causes it was — but never by
+    /// republishing the application transport's own exception message, which is not the library's to publish.
+    /// </summary>
+    [TestMethod]
+    public async Task TransportFailureNamesTheCauseWithoutTheExceptionMessage()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        const string DistinctiveTransportMarker = "wvh-transport-marker-4f21a9";
+
+        static ValueTask<OutboundResponse> throwingTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
+            throw new IOException(DistinctiveTransportMarker);
+
+        DidResolutionResult result = await ResolveAsync(log.Did, throwingTransport).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "A did:webvh whose transport throws MUST NOT resolve.");
+        Assert.AreEqual(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error, "A transport failure fetching the primary DID Log MUST still report notFound.");
+        Assert.IsNotNull(result.ResolutionMetadata.Error!.Detail, "The transport-failure cause MUST be told apart in the Detail.");
+        Assert.DoesNotContain(DistinctiveTransportMarker, result.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal,
+            "The application transport's own exception message MUST NOT be published in the Detail.");
+    }
+
+
+    /// <summary>
+    /// A primary DID Log fetch the outbound-fetch policy refuses (before any transport call) still reports
+    /// notFound, and the Detail says the policy refused it — never the policy's own diagnostic
+    /// <c>DenyReason</c>, which <see cref="OutboundFetchResult.DenyReason"/> documents as not for untrusted
+    /// callers.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyRefusalNamesTheCauseInTheDetail()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        static ValueTask<OutboundResponse> unreachedTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The outbound-fetch policy MUST deny the DID Log host before any transport call.");
+
+        ExchangeContext context = [];
+        context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with { HostDenyList = [Domain] });
+
+        DidResolutionResult result = await ResolveAsync(log.Did, unreachedTransport, context).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "A did:webvh whose log host the outbound policy denies MUST NOT resolve.");
+        Assert.AreEqual(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error, "A policy-refused fetch of the primary DID Log MUST still report notFound.");
+        Assert.IsNotNull(result.ResolutionMetadata.Error!.Detail, "The policy-refusal cause MUST be told apart in the Detail.");
+    }
+
+
+    /// <summary>
+    /// A non-200 status fetching the primary DID Log reports notFound with the status named in the Detail
+    /// (did:webvh v1.0, Read: L848-849).
+    /// </summary>
+    [TestMethod]
+    [DataRow(404)]
+    [DataRow(500)]
+    public async Task UnsuccessfulStatusNamesTheStatusInTheDetail(int statusCode)
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [WebVhDidResolver.Resolve(log.Did)] = (statusCode, null)
+        });
+
+        DidResolutionResult result = await ResolveAsync(log.Did, transport).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, $"did:webvh resolution against a status {statusCode} log MUST fail.");
+        Assert.AreEqual(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error);
+        Assert.IsNotNull(result.ResolutionMetadata.Error!.Detail, "The status cause MUST be told apart in the Detail.");
+        Assert.Contains(statusCode.ToString(CultureInfo.InvariantCulture), result.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal,
+            "The Detail MUST name the status the server answered with.");
+    }
+
+
+    /// <summary>
+    /// When the primary fails one way and the one supplied alternative source fails a DIFFERENT way, the
+    /// Detail names the PRIMARY's own cause and says that no alternative source yielded the log (did:webvh
+    /// v1.0, Read: L848-849, the alternative-source fallback).
+    /// </summary>
+    [TestMethod]
+    public async Task AlternativeSourceFailureNamesThePrimaryCauseAndThatNoneYielded()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        const string watcherUrl = "https://watcher.example/cache/did.jsonl";
+
+        //The primary answers 404; the one supplied alternative source answers 500 — a DIFFERENT cause. Both
+        //fail, so resolution stays notFound, and the Detail MUST name the primary's own cause, not the
+        //alternative's.
+        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        {
+            [WebVhDidResolver.Resolve(log.Did)] = (404, null),
+            [watcherUrl] = (500, null)
+        });
+
+        DidResolutionResult result = await ResolveAsync(log.Did, transport, new DidResolutionOptions { WatcherUrls = [watcherUrl] }).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "A primary and every alternative source failing MUST NOT resolve.");
+        Assert.AreEqual(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error);
+        Assert.IsNotNull(result.ResolutionMetadata.Error!.Detail, "The combined failure MUST carry a Detail.");
+
+        string detail = result.ResolutionMetadata.Error!.Detail!;
+        Assert.Contains("404", detail, StringComparison.Ordinal, "The Detail MUST name the PRIMARY's own cause.");
+        Assert.DoesNotContain("500", detail, StringComparison.Ordinal, "The Detail MUST NOT name the alternative source's own cause.");
+        Assert.Contains("alternative", detail, StringComparison.OrdinalIgnoreCase, "The Detail MUST say that no alternative source yielded the log.");
+    }
+
+
     [TestMethod]
     public async Task ResolvesMovedDidWhenPortable()
     {
@@ -1303,13 +1467,45 @@ pinningTransport,
     }
 
 
-    private async Task<DidResolutionResult> ResolveAsync(string did, RoutingTransport transport, DidResolutionOptions? options = null)
+    /// <summary>Resolves over the canned <see cref="RoutingTransport"/>, forwarding to the delegate-driven overload.</summary>
+    /// <param name="did">The did:webvh identifier to resolve.</param>
+    /// <param name="transport">The canned (status, body)-per-URL transport.</param>
+    /// <param name="options">The resolution options, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The resolution result.</returns>
+    private Task<DidResolutionResult> ResolveAsync(string did, RoutingTransport transport, DidResolutionOptions? options = null)
+    {
+        return ResolveAsync(did, transport.Delegate, options);
+    }
+
+
+    /// <summary>
+    /// Resolves over a bare transport delegate — the real seam a transport-failure or policy-denial test needs
+    /// rather than the canned <see cref="RoutingTransport"/> — with the same SecureDefault policy every other
+    /// test in this file uses.
+    /// </summary>
+    /// <param name="did">The did:webvh identifier to resolve.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="options">The resolution options, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The resolution result.</returns>
+    private Task<DidResolutionResult> ResolveAsync(string did, OutboundTransportDelegate transport, DidResolutionOptions? options = null)
     {
         ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
+        return ResolveAsync(did, transport, context, options);
+    }
+
+
+    /// <summary>Resolves over a bare transport delegate and an explicit <see cref="ExchangeContext"/> (for a test that needs a non-default outbound-fetch policy).</summary>
+    /// <param name="did">The did:webvh identifier to resolve.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="context">The per-operation context carrying the outbound-fetch policy.</param>
+    /// <param name="options">The resolution options, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The resolution result.</returns>
+    private async Task<DidResolutionResult> ResolveAsync(string did, OutboundTransportDelegate transport, ExchangeContext context, DidResolutionOptions? options = null)
+    {
         DidMethodResolverDelegate resolver = WebVhDidResolver.Build(
-            transport.Delegate,
+            transport,
             WebVhLogEntryJson.Parser,
             WebVhLogEntryJson.WitnessFileParser,
             WebVhLogEntryJson.DocumentIdentityReader,
@@ -1353,6 +1549,10 @@ pinningTransport,
             this.Routes = routes;
         }
 
+        //Additive: response headers per URL. Left empty by every existing route, so a caller that never sets
+        //an entry here sees the same header-less OutboundResponse as before.
+        public Dictionary<string, HttpHeaderSet> ResponseHeaders { get; } = new(StringComparer.Ordinal);
+
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
             if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
@@ -1364,7 +1564,11 @@ pinningTransport,
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(Encoding.UTF8.GetBytes(route.Body), BufferTags.Json);
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body });
+            HttpHeaderSet headers = ResponseHeaders.TryGetValue(request.Target.AbsoluteUri, out HttpHeaderSet? configuredHeaders)
+                ? configuredHeaders
+                : HttpHeaderSet.Empty;
+
+            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
         };
     }
 }

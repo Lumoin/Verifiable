@@ -1553,7 +1553,7 @@ internal sealed class DidCommSocketSessionTests
     /// The spinner arms itself at the observed EDGE of the cancellation instead of relying on scheduling
     /// alignment: it busy-waits on <see cref="CancellationTokenSource.IsCancellationRequested"/> itself —
     /// which flips before any registered callback runs — using <see cref="Thread.SpinWait(int)"/> rather than
-    /// <see cref="SpinWait.SpinOnce"/> so edge detection is never surrendered to the scheduler under load, and
+    /// <see cref="SpinWait.SpinOnce()"/> so edge detection is never surrendered to the scheduler under load, and
     /// only then hammers, continuing until the exchange itself resolves. Measured at ~300 iterations under
     /// 16-way contention, a genuinely correlated reply coincides with a genuinely thrown cancellation on
     /// roughly nine of ten iterations, so the logged diagnostic is non-zero on every observed run — it

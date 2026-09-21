@@ -104,8 +104,8 @@ namespace Verifiable.JCose
         /// Returns the equivalent static instance, or the original instance if none match.
         /// This conversion is optional but allows for performance optimizations when comparing method values elsewhere.
         /// </summary>
-        /// <param name="property">The property to canocalize.</param>
-        /// <returns>The equivalent static instance of <paramref name="property"/>, or the original instance if none match.</returns>
+        /// <param name="kty">The key type to canonicalize.</param>
+        /// <returns>The equivalent static instance of <paramref name="kty"/>, or the original instance if none match.</returns>
 
         public static string GetCanonicalizedValue(string kty) => kty switch
         {

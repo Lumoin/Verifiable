@@ -10,7 +10,7 @@ using StringValues = Microsoft.Extensions.Primitives.StringValues;
 namespace Verifiable.Tests.Vcalm;
 
 /// <summary>
-/// The <see cref="Microsoft.AspNetCore.Builder.WebApplication"/> host skin for the W3C VCALM 1.0
+/// The <c>Microsoft.AspNetCore.Builder.WebApplication</c> host skin for the W3C VCALM 1.0
 /// conformance bridge (chunk V-6a), mounted directly as its HTTPS pipeline's <c>RequestDelegate</c>
 /// (<c>app.Run(application.ProcessRequestAsync)</c>). It is the analogue of
 /// <see cref="Verifiable.Tests.OAuth.AuthorizationServerHttpApplication"/>, specialised for the
@@ -34,7 +34,7 @@ namespace Verifiable.Tests.Vcalm;
 ///   (<c>/credentials/issue</c>, <c>/credentials/verify</c>, <c>/presentations/verify</c>) and read
 ///   the token from a single token endpoint. The library's dispatcher matches VCALM endpoints on the
 ///   tenant-scoped <c>/connect/{segment}/vcalm/...</c> path the fixture's
-///   <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/> resolver produces, so this
+///   <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/> resolver produces, so this
 ///   skin REWRITES the inbound flat path into that tenant-scoped shape before dispatch (§2.3 instance
 ///   pathing is deployment-chosen — the suite sees flat paths, the dispatcher sees its own).
 ///   </description></item>

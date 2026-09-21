@@ -349,6 +349,9 @@ public static class AndroidKeyAttestation
     /// Rents a buffer sized to <paramref name="authenticatorData"/> plus <paramref name="clientDataHash"/>
     /// and fills it with their concatenation — the bytes every android-key attestation signature covers.
     /// </summary>
+    /// <param name="authenticatorData">The authenticator data bytes to concatenate.</param>
+    /// <param name="clientDataHash">The client data hash to concatenate after <paramref name="authenticatorData"/>.</param>
+    /// <param name="pool">The memory pool the returned owner is rented from.</param>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
     private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {

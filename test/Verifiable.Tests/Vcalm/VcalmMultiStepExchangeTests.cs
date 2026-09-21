@@ -128,7 +128,7 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, TwoPresentationStepWorkflow());
+        string segment = await RegisterMultiStepAsync(app, holder, TwoPresentationStepWorkflow()).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -207,7 +207,7 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, TwoPresentationStepWorkflow());
+        string segment = await RegisterMultiStepAsync(app, holder, TwoPresentationStepWorkflow()).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -256,7 +256,7 @@ internal sealed class VcalmMultiStepExchangeTests
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         IssuerSigningContext issuer = await CreateIssuerSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, PresentThenIssueWorkflow(issuer.IssuerDid), issuer);
+        string segment = await RegisterMultiStepAsync(app, holder, PresentThenIssueWorkflow(issuer.IssuerDid), issuer).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -316,8 +316,8 @@ internal sealed class VcalmMultiStepExchangeTests
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         IssuerSigningContext issuer = await CreateIssuerSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(
-            app, holder, PresentThenIssueWorkflowWithReservedVariablesCollision(issuer.IssuerDid), issuer);
+        string segment = await RegisterMultiStepAsync(
+            app, holder, PresentThenIssueWorkflowWithReservedVariablesCollision(issuer.IssuerDid), issuer).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
         (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
@@ -331,6 +331,38 @@ internal sealed class VcalmMultiStepExchangeTests
         Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
             problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "An issueRequest redefining the reserved 'results' member is a MALFORMED_VALUE_ERROR refusal.");
+    }
+
+
+    /// <summary>
+    /// §3.6.1's <c>credentialTemplates[].type</c> selects the evaluation mechanism; a type no evaluator
+    /// is registered for is refused with <c>MALFORMED_VALUE_ERROR</c>, and the refusal states that the
+    /// type is not registered WITHOUT repeating the client-supplied value back on the wire.
+    /// </summary>
+    [TestMethod]
+    public async Task IssueRequestWithUnregisteredTemplateTypeRefusesWithoutEchoingTheType()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        IssuerSigningContext issuer = await CreateIssuerSigningContextAsync().ConfigureAwait(false);
+        const string distinctiveTemplateType = "vnd.example.unregistered-mechanism-9f2c";
+        string segment = await RegisterMultiStepAsync(
+            app, holder, PresentThenIssueWorkflowWithUnregisteredTemplateType(issuer.IssuerDid, distinctiveTemplateType), issuer).ConfigureAwait(false);
+
+        string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
+        (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+
+        ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, refused.StatusCode, refused.Body);
+        using JsonDocument problem = JsonDocument.Parse(refused.Body);
+        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+            problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "An unregistered template type is a MALFORMED_VALUE_ERROR refusal, unchanged by not echoing the type.");
+        Assert.DoesNotContain(distinctiveTemplateType, refused.Body, StringComparison.Ordinal,
+            "The client-supplied template type must not be echoed back into the 400 problem detail.");
     }
 
 
@@ -349,7 +381,7 @@ internal sealed class VcalmMultiStepExchangeTests
         IssuerSigningContext issuerA = await CreateFreshIssuerSigningContextAsync().ConfigureAwait(false);
         IssuerSigningContext issuerB = await CreateFreshIssuerSigningContextAsync().ConfigureAwait(false);
 
-        (string segmentA, string segmentB) = RegisterTwoTenantExchange(app, issuerA, issuerB);
+        (string segmentA, string segmentB) = await RegisterTwoTenantExchangeAsync(app, issuerA, issuerB).ConfigureAwait(false);
 
         string mintedVmA = await RunIssueExchangeAndGetMintedVmAsync(app, segmentA, holder).ConfigureAwait(false);
         string mintedVmB = await RunIssueExchangeAndGetMintedVmAsync(app, segmentB, holder).ConfigureAwait(false);
@@ -379,7 +411,7 @@ internal sealed class VcalmMultiStepExchangeTests
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         IssuerSigningContext issuer = await CreateIssuerSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, PresentThenIssueWorkflow(issuer.IssuerDid), issuer);
+        string segment = await RegisterMultiStepAsync(app, holder, PresentThenIssueWorkflow(issuer.IssuerDid), issuer).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -429,13 +461,16 @@ internal sealed class VcalmMultiStepExchangeTests
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         List<(string Url, string Body)> deliveredCallbacks = [];
 
-        string segment = RegisterMultiStep(app, holder, CallbackWorkflow());
-        app.Server.Vcalm().DeliverVcalmCallbackAsync = (url, body, _, _) =>
+        string segment = await RegisterMultiStepAsync(app, holder, CallbackWorkflow()).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            deliveredCallbacks.Add((url, body));
+            candidateIntegration.DeliverVcalmCallbackAsync = (url, body, _, _) =>
+            {
+                deliveredCallbacks.Add((url, body));
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -471,7 +506,7 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, CallbackWorkflow());
+        string segment = await RegisterMultiStepAsync(app, holder, CallbackWorkflow()).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmCallbackAsync(
             segment, "urn:callback:abc123", "{\"notAnEvent\":true}", [], TestContext.CancellationToken).ConfigureAwait(false);
@@ -502,7 +537,7 @@ internal sealed class VcalmMultiStepExchangeTests
                 .SetItem("b", new VcalmWorkflowStep { NextStep = "a" })
         };
 
-        string segment = RegisterMultiStep(app, holder, cyclic);
+        string segment = await RegisterMultiStepAsync(app, holder, cyclic).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -534,7 +569,7 @@ internal sealed class VcalmMultiStepExchangeTests
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
 
         //Resolve the exchange's workflow from the store the §3.6.1 endpoint authors into (no direct config).
-        string segment = RegisterMultiStep(app, holder, workflow: null);
+        string segment = await RegisterMultiStepAsync(app, holder, workflow: null).ConfigureAwait(false);
 
         //§3.6.1: author the workflow through the REAL POST /workflows — the parser produces the unified
         //step contract (whole VPR object kept, query extracted) the engine then drives.
@@ -612,7 +647,7 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, TwoPresentationStepWorkflow());
+        string segment = await RegisterMultiStepAsync(app, holder, TwoPresentationStepWorkflow()).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
@@ -673,10 +708,13 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, SchemaGatedWorkflow(ProofRequiringSchemaEnvelope));
-        app.Server.Vcalm().VcalmSchemaValidators.Register(
-            VcalmSchemaValidatorRegistry.JsonSchemaType,
-            SchemaValidationTestUtilities.CreateVeritasSchemaValidator());
+        string segment = await RegisterMultiStepAsync(app, holder, SchemaGatedWorkflow(ProofRequiringSchemaEnvelope)).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmSchemaValidators.Register(
+                VcalmSchemaValidatorRegistry.JsonSchemaType,
+                SchemaValidationTestUtilities.CreateVeritasSchemaValidator());
+        }).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
         (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
@@ -703,10 +741,13 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = RegisterMultiStep(app, holder, SchemaGatedWorkflow(AbsentMemberRequiringSchemaEnvelope));
-        app.Server.Vcalm().VcalmSchemaValidators.Register(
-            VcalmSchemaValidatorRegistry.JsonSchemaType,
-            SchemaValidationTestUtilities.CreateVeritasSchemaValidator());
+        string segment = await RegisterMultiStepAsync(app, holder, SchemaGatedWorkflow(AbsentMemberRequiringSchemaEnvelope)).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmSchemaValidators.Register(
+                VcalmSchemaValidatorRegistry.JsonSchemaType,
+                SchemaValidationTestUtilities.CreateVeritasSchemaValidator());
+        }).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
         (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
@@ -738,7 +779,7 @@ internal sealed class VcalmMultiStepExchangeTests
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         string vendorEnvelope = /*lang=json,strict*/ """{ "type": "VendorMechanism" }""";
-        string segment = RegisterMultiStep(app, holder, SchemaGatedWorkflow(vendorEnvelope));
+        string segment = await RegisterMultiStepAsync(app, holder, SchemaGatedWorkflow(vendorEnvelope)).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
         (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
@@ -792,7 +833,6 @@ internal sealed class VcalmMultiStepExchangeTests
           }
         }
         """;
-
 
 
     private static VcalmWorkflowConfiguration TwoPresentationStepWorkflow() => new()
@@ -891,6 +931,36 @@ internal sealed class VcalmMultiStepExchangeTests
     };
 
 
+    //Same present-then-issue shape as PresentThenIssueWorkflow, except the credentialTemplate names a
+    //type no evaluator is registered for — the §3.6.1 refusal this seam fails closed on.
+    private static VcalmWorkflowConfiguration PresentThenIssueWorkflowWithUnregisteredTemplateType(string issuerDid, string templateType) => new()
+    {
+        InitialStep = "stepOne",
+        Steps = ImmutableDictionary<string, VcalmWorkflowStep>.Empty
+            .SetItem("stepOne", new VcalmWorkflowStep
+            {
+                CreateChallenge = true,
+                VerifiablePresentationRequestJson = DidAuthVprJson,
+                PresentationQueryJson = DidAuthQueryJson,
+                NextStep = "issue"
+            })
+            .SetItem("issue", new VcalmWorkflowStep
+            {
+                IssueRequests = [new VcalmIssueRequest { CredentialTemplateId = "urn:tmpl-1" }]
+            }),
+        CredentialTemplates = [new VcalmCredentialTemplate
+        {
+            Id = "urn:tmpl-1",
+            TemplateType = templateType,
+            Template =
+                "{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"]," +
+                "\"type\":[\"VerifiableCredential\"]," +
+                "\"issuer\":\"" + issuerDid + "\"," +
+                "\"credentialSubject\":{\"name\":\"Example Holder\"}}"
+        }]
+    };
+
+
     //A single presentation step that names a callback (fired when the step's request is staged).
     private static VcalmWorkflowConfiguration CallbackWorkflow() => new()
     {
@@ -906,73 +976,64 @@ internal sealed class VcalmMultiStepExchangeTests
     };
 
 
-    //--- Wiring ------------------------------------------------------------------------------------
-
-    private string RegisterMultiStep(
+    /// <summary>
+    /// Registers an exchange service with a multi-step workflow and its state-storage delegates.
+    /// </summary>
+    private async Task<string> RegisterMultiStepAsync(
         TestHostShell app, HolderSigningContext holder, VcalmWorkflowConfiguration? workflow, IssuerSigningContext? issuer = null)
     {
-        VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, Capabilities);
+        VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, Capabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         //§3.6.1 / §3.6.2: the real create-workflow endpoint persists the parser-produced configuration
         //here; the exchange's workflow resolves from the same store, so a workflow AUTHORED through the
         //real POST /workflows is the one the exchange engine drives (the seam the missing test crosses).
-        app.Server.Vcalm().StoreVcalmWorkflowAsync = (workflowId, configuration, _, _) =>
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            WorkflowStore[workflowId] = configuration;
+            candidateIntegration.StoreVcalmWorkflowAsync = (workflowId, configuration, _, _) =>
+            {
+                WorkflowStore[workflowId] = configuration;
 
-            return ValueTask.CompletedTask;
-        };
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
-        app.Server.Vcalm().LoadVcalmWorkflowAsync = (workflowId, _, _) =>
-            ValueTask.FromResult(WorkflowStore.GetValueOrDefault(workflowId));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadVcalmWorkflowAsync = (workflowId, _, _) =>
+                ValueTask.FromResult(WorkflowStore.GetValueOrDefault(workflowId));
+        }).ConfigureAwait(false);
 
         //§3.6.4 / §3.6.6: resolve exchange id -> flow id over the host's flow store.
-        app.Server.Vcalm().ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
-            ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
+                ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        }).ConfigureAwait(false);
 
         //§3.6.5 / §3.6.8: the exchange runs on a workflow — a directly-supplied config (the unit-style
         //multi-step tests) or, when none is supplied, the single configuration the §3.6.1 endpoint
         //authored into the store (the end-to-end test). The step decision DERIVES from its step graph.
-        app.Server.Vcalm().ResolveVcalmWorkflowForExchangeAsync = (exchangeId, _, _) =>
-            ValueTask.FromResult(workflow ?? WorkflowStore.Values.FirstOrDefault());
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmWorkflowForExchangeAsync = (exchangeId, _, _) =>
+                ValueTask.FromResult(workflow ?? WorkflowStore.Values.FirstOrDefault());
+        }).ConfigureAwait(false);
 
         //The engine verifies the holder's presentation against the bound challenge / domain.
-        app.Server.Vcalm().VcalmExchangeVerification = new VcalmCredentialVerification
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Resolver = KeyDidResolverSeam,
-            Canonicalize = JcsCanonicalizer,
-            ContextResolver = null,
-            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-            SerializeCredential = SerializeCredential,
-            SerializePresentation = SerializePresentation,
-            SerializeProofOptions = SerializeProofOptions,
-            Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            MemoryPool = Pool
-        };
-
-        app.Server.Vcalm().VcalmPresentationSigning = holder.Signing;
-
-        if(issuer is not null)
-        {
-            //§3.6 issuance-in-exchange: the engine mints credentials with the issuer's eddsa-jcs-2022
-            //configuration. The verifier role (also allowed on this tenant) lets the offered credential
-            //be POSTed straight to /credentials/verify.
-            app.Server.Vcalm().VcalmExchangeIssuance = new VcalmCredentialIssuance
-            {
-                ConfiguredIssuer = issuer.IssuerDid,
-                SigningDescriptors = [issuer.Descriptor],
-                MemoryPool = Pool
-            };
-
-            app.Server.Vcalm().VcalmCredentialVerification = new VcalmCredentialVerification
+            candidateIntegration.VcalmExchangeVerification = new VcalmCredentialVerification
             {
                 Resolver = KeyDidResolverSeam,
                 Canonicalize = JcsCanonicalizer,
                 ContextResolver = null,
+                KnownContext = Context.FromIris(Context.Credentials20),
                 DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
                 SerializeCredential = SerializeCredential,
                 SerializePresentation = SerializePresentation,
@@ -981,6 +1042,45 @@ internal sealed class VcalmMultiStepExchangeTests
                 ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
                 MemoryPool = Pool
             };
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmPresentationSigning = holder.Signing;
+        }).ConfigureAwait(false);
+
+        if(issuer is not null)
+        {
+            //§3.6 issuance-in-exchange: the engine mints credentials with the issuer's eddsa-jcs-2022
+            //configuration. The verifier role (also allowed on this tenant) lets the offered credential
+            //be POSTed straight to /credentials/verify.
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.VcalmExchangeIssuance = new VcalmCredentialIssuance
+                {
+                    ConfiguredIssuer = issuer.IssuerDid,
+                    SigningDescriptors = [issuer.Descriptor],
+                    MemoryPool = Pool
+                };
+            }).ConfigureAwait(false);
+
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.VcalmCredentialVerification = new VcalmCredentialVerification
+                {
+                    Resolver = KeyDidResolverSeam,
+                    Canonicalize = JcsCanonicalizer,
+                    ContextResolver = null,
+                    KnownContext = Context.FromIris(Context.Credentials20),
+                    DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                    SerializeCredential = SerializeCredential,
+                    SerializePresentation = SerializePresentation,
+                    SerializeProofOptions = SerializeProofOptions,
+                    Decoder = TestSetup.Base58Decoder,
+                    ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                    MemoryPool = Pool
+                };
+            }).ConfigureAwait(false);
         }
 
         return material.Registration.TenantId.Value;
@@ -1127,25 +1227,26 @@ internal sealed class VcalmMultiStepExchangeTests
     }
 
 
-    //Registers two exchange tenants on one host, each with its own issuer and its own present-then-issue
-    //workflow (whose template names that tenant's issuer). The exchange issuance and the workflow resolve
-    //per tenant off the dispatcher-stamped context.TenantId; the exchange-flow-id resolution and the
-    //identity-based present verification are shared. The holder presents client-side to both tenants.
-    private (string SegmentA, string SegmentB) RegisterTwoTenantExchange(
+    /// <summary>
+    /// Registers the two tenant exchange services with independent workflow state.
+    /// </summary>
+    private async Task<(string SegmentA, string SegmentB)> RegisterTwoTenantExchangeAsync(
         TestHostShell app, IssuerSigningContext issuerA, IssuerSigningContext issuerB)
     {
-        VerifierKeyMaterial materialA = app.RegisterClient(
-            "https://multistep-a.client.test", new Uri("https://multistep-a.client.test"), Capabilities);
+        VerifierKeyMaterial materialA = await app.RegisterClientAsync(
+            "https://multistep-a.client.test", new Uri("https://multistep-a.client.test"), Capabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(materialA);
-        VerifierKeyMaterial materialB = app.RegisterClient(
-            "https://multistep-b.client.test", new Uri("https://multistep-b.client.test"), Capabilities);
+        VerifierKeyMaterial materialB = await app.RegisterClientAsync(
+            "https://multistep-b.client.test", new Uri("https://multistep-b.client.test"), Capabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(materialB);
 
         string segmentA = materialA.Registration.TenantId.Value;
         string segmentB = materialB.Registration.TenantId.Value;
 
-        VcalmIntegration vcalm = app.Server.Vcalm();
-        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultVcalmJsonParsing(JsonOptions);
+        }).ConfigureAwait(false);
 
         Dictionary<string, VcalmCredentialIssuance> issuanceBySegment = new(StringComparer.Ordinal)
         {
@@ -1168,27 +1269,40 @@ internal sealed class VcalmMultiStepExchangeTests
             [segmentB] = PresentThenIssueWorkflow(issuerB.IssuerDid)
         };
 
-        vcalm.ResolveVcalmExchangeIssuanceAsync = (context, _) =>
-            ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(Seg(context)));
-        vcalm.ResolveVcalmWorkflowForExchangeAsync = (exchangeId, context, _) =>
-            ValueTask.FromResult(workflowBySegment.GetValueOrDefault(Seg(context)));
-
-        vcalm.ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
-            ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
-
-        vcalm.VcalmExchangeVerification = new VcalmCredentialVerification
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
-            Resolver = KeyDidResolverSeam,
-            Canonicalize = JcsCanonicalizer,
-            ContextResolver = null,
-            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
-            SerializeCredential = SerializeCredential,
-            SerializePresentation = SerializePresentation,
-            SerializeProofOptions = SerializeProofOptions,
-            Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            MemoryPool = Pool
-        };
+            candidateIntegration.ResolveVcalmExchangeIssuanceAsync = (context, _) =>
+                ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(Seg(context)));
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmWorkflowForExchangeAsync = (exchangeId, context, _) =>
+                ValueTask.FromResult(workflowBySegment.GetValueOrDefault(Seg(context)));
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
+                ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        }).ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmExchangeVerification = new VcalmCredentialVerification
+            {
+                Resolver = KeyDidResolverSeam,
+                Canonicalize = JcsCanonicalizer,
+                ContextResolver = null,
+                KnownContext = Context.FromIris(Context.Credentials20),
+                DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+                SerializeCredential = SerializeCredential,
+                SerializePresentation = SerializePresentation,
+                SerializeProofOptions = SerializeProofOptions,
+                Decoder = TestSetup.Base58Decoder,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+                MemoryPool = Pool
+            };
+        }).ConfigureAwait(false);
 
         return (segmentA, segmentB);
     }

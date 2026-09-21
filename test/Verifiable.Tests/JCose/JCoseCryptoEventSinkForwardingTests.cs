@@ -32,7 +32,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Verifiable.JCose.Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// forwards the <see cref="SignatureProducedEvent"/> to an explicit sink instead of the global stream.
     /// </summary>
     [TestMethod]
@@ -66,7 +66,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Verifiable.JCose.Cose.VerifyAsync(CoseSign1Message, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CryptoEventSink?, CancellationToken)"/>
     /// forwards the <see cref="VerificationCompletedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -101,7 +101,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// (the typed explicit-delegate overload) forwards the <see cref="SignatureProducedEvent"/> to an
     /// explicit sink.
     /// </summary>
@@ -135,10 +135,10 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, ReadOnlyMemory{byte}, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, IReadOnlyDictionary{string, object}?, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, ReadOnlyMemory{byte}, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, IReadOnlyDictionary{string, object}?, CryptoEventSink?, CancellationToken)"/>
     /// (the raw-payload overload <c>DidCommSignedExtensions.PackSignedAsync</c> reaches) forwards to an
     /// explicit sink, and — the DIDComm symmetry property — reaches <see cref="CryptographicKeyEvents.DefaultSink"/>
-    /// (the global stream) when no sink is supplied, matching what <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
+    /// (the global stream) when no sink is supplied, matching what <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// (the sibling <c>UnpackSignedAsync</c> reaches) already does on the verify side.
     /// </summary>
     [TestMethod]
@@ -195,7 +195,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// forwards the <see cref="VerificationCompletedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -229,7 +229,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// (the overload <c>DidCommSignedExtensions.UnpackSignedAsync</c> reaches) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -268,7 +268,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>
     /// (compact serialization) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -304,7 +304,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>
     /// forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -341,7 +341,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// (the primitive <c>DidCommFromPriorExtensions.PackFromPriorAsync</c> calls) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -380,7 +380,7 @@ payloadSerializer,
 
 
     /// <summary>
-    /// The resolver/binder <see cref="Cose.SignAsync{TResolverState, TBinderState}"/>/<see cref="Cose.VerifyAsync{TResolverState, TBinderState}"/>
+    /// The resolver/binder <see cref="Verifiable.JCose.Cose.SignAsync{TResolverState, TBinderState}(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, BaseMemoryPool, TResolverState, KeyMaterialResolver{PrivateKeyMemory, CoseKeyContext, TResolverState}, TBinderState, KeyMaterialBinder{PrivateKeyMemory, PrivateKey, TBinderState}, CancellationToken)"/>/<see cref="Verifiable.JCose.Cose.VerifyAsync{TResolverState, TBinderState}(CoseSign1Message, BuildSigStructureDelegate, BaseMemoryPool, TResolverState, KeyMaterialResolver{PublicKeyMemory, CoseKeyContext, TResolverState}, TBinderState, KeyMaterialBinder{PublicKeyMemory, PublicKey, TBinderState}, CancellationToken)"/>
     /// overloads (design item 5's second sanctioned route) construct a <see cref="PrivateKey"/>/<see cref="PublicKey"/>
     /// internally, so they emit through the key-object choke point to the global stream — no
     /// <see cref="CryptoEventSink"/> parameter exists on this route by design (see <see cref="CryptoEventSink"/>).
@@ -425,7 +425,7 @@ payloadSerializer,
 
 
     /// <summary>
-    /// The resolver/binder <see cref="Jws.SignAsync{TResolverState, TBinderState}"/>/<see cref="Jws.VerifyAsync{TResolverState, TBinderState}"/>
+    /// The resolver/binder <see cref="Jws.SignAsync{TResolverState, TBinderState}(JwtHeader, JwtPayload, JwtPartEncoder{JoseDictionary}, EncodeDelegate, BaseMemoryPool, TResolverState, KeyMaterialResolver{PrivateKeyMemory, JoseKeyContext, TResolverState}, TBinderState, KeyMaterialBinder{PrivateKeyMemory, PrivateKey, TBinderState}, CancellationToken)"/>/<see cref="Jws.VerifyAsync{TResolverState, TBinderState}(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, TResolverState, KeyMaterialResolver{PublicKeyMemory, JoseKeyContext, TResolverState}, TBinderState, KeyMaterialBinder{PublicKeyMemory, PublicKey, TBinderState}, CancellationToken)"/>
     /// overloads — zero-caller surface design item 5 keeps as the intentional second sanctioned route — round
     /// trip correctly and emit via the key-object choke point to the global stream. Previously untested.
     /// </summary>

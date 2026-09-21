@@ -207,7 +207,7 @@ internal static class Oid4VpSchemeFixtures
         FederationTestRingNode anchorNode = FederationTestRing.CreateNode(new EntityIdentifier(anchorEntityId));
 
         MintedChain mintedChain = await FederationTestRing.BuildDirectChainAsync(
-            verifierNode, anchorNode, now, now.AddHours(1), cancellationToken).ConfigureAwait(false);
+            verifierNode, anchorNode, now, now.AddHours(1), cancellationToken: cancellationToken).ConfigureAwait(false);
 
         ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
             HeaderDeserializer,

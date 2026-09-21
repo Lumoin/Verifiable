@@ -30,7 +30,7 @@ namespace Verifiable.Server;
 /// </param>
 /// <param name="context">
 /// The per-request context. The matched endpoint's capability and the typed
-/// <see cref="Routing.ExchangeContextIncomingRequestExtensions.IncomingRequest"/> are already
+/// <c>Routing.ExchangeContextIncomingRequestExtensions.IncomingRequest</c> are already
 /// set when this runs.
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>

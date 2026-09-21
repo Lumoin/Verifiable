@@ -10,7 +10,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.JCose;
 
 /// <summary>
-/// The CB-AdES certificate-accepting <see cref="CBAdESSignatureValidation.ValidateAsync"/> overload earns
+/// The CB-AdES certificate-accepting <see cref="CBAdESSignatureValidation.ValidateAsync(System.ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, Verifiable.Cryptography.PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, System.ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, Lumoin.Base.BaseMemoryPool, System.Threading.CancellationToken)"/> overload earns
 /// <see cref="BoundProvenance"/> through
 /// <see cref="BoundProvenance.TryBindByCertificateDigestAsync"/>, and the bare-<see cref="PublicKeyMemory"/>
 /// overloads stay the honest bring-your-own-key <see cref="AssertedProvenance"/> primitive.

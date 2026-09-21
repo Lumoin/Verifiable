@@ -32,7 +32,7 @@ public enum DidCommMessageClass
 /// dispatch to the matching unpack without sniffing the wire by hand.
 /// </summary>
 /// <remarks>
-/// The classification is the receive-side counterpart to <see cref="DidCommSendDelegate"/>: the send seam is
+/// The classification is the receive-side counterpart to <see cref="Verifiable.DidComm.Transport.DidCommSendDelegate"/>: the send seam is
 /// channel-agnostic, and so is dispatch — the same routing applies whatever transport delivered the bytes. The
 /// media type distinguishes plaintext / signed / encrypted (DIDComm v2.1 §IANA Media Types); the three
 /// encryption wrappings share one media type, so for an encrypted envelope the protected-header <c>alg</c>

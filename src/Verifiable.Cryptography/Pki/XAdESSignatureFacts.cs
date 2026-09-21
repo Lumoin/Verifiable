@@ -250,7 +250,7 @@ public sealed class XAdESOcspReferenceFact: IDisposable
     /// <summary>Gets the <c>ProducedAt</c>'s lexical <c>xsd:dateTime</c> text.</summary>
     public required string ProducedAtLexical { get; init; }
 
-    /// <summary>Gets the <c>ProducedAt</c>'s parsed value, or <see langword="null"/> when lexically unrepresentable — "shall indicate the same time as the referenced OCSP response's own <c>ProducedAt</c> field" (A.1.2), the antecedent <see cref="XAdESLevelRules.CheckOcspProducedAtConsistencyAsync"/> checks against the actual referenced response.</summary>
+    /// <summary>Gets the <c>ProducedAt</c>'s parsed value, or <see langword="null"/> when lexically unrepresentable — "shall indicate the same time as the referenced OCSP response's own <c>ProducedAt</c> field" (A.1.2), the antecedent <see cref="XAdESLevelRules.CheckOcspProducedAtConsistencyAsync(XAdESRefsFamilyDigestSurface, IReadOnlyList{XAdESOcspReferenceFact}, IReadOnlyList{PkiCertificateMemory}, BaseMemoryPool, List{XAdESRuleViolation}, CancellationToken)"/> checks against the actual referenced response.</summary>
     public DateTimeOffset? ProducedAt { get; init; }
 
     /// <summary>Gets whether the optional <c>OCSPIdentifier/@URI</c> attribute is present.</summary>

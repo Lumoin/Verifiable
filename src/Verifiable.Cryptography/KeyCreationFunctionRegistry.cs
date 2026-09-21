@@ -91,4 +91,11 @@ public static class KeyCreationFunctionRegistry<TDiscriminator1, TDiscriminator2
 
         return CreationMatcher(algorithm, purpose, qualifier);
     }
+
+
+    /// <summary>Gets whether <see cref="Initialize"/> has registered this registry's key-creation matcher.</summary>
+    public static bool IsInitialized
+    {
+        get => CreationMatcher is not null;
+    }
 }

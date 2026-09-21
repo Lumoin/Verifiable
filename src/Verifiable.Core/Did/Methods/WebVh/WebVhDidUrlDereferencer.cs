@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -41,7 +42,7 @@ public static class WebVhDidUrlDereferencer
     /// </summary>
     /// <param name="resolve">
     /// The <c>did:webvh</c> resolver the dereferencer drives to resolve and verify the base DID — typically the
-    /// same delegate produced by <see cref="WebVhDidResolver.Build"/> and registered for resolution.
+    /// same delegate produced by <see cref="WebVhDidResolver.Build(OutboundTransportDelegate, WebVhLineParser, WebVhWitnessFileParser, WebVhDocumentIdentityReader, WebVhStateDeserializer, WebVhCanonicalizer, EncodeDelegate, DecodeDelegate, BaseMemoryPool, TimeProvider)"/> and registered for resolution.
     /// </param>
     /// <param name="transport">The application-supplied single-hop transport the guarded fetch drives.</param>
     /// <param name="presentationDeserializer">Parses a fetched <c>whois.vp</c> into a presentation.</param>
@@ -52,6 +53,13 @@ public static class WebVhDidUrlDereferencer
     /// <param name="base58Decoder">The base58btc decoder for the whois proof value.</param>
     /// <param name="computeDigest">The digest function the whois cryptosuite hashes with.</param>
     /// <param name="pool">The pool the whois verification buffers are rented from.</param>
+    /// <param name="knownContext">
+    /// The deployment's known <c>@context</c> for a <c>whois.vp</c>'s own <c>@context</c>, checked
+    /// after the proof verifies per
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data Integrity
+    /// 1.0 §2.4.1 Validating Contexts</see> and threaded to
+    /// <see cref="PresentationDataIntegrityExtensions.VerifyLinkedPresentationAsync"/> unchanged.
+    /// </param>
     /// <returns>A <see cref="DidMethodDereferencerDelegate"/> for registration with the resolver composition.</returns>
     public static DidMethodDereferencerDelegate Build(
         DidMethodResolverDelegate resolve,
@@ -63,7 +71,8 @@ public static class WebVhDidUrlDereferencer
         ProofOptionsSerializeDelegate proofOptionsSerializer,
         DecodeDelegate base58Decoder,
         ComputeDigestDelegate computeDigest,
-        BaseMemoryPool pool)
+        BaseMemoryPool pool,
+        Context knownContext)
     {
         ArgumentNullException.ThrowIfNull(resolve);
         ArgumentNullException.ThrowIfNull(transport);
@@ -75,6 +84,7 @@ public static class WebVhDidUrlDereferencer
         ArgumentNullException.ThrowIfNull(base58Decoder);
         ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(knownContext);
 
         return async (baseDid, path, query, options, context, cancellationToken) =>
         {
@@ -114,6 +124,7 @@ public static class WebVhDidUrlDereferencer
                     base58Decoder,
                     computeDigest,
                     pool,
+                    knownContext,
                     context,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -156,7 +167,8 @@ public static class WebVhDidUrlDereferencer
         //DID document metadata accompanies it.
         string? contentType = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? value) ? value : null;
 
-        return DidDereferencingResult.Success(response.Body, contentMetadata: null, contentType: contentType);
+        return DidDereferencingResult.Success(
+            response.Body, contentMetadata: null, contentType: contentType, freshness: HttpCacheFreshness.Compute(response));
     }
 
 
@@ -177,6 +189,7 @@ public static class WebVhDidUrlDereferencer
         DecodeDelegate base58Decoder,
         ComputeDigestDelegate computeDigest,
         BaseMemoryPool pool,
+        Context knownContext,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
@@ -227,6 +240,7 @@ public static class WebVhDidUrlDereferencer
             document,
             presentationCanonicalizer,
             contextResolver: null,
+            knownContext,
             proofValueDecoder,
             presentationSerializer,
             proofOptionsSerializer,
@@ -253,6 +267,7 @@ public static class WebVhDidUrlDereferencer
                 aliasDocument,
                 presentationCanonicalizer,
                 contextResolver: null,
+                knownContext,
                 proofValueDecoder,
                 presentationSerializer,
                 proofOptionsSerializer,
@@ -274,7 +289,8 @@ public static class WebVhDidUrlDereferencer
             return DidDereferencingResult.Failure(DidResolutionErrors.InvalidDid);
         }
 
-        return DidDereferencingResult.Success(presentation, contentMetadata: null, contentType: WellKnownWebVhValues.WhoisMediaType);
+        return DidDereferencingResult.Success(
+            presentation, contentMetadata: null, contentType: WellKnownWebVhValues.WhoisMediaType, freshness: HttpCacheFreshness.Compute(response));
     }
 
 

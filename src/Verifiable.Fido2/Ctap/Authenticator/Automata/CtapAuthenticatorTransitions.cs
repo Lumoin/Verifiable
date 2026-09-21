@@ -890,6 +890,11 @@ public static class CtapAuthenticatorTransitions
     /// UP/UV cleared) by the time a <see cref="WellKnownCtapStatusCodes.KeyStoreFull"/> rejection can
     /// fire.
     /// </summary>
+    /// <param name="state">The authenticator state to transition from.</param>
+    /// <param name="requested">The originating <c>authenticatorMakeCredential</c> request, carrying the timing and continuation context this call resumes with.</param>
+    /// <param name="request">The parsed <c>authenticatorMakeCredential</c> command parameters.</param>
+    /// <param name="userVerified">Whether user verification was already collected for this call.</param>
+    /// <param name="userPresent">Whether user presence was already collected for this call.</param>
     /// <param name="enterpriseAttestationGranted">
     /// Step 9's own grant candidate, threaded from <c>OnMakeCredentialRequested</c> (directly,
     /// or via <see cref="CtapMakeCredentialVerifyContinuation"/>/<see cref="CtapMakeCredentialBuiltInUvContinuation"/>
@@ -2003,6 +2008,11 @@ public static class CtapAuthenticatorTransitions
             CtapChangePinOutcomeKind.NewPinSameAsCurrentUnderForce =>
                 Reject(matchedState, WellKnownCtapStatusCodes.PinPolicyViolation, "ClientPin:ChangePinNewPinSameAsCurrentUnderForce"),
             CtapChangePinOutcomeKind.Success => ApplyChangePinSuccess(matchedState, completed),
+            CtapChangePinOutcomeKind.DecapsulationFailed or
+            CtapChangePinOutcomeKind.VerifyFailed or
+            CtapChangePinOutcomeKind.CurrentPinDecryptFailed or
+            CtapChangePinOutcomeKind.CurrentPinMismatch =>
+                throw new NotSupportedException($"No changePIN outcome handling is defined for '{completed.Kind}'."),
             _ => throw new NotSupportedException($"No changePIN outcome handling is defined for '{completed.Kind}'.")
         };
     }
@@ -3632,6 +3642,14 @@ public static class CtapAuthenticatorTransitions
     /// and <c>authenticatorGetNextAssertion</c> success path, computing the next signature counter and
     /// packaging every value the effect and the response need.
     /// </summary>
+    /// <param name="state">The authenticator state to transition from.</param>
+    /// <param name="credential">The credential record the assertion is signed over.</param>
+    /// <param name="clientDataHash">The client data hash the signature covers.</param>
+    /// <param name="userPresent">Whether user presence was collected for this call.</param>
+    /// <param name="userVerified">Whether user verification was collected for this call.</param>
+    /// <param name="responseUser">The user entity to include in the response, or <see langword="null"/> when the response omits it.</param>
+    /// <param name="numberOfCredentials">The number of matching credentials remaining, for the response's <c>numberOfCredentials</c> member, or <see langword="null"/> when the field is omitted.</param>
+    /// <param name="rememberOnCompletion">The <c>authenticatorGetNextAssertion</c> continuation state to remember once this assertion completes, or <see langword="null"/> when there is nothing further to remember.</param>
     /// <param name="largeBlobKeyRequested">
     /// Whether the platform requested the <c>largeBlobKey</c> extension for this call (CTAP 2.3 §12.3,
     /// already validated by the caller). Resolved here, against THIS specific <paramref name="credential"/>,
@@ -3767,6 +3785,8 @@ public static class CtapAuthenticatorTransitions
     {
         CtapGetAssertionHmacSecretOutcomeKind.VerifyFailed => WellKnownCtapStatusCodes.PinAuthInvalid,
         CtapGetAssertionHmacSecretOutcomeKind.DecryptFailed => WellKnownCtapStatusCodes.InvalidParameter,
+        CtapGetAssertionHmacSecretOutcomeKind.Success =>
+            throw new NotSupportedException($"No status code is defined for hmac-secret outcome '{kind}'."),
         _ => throw new NotSupportedException($"No status code is defined for hmac-secret outcome '{kind}'.")
     };
 
@@ -4933,7 +4953,7 @@ public static class CtapAuthenticatorTransitions
     /// complete and VALID → discards the sequence, disposes the superseded stored array, and adopts
     /// <see cref="CtapLargeBlobArrayCommitAttempted.CommittedArray"/> as the new one, responding with an
     /// empty success (line 7670). No pool op, no hashing — both already ran in the executor; this
-    /// method only disposes and swaps already-owned references, mirroring <see cref="FactoryReset"/>'s
+    /// method only disposes and swaps already-owned references, mirroring <see cref="CtapAuthenticatorState.FactoryReset"/>'s
     /// own direct-disposal shape.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnLargeBlobArrayCommitAttempted(

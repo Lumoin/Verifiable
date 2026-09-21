@@ -93,6 +93,14 @@ public static class HaipProfile
     /// <param name="iat">The "issued at" instant for the JAR's <c>iat</c> claim.</param>
     /// <param name="nbf">The "not before" instant for the JAR's <c>nbf</c> claim.</param>
     /// <param name="exp">The expiration instant for the JAR's <c>exp</c> claim.</param>
+    /// <param name="transactionData">
+    /// Optional OID4VP 1.0 <c>transaction_data</c> base64url-encoded JSON descriptor strings.
+    /// </param>
+    /// <param name="walletNonce">Optional wallet-supplied nonce echoed back in the JAR.</param>
+    /// <param name="responseMode">
+    /// The <c>response_mode</c> for the JAR. Defaults to
+    /// <see cref="WellKnownResponseModes.DirectPostJwt"/> when <see langword="null"/>.
+    /// </param>
     public static AuthorizationRequestObject CreateAuthorizationRequestObject(
         string clientId,
         Uri responseUri,
@@ -153,9 +161,9 @@ public static class HaipProfile
     /// </para>
     /// <para>
     /// Timing-claim policy lives in
-    /// <see cref="Server.TimingPolicy"/>; the executor's action handler reads
-    /// <see cref="Server.TimingPolicy.Oid4VpRequestObjectLifetime"/> from the
-    /// <see cref="Server.EndpointServer"/> and passes it here. The
+    /// <see cref="Verifiable.OAuth.Server.TimingPolicy"/>; the executor's action handler reads
+    /// <see cref="Verifiable.OAuth.Server.TimingPolicy.Oid4VpRequestObjectLifetime"/> from the
+    /// <see cref="Verifiable.Server.EndpointServer"/> and passes it here. The
     /// <c>iat</c> and <c>nbf</c> claims are stamped at <paramref name="now"/>;
     /// <c>exp</c> is stamped at <c>now + requestObjectLifetime</c>. The
     /// resulting <c>exp - nbf</c> window satisfies
@@ -183,6 +191,18 @@ public static class HaipProfile
     /// <param name="clientMetadataSerializer">Delegate for serializing client metadata.</param>
     /// <param name="encoder">Delegate for Base64Url encoding.</param>
     /// <param name="pool">Memory pool for allocations.</param>
+    /// <param name="transactionData">
+    /// Optional OID4VP 1.0 <c>transaction_data</c> base64url-encoded JSON descriptor strings.
+    /// </param>
+    /// <param name="walletNonce">Optional wallet-supplied nonce echoed back in the JAR.</param>
+    /// <param name="additionalHeaderClaims">
+    /// Optional JOSE header claims to merge into the JAR's signed header, such as the
+    /// federation <c>trust_chain</c> or an <c>x5c</c> certificate chain.
+    /// </param>
+    /// <param name="responseMode">
+    /// The <c>response_mode</c> for the JAR. Defaults to
+    /// <see cref="WellKnownResponseModes.DirectPostJwt"/> when <see langword="null"/>.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// A tuple of the <see cref="JarSigned"/> PDA input and the compact JWS string.
@@ -353,65 +373,6 @@ public static class HaipProfile
 
     /// <summary>
     /// Wallet-side: encrypts a VP token payload to the Verifier's ephemeral P-256
-    /// exchange key and produces a compact JWE for POSTing to the
-    /// <c>response_uri</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Extracts the Verifier's P-256 public exchange key from
-    /// <see cref="AuthorizationRequestObject.ClientMetadata"/> using
-    /// <paramref name="jwkDeserializer"/> and <paramref name="decoder"/>, then
-    /// performs ECDH-ES key agreement with AES-128-GCM content encryption as
-    /// required by HAIP 1.0.
-    /// </para>
-    /// <para>
-    /// The Wallet calls this after selecting disclosures and serializing the VP token
-    /// presentations to JSON. The returned compact JWE is the body of the HTTP POST
-    /// to <see cref="AuthorizationRequestObject.ResponseUri"/>.
-    /// </para>
-    /// </remarks>
-    /// <param name="requestObject">
-    /// The parsed and signature-verified <see cref="AuthorizationRequestObject"/>
-    /// received from <c>request_uri</c>.
-    /// </param>
-    /// <param name="vpTokenPayloadBytes">
-    /// The serialized VP token presentations as UTF-8 bytes. Typically the JSON
-    /// serialization of the presentations keyed by DCQL credential query identifier.
-    /// </param>
-    /// <param name="headerSerializer">Delegate for serializing the JWE protected header.</param>
-    /// <param name="jwkDeserializer">
-    /// Delegate that parses a JWKS JSON string into a dictionary of claim names to
-    /// values. Used to locate the Verifier's P-256 exchange key.
-    /// </param>
-    /// <param name="tagToEpkCrvConverter">
-    /// Delegate mapping a key <see cref="Tag"/> to the JWK <c>crv</c> string embedded
-    /// in the EPK header parameter.
-    /// </param>
-    /// <param name="keyAgreementEncryptDelegate">
-    /// Delegate performing ECDH-ES P-256 key agreement and deriving the ephemeral key.
-    /// </param>
-    /// <param name="keyDerivationDelegate">
-    /// Concat KDF delegate for deriving the content encryption key per RFC 7518 §4.6.2.
-    /// </param>
-    /// <param name="aeadEncryptDelegate">
-    /// AES-GCM content encryption delegate.
-    /// </param>
-    /// <param name="encoder">Delegate for Base64Url encoding.</param>
-    /// <param name="decoder">
-    /// Delegate for Base64Url decoding, used when parsing the JWKS key coordinates.
-    /// </param>
-    /// <param name="pool">Memory pool for allocations.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>
-    /// The compact JWE serialization to POST to
-    /// <see cref="AuthorizationRequestObject.ResponseUri"/>.
-    /// </returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="AuthorizationRequestObject.ClientMetadata"/> or its
-    /// JWKS is absent, or when no P-256 exchange key is found in the JWKS.
-    /// </exception>
-    /// <summary>
-    /// Wallet-side: encrypts a VP token payload to the Verifier's ephemeral P-256
     /// exchange key and produces a compact JWE for POSTing to the <c>response_uri</c>.
     /// </summary>
     /// <remarks>
@@ -445,6 +406,10 @@ public static class HaipProfile
     /// <param name="encoder">Delegate for Base64url encoding.</param>
     /// <param name="decoder">Delegate for Base64url decoding.</param>
     /// <param name="pool">Memory pool for allocations.</param>
+    /// <param name="agreementPartyUInfo">
+    /// Optional <c>PartyUInfo</c> fixed input for the Concat KDF per RFC 7518 §4.6.2.
+    /// <see langword="null"/> omits it from the key-derivation input.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact JWE string to POST to <see cref="AuthorizationRequestObject.ResponseUri"/>.</returns>
     /// <exception cref="InvalidOperationException">
@@ -523,7 +488,7 @@ public static class HaipProfile
 
     /// <summary>
     /// Pre-resolved-key overload of
-    /// <see cref="EncryptResponseAsync(AuthorizationRequestObject, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, KeyAgreementEncryptDelegate, KeyDerivationDelegate, AeadEncryptDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, CancellationToken)"/>.
+    /// <see cref="EncryptResponseAsync(AuthorizationRequestObject, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, KeyAgreementEncryptDelegate, KeyDerivationDelegate, AeadEncryptDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, string, CancellationToken)"/>.
     /// Skips the <c>client_metadata.jwks</c> extraction path — useful for
     /// the OID4VP <c>openid_federation:</c> client_id prefix, where per
     /// §5.9.3 <c>client_metadata</c> MUST be ignored and the Verifier's
@@ -539,6 +504,23 @@ public static class HaipProfile
     /// Caller is responsible for selecting per the Verifier's
     /// <c>encrypted_response_enc_values_supported</c> set.
     /// </param>
+    /// <param name="vpTokenPayloadBytes">
+    /// The serialised VP token presentations as UTF-8 bytes.
+    /// </param>
+    /// <param name="headerSerializer">Delegate for serialising the JWE protected header.</param>
+    /// <param name="tagToEpkCrvConverter">
+    /// Delegate mapping a key <see cref="Tag"/> to the JWK <c>crv</c> string for the
+    /// EPK header parameter.
+    /// </param>
+    /// <param name="keyAgreementEncryptDelegate">ECDH-ES P-256 key agreement delegate.</param>
+    /// <param name="keyDerivationDelegate">Concat KDF delegate per RFC 7518 §4.6.2.</param>
+    /// <param name="aeadEncryptDelegate">AES-GCM content encryption delegate.</param>
+    /// <param name="encoder">Delegate for Base64url encoding.</param>
+    /// <param name="pool">Memory pool for allocations.</param>
+    /// <param name="agreementPartyUInfo">
+    /// Optional <c>PartyUInfo</c> fixed input for the Concat KDF per RFC 7518 §4.6.2.
+    /// <see langword="null"/> omits it from the key-derivation input.
+    /// </param>
     /// <param name="keyManagementAlgorithm">
     /// The JWE <c>alg</c> (key management algorithm) for the protected header. Defaults to
     /// <see cref="WellKnownJweAlgorithms.EcdhEs"/> (the OID4VP <c>direct_post.jwt</c> default).
@@ -549,6 +531,7 @@ public static class HaipProfile
     /// Optional <c>kid</c> (Key ID) copied into the JWE protected header. OID4VCI 1.0 §10 makes
     /// this a MUST when the recipient JWK carries a <c>kid</c>. <see langword="null"/> omits it.
     /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<string> EncryptResponseAsync(
         PublicKeyMemory encryptionPublicKey,
         string selectedEnc,
@@ -678,6 +661,16 @@ public static class HaipProfile
 
         using IMemoryOwner<byte> headerBytes = decoder(
             compactJwe.AsSpan(0, firstDot).ToString(), pool);
+
+        //RFC 7516 §4: gate the peeked header for well-formedness — a repeated "enc" would otherwise let
+        //this allowlist check see a different value than the one the authoritative JWE parse later
+        //rejects the message for, diverging on which occurrence the two readers acted on.
+        if(!JwkJsonReader.IsWellFormedJsonDocument(headerBytes.Memory.Span))
+        {
+            throw new FormatException(
+                "JWE protected header is not well-formed JSON, or contains a duplicate Header "
+                + "Parameter name.");
+        }
 
         string? enc = JwkJsonReader.ExtractStringValue(
             headerBytes.Memory.Span, "enc"u8);

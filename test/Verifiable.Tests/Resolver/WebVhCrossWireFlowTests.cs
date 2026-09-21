@@ -15,6 +15,7 @@ using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -274,6 +275,233 @@ internal sealed class WebVhCrossWireFlowTests
     }
 
 
+    /// <summary>
+    /// Resolving a moved did:webvh DID by its PRE-MOVE name MUST succeed and return the CURRENT document: the
+    /// did:webvh Read algorithm counts a match against ANY verified version's top-level <c>id</c>, not only the
+    /// resolved one, so the old name resolves — the resolved document's own <c>id</c> becomes
+    /// <c>canonicalId</c>, and the pre-move name the caller used becomes an <c>equivalentId</c>
+    /// (did:webvh v1.0, Read; W3C DID Resolution, equivalentId/canonicalId).
+    /// </summary>
+    [TestMethod]
+    public async Task ResolvesPreMoveDidToCurrentDocumentAcrossTheWire()
+    {
+        await using StaticContentHttpHost nodeA = await StaticContentHttpHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int port = nodeA.BaseAddress.Port;
+
+        string originDomain = $"localhost%3A{port}";
+        string movedDomain = $"localhost%3A{port}:moved";
+
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintAsync(originDomain,
+        [
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain)
+        ]).ConfigureAwait(false);
+
+        string preMoveDid = $"did:webvh:{log.Scid}:{originDomain}";
+
+        //The did:webvh location transform derives the fetch URL from the DID being RESOLVED, so resolving the
+        //pre-move name fetches from the pre-move (origin) location; the SAME complete, verifiable log is served
+        //from there too, exactly as an operator keeping the old name alive after a move would host it.
+        byte[] logBytes = Encoding.UTF8.GetBytes(string.Join('\n', log.Lines));
+        nodeA.Publish("/.well-known/did.jsonl", logBytes, "application/jsonl");
+        nodeA.Publish("/moved/did.jsonl", logBytes, "application/jsonl");
+
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
+        DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
+
+        ExchangeContext context = NewLoopbackContext();
+        DidResolutionResult resolution = await composed.ResolveAsync(
+            preMoveDid, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsSuccessful,
+            $"Resolving a did:webvh DID by its pre-move name MUST succeed across the wire. Error: {resolution.ResolutionMetadata.Error?.Type}.");
+        Assert.AreEqual(log.Did, resolution.Document!.Id?.ToString(),
+            "The resolved document id MUST be the CURRENT (moved) DID, not the pre-move name that was requested.");
+        Assert.AreEqual(log.Did, resolution.DocumentMetadata.CanonicalId,
+            "canonicalId MUST be the resolved document's own id.");
+        Assert.IsNotNull(resolution.DocumentMetadata.EquivalentId, "A moved did:webvh DID MUST carry equivalentId.");
+        Assert.Contains(preMoveDid, resolution.DocumentMetadata.EquivalentId!,
+            "equivalentId MUST list the pre-move DID the caller resolved by.");
+    }
+
+
+    /// <summary>
+    /// Resolving a moved did:webvh DID by its CURRENT (moved) name succeeds, and the resolved metadata carries
+    /// <c>canonicalId</c> (the document's own id) and <c>equivalentId</c> (the pre-move name): DID Resolution's
+    /// <see href="https://www.w3.org/TR/did-resolution/#dfn-equivalentid"><c>equivalentId</c></see> is the
+    /// method's guarantee that both names identify one subject.
+    /// </summary>
+    [TestMethod]
+    public async Task MovedPortableDidMetadataCarriesEquivalenceAcrossTheWire()
+    {
+        await using StaticContentHttpHost nodeA = await StaticContentHttpHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int port = nodeA.BaseAddress.Port;
+
+        string originDomain = $"localhost%3A{port}";
+        string movedDomain = $"localhost%3A{port}:moved";
+
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintAsync(originDomain,
+        [
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain)
+        ]).ConfigureAwait(false);
+
+        string preMoveDid = $"did:webvh:{log.Scid}:{originDomain}";
+
+        nodeA.Publish("/moved/did.jsonl", Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), "application/jsonl");
+
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
+        DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
+
+        ExchangeContext context = NewLoopbackContext();
+        DidResolutionResult resolution = await composed.ResolveAsync(
+            log.Did, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsSuccessful,
+            $"A portable moved did:webvh DID MUST resolve across the wire by its current name. Error: {resolution.ResolutionMetadata.Error?.Type}.");
+        Assert.AreEqual(log.Did, resolution.DocumentMetadata.CanonicalId,
+            "canonicalId MUST be the resolved (moved) document's own id.");
+        Assert.IsNotNull(resolution.DocumentMetadata.EquivalentId, "A moved did:webvh DID MUST carry equivalentId.");
+        Assert.Contains(preMoveDid, resolution.DocumentMetadata.EquivalentId,
+            "equivalentId MUST list the pre-move DID.");
+    }
+
+
+    /// <summary>
+    /// Dereferencing a verification method through the PRE-MOVE DID URL MUST succeed and return the CURRENT
+    /// document's verification method — the same binding that resolves the bare pre-move DID also carries
+    /// through dereferencing, since <see cref="DidResolver.DereferenceAsync"/> resolves the base DID first.
+    /// </summary>
+    [TestMethod]
+    public async Task DereferencesVerificationMethodThroughPreMoveDidUrlAcrossTheWire()
+    {
+        await using StaticContentHttpHost nodeA = await StaticContentHttpHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int port = nodeA.BaseAddress.Port;
+
+        string originDomain = $"localhost%3A{port}";
+        string movedDomain = $"localhost%3A{port}:moved";
+
+        using WebVhController controller = WebVhController.Create();
+        using WebVhController authentication = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintAsync(originDomain,
+        [
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain, Authentication: authentication)
+        ]).ConfigureAwait(false);
+
+        string preMoveDid = $"did:webvh:{log.Scid}:{originDomain}";
+        string expectedVerificationMethodId = $"{log.Did}#key-1";
+
+        //Resolving the pre-move DID fetches from the pre-move (origin) location, so the same log is served
+        //there too (see ResolvesPreMoveDidToCurrentDocumentAcrossTheWire for the full reasoning).
+        byte[] logBytes = Encoding.UTF8.GetBytes(string.Join('\n', log.Lines));
+        nodeA.Publish("/.well-known/did.jsonl", logBytes, "application/jsonl");
+        nodeA.Publish("/moved/did.jsonl", logBytes, "application/jsonl");
+
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
+        DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
+
+        ExchangeContext context = NewLoopbackContext();
+        DidDereferencingResult result = await composed.DereferenceAsync(
+            $"{preMoveDid}#key-1", context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful,
+            $"Dereferencing a verification method through the pre-move DID URL MUST succeed. Error: {result.DereferencingMetadata.Error?.Type}.");
+        _ = Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream,
+            "The dereferenced fragment MUST be the current document's verification method.");
+        Assert.AreEqual(expectedVerificationMethodId, ((VerificationMethod)result.ContentStream).Id,
+            "The returned verification method MUST be the CURRENT document's own method.");
+    }
+
+
+    /// <summary>
+    /// A DID that is named ONLY in the current document's <c>alsoKnownAs</c> — never a verified <c>state.id</c>
+    /// anywhere in the replayed chain — MUST NOT resolve, even when the very same verified log is served from
+    /// that third location too. <c>alsoKnownAs</c> is the DID controller's own unverified claim; only a
+    /// replay-verified <c>state.id</c> counts as equivalence. This is the test that fails if <c>alsoKnownAs</c>
+    /// is ever fed into the equivalence.
+    /// </summary>
+    [TestMethod]
+    public async Task ThirdLocationAlsoKnownAsNeverGrantsEquivalenceAcrossTheWire()
+    {
+        await using StaticContentHttpHost nodeA = await StaticContentHttpHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int port = nodeA.BaseAddress.Port;
+
+        string originDomain = $"localhost%3A{port}";
+        string movedDomain = $"localhost%3A{port}:moved";
+        string decoyDomain = $"localhost%3A{port}:decoy";
+
+        //A syntactically well-formed did:webvh identifier at a THIRD location: its SCID segment only has to
+        //satisfy the did:webvh ABNF (46 base58btc characters) to reach the replay below — it is never the
+        //chain's own SCID (the transform drops it before fetching), and this DID is never a verified state.id.
+        string decoyScid = WebVhTestLog.MultihashBase58(Encoding.UTF8.GetBytes("lane9-decoy-location"));
+        string thirdDid = $"did:webvh:{decoyScid}:{decoyDomain}";
+
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintAsync(originDomain,
+        [
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain, ExtraMoveAlsoKnownAs: [thirdDid])
+        ]).ConfigureAwait(false);
+
+        byte[] logBytes = Encoding.UTF8.GetBytes(string.Join('\n', log.Lines));
+
+        //The SAME verified log is served from the moved location AND from the third (alsoKnownAs-only)
+        //location, so a request for the third DID reaches full replay and verification and fails ONLY on the
+        //equivalence check — never on a fetch failure.
+        nodeA.Publish("/moved/did.jsonl", logBytes, "application/jsonl");
+        nodeA.Publish("/decoy/did.jsonl", logBytes, "application/jsonl");
+
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
+        DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
+
+        ExchangeContext context = NewLoopbackContext();
+        DidResolutionResult resolution = await composed.ResolveAsync(
+            thirdDid, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(resolution.IsSuccessful,
+            "A DID that is only named in alsoKnownAs, and was never a verified state.id, MUST NOT resolve.");
+        Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDid, resolution.ResolutionMetadata.Error,
+            "The refusal MUST be invalidDid (did:webvh Read: didIdMatchCount MUST be greater than 0).");
+        Assert.Contains("does not match the top-level id of any verified version", resolution.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal,
+            "The refusal's detail MUST say the DID matches no verified version.");
+    }
+
+
+    /// <summary>
+    /// A did:webvh log that never moved (every entry shares the same top-level <c>id</c>) MUST carry neither
+    /// <c>canonicalId</c> nor <c>equivalentId</c> — a document is not an equivalent of itself.
+    /// </summary>
+    [TestMethod]
+    public async Task NeverMovedDidCarriesNoPortabilityEquivalenceAcrossTheWire()
+    {
+        await using StaticContentHttpHost nodeA = await StaticContentHttpHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int port = nodeA.BaseAddress.Port;
+        string domain = $"localhost%3A{port}";
+
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime).ConfigureAwait(false);
+
+        nodeA.Publish("/.well-known/did.jsonl", Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), "application/jsonl");
+
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
+        DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
+
+        ExchangeContext context = NewLoopbackContext();
+        DidResolutionResult resolution = await composed.ResolveAsync(
+            log.Did, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsSuccessful,
+            $"A never-moved did:webvh DID MUST resolve across the wire. Error: {resolution.ResolutionMetadata.Error?.Type}.");
+        Assert.IsNull(resolution.DocumentMetadata.CanonicalId,
+            "A did:webvh DID that never moved MUST NOT carry canonicalId.");
+        Assert.IsNull(resolution.DocumentMetadata.EquivalentId,
+            "A did:webvh DID that never moved MUST NOT carry equivalentId.");
+    }
+
+
     //A fresh ExchangeContext whose policy allows https loopback so the genuine https://localhost:{port}/... URL
     //the resolver computes is permitted, mirroring TestHostShell.LoopbackOutboundFetchPolicy: production keeps
     //SecureDefault (which would deny a loopback target before any network contact).
@@ -336,7 +564,8 @@ transport,
             SerializeProofOptions,
             Base58Decoder,
             MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
-            BaseMemoryPool.Shared);
+            BaseMemoryPool.Shared,
+            Context.FromIris(Context.Credentials20));
 
         return DidResolverComposition.Build(
             BaseMemoryPool.Shared,

@@ -4,7 +4,8 @@ namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Carries a successful PAR HTTP response. Transitions from
-/// <see cref="ParRequestReady"/> to <see cref="ParCompleted"/>.
+/// <see cref="Verifiable.OAuth.AuthCode.States.ParRequestReadyState"/> to
+/// <see cref="Verifiable.OAuth.AuthCode.States.ParCompletedState"/>.
 /// </summary>
 /// <param name="Par">The PAR response body parsed from the authorization server.</param>
 /// <param name="ReceivedAt">The UTC instant the response was received.</param>

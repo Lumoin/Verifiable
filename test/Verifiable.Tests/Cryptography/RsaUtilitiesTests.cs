@@ -291,7 +291,7 @@ namespace Verifiable.Tests.Cryptography
         /// <summary>
         /// This is a platform provided way to turn DER into raw RSA key components.
         /// </summary>
-        /// <param name="rsa">The RSA structure from which to export the key.</param>
+        /// <param name="derEncodedKey">The DER-encoded RSA public key structure from which to export the key.</param>
         /// <returns>The RSA key in raw format.</returns>
         private static (byte[] Modulus, byte[] Exponent) DecodeDerPublicKey(byte[] derEncodedKey)
         {

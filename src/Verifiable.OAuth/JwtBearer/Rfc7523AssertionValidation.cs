@@ -353,6 +353,7 @@ public static class Rfc7523AssertionValidation
         Rfc7523TemporalOutcome.Expired => Rfc7523AssertionValidationFailureReason.Expired,
         Rfc7523TemporalOutcome.NotYetValid => Rfc7523AssertionValidationFailureReason.NotYetValid,
         Rfc7523TemporalOutcome.InconsistentTemporalClaims => Rfc7523AssertionValidationFailureReason.InconsistentTemporalClaims,
+        Rfc7523TemporalOutcome.Valid => Rfc7523AssertionValidationFailureReason.InconsistentTemporalClaims,
 
         _ => Rfc7523AssertionValidationFailureReason.InconsistentTemporalClaims
     };

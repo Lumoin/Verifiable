@@ -39,6 +39,13 @@ namespace Verifiable.DidComm.Transport;
 /// a typed <see cref="DidCommTransmitResult"/> rather than thrown, so a sender can fail over to another endpoint or
 /// retry later (DIDComm v2.1 §Failover). Producer-side null guards on the caller arguments MAY throw.
 /// </para>
+/// <para>
+/// Neither <see cref="DidCommTransmitResult"/> nor <see cref="DidCommExchangeResult"/> reports an RFC 9111
+/// cache freshness: a delivery POST has a response (a receipt, or a Return-Route reply), but no document
+/// identified by that URI for a cache to keep — the response is a one-time answer to this exchange, not a
+/// representation of a resource a later request to the same endpoint would re-fetch. This transport is
+/// therefore exempt from the freshness reporting the library's document-fetching attempts carry.
+/// </para>
 /// </remarks>
 public static class DidCommHttpTransport
 {

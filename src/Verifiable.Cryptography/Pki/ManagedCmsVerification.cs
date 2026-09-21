@@ -12,7 +12,7 @@ namespace Verifiable.Cryptography.Pki;
 /// registers nothing for it): it parses the CMS SignedData
 /// structure (RFC 5652) with <see cref="System.Formats.Asn1"/> and verifies the signature through the
 /// library's own registered cryptographic seams — the <see cref="VerificationDelegate"/> for the raw
-/// elliptic-curve primitive and <see cref="CryptographicKeyEvents.ComputeDigestAsync"/> for the digest — with
+/// elliptic-curve primitive and <see cref="CryptographicKeyEvents.ComputeDigestAsync(ComputeDigestDelegate, System.Buffers.ReadOnlySequence{byte}, int, Lumoin.Base.Tag, Lumoin.Base.BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, System.Threading.CancellationToken)"/> for the digest — with
 /// no dependency on <c>System.Security.Cryptography.Pkcs.SignedCms</c> or a third-party CMS library.
 /// </summary>
 /// <remarks>
@@ -975,6 +975,10 @@ public static class ManagedCmsVerification
         EllipticCurveTypes.BrainpoolP320r1 => CryptoAlgorithm.BrainpoolP320r1,
         EllipticCurveTypes.BrainpoolP384r1 => CryptoAlgorithm.BrainpoolP384r1,
         EllipticCurveTypes.BrainpoolP512r1 => CryptoAlgorithm.BrainpoolP512r1,
+        EllipticCurveTypes.None => throw new CryptographicException($"The elliptic curve '{curve}' has no verification algorithm."),
+        EllipticCurveTypes.Curve25519 => throw new CryptographicException($"The elliptic curve '{curve}' has no verification algorithm."),
+        EllipticCurveTypes.NistCurves => throw new CryptographicException($"The elliptic curve '{curve}' has no verification algorithm."),
+        EllipticCurveTypes.BrainpoolCurves => throw new CryptographicException($"The elliptic curve '{curve}' has no verification algorithm."),
         _ => throw new CryptographicException($"The elliptic curve '{curve}' has no verification algorithm.")
     };
 

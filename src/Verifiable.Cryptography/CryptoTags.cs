@@ -13,6 +13,12 @@ namespace Verifiable.Cryptography;
 /// Each tag contains the appropriate <see cref="CryptoAlgorithm"/>, <see cref="Purpose"/>,
 /// and <see cref="EncodingScheme"/> metadata needed for routing and semantic checking.
 /// </para>
+/// <para>
+/// <see cref="Tag"/> is declared in <c>Lumoin.Base</c>; a consumer that imports only
+/// <c>Verifiable.Cryptography</c> and writes the bare <see cref="Tag"/> name needs its own
+/// <c>using Lumoin.Base;</c> as well, since a <c>global using</c> inside this project's own
+/// compilation is not re-exported to a downstream consumer.
+/// </para>
 /// <code>
 /// var publicKey = new PublicKeyMemory(keyBytes, CryptoTags.P256PublicKey);
 /// var algorithm = CryptoTags.Ed25519PrivateKey.Get&lt;CryptoAlgorithm&gt;();
@@ -511,6 +517,31 @@ public static class CryptoTags
     /// </para>
     /// </remarks>
     public static Tag X509CertificateSerialNumber { get; } = Tag.Create(Purpose.Nonce).With(EncodingScheme.Raw);
+
+
+    /// <summary>
+    /// Tag for an unguessable value minted for a protocol exchange's freshness — an OAuth
+    /// <c>state</c>, an OpenID Connect <c>nonce</c>, a PKCE <c>code_verifier</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.1">RFC 7636 §4.1</see>), or
+    /// similar draw — where the value is not itself an input to any named cryptographic primitive
+    /// and does not arise from one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Carries <see cref="Purpose.Nonce"/> with raw encoding, the same algorithm-free shape as
+    /// <see cref="X509CertificateSerialNumber"/>: unique per use, never secret. Unlike that entry,
+    /// which names one artifact, this one names the general protocol-freshness role, for a draw
+    /// that has no artifact-specific tag of its own.
+    /// </para>
+    /// <para>
+    /// This is NOT key material and MUST NOT tag a value that is: a cryptographic key, an
+    /// initialization vector or nonce consumed by a symmetric cipher, or any other bytes that feed
+    /// into a keyed algorithm — those carry the algorithm-specific tag the operation defines (for
+    /// example <see cref="AesGcmIv"/>).
+    /// </para>
+    /// </remarks>
+    public static Tag ProtocolFreshnessValue { get; } = Tag.Create(Purpose.Nonce).With(EncodingScheme.Raw);
 
 
     //COSE wire-form tags. Pool-allocated buffers holding the byte form of

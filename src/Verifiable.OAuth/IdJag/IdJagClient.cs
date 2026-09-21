@@ -126,7 +126,10 @@ public readonly struct IdJagClient
 
 
     /// <inheritdoc cref="MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the IdP authorization server.</param>
+    /// <param name="options">The mint inputs (subject token, audience, client signing material).</param>
     /// <param name="context">The per-operation exchange context threaded into the transport delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<Result<TokenResponse, OAuthParseError>> MintAsync(
         ClientRegistration registration,
         IdJagMintOptions options,
@@ -156,7 +159,10 @@ public readonly struct IdJagClient
 
 
     /// <inheritdoc cref="RedeemAsync(ClientRegistration, IdJagRedeemOptions, CancellationToken)"/>
+    /// <param name="registration">The registration identifying the Resource Authorization Server.</param>
+    /// <param name="options">The redeem inputs (the ID-JAG assertion, client signing material).</param>
     /// <param name="context">The per-operation exchange context threaded into the transport delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<Result<TokenResponse, OAuthParseError>> RedeemAsync(
         ClientRegistration registration,
         IdJagRedeemOptions options,

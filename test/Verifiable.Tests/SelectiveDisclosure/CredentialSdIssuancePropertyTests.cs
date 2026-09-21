@@ -1,5 +1,6 @@
 using CsCheck;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -33,7 +34,7 @@ internal sealed class CredentialSdIssuancePropertyTests
             };
 
             SdJwtIssuanceExtensions.ValidateCredentialPaths(paths);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -51,7 +52,7 @@ internal sealed class CredentialSdIssuancePropertyTests
 
             _ = Assert.Throws<ArgumentException>(() =>
                 SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -69,7 +70,7 @@ internal sealed class CredentialSdIssuancePropertyTests
             };
 
             SdJwtIssuanceExtensions.ValidateCredentialPaths(paths);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -89,7 +90,7 @@ internal sealed class CredentialSdIssuancePropertyTests
 
             _ = Assert.Throws<ArgumentException>(() =>
                 SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 
@@ -111,6 +112,6 @@ internal sealed class CredentialSdIssuancePropertyTests
 
             _ = Assert.Throws<ArgumentException>(() =>
                 SdCwtIssuanceExtensions.ValidateCredentialPaths(paths));
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 }

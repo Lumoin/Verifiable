@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Server.Pipeline;
 
 /// <summary>
 /// Library default backing for
-/// <see cref="AuthorizationServerIntegration.GenerateIdentifierAsync"/>:
+/// <see cref="Verifiable.Server.ServerIntegration.GenerateIdentifierAsync"/>:
 /// purpose-aware identifier generation. Credential-shaped purposes — values
 /// an attacker could present, such as authorization codes, refresh tokens,
 /// and PAR handles — get 32 bytes (256 bits) of CSPRNG output as hex,

@@ -38,7 +38,7 @@ public static class WebFingerEndpoints
     {
         List<EndpointCandidate> candidates = [];
 
-        EndpointServer? server = context.Server;
+        EndpointServer? server = context.RequestServer;
 
         //Fail-closed: the route materializes only when the registration carries the capability AND the
         //application wired its one required seam — only it knows the resource store the resolved
@@ -84,7 +84,7 @@ public static class WebFingerEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 WebFingerIntegration webFinger = server.WebFinger();
 
                 IRegistrationRecord? registration = context.Registration;

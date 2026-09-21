@@ -24,7 +24,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// is the minted URL's own <see cref="Uri.OriginalString"/> (CIMD-013/014/015), and expires the
 /// provision at the injected <see cref="TimeProvider"/>'s instant (CIMD-065) — an expired or unknown
 /// path answers 404, the minimal form of CIMD-067's "MUST return valid ... or a status code indicating
-/// an error response". <paramref name="developerInfo"/> on <see cref="ProvisionClient"/> models
+/// an error response". <c>developerInfo</c> on <see cref="ProvisionClient"/> models
 /// "MAY require developers to provide additional information about the client being developed"
 /// (CIMD-066) and is merely recorded, readable back via <see cref="DeveloperInfo"/>.
 /// </remarks>

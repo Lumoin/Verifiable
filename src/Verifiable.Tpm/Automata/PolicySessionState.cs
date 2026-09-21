@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Automata;
 /// command response. The accumulated policyDigest and the latched cpHash are both the structure Part 2, clause
 /// 10.3.2, Table 90 names — <c>TPM2B_DIGEST</c> — so each rides in a <see cref="Tpm2bDigest"/> carrier this
 /// record owns as well, replaced wholesale by <see cref="WithPolicyDigest(Tpm2bDigest)"/> and
-/// <see cref="WithCpHash(Tpm2bDigest)"/> and never mutated in place. Before the first assertion, and again
+/// <see cref="WithCpHash(Tpm2bDigest, TpmPolicyCpHashKind)"/> and never mutated in place. Before the first assertion, and again
 /// after the context reset, the policyDigest is the shared dispose-immune
 /// <see cref="Tpm2bDigest.Zero(TpmiAlgHash)"/> of the session hash's width.
 /// </para>
@@ -60,7 +60,7 @@ namespace Verifiable.Tpm.Automata;
 /// example <c>TPM2_PolicySigned()</c>) sets this to a non-empty value, it is immutable for the life of the
 /// session (first-writer-wins) — a later assertion proposing a different, non-empty value is rejected rather
 /// than silently replacing it. The latching assertion TRANSFERS its own carrier here through
-/// <see cref="WithCpHash(Tpm2bDigest)"/>; an assertion that re-proposes the same value has its carrier released
+/// <see cref="WithCpHash(Tpm2bDigest, TpmPolicyCpHashKind)"/>; an assertion that re-proposes the same value has its carrier released
 /// by the arm that accepted it.
 /// </param>
 /// <param name="StartTime">

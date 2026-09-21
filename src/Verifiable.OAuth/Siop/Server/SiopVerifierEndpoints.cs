@@ -65,7 +65,7 @@ public static class SiopVerifierEndpoints
     /// Builds the SIOPv2 request-preparation endpoint — the Relying-Party-internal,
     /// PAR-equivalent trigger that starts the flow. It reads the transaction inputs (nonce,
     /// client_id, accepted algorithms, optional id_token_type) off the
-    /// <see cref="ExchangeContext"/>, mints a per-flow request handle, and produces the
+    /// <see cref="Verifiable.Core.ExchangeContext"/>, mints a per-flow request handle, and produces the
     /// <see cref="SiopRequestPrepared"/> input.
     /// </summary>
     /// <remarks>
@@ -100,7 +100,7 @@ public static class SiopVerifierEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
@@ -258,7 +258,7 @@ public static class SiopVerifierEndpoints
     /// <see cref="SiopAuthorizationRequestParameterValues.StaticDiscoveryRequestObjectAudience"/>
     /// (<c>https://self-issued.me/v2</c>) when static discovery is in effect, else the dynamically
     /// discovered issuer — the RP deployment's own issuer in this server-side flow. The signed
-    /// compact JWS rides the <see cref="ExchangeContext"/> (set by the action handler via
+    /// compact JWS rides the <see cref="Verifiable.Core.ExchangeContext"/> (set by the action handler via
     /// <see cref="SiopVerifierExchangeContextExtensions.SetSiopRequestObject"/>); the
     /// <see cref="ServerEndpoint.BuildResponse"/> reads it and serves it with media type
     /// <see cref="WellKnownMediaTypes.Application.OauthAuthzReqJwt"/>.
@@ -299,7 +299,7 @@ public static class SiopVerifierEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
                 if(currentState is not SiopRequestPreparedState prepared)
@@ -448,6 +448,12 @@ public static class SiopVerifierEndpoints
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
+            //A present-but-blank state matches (the acceptance test above only requires the field's
+            //presence) then falls through here to null — the parameter this endpoint keys its
+            //continuing flow on is known, so the refusal names it rather than falling back to the
+            //host's generic "Cannot determine correlation key."
+            MissingCorrelationKeyErrorDescription = "Missing state.",
+
             //The Wallet echoes the preparation handle as the state form field; the value equals the
             //per-flow request handle, which the application's ResolveCorrelationKeyAsync maps back
             //to the internal flow identifier.
@@ -457,7 +463,7 @@ public static class SiopVerifierEndpoints
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                EndpointServer server = context.Server!;
+                EndpointServer server = context.RequestServer!;
 
                 //SiopRequestPreparedState is the same-device (by-value) path; SiopRequestObjectServedState
                 //is the by-reference path where the RP served a signed §9 Request Object at request_uri.

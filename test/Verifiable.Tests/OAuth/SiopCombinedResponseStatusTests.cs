@@ -470,8 +470,8 @@ internal sealed class SiopCombinedResponseStatusTests
             resolveVerifiedStatusListToken: countingResolver,
             credentialStatusPolicy: CredentialStatusPolicies.RefuseNotValid);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         const string Nonce = "n-siop-status-idtoken-only";
@@ -537,8 +537,8 @@ internal sealed class SiopCombinedResponseStatusTests
         {
             host.RegisterIssuerTrust(SiopCombinedResponseFixture.IssuerId, issuerPublicKey);
 
-            using VerifierKeyMaterial rpKeys = host.RegisterClient(
-                SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities);
+            using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+                SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities).ConfigureAwait(false);
             string tenant = rpKeys.Registration.TenantId.Value;
 
             async Task<(string RequestHandle, ServerHttpResponse Response)> PostOnceAsync()
@@ -605,8 +605,8 @@ internal sealed class SiopCombinedResponseStatusTests
     public async Task AnUnclassifiedCombinedResponseFailureAnswersServerError()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities).ConfigureAwait(false);
 
         ExchangeContext context = [];
         context.SetTenantId(rpKeys.Registration.TenantId);
@@ -835,8 +835,8 @@ internal sealed class SiopCombinedResponseStatusTests
         await using TestHostShell host = new(
             TimeProvider, resolveVerifiedStatusListToken: countingResolver);
 
-        using VerifierKeyMaterial rpKeys = host.RegisterClient(
-            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities).ConfigureAwait(false);
         string tenant = rpKeys.Registration.TenantId.Value;
 
         const string Nonce = "n-siop-status-corrupt-vp-token";

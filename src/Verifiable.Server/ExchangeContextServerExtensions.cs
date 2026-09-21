@@ -22,6 +22,9 @@ namespace Verifiable.Server;
     Justification = "C# 14 extension blocks are surfaced as nested types by the analyzer but are not nested types in the language sense.")]
 public static class ExchangeContextServerExtensions
 {
+    /// <summary>
+    /// Typed dispatch-context extensions that expose the admitted server view and pipeline entries without key casts.
+    /// </summary>
     extension(ExchangeContext context)
     {
         /// <summary>
@@ -197,13 +200,30 @@ public static class ExchangeContextServerExtensions
 
 
         /// <summary>
-        /// Gets the active <see cref="EndpointServer"/> placed on the context at dispatch
-        /// entry. Every per-request delegate reads backend access from here rather than
-        /// receiving the host as a separate parameter.
+        /// The serving owner for requesting alterations. Per-request backend access reads
+        /// <c>ExchangeContextServerExtensions.RequestServer</c>, which retains the wiring acquired at admission.
         /// </summary>
         public EndpointServer? Server =>
             context.TryGetValue(ServerContextKeys.ServerKey, out object? v)
                 && v is EndpointServer server ? server : null;
+
+        /// <summary>
+        /// The wiring captured at admission. Direct helper callers without a lease use their supplied
+        /// server; serving entry points stamp a fixed view before any application operation.
+        /// </summary>
+        public EndpointServer? RequestServer =>
+            context.TryGetValue(ServerContextKeys.RequestServerKey, out object? value)
+                && value is EndpointServer server ? server : context.Server;
+
+
+        /// <summary>Retains the admitted view for every builder, handler and action callback.</summary>
+        /// <param name="server">The fixed request view.</param>
+        public void SetRequestServer(EndpointServer server)
+        {
+            ArgumentNullException.ThrowIfNull(server);
+            context[ServerContextKeys.RequestServerKey] = server;
+        }
+
 
         /// <summary>Sets the active dispatch host on the request context. Called by the dispatcher.</summary>
         public void SetServer(EndpointServer server)

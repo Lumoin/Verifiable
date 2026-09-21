@@ -1,7 +1,6 @@
-using Lumoin.Veritas.Cbor;
-using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
+using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
@@ -482,7 +481,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
 
 
     /// <summary>
-    /// Establishes <paramref name="pin"/> as the authenticator's PIN and issues a <c>ga</c>-permission
+    /// Establishes the fixture PIN as the authenticator's PIN and issues a <c>ga</c>-permission
     /// <c>pinUvAuthToken</c> under <paramref name="protocolId"/>, decrypted from wire bytes only.
     /// </summary>
     private static async Task<byte[]> EstablishPinAndIssueGaTokenAsync(
@@ -592,7 +591,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         DisposeResponse(response);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
-        byte[] ciphertext = DecodeCborByteString(FindHmacSecretOutput(authenticatorData.Extensions));
+        byte[] ciphertext = await DecodeHmacSecretEncryptedOutputAsync(FindHmacSecretOutput(authenticatorData.Extensions), cancellationToken).ConfigureAwait(false);
         byte[] decrypted = await session.DecryptHmacSecretOutputAsync(ciphertext, cancellationToken).ConfigureAwait(false);
 
         return (ciphertext, decrypted);
@@ -602,7 +601,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     /// <summary>Decrypts the decoded <paramref name="authenticatorData"/>'s <c>hmac-secret</c> authData output under <paramref name="session"/>'s shared secret.</summary>
     private static async Task<byte[]> DecryptHmacSecretOutputAsync(CtapPlatformPinSession session, AuthenticatorData authenticatorData, CancellationToken cancellationToken)
     {
-        byte[] encryptedOutput = DecodeCborByteString(FindHmacSecretOutput(authenticatorData.Extensions));
+        byte[] encryptedOutput = await DecodeHmacSecretEncryptedOutputAsync(FindHmacSecretOutput(authenticatorData.Extensions), cancellationToken).ConfigureAwait(false);
 
         return await session.DecryptHmacSecretOutputAsync(encryptedOutput, cancellationToken).ConfigureAwait(false);
     }
@@ -624,9 +623,18 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     }
 
 
-    /// <summary>Decodes a CBOR byte-string item's raw content bytes (the wire form <see cref="AuthenticatorExtensionOutputsCborReader"/> hands back, still type/length-prefixed).</summary>
-    private static byte[] DecodeCborByteString(ReadOnlyMemory<byte> encoded) =>
-        new CborReader(encoded, CborOptions.Ctap2Canonical).ReadByteString();
+    /// <summary>
+    /// Decodes an <c>hmac-secret</c> authenticator extension output's still-encoded value through
+    /// <see cref="HmacSecretExtensionProcessor.ProcessAssertionOutput"/> and returns the claim's
+    /// <see cref="HmacSecretEncryptedOutputContext.EncryptedOutput"/> as a private copy.
+    /// </summary>
+    private static async Task<byte[]> DecodeHmacSecretEncryptedOutputAsync(ReadOnlyMemory<byte> encoded, CancellationToken cancellationToken)
+    {
+        var request = new ExtensionOutputProcessingRequest(WellKnownWebAuthnExtensionIdentifiers.HmacSecret, clientOutputJson: null, encoded, BaseMemoryPool.Shared);
+        List<Claim> claims = await HmacSecretExtensionProcessor.ProcessAssertionOutput(request, cancellationToken).ConfigureAwait(false);
+
+        return ((HmacSecretEncryptedOutputContext)claims[0].Context).EncryptedOutput.ToArray();
+    }
 
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorGetAssertionClient.GetAssertionAsync"/>, disposing the request either way.</summary>

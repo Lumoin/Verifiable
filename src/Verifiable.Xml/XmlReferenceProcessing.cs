@@ -12,7 +12,7 @@ namespace Verifiable.Xml;
 /// (Second Edition)</see>: dereferencing a <c>ds:Reference</c>'s <c>URI</c> through
 /// <see cref="XmlReferenceDereferencer"/>, running the transform chain the <c>Reference</c> names, and
 /// producing the two octet streams core validation digests and verifies — per-reference digest input
-/// (<see cref="TryComputeDigestInput"/>) and canonical <c>SignedInfo</c> octets
+/// (<see cref="TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/>) and canonical <c>SignedInfo</c> octets
 /// (<see cref="TryComputeSignedInfoOctets"/>).
 /// </summary>
 /// <remarks>
@@ -34,7 +34,7 @@ public static class XmlReferenceProcessing
 {
     /// <summary>
     /// The maximum number of <c>Transform</c> elements one <c>Reference</c>'s chain may carry before
-    /// <see cref="TryComputeDigestInput"/> refuses with
+    /// <see cref="TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/> refuses with
     /// <see cref="XmlSignatureProcessingFailure.TransformCountExceeded"/> — a documented hardening bound
     /// this library imposes; XML Signature itself sets no such bound.
     /// </summary>
@@ -43,7 +43,7 @@ public static class XmlReferenceProcessing
     /// <summary>
     /// The maximum number of octets-to-node-set re-parses — the section 4.3.3.2 default conversion,
     /// performed wherever a transform needs a node-set but octets arrive, including the reference's
-    /// initial dereference — one <c>Reference</c>'s chain may perform before <see cref="TryComputeDigestInput"/>
+    /// initial dereference — one <c>Reference</c>'s chain may perform before <see cref="TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/>
     /// refuses with <see cref="XmlSignatureProcessingFailure.ReparseDepthExceeded"/> — a documented
     /// hardening bound this library imposes.
     /// </summary>
@@ -774,7 +774,7 @@ public static class XmlReferenceProcessing
     /// Canonicalizes a node-set with one algorithm and one <c>InclusiveNamespaces PrefixList</c> value, the
     /// one dispatch both a <c>Transform</c>'s and a <c>CanonicalizationMethod</c>'s parameters share:
     /// exclusive-family algorithms honor a non-empty <paramref name="prefixList"/> through
-    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>; the inclusive families ignore it.
+    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/>; the inclusive families ignore it.
     /// <paramref name="prefixList"/> is length-capped at
     /// <see cref="MaximumPrefixListByteLength"/> before it is tokenized — the attribute value is fully
     /// attacker-controlled and this dispatch runs on the engine's hot path (once per exclusive-family
@@ -816,7 +816,7 @@ public static class XmlReferenceProcessing
     /// <c>S</c>) into one managed string per token: each token is transcoded on its
     /// own rather than the whole attribute value being materialized as a single managed string first — the
     /// house "no managed-string surfaces" discipline permits the small, individually-bounded per-token
-    /// strings <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>'s own <c>ReadOnlySpan&lt;string&gt;</c>
+    /// strings <see cref="XmlCanonicalization.TryCanonicalizeExclusive(XmlNodeTable, XmlNodeSet, bool, ReadOnlySpan{string}, BaseMemoryPool, out PooledMemory?, out XmlCanonicalizationError)"/>'s own <c>ReadOnlySpan&lt;string&gt;</c>
     /// parameter shape requires, never one string sized to the whole (length-capped, but still
     /// attacker-influenced) attribute value. <see cref="XmlCanonicalization"/>'s own per-entry whitespace
     /// split (<c>TryParsePrefixList</c>) still runs over each returned token, but is a no-op there since

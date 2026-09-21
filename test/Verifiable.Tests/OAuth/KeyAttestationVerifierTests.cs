@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -89,13 +90,19 @@ internal sealed class KeyAttestationVerifierTests
         string attestation = await MintJwkAttestationAsync(wpPrivate, wpPublic, NowInstant.AddHours(1), AttestationNonce)
             .ConfigureAwait(false);
 
-        //Flip one character of the payload segment; the embedded jwk is intact so resolution succeeds
-        //but the signature no longer matches the altered signing input.
+        //Alter the nonce value inside the payload's JSON text — a content-level edit, not a byte flip,
+        //so the payload stays well-formed JSON and the structural parse still succeeds; only the
+        //signature no longer matches the altered signing input.
         string[] parts = attestation.Split('.');
-        char[] payload = parts[1].ToCharArray();
-        payload[0] = payload[0] == 'A' ? 'B' : 'A';
-        parts[1] = new string(payload);
-        string tampered = string.Join('.', parts);
+        string payloadJson;
+        using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
+        {
+            payloadJson = Encoding.UTF8.GetString(payloadBytes.Memory.Span).TrimEnd('\0');
+        }
+
+        string tamperedJson = payloadJson.Replace(AttestationNonce, "attestation-nonce-tampered", StringComparison.Ordinal);
+        string tamperedPayload = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(tamperedJson));
+        string tampered = $"{parts[0]}.{tamperedPayload}.{parts[2]}";
 
         KeyAttestationVerificationResult result = await VerifyAsync(tampered).ConfigureAwait(false);
 
@@ -380,6 +387,224 @@ internal sealed class KeyAttestationVerifierTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(KeyAttestationVerificationFailureReason.KeyReferenceUnresolved, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// RFC 7515 §4: "The Header Parameter names within the JOSE Header ... MUST be unique." A
+    /// header repeating the <c>kid</c> member is rejected as <c>Malformed</c> before the
+    /// Wallet-Provider key is resolved; the same header and payload with the duplicate removed
+    /// verify. The header and payload are built by hand, never through
+    /// <see cref="HeaderSerializer"/> or <see cref="PayloadSerializer"/>, and signed over their
+    /// exact bytes with the project's own signing primitive, so only the header well-formedness
+    /// gate — not an invalid signature — can be responsible for the refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsAttestationHeaderWithDuplicateKidMember()
+    {
+        var wp = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory wpPublic = wp.PublicKey;
+        using PrivateKeyMemory wpPrivate = wp.PrivateKey;
+
+        const string Kid = "https://wallet-provider.example.com/keys#wp-1";
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(wpPrivate.Tag);
+        DateTimeOffset expiresAt = NowInstant.AddHours(1);
+
+        string payloadJson =
+            "{\"attested_keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\"," +
+            "\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\"," +
+            "\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\"}]," +
+            $"\"iat\":{NowInstant.ToUnixTimeSeconds()},\"exp\":{expiresAt.ToUnixTimeSeconds()}," +
+            $"\"nonce\":\"{AttestationNonce}\"}}";
+
+        string duplicateHeaderJson =
+            "{\"alg\":\"" + algorithm + "\",\"typ\":\"key-attestation+jwt\"," +
+            "\"kid\":\"" + Kid + "\",\"kid\":\"" + Kid + "\"}";
+
+        string duplicateAttestation =
+            await SignRawAsync(wpPrivate, duplicateHeaderJson, payloadJson).ConfigureAwait(false);
+
+        KeyAttestationVerificationResult duplicateResult =
+            await VerifyAsync(duplicateAttestation).ConfigureAwait(false);
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, duplicateResult.FailureReason);
+
+        string singleHeaderJson =
+            "{\"alg\":\"" + algorithm + "\",\"typ\":\"key-attestation+jwt\",\"kid\":\"" + Kid + "\"}";
+
+        string acceptedAttestation =
+            await SignRawAsync(wpPrivate, singleHeaderJson, payloadJson).ConfigureAwait(false);
+
+        ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) =>
+            string.Equals(kid, Kid, StringComparison.Ordinal)
+                ? ValueTask.FromResult<PublicKeyMemory?>(CopyPublicKey(wpPublic))
+                : ValueTask.FromResult<PublicKeyMemory?>(null);
+
+        KeyAttestationVerificationResult acceptedResult = await KeyAttestationVerifier.VerifyAsync(
+            acceptedAttestation,
+            AttestationNonce,
+            nonceRequired: true,
+            isAttestationSigningAlgAcceptable: static _ => true,
+            resolveWalletProviderKey: resolver,
+            x509Verification: null,
+            context: [],
+            TestSetup.Base64UrlDecoder,
+            TimeProvider,
+            Pool,
+            ClockSkew,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(acceptedResult.IsValid,
+            $"the same attestation without the duplicate must verify; got {acceptedResult.FailureReason}.");
+    }
+
+
+    /// <summary>
+    /// A constrained attestation whose <c>key_storage</c> and <c>user_authentication</c> arrays each
+    /// carry a value the caller's accepted-value sets also carry validates:
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI
+    /// 1.0 §12.2.4</see>'s constraint arrays are "accepted by the Credential Issuer" membership sets, so
+    /// at least one match on each side is enough.
+    /// </summary>
+    [TestMethod]
+    public void SatisfiedConstraintsValidate()
+    {
+        KeyAttestation attestation = BuildAttestation(
+            keyStorageJson: "[\"iso_18045_moderate\",\"iso_18045_high\"]",
+            userAuthenticationJson: "[\"iso_18045_basic\"]");
+
+        KeyAttestationVerificationResult result = KeyAttestationVerifier.CheckAssuranceConstraints(
+            attestation, ["iso_18045_high"], ["iso_18045_basic"], Pool);
+
+        Assert.IsTrue(result.IsValid, $"a matching attested value on each side must satisfy both constraints; got {result.FailureReason}.");
+        Assert.AreSame(attestation, result.Attestation);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-D.2">OID4VCI
+    /// 1.0 Appendix D.2</see>: <c>iso_18045_high</c> "MUST be used when key storage or user
+    /// authentication is resistant to attack with attack potential 'High'", equivalent to VAN.5, while
+    /// <c>iso_18045_moderate</c> "MUST be used when ... 'Moderate'", equivalent to VAN.4 — two DISTINCT
+    /// bands, never one ranking the other satisfies. An attestation whose <c>key_storage</c> is only
+    /// <c>iso_18045_high</c> does not satisfy a constraint listing only <c>iso_18045_moderate</c>: the
+    /// check is membership, not ordering.
+    /// </summary>
+    [TestMethod]
+    public void KeyStorageConstraintUnsatisfiedWhenNoAttestedValueIsAccepted()
+    {
+        KeyAttestation attestation = BuildAttestation(keyStorageJson: "[\"iso_18045_high\"]", userAuthenticationJson: null);
+
+        KeyAttestationVerificationResult result = KeyAttestationVerifier.CheckAssuranceConstraints(
+            attestation, ["iso_18045_moderate"], acceptedUserAuthenticationValues: null, pool: Pool);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.KeyStorageConstraintUnsatisfied, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// The same membership rule applies to <c>user_authentication</c>: an attestation whose value is
+    /// <c>iso_18045_basic</c> does not satisfy a constraint listing only <c>iso_18045_high</c>.
+    /// </summary>
+    [TestMethod]
+    public void UserAuthenticationConstraintUnsatisfiedWhenNoAttestedValueIsAccepted()
+    {
+        KeyAttestation attestation = BuildAttestation(keyStorageJson: null, userAuthenticationJson: "[\"iso_18045_basic\"]");
+
+        KeyAttestationVerificationResult result = KeyAttestationVerifier.CheckAssuranceConstraints(
+            attestation, acceptedKeyStorageValues: null, ["iso_18045_high"], Pool);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.UserAuthenticationConstraintUnsatisfied, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A non-empty constraint asks a membership question of the attested array; an attested value that
+    /// is not itself a well-formed JSON array of strings cannot answer that question, so it fails with
+    /// <see cref="KeyAttestationVerificationFailureReason.AssuranceConstraintValuesMalformed"/> rather
+    /// than a silent unsatisfied.
+    /// </summary>
+    [TestMethod]
+    public void MalformedAttestedArrayAnswersAssuranceConstraintValuesMalformed()
+    {
+        KeyAttestation attestation = BuildAttestation(keyStorageJson: "\"iso_18045_moderate\"", userAuthenticationJson: null);
+
+        KeyAttestationVerificationResult result = KeyAttestationVerifier.CheckAssuranceConstraints(
+            attestation, ["iso_18045_moderate"], acceptedUserAuthenticationValues: null, pool: Pool);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.AssuranceConstraintValuesMalformed, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI
+    /// 1.0 §12.2.4</see>: <c>key_storage</c> and <c>user_authentication</c> are each "OPTIONAL. A
+    /// non-empty array" — an absent constraint (here, both are <see langword="null"/>) constrains
+    /// nothing, whatever the attestation carries, including when it carries nothing at all.
+    /// </summary>
+    [TestMethod]
+    public void AbsentConstraintIsSatisfiedByAnyAttestation()
+    {
+        KeyAttestation attestation = BuildAttestation(keyStorageJson: null, userAuthenticationJson: null);
+
+        KeyAttestationVerificationResult result = KeyAttestationVerifier.CheckAssuranceConstraints(
+            attestation, acceptedKeyStorageValues: null, acceptedUserAuthenticationValues: null, pool: Pool);
+
+        Assert.IsTrue(result.IsValid, $"an absent constraint must constrain nothing; got {result.FailureReason}.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-D.2">OID4VCI
+    /// 1.0 Appendix D.2</see>: "Specifications that extend this list MUST choose collision-resistant
+    /// values", and when ISO 18045 is not used "ecosystems may define their own values", "RECOMMENDED"
+    /// to be a URL — compared the same membership way as the four built-in values, by ordinal string
+    /// equality.
+    /// </summary>
+    [TestMethod]
+    public void EcosystemDefinedUrlValueMatchesByOrdinalEquality()
+    {
+        const string EcosystemValue = "https://issuer.example/assurance/enhanced";
+        KeyAttestation attestation = BuildAttestation(keyStorageJson: $"[\"{EcosystemValue}\"]", userAuthenticationJson: null);
+
+        KeyAttestationVerificationResult matching = KeyAttestationVerifier.CheckAssuranceConstraints(
+            attestation, [EcosystemValue], acceptedUserAuthenticationValues: null, pool: Pool);
+
+        Assert.IsTrue(matching.IsValid, $"an identical ecosystem-defined URL must match; got {matching.FailureReason}.");
+
+        KeyAttestationVerificationResult differentlyCased = KeyAttestationVerifier.CheckAssuranceConstraints(
+            attestation, [EcosystemValue.ToUpperInvariant()], acceptedUserAuthenticationValues: null, pool: Pool);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.KeyStorageConstraintUnsatisfied, differentlyCased.FailureReason,
+            "the comparison is ordinal, so a differently-cased URL must not match.");
+    }
+
+
+    //A minimal already-verified KeyAttestation, standing in for KeyAttestationVerifier.VerifyAsync's
+    //output — CheckAssuranceConstraints takes the verified record directly, so no JWS is minted here.
+    private static KeyAttestation BuildAttestation(string? keyStorageJson, string? userAuthenticationJson) =>
+        new()
+        {
+            AttestedKeysJson = "[{\"kty\":\"EC\",\"crv\":\"P-256\"," +
+                "\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\"," +
+                "\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\"}]",
+            KeyStorageJson = keyStorageJson,
+            UserAuthenticationJson = userAuthenticationJson
+        };
+
+
+    //Signs a hand-built header/payload JSON pair over their exact UTF-8 bytes with the project's
+    //signing primitive, never through HeaderSerializer/PayloadSerializer — proves the well-formedness
+    //gate's refusal is independent of how a JSON serializer would itself react to a repeated member.
+    private static async Task<string> SignRawAsync(PrivateKeyMemory signingKey, string headerJson, string payloadJson)
+    {
+        string headerB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+        string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+
+        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+
+        return $"{headerB64}.{payloadB64}.{signatureB64}";
     }
 
 

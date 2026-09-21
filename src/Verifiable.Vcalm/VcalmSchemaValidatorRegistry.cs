@@ -32,14 +32,14 @@ public delegate ValueTask<string?> ResolveVcalmSchemaDocumentDelegate(
 /// </summary>
 /// <remarks>
 /// The registry ships EMPTY: the library carries no JSON Schema engine, so a deployment registers
-/// one (e.g. the validator from <c>Lumoin.Veritas</c>) for <see cref="JsonSchemaType"/>. Validation
+/// one (e.g. the validator from <c>the application</c>) for <see cref="JsonSchemaType"/>. Validation
 /// sites treat an unregistered mechanism as
 /// <see cref="CredentialSchemaValidationOutcome.Indeterminate"/> where a result is reported, and
 /// fail closed where a workflow step demands validation (§3.6.1 <c>presentationSchema</c>): a step
 /// that declares a schema is the workflow author requiring the check, and an instance that cannot
 /// run it refuses the presentation rather than skipping the check.
 /// </remarks>
-public sealed class VcalmSchemaValidatorRegistry
+public sealed class VcalmSchemaValidatorRegistry: WiringComponent
 {
     /// <summary>
     /// The <see href="https://www.w3.org/TR/vc-json-schema/">VC JSON Schema</see> mechanism type:
@@ -49,22 +49,28 @@ public sealed class VcalmSchemaValidatorRegistry
     public const string JsonSchemaType = "JsonSchema";
 
 
-    private Dictionary<string, CredentialSchemaValidationDelegate> Validators { get; } = new(StringComparer.Ordinal);
+    /// <summary>The application operations keyed by their declared mechanism type.</summary>
+    private Dictionary<string, CredentialSchemaValidationDelegate> Validators { get; set; } = new(StringComparer.Ordinal);
 
 
     /// <summary>
     /// Registers (or supersedes) the validator for a schema mechanism type. A deployment calls this
-    /// with a JSON Schema engine (e.g. the one from <c>Lumoin.Veritas</c>) for
+    /// with a JSON Schema engine (e.g. the one from <c>the application</c>) for
     /// <see cref="JsonSchemaType"/>.
     /// </summary>
     /// <param name="schemaType">The mechanism <c>type</c> the validator handles.</param>
     /// <param name="validator">The validator to register for the type.</param>
     public void Register(string schemaType, CredentialSchemaValidationDelegate validator)
     {
-        ArgumentException.ThrowIfNullOrEmpty(schemaType);
-        ArgumentNullException.ThrowIfNull(validator);
+        lock(MutationLock)
+        {
+            EnsureMutable();
+            ArgumentException.ThrowIfNullOrEmpty(schemaType);
+            ArgumentNullException.ThrowIfNull(validator);
 
-        Validators[schemaType] = validator;
+            Validators[schemaType] = validator;
+
+        }
     }
 
 
@@ -105,4 +111,15 @@ public sealed class VcalmSchemaValidatorRegistry
 
         return validator(schemaJson, documentJson, cancellationToken);
     }
+
+
+    /// <summary>Copies mechanism membership into an independent alteration candidate.</summary>
+    protected override WiringComponent CloneCore()
+    {
+        VcalmSchemaValidatorRegistry copy = (VcalmSchemaValidatorRegistry)base.CloneCore();
+        copy.Validators = new(Validators, StringComparer.Ordinal);
+
+        return copy;
+    }
+
 }

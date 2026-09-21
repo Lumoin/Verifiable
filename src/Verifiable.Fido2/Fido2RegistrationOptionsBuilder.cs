@@ -144,13 +144,14 @@ public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredential
 
             return ValueTask.FromResult(options);
         })
-        //Ninth transformation: the two registration-side named extension-input carve-outs.
+        //Ninth transformation: the registration-side named extension-input carve-outs.
         .With((options, builder, state) =>
         {
             options.AppIdExclude = state!.AppIdExclude;
             options.LargeBlob = state.LargeBlobSupport is LargeBlobSupport support
                 ? new Fido2LargeBlobRegistrationExtensionInput { Support = support }
                 : null;
+            options.Prf = state.Prf;
 
             return ValueTask.FromResult(options);
         });
@@ -179,6 +180,7 @@ public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredential
     /// <param name="hints">Hints for the user agent, or <see langword="null"/> for none.</param>
     /// <param name="appIdExclude">The <c>appidExclude</c> extension's legacy AppID, or <see langword="null"/> when not requested.</param>
     /// <param name="largeBlobSupport">The <c>largeBlob</c> extension's registration-side support requirement, or <see langword="null"/> when not requested.</param>
+    /// <param name="prf">The <c>prf</c> extension's registration-side input, or <see langword="null"/> when not requested.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A <see cref="ValueTask{PublicKeyCredentialCreationOptions}"/> containing the fully constructed options document.</returns>
     /// <exception cref="System.ArgumentException"><paramref name="rpId"/> or <paramref name="userName"/> is null, empty, or whitespace.</exception>
@@ -202,6 +204,7 @@ public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredential
         IReadOnlyList<PublicKeyCredentialHint>? hints = null,
         string? appIdExclude = null,
         LargeBlobSupport? largeBlobSupport = null,
+        Fido2PrfRegistrationExtensionInput? prf = null,
         CancellationToken cancellationToken = default)
     {
         System.ArgumentException.ThrowIfNullOrWhiteSpace(rpId);
@@ -228,7 +231,8 @@ public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredential
             UserVerification = userVerification,
             Hints = hints,
             AppIdExclude = appIdExclude,
-            LargeBlobSupport = largeBlobSupport
+            LargeBlobSupport = largeBlobSupport,
+            Prf = prf
         };
 
         return BuildAsync(

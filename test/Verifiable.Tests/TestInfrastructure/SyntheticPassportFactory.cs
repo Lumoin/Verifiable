@@ -8,6 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -354,13 +355,18 @@ internal static class SyntheticPassportFactory
         }
 
         using IMemoryOwner<byte> modifiedTbs = EncodeToPooled(tbsWriter);
-        using IMemoryOwner<byte> signatureBuffer = BaseMemoryPool.Shared.Rent(issuerKey.GetMaxSignatureSize(DSASignatureFormat.Rfc3279DerSequence));
 
-        //Certificate-factory carve-out (see class remarks): re-signs the modified TBSCertList with the issuer's own BCL ECDsa key.
-        if(!issuerKey.TrySignData(modifiedTbs.Memory.Span, signatureBuffer.Memory.Span, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence, out int signatureLength))
-        {
-            throw new InvalidOperationException("Signing the modified TBSCertList failed.");
-        }
+        //The certificate-factory carve-out (see class remarks) covers CertificateRequest/CertificateRevocationListBuilder,
+        //not this bare re-sign: the modified TBSCertList is signed through the registered P-256 SigningDelegate, whose
+        //fixed-width IEEE P1363 output is then re-encoded as the ASN.1 DER Ecdsa-Sig-Value a CRL signature requires.
+        byte[] exportedIssuerPrivateKey = issuerKey.ExportParameters(true).D!;
+        using IMemoryOwner<byte> issuerPrivateKeyOwner = BaseMemoryPool.Shared.Rent(exportedIssuerPrivateKey.Length, AllocationKind.Pinned);
+        exportedIssuerPrivateKey.CopyTo(issuerPrivateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedIssuerPrivateKey);
+
+        SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
+        using Signature p1363Signature = sign(issuerPrivateKeyOwner.Memory, modifiedTbs.Memory, BaseMemoryPool.Shared).AsTask().GetAwaiter().GetResult().Signature;
+        using IMemoryOwner<byte> signatureBuffer = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int signatureLength);
 
         var crlWriter = new AsnWriter(AsnEncodingRules.DER);
         using(crlWriter.PushSequence())

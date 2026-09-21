@@ -302,7 +302,7 @@ public static class XAdESQualifyingPropertiesDiscovery
     /// <param name="resolver">The external-dereference delegate a non-same-document <c>URI</c> would need, or
     /// <see langword="null"/> when the caller supplies none — irrelevant on the success path, since a
     /// conformant <c>SignedProperties</c> reference is always same-document.</param>
-    /// <param name="pool">The pool <see cref="XmlReferenceDereferencer.TryDereference"/> would rent an
+    /// <param name="pool">The pool <see cref="XmlReferenceDereferencer.TryDereference(XmlNodeTable, XmlReference, XmlReferenceResolver?, BaseMemoryPool, out XmlDereferenceResult, out XmlSignatureProcessingError)"/> would rent an
     /// external resolver's octets from.</param>
     /// <param name="matchedReference">The located, verified reference on success.</param>
     /// <param name="error">The refusal on failure:

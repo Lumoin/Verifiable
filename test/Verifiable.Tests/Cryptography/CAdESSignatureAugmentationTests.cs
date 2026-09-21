@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Cryptography;
 /// <remarks>
 /// <para>
 /// Every signature under augmentation is minted by the shipped creation surface
-/// (<see cref="CAdESSignatureCreation.SignAsync"/>) over key material from
+/// (<see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/>) over key material from
 /// <see cref="BouncyCastleKeyMaterialCreator"/>, so the whole B-B to B-LTA succession runs through shipped code.
 /// Every augmented result is then checked by readers that share no code with the augmentation: the platform
 /// <see cref="SignedCms"/> reader, the independent time-stamp protocol oracle

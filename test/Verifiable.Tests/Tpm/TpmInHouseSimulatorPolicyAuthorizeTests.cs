@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Drives <c>TPM2_PolicyAuthorize()</c> against the in-house behavioural <see cref="TpmSimulator"/> — entirely
 /// in-process, with no external assets — through the same production command path the production code uses (the
-/// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
+/// <see cref="Verifiable.Tpm.Extensions.Policy.TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
 /// command/response codecs). Each test builds a session's digest to a known "approved" value, has an authority
 /// key sign off on it through the production <c>TPM2_Sign()</c>/<c>TPM2_VerifySignature()</c> wire path, and
 /// drives <c>TPM2_PolicyAuthorize()</c> itself over the wire (TPM 2.0 Library Part 3, clause 23.16).

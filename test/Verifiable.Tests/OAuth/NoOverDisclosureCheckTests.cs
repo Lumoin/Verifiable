@@ -10,7 +10,7 @@ namespace Verifiable.Tests.OAuth;
 /// data-minimization rule. The over-disclosure signal
 /// (<see cref="ValidationContext.DcqlOverDisclosed"/>) is derived in the verify
 /// step; this rule gates enforcement on the per-request policy
-/// (<see cref="PolicyExchangeContextExtensions.EnforceNoOverDisclosure"/>, default
+/// (<c>PolicyExchangeContextExtensions.EnforceNoOverDisclosure</c>, default
 /// enforce). The full pipeline path is covered by the OID4VP wallet/flow tests;
 /// these pin the gate × signal matrix directly.
 /// </summary>

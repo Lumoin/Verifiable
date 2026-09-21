@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -44,6 +45,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+    private static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, Context.CredentialsExamples20);
 
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, CredentialSecuringMaterial.JsonOptions);
@@ -105,6 +107,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -166,6 +169,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,

@@ -37,8 +37,8 @@ internal sealed class HttpWireFidelityTests
         //are space-separated lists) must round-trip cleanly through
         //FormUrlEncodedContent → HTTP wire → AS form parser → AS state.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -87,8 +87,8 @@ internal sealed class HttpWireFidelityTests
         //test verifies the same string lands on the client's parsed
         //response headers after a real socket round-trip.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, _) =
             await host.CreateOAuthClientAndRegistrationAsync(
@@ -102,6 +102,7 @@ internal sealed class HttpWireFidelityTests
         //client-side result and doesn't surface response headers).
         Dictionary<string, string> parFields = new(StringComparer.Ordinal)
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
@@ -109,10 +110,11 @@ internal sealed class HttpWireFidelityTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
-        AuthorizationServerMetadata metadata = await client.Infrastructure
+        AuthorizationServerMetadataResolution resolution = await client.Infrastructure
             .ResolveAuthorizationServerMetadataAsync(
                 registration.AuthorizationServerIssuer, [], TestContext.CancellationToken)
             .ConfigureAwait(false);
+        AuthorizationServerMetadata metadata = resolution.Metadata!;
 
         HttpResponseData parResponse = await client.Infrastructure.SendFormPostAsync(
             metadata.PushedAuthorizationRequestEndpoint!,
@@ -142,8 +144,8 @@ internal sealed class HttpWireFidelityTests
         //real HTTP round-trip — the status line and body actually
         //traversed Kestrel and HttpClient.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, _) =
             await host.CreateOAuthClientAndRegistrationAsync(

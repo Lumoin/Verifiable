@@ -155,6 +155,41 @@ public static class WellKnownPaths
         identifier => ComputeWellKnownWithPathInsertion(identifier, OpenIdCredentialIssuerSuffix));
 
 
+    /// <summary>The UTF-8 source literal of <see cref="JwtVcIssuerSuffix"/>.</summary>
+    public static ReadOnlySpan<byte> JwtVcIssuerSuffixUtf8 => "jwt-vc-issuer"u8;
+
+    /// <summary>
+    /// The SD-JWT VC draft-19 §4 well-known suffix inserted between the host and path components of
+    /// the credential's <c>iss</c> claim value to form the JWT VC Issuer Metadata URL.
+    /// </summary>
+    public static string JwtVcIssuerSuffix { get; } = Utf8Constants.ToInternedString(JwtVcIssuerSuffixUtf8);
+
+
+    /// <summary>
+    /// SD-JWT VC JWT VC Issuer Metadata (SD-JWT VC draft-19 §4).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// §4: "Issuers publishing JWT VC Issuer Metadata MUST make a JWT VC Issuer Metadata configuration
+    /// available at the location formed by inserting the well-known string
+    /// <c>/.well-known/jwt-vc-issuer</c> between the host component and the path component (if any) of
+    /// the <c>iss</c> claim value in the JWT." The identical host/path-insertion rule RFC 8414 §3, RFC
+    /// 9728 §3, and OID4VCI 1.0 §12.2.2 use, so this entry reuses
+    /// <see cref="ComputeWellKnownWithPathInsertion"/> rather than a divergent routine.
+    /// </para>
+    /// <para>
+    /// For <c>https://example.com</c>, produces
+    /// <c>https://example.com/.well-known/jwt-vc-issuer</c>. For
+    /// <c>https://example.com/tenant/1234</c>, produces
+    /// <c>https://example.com/.well-known/jwt-vc-issuer/tenant/1234</c> — the two §4.1 worked examples.
+    /// </para>
+    /// </remarks>
+    public static WellKnownPath JwtVcIssuer { get; } = new(
+        JwtVcIssuerSuffix,
+        "SD-JWT VC draft-19",
+        identifier => ComputeWellKnownWithPathInsertion(identifier, JwtVcIssuerSuffix));
+
+
     /// <summary>
     /// DID Web resolution (did:web method specification).
     /// </summary>

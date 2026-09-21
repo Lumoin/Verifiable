@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Client;
 
 /// <summary>
 /// Per-call inputs for
-/// <see cref="OAuthDynamicRegistrationClient.RegisterAsync"/>. Carries the
+/// <see cref="OAuthDynamicRegistrationClient.RegisterAsync(RegisterClientOptions, Verifiable.Core.ExchangeContext, CancellationToken)"/>. Carries the
 /// AS endpoint to POST to, the metadata to publish, and the locally-held
 /// key material the resulting <see cref="ClientRegistration"/> binds to.
 /// </summary>

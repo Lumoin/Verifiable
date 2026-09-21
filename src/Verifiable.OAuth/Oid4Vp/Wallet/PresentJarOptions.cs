@@ -3,7 +3,7 @@ using Verifiable.Cryptography;
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
 
 /// <summary>
-/// Per-call inputs to <see cref="Oid4VpWalletClient.PresentJarAsync"/>. These
+/// Per-call inputs to <see cref="Oid4VpWalletClient.PresentJarAsync(PresentJarOptions, System.Threading.CancellationToken)"/>. These
 /// are the format-neutral request/transport inputs for a single presentation;
 /// credential-format machinery (resolution, disclosure selection, presentation
 /// building) lives behind <see cref="Oid4VpWalletConfiguration.ProduceVpTokenPresentations"/>.

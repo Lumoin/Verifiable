@@ -32,7 +32,15 @@ internal sealed class PublicKeyCredentialRequestOptionsJsonTests
             UserVerification = UserVerificationRequirement.Required,
             Hints = [PublicKeyCredentialHint.Hybrid],
             AppId = "https://example.com/appid.json",
-            LargeBlob = Fido2LargeBlobAssertionExtensionInput.ForRead()
+            LargeBlob = Fido2LargeBlobAssertionExtensionInput.ForRead(),
+            Prf = new Fido2PrfAssertionExtensionInput
+            {
+                Eval = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 1, 2, 3 }, Fido2BufferTags.PrfValue) },
+                EvalByCredential = new Dictionary<CredentialId, Fido2PrfValues>
+                {
+                    [allowedId] = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 4, 5, 6 }, Fido2BufferTags.PrfValue) }
+                }
+            }
         };
 
         ArrayBufferWriter<byte> buffer = new();
@@ -51,6 +59,10 @@ internal sealed class PublicKeyCredentialRequestOptionsJsonTests
         Assert.AreEqual(original.AppId, roundTripped.AppId);
         Assert.IsTrue(roundTripped.LargeBlob!.Read);
         Assert.IsNull(roundTripped.LargeBlob.Write);
+        Assert.IsTrue(original.Prf!.Eval!.First.Span.SequenceEqual(roundTripped.Prf!.Eval!.First.Span));
+        KeyValuePair<CredentialId, Fido2PrfValues> roundTrippedEntry = Assert.ContainsSingle(roundTripped.Prf.EvalByCredential!);
+        Assert.IsTrue(allowedId.AsReadOnlySpan().SequenceEqual(roundTrippedEntry.Key.AsReadOnlySpan()));
+        Assert.IsTrue(original.Prf.EvalByCredential![allowedId].First.Span.SequenceEqual(roundTrippedEntry.Value.First.Span));
     }
 
 
@@ -97,6 +109,86 @@ internal sealed class PublicKeyCredentialRequestOptionsJsonTests
         Assert.IsNull(roundTripped.UserVerification);
         Assert.IsNull(roundTripped.AppId);
         Assert.IsNull(roundTripped.LargeBlob);
+        Assert.IsNull(roundTripped.Prf);
+    }
+
+
+    /// <summary>The prf extension's two-salt eval input round-trips both values.</summary>
+    [TestMethod]
+    public void PrfEvalWithTwoSaltsRoundTripsBothValues()
+    {
+        PublicKeyCredentialRequestOptions original = new()
+        {
+            Challenge = "AQIDBA",
+            Prf = new Fido2PrfAssertionExtensionInput
+            {
+                Eval = new Fido2PrfValues
+                {
+                    First = new TaggedMemory<byte>(new byte[] { 1, 2, 3 }, Fido2BufferTags.PrfValue),
+                    Second = new TaggedMemory<byte>(new byte[] { 4, 5, 6 }, Fido2BufferTags.PrfValue)
+                }
+            }
+        };
+
+        ArrayBufferWriter<byte> buffer = new();
+        PublicKeyCredentialRequestOptionsJsonWriter.Write(original, buffer);
+
+        PublicKeyCredentialRequestOptions roundTripped = PublicKeyCredentialRequestOptionsJsonReader.Read(buffer.WrittenMemory, BaseMemoryPool.Shared);
+
+        Assert.IsTrue(original.Prf.Eval!.First.Span.SequenceEqual(roundTripped.Prf!.Eval!.First.Span));
+        Assert.IsTrue(original.Prf.Eval.Second!.Value.Span.SequenceEqual(roundTripped.Prf.Eval.Second!.Value.Span));
+    }
+
+
+    /// <summary><c>evalByCredential</c> with two credentials round-trips both entries, keyed correctly.</summary>
+    [TestMethod]
+    public void PrfEvalByCredentialWithTwoCredentialsRoundTripsBothEntries()
+    {
+        using CredentialId firstId = CredentialId.Create([1, 1, 1], BaseMemoryPool.Shared);
+        using CredentialId secondId = CredentialId.Create([2, 2, 2], BaseMemoryPool.Shared);
+
+        PublicKeyCredentialRequestOptions original = new()
+        {
+            Challenge = "AQIDBA",
+            Prf = new Fido2PrfAssertionExtensionInput
+            {
+                EvalByCredential = new Dictionary<CredentialId, Fido2PrfValues>
+                {
+                    [firstId] = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 0xA1 }, Fido2BufferTags.PrfValue) },
+                    [secondId] = new Fido2PrfValues { First = new TaggedMemory<byte>(new byte[] { 0xA2 }, Fido2BufferTags.PrfValue) }
+                }
+            }
+        };
+
+        ArrayBufferWriter<byte> buffer = new();
+        PublicKeyCredentialRequestOptionsJsonWriter.Write(original, buffer);
+
+        PublicKeyCredentialRequestOptions roundTripped = PublicKeyCredentialRequestOptionsJsonReader.Read(buffer.WrittenMemory, BaseMemoryPool.Shared);
+
+        IReadOnlyDictionary<CredentialId, Fido2PrfValues> roundTrippedEvalByCredential = roundTripped.Prf!.EvalByCredential!;
+        Assert.HasCount(2, roundTrippedEvalByCredential);
+        Assert.IsTrue(original.Prf.EvalByCredential![firstId].First.Span.SequenceEqual(roundTrippedEvalByCredential[firstId].First.Span));
+        Assert.IsTrue(original.Prf.EvalByCredential[secondId].First.Span.SequenceEqual(roundTrippedEvalByCredential[secondId].First.Span));
+    }
+
+
+    /// <summary>An <c>evalByCredential</c> key that is not valid base64url is rejected — a wire-format concern for this reader.</summary>
+    [TestMethod]
+    public void PrfEvalByCredentialKeyNotValidBase64UrlIsRejected()
+    {
+        string json = """{"challenge":"AQIDBA","extensions":{"prf":{"evalByCredential":{"not base64url!!":{"first":"AQIDBA"}}}}}""";
+
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialRequestOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>A repeated <c>evalByCredential</c> key is rejected.</summary>
+    [TestMethod]
+    public void PrfEvalByCredentialRepeatedKeyIsRejected()
+    {
+        string json = """{"challenge":"AQIDBA","extensions":{"prf":{"evalByCredential":{"AQID":{"first":"AQIDBA"},"AQID":{"first":"AQIDBA"}}}}}""";
+
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialRequestOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 

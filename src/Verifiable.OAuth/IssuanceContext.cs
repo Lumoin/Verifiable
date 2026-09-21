@@ -66,7 +66,7 @@ public sealed record IssuanceContext
 
     /// <summary>
     /// The Authorization Server's resolved issuer URI for this request. Already
-    /// flowed through <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+    /// flowed through <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/>
     /// once before the producer walk begins; producers consume the resolved value.
     /// </summary>
     public required Uri IssuerUri { get; init; }

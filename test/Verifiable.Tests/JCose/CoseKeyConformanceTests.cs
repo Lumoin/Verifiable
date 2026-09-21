@@ -8,7 +8,7 @@ namespace Verifiable.Tests.JCose;
 /// (<see href="https://www.w3.org/TR/webauthn-3/#sctn-alg-identifier">W3C Web Authentication Level 3,
 /// section 5.8.5</see>), the compressed-point predicate, and the per-key-type required/allowed parameter
 /// label sets (<see href="https://www.w3.org/TR/webauthn-3/#sctn-attested-credential-data">section
-/// 6.5.1</see>). No CBOR or wire parsing is exercised here — <see cref="Fido2CredentialKeyConformanceTests"/>
+/// 6.5.1</see>). No CBOR or wire parsing is exercised here — <see cref="Verifiable.Tests.Fido2.Fido2CredentialKeyConformanceTests"/>
 /// in <c>Verifiable.Tests.Fido2</c> covers the reader-path enforcement built on top of this mechanism.
 /// </summary>
 [TestClass]

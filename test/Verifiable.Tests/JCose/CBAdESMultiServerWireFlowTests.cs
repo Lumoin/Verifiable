@@ -38,8 +38,8 @@ namespace Verifiable.Tests.JCose;
 /// <strong>Two independent signer identities, by design (certificate-path
 /// neutrality).</strong> The COSE signing key pair is minted through the repo's BouncyCastle key-material
 /// creator (<see cref="BouncyCastleKeyMaterialCreator.CreateP256Keys"/>) directly — the "BC-minted signer"
-/// — and is registry-resolved into <see cref="CBAdESSignatureCreation.SignAsync"/>/
-/// <see cref="CBAdESSignatureValidation.ValidateAsync"/> exactly like every other CB-AdES flow test in this
+/// — and is registry-resolved into <see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>/
+/// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> exactly like every other CB-AdES flow test in this
 /// suite. The "signer chain" placed into <c>valData</c> and checked live over Host B is a SEPARATE, platform-
 /// ECDsa-backed <see cref="X509Certificate2"/> minted through <see cref="OcspTestFixtures.MintCertificate"/> —
 /// the same oracle machinery the CAdES exemplar uses. Nothing in <see cref="CBAdESSignatureValidation"/>'s
@@ -63,7 +63,7 @@ namespace Verifiable.Tests.JCose;
 /// for the OCSP responder's own answers cannot be released before the augmentation's live
 /// <c>OCSPRequest</c>/<c>OCSPResponse</c> round trip runs, since Host B must keep answering correctly through
 /// that live call. The firewall this leg demonstrates is therefore the one enforced at the level of what the
-/// VALIDATING CALL touches: <see cref="CBAdESSignatureValidation.ValidateAsync"/> is handed only a plain
+/// VALIDATING CALL touches: <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> is handed only a plain
 /// <c>byte[]</c> (<c>wireCopy</c>) reconstructed from the augmented signature's own wire bytes, plus the
 /// verifying party's own, independently-known public key — never a creation-side model, message, or decoded
 /// fact — never at the level of process/host lifetime, which a live second network peer cannot honour the way
@@ -95,7 +95,7 @@ internal sealed class CBAdESMultiServerWireFlowTests
     /// a real <c>TimeStampReq</c>/<c>TimeStampResp</c> round trip to Host A, then to B-LT with a real
     /// <c>OCSPRequest</c>/<c>OCSPResponse</c> round trip to Host B feeding <c>valData</c> alongside the
     /// signer's own X.509 certificate chain, then a verifying party reconstructed from the resulting wire
-    /// bytes runs the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync"/> at
+    /// bytes runs the level-aware <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> at
     /// <see cref="AdESBaselineLevel.BLT"/> and reaches a valid result — proof the COSE signature value, the
     /// <c>sigTst</c> token's message-imprint binding, and the B-LT validation-data-for-time-stamps service are
     /// all independently re-verified from wire bytes alone.
@@ -811,7 +811,7 @@ internal sealed class CBAdESMultiServerWireFlowTests
 
     /// <summary>
     /// Bridges a <see cref="BinaryHttpHost"/> to a <see cref="FetchTimestampResponseAsyncDelegate"/>-shaped
-    /// responder: wraps the received request octets as a <see cref="TimestampRequest"/>-tagged carrier, calls
+    /// responder: wraps the received request octets as a <see cref="PkiCertificateTags.TimestampRequest"/>-tagged carrier, calls
     /// the responder, and returns its answer as the <c>application/timestamp-reply</c> body. A configured
     /// object holding the responder delegate, not a closure over test state.
     /// </summary>

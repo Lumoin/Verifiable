@@ -12,7 +12,7 @@ namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// The phase 6 gate test. Exercises the full DPoP-bound AuthCode flow end to
-/// end against a real <see cref="AuthorizationServer"/> dispatch chain:
+/// end against a real <see cref="AuthorizationServerIntegration"/> dispatch chain:
 /// PAR → Authorize → Token, with the AS challenging the first token request
 /// for a fresh nonce and the client retrying exactly once with the nonce
 /// echoed. Then plays the RS-side proof validation for a resource call,
@@ -41,8 +41,8 @@ internal sealed class DpopEndToEndTests
         //wire-level assertions (token_type from response body, cnf.jkt from
         //the JWT) now run against bytes that actually traversed HTTP framing.
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        _ = host.EnableDpop();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration,
@@ -70,7 +70,7 @@ internal sealed class DpopEndToEndTests
 
         //Step 2 — Authorize. The user-agent would normally GET the redirect URL
         //against the AS. Replicate that in-process by dispatching a GET to
-        ///authorize with the request_uri lifted from the PAR response and a
+        //authorize with the request_uri lifted from the PAR response and a
         //pre-authenticated subject identifier on the context.
         string requestUri = parCompleted.Par.RequestUri.ToString();
         RequestFields authorizeFields = new()
@@ -225,8 +225,8 @@ internal sealed class DpopEndToEndTests
         //accessor in the assertion path, except for one verification that
         //the diagnostic accessor agrees (returns null).
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             host.CreateInProcessOAuthClientAndRegistration(
@@ -319,8 +319,8 @@ internal sealed class DpopEndToEndTests
     public async Task DpopTokenEndpointFailsClosedWhenStoreCannotProveItself()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        _ = host.EnableDpop();
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration,
@@ -367,7 +367,7 @@ internal sealed class DpopEndToEndTests
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome, callbackResult.ErrorDescription);
 
-        HalfWireJtiReplayStore(host.Server);
+        await HalfWireJtiReplayStoreAsync(host.Server).ConfigureAwait(false);
 
         //The token endpoint's DPoP proof carries a jti; the half-wired store saves it but cannot resolve
         //it, so the guard cannot prove the replay defense ran and the exchange fails closed.
@@ -388,13 +388,16 @@ internal sealed class DpopEndToEndTests
     /// real resolver. This is the half-wired store the guard's post-save self-check must catch.
     /// </summary>
     /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
-    private static void HalfWireJtiReplayStore(EndpointServer server)
+    private static async Task HalfWireJtiReplayStoreAsync(EndpointServer server)
     {
         ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
-        server.OAuth().ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
-            flowKind == FlowKind.JtiReplay
-                ? ValueTask.FromResult<string?>(null)
-                : original(tenantId, flowKind, externalHandle, ctx, ct);
+        await TestHostShell.AlterAsync(server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
+                flowKind == FlowKind.JtiReplay
+                    ? ValueTask.FromResult<string?>(null)
+                    : original(tenantId, flowKind, externalHandle, ctx, ct);
+        }).ConfigureAwait(false);
     }
 
 

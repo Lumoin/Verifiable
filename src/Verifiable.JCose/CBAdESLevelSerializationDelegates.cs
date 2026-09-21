@@ -81,7 +81,7 @@ public sealed record CBAdESImprintCoseSign1StructureContext: CBAdESImprintStruct
 /// (mirroring <c>Verifiable.Cbor.CBAdESCountersignatureStructureContext</c>'s own reasoning: this seam does not
 /// itself resolve which of RFC 9338's four context strings applies).
 /// </summary>
-/// <param name="ContextText">The RFC 9338 clause 3.3 context text string. Must not be null or empty.</param>
+/// <remarks><see cref="ContextText"/> must not be null or empty.</remarks>
 [DebuggerDisplay("CBAdESImprintCountersignatureStructureContext: {ContextText}")]
 public sealed record CBAdESImprintCountersignatureStructureContext: CBAdESImprintStructureContext
 {
@@ -180,10 +180,9 @@ public sealed class CBAdESDetachedPayloadTimestampImprintSource: CBAdESPayloadTi
 /// concatenation is raw, with NO CBOR byte-string wrapping (contrast with the <c>arcTst</c> builder's own
 /// step 7).
 /// </summary>
-/// <param name="ProcessedParBytes">
-/// The ordered, already-dereferenced byte sequences to concatenate. Must be non-empty (CB-5.2.8-06). Each
-/// element is a <strong>borrowed</strong> view.
-/// </param>
+/// <remarks>
+/// <see cref="ProcessedParBytes"/> must be non-empty (CB-5.2.8-06). Each element is a <strong>borrowed</strong> view.
+/// </remarks>
 [DebuggerDisplay("CBAdESSigDProcessedPayloadTimestampImprintSource: {ProcessedParBytes.Count} segments")]
 public sealed class CBAdESSigDProcessedPayloadTimestampImprintSource: CBAdESPayloadTimestampImprintSource
 {

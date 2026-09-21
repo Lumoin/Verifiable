@@ -88,6 +88,35 @@ internal sealed class AttachmentDataResolutionTests
     }
 
 
+    /// <summary>
+    /// A fetched link's response carrying <c>Cache-Control: max-age</c> reports that many seconds of storable
+    /// freshness on the result, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task FetchedLinkReportsMaxAgeAsStorableFreshness()
+    {
+        byte[] content = "the linked attachment bytes"u8.ToArray();
+        const string Url = "https://content.example/blob";
+
+        FakeTransport transport = new(new() { [Url] = (200, content) });
+        transport.ResponseHeaders[Url] = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.CacheControl, "max-age=30"));
+
+        var data = new AttachmentData
+        {
+            Hash = MultibaseSha256Multihash(content),
+            Links = [Url]
+        };
+
+        using AttachmentResolutionResult result = await ResolveAsync(data, OutboundFetchPolicy.SecureDefault, transport);
+
+        Assert.IsTrue(result.IsResolved, $"A links+hash attachment MUST resolve. Error: {result.Error}.");
+        Assert.IsTrue(result.Freshness.IsStorable, "A max-age response is storable.");
+        Assert.AreEqual(TimeSpan.FromSeconds(30), result.Freshness.FreshnessLifetime,
+            "The reported lifetime is exactly the max-age directive's delta-seconds.");
+    }
+
+
     /// <summary>A 200 fetch whose body does not match the multihash is rejected — the bytes are NOT returned.</summary>
     [TestMethod]
     public async Task FetchedHashMismatchIsRejected()
@@ -399,7 +428,8 @@ transport,
 
     /// <summary>
     /// A single reachable link that returns 500 is AllLinksFailed with the link contacted once — a non-200 is
-    /// reached but yields no content.
+    /// reached but yields no content, and so reports non-storable freshness — there is no document a cache
+    /// could keep, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
     /// </summary>
     [TestMethod]
     public async Task ServerErrorIsAllLinksFailedContactedOnce()
@@ -420,6 +450,7 @@ transport,
         Assert.IsFalse(result.IsResolved);
         Assert.AreEqual(AttachmentResolutionError.AllLinksFailed, result.Error);
         Assert.HasCount(1, transport.Calls);
+        Assert.IsFalse(result.Freshness.IsStorable, "A resolution that never reached a document reports no storable freshness.");
     }
 
 
@@ -570,6 +601,10 @@ transport,
 
         public List<OutboundRequest> Calls { get; } = [];
 
+        //Additive: response headers per URL, consulted by Delegate below. Left empty by every existing route,
+        //so a caller that never sets an entry here sees the same header-less OutboundResponse as before.
+        public Dictionary<string, HttpHeaderSet> ResponseHeaders { get; } = new(StringComparer.Ordinal);
+
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
             Calls.Add(request);
@@ -584,10 +619,15 @@ transport,
                 route = (404, []);
             }
 
+            HttpHeaderSet headers = ResponseHeaders.TryGetValue(request.Target.AbsoluteUri, out HttpHeaderSet? configuredHeaders)
+                ? configuredHeaders
+                : HttpHeaderSet.Empty;
+
             return ValueTask.FromResult(new OutboundResponse
             {
                 StatusCode = route.Status,
-                Body = new TaggedMemory<byte>(route.Body, Tag.Empty)
+                Body = new TaggedMemory<byte>(route.Body, Tag.Empty),
+                Headers = headers
             });
         };
     }

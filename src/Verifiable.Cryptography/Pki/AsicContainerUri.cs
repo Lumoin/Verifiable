@@ -138,7 +138,7 @@ public static class AsicContainerUri
     /// <summary>
     /// The unreserved characters of
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2.3">IETF RFC 3986 clause 2.3</see> that are
-    /// not letters or digits, which <see cref="ToReference"/> writes as themselves.
+    /// not letters or digits, which <see cref="ToReference(string, int)"/> writes as themselves.
     /// </summary>
     private static string AdditionalUnreservedCharacters { get; } = "-._~";
 

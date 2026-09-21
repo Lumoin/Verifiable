@@ -15,7 +15,7 @@ namespace Verifiable.Cbor.Ctap;
 /// to capture every top-level key's still-encoded value in one pass, mirroring
 /// <see cref="CtapClientPinRequestCborReader"/>. <c>subCommandParams</c> (<c>0x02</c>)'s still-encoded
 /// bytes are captured as <see cref="CtapAuthenticatorConfigRequest.SubCommandParams"/> UNCHANGED (a
-/// slice of <paramref name="parametersCbor"/> itself, via <see cref="CborReader.ReadEncodedValue"/> —
+/// slice of <c>parametersCbor</c> itself, via <see cref="CborReader.ReadEncodedValue"/> —
 /// never re-encoded) and, when present, decoded a second time through the same
 /// <see cref="CtapParameterMapReader"/> for its own four members.
 /// </remarks>

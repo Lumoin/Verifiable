@@ -20,7 +20,7 @@ public enum JarAudienceMode
 {
     /// <summary>
     /// <c>aud</c> must equal the AS issuer URL resolved through
-    /// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>. The
+    /// <see cref="Verifiable.Server.ServerIntegration.ResolveIssuerAsync"/>. The
     /// FAPI 2.0 reading; the only reading that defends RFC 9700 §4.2 mix-up
     /// attacks across multiple AS deployments.
     /// </summary>

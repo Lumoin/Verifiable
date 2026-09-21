@@ -64,13 +64,13 @@ internal sealed class WebFingerCrossWireFlowTests
     {
         const string resource = "acct:alice@example.com";
 
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(
             static (queryResource, relFilters, registration, context, ct) => ValueTask.FromResult<JsonResourceDescriptor?>(
                 new JsonResourceDescriptor
                 {
                     Subject = queryResource,
                     Links = [new WebFingerLink { Rel = WebFingerLinkRelationTypes.Did, Href = PublishedDid }]
-                }));
+                })).ConfigureAwait(false);
 
         await using WebFingerHttpApplication.Host nodeA = await WebFingerHttpApplication.Host.StartAsync(
             server, TestContext.CancellationToken).ConfigureAwait(false);
@@ -131,8 +131,8 @@ internal sealed class WebFingerCrossWireFlowTests
     [TestMethod]
     public async Task WF13_ResolverReturningNullYieldsARealNotFoundOverTheSocket()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(
-            static (resource, relFilters, registration, context, ct) => ValueTask.FromResult<JsonResourceDescriptor?>(null));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(
+            static (resource, relFilters, registration, context, ct) => ValueTask.FromResult<JsonResourceDescriptor?>(null)).ConfigureAwait(false);
 
         await using WebFingerHttpApplication.Host nodeA = await WebFingerHttpApplication.Host.StartAsync(
             server, TestContext.CancellationToken).ConfigureAwait(false);
@@ -160,9 +160,9 @@ internal sealed class WebFingerCrossWireFlowTests
     [TestMethod]
     public async Task WF11_ARepeatedResourceParameterYieldsARealBadRequestOverTheSocket()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(
             static (resource, relFilters, registration, context, ct) => ValueTask.FromResult<JsonResourceDescriptor?>(
-                new JsonResourceDescriptor { Subject = resource }));
+                new JsonResourceDescriptor { Subject = resource })).ConfigureAwait(false);
 
         await using WebFingerHttpApplication.Host nodeA = await WebFingerHttpApplication.Host.StartAsync(
             server, TestContext.CancellationToken).ConfigureAwait(false);
@@ -189,12 +189,12 @@ internal sealed class WebFingerCrossWireFlowTests
     [TestMethod]
     public async Task WF66_AnUntrustedCertificateIsNeverAcceptedAndResolutionFails()
     {
-        using EndpointServer trustedServer = WebFingerHttpApplication.BuildServer(
+        using EndpointServer trustedServer = await WebFingerHttpApplication.BuildServerAsync(
             static (resource, relFilters, registration, context, ct) => ValueTask.FromResult<JsonResourceDescriptor?>(
-                new JsonResourceDescriptor { Subject = resource }));
-        using EndpointServer impostorServer = WebFingerHttpApplication.BuildServer(
+                new JsonResourceDescriptor { Subject = resource })).ConfigureAwait(false);
+        using EndpointServer impostorServer = await WebFingerHttpApplication.BuildServerAsync(
             static (resource, relFilters, registration, context, ct) => ValueTask.FromResult<JsonResourceDescriptor?>(
-                new JsonResourceDescriptor { Subject = resource }));
+                new JsonResourceDescriptor { Subject = resource })).ConfigureAwait(false);
 
         await using WebFingerHttpApplication.Host trustedNode = await WebFingerHttpApplication.Host.StartAsync(
             trustedServer, TestContext.CancellationToken).ConfigureAwait(false);

@@ -37,7 +37,7 @@ public sealed class EncodedJoseProtectedHeader(IMemoryOwner<byte> sensitiveMemor
     /// <remarks>
     /// A JAdES protected header always carries a mandatory <c>alg</c> member (JA-5.1.2-01), so its base64url
     /// TEXT is never genuinely empty in practice; the empty-input arm below exists only for the same structural
-    /// reason <see cref="EncodedCoseProtectedHeader.FromBytes"/> keeps one — <see cref="BaseMemoryPool.Rent"/>
+    /// reason <see cref="EncodedCoseProtectedHeader.FromBytes"/> keeps one — <see cref="BaseMemoryPool.Rent(int)"/>
     /// refuses a zero-length rental.
     /// </remarks>
     /// <param name="base64UrlText">The base64url-encoded protected-header TEXT, ASCII bytes.</param>

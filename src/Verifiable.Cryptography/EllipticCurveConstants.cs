@@ -26,7 +26,7 @@ public static class EllipticCurveConstants
         /// </summary>
         public const int PointArrayLength = 32;
 
-        // <summary>
+        /// <summary>
         /// This is calculated using formula PrimeBytes = BigInteger.Pow(2, 256) - BigInteger.Pow(2, 224) + BigInteger.Pow(2, 192) + BigInteger.Pow(2, 96) - 1;
         /// </summary>
         /// <remarks>
@@ -505,13 +505,24 @@ public static class EllipticCurveConstants
     }
 
 
+    /// <summary>
+    /// Precomputed constants for Curve25519, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7748">RFC 7748</see>: the Montgomery curve
+    /// <c>y^2 = x^3 + A*x^2 + x</c> over the prime field <see cref="Prime"/>.
+    /// </summary>
     [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
     public static class Curve25519
     {
+        /// <summary>The length of a Curve25519 field element byte array.</summary>
         public const int PointArrayLength = 32;
 
+        /// <summary>The field prime <c>2^255 - 19</c>.</summary>
         public static BigInteger Prime { get; } = BigInteger.Parse("7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED", NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve equation's <c>A</c> coefficient, 486662.</summary>
         public static BigInteger A { get; } = 486662;
+
+        /// <summary>The curve equation's <c>B</c> coefficient, 1.</summary>
         public static BigInteger B { get; } = 1;
     }
 

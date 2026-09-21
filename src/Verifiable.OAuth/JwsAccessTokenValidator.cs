@@ -23,7 +23,7 @@ namespace Verifiable.OAuth;
 ///   <item><description>Header decode, alg check — reject <c>none</c> per RFC 8725 §3.1.</description></item>
 ///   <item><description><c>typ</c> check — require <c>at+jwt</c> or <c>application/at+jwt</c> per RFC 9068 §4.</description></item>
 ///   <item><description><c>kid</c> resolution via the supplied resolver.</description></item>
-///   <item><description>Signature verification via <see cref="Jws.VerifyAsync"/>.</description></item>
+///   <item><description>Signature verification via <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>.</description></item>
 ///   <item><description>Standard claim checks: <c>iss</c>, <c>aud</c>, <c>exp</c>, <c>nbf</c>, <c>iat</c>, <c>sub</c>.</description></item>
 ///   <item><description>Optional claim read: <c>client_id</c>, <c>scope</c>, <c>jti</c>, <c>cnf</c>, <c>act</c>, <c>may_act</c>.</description></item>
 /// </list>
@@ -61,7 +61,7 @@ public static class JwsAccessTokenValidator
     /// <param name="expectedIssuer">The expected <c>iss</c> value; compared by ordinal equality.</param>
     /// <param name="expectedAudience">The expected <c>aud</c> value; required to be present in the claim.</param>
     /// <param name="resolveVerificationKey">Resolves the public verification key for the header's <c>kid</c>.</param>
-    /// <param name="verifySignature">The signature-verification primitive threaded into <see cref="Jws.VerifyAsync"/>.</param>
+    /// <param name="verifySignature">The signature-verification primitive threaded into <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>.</param>
     /// <param name="parser">JSON parser for header and payload segments.</param>
     /// <param name="base64UrlDecoder">Base64url decoder.</param>
     /// <param name="timeProvider">Time provider for <c>exp</c>/<c>nbf</c>/<c>iat</c> checks.</param>
@@ -181,12 +181,30 @@ public static class JwsAccessTokenValidator
     /// <see cref="Oidc10IdTokenClaims"/> (reading <c>nonce</c>/<c>auth_time</c>/<c>acr</c>/<c>amr</c>/
     /// <c>sid</c>/<c>cnf</c>, plus its own nonce and trusted-audience checks).
     /// </summary>
+    /// <param name="accessToken">The compact-serialised JWS access token.</param>
+    /// <param name="expectedIssuer">The expected <c>iss</c> value; compared by ordinal equality.</param>
+    /// <param name="expectedAudience">The expected <c>aud</c> value; required to be present in the claim.</param>
+    /// <param name="resolveVerificationKey">Resolves the public verification key for the header's <c>kid</c>.</param>
+    /// <param name="verifySignature">The signature-verification primitive threaded into <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>.</param>
+    /// <param name="parser">JSON parser for header and payload segments.</param>
+    /// <param name="base64UrlDecoder">Base64url decoder.</param>
+    /// <param name="timeProvider">Time provider for <c>exp</c>/<c>nbf</c>/<c>iat</c> checks.</param>
+    /// <param name="memoryPool">Memory pool for transient decoded buffers and pooled signing-input bytes.</param>
+    /// <param name="iatSkew">Tolerance for an <c>iat</c> claim slightly in the future.</param>
+    /// <param name="tenantId">Tenant identifier threaded to the key resolver.</param>
+    /// <param name="context">Per-request context bag threaded to the key resolver.</param>
+    /// <param name="expectedAuthorizedParty">
+    /// The authorized party (the recipient's own <c>client_id</c>) to validate the <c>azp</c> claim
+    /// against per OIDC Core §3.1.3.7, when the calling profile enforces it. <see langword="null"/> for a
+    /// profile (or a token) where <c>azp</c> coordination does not apply.
+    /// </param>
     /// <param name="typeEnforcement">
     /// The header <c>typ</c> policy: <see cref="JwtTypeEnforcement.RequireAtJwt"/> for access tokens
     /// (RFC 9068 §4); <see cref="JwtTypeEnforcement.RejectAtJwt"/> for ID Tokens — which refuses
     /// <c>at+jwt</c>/<c>application/at+jwt</c> so an access token is never accepted as an ID Token
     /// (RFC 8725 §3.11). <see cref="JwtTypeEnforcement.None"/> is used by neither production caller.
     /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     internal static async ValueTask<SignedJwtValidationOutcome> ValidateSignedJwtCoreAsync(
         string accessToken,
         string expectedIssuer,

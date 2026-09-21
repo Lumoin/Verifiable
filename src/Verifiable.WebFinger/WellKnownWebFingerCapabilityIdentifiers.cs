@@ -20,4 +20,11 @@ public static class WellKnownWebFingerCapabilityIdentifiers
     /// </summary>
     public static CapabilityIdentifier Endpoint { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:webfinger:endpoint");
+
+
+    /// <summary>The hand-kept list behind <see cref="All"/>: every identifier this class declares, in declaration order.</summary>
+    private static IReadOnlyList<CapabilityIdentifier> RegisteredIdentifiers { get; } = [Endpoint];
+
+    /// <summary>Gets every <see cref="CapabilityIdentifier"/> this class declares, in declaration order.</summary>
+    public static IReadOnlyList<CapabilityIdentifier> All => RegisteredIdentifiers;
 }

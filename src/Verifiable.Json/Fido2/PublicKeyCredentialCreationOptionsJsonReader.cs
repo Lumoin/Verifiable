@@ -14,8 +14,8 @@ namespace Verifiable.Json;
 /// Strict, mirroring <see cref="Fido2CredentialRecordJsonReader"/>'s posture: an unrecognised or
 /// repeated member is rejected rather than silently skipped, including under <c>extensions</c> (this
 /// writer emits only the <c>appidExclude</c>/<c>largeBlob</c>/<c>minPinLength</c>/
-/// <c>credentialProtectionPolicy</c>/<c>enforceCredentialProtectionPolicy</c> carve-outs, so a
-/// document carrying any other extension identifier did not come from this writer). Unlike
+/// <c>credentialProtectionPolicy</c>/<c>enforceCredentialProtectionPolicy</c>/<c>prf</c> carve-outs, so
+/// a document carrying any other extension identifier did not come from this writer). Unlike
 /// <see cref="Fido2CredentialRecordJsonReader"/>, there is no <c>version</c> member to check, since
 /// this is the CR's own named wire shape, not a private persistence format.
 /// </remarks>
@@ -46,12 +46,15 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
     private const string SupportMember = "support";
     private const string CredentialProtectionPolicyMember = "credentialProtectionPolicy";
     private const string EnforceCredentialProtectionPolicyMember = "enforceCredentialProtectionPolicy";
+    private const string EvalMember = "eval";
+    private const string FirstMember = "first";
+    private const string SecondMember = "second";
 
 
     /// <summary>
-    /// Bounds JSON nesting depth. The deepest legal path is
-    /// <c>excludeCredentials[].transports[]</c> or <c>extensions.largeBlob.support</c> (three levels
-    /// below the top object), so 6 is generous while still capping recursion depth at parse time.
+    /// Bounds JSON nesting depth. The deepest legal path is <c>extensions.prf.eval.first</c> (four
+    /// nested JSON containers: the top object, <c>extensions</c>, <c>prf</c>, and <c>eval</c>), so 6 is
+    /// generous while still capping recursion depth at parse time.
     /// </summary>
     private static JsonReaderOptions ReaderOptions { get; } = new() { MaxDepth = 6 };
 
@@ -108,6 +111,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
         Fido2LargeBlobRegistrationExtensionInput? largeBlob = null;
         bool? minPinLength = null;
         Fido2CredProtectRegistrationExtensionInput? credProtect = null;
+        Fido2PrfRegistrationExtensionInput? prf = null;
 
         while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
@@ -134,7 +138,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
                 HintsMember => AssignHints(ref reader, memberName, out hints),
                 AttestationMember => AssignAttestation(ref reader, memberName, out attestation),
                 AttestationFormatsMember => AssignAttestationFormats(ref reader, memberName, out attestationFormats),
-                ExtensionsMember => AssignExtensions(ref reader, out appIdExclude, out largeBlob, out minPinLength, out credProtect),
+                ExtensionsMember => AssignExtensions(ref reader, out appIdExclude, out largeBlob, out minPinLength, out credProtect, out prf),
                 _ => throw new Fido2FormatException($"The PublicKeyCredentialCreationOptions member '{memberName}' is not recognised.")
             };
         }
@@ -184,7 +188,8 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
             AppIdExclude = appIdExclude,
             LargeBlob = largeBlob,
             MinPinLength = minPinLength,
-            CredProtect = credProtect
+            CredProtect = credProtect,
+            Prf = prf
         };
 
         static bool AssignRp(ref Utf8JsonReader reader, out PublicKeyCredentialRpEntity? rp)
@@ -257,16 +262,17 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
             return true;
         }
 
-        //Assigns all four extension-derived outputs together, since 'extensions' decodes as one nested
-        //object producing appIdExclude/largeBlob/minPinLength/credProtect in a single pass.
+        //Assigns all five extension-derived outputs together, since 'extensions' decodes as one nested
+        //object producing appIdExclude/largeBlob/minPinLength/credProtect/prf in a single pass.
         static bool AssignExtensions(
             ref Utf8JsonReader reader,
             out string? appIdExclude,
             out Fido2LargeBlobRegistrationExtensionInput? largeBlob,
             out bool? minPinLength,
-            out Fido2CredProtectRegistrationExtensionInput? credProtect)
+            out Fido2CredProtectRegistrationExtensionInput? credProtect,
+            out Fido2PrfRegistrationExtensionInput? prf)
         {
-            (appIdExclude, largeBlob, minPinLength, credProtect) = ReadExtensions(ref reader);
+            (appIdExclude, largeBlob, minPinLength, credProtect, prf) = ReadExtensions(ref reader);
 
             return true;
         }
@@ -665,7 +671,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
     }
 
 
-    private static (string? AppIdExclude, Fido2LargeBlobRegistrationExtensionInput? LargeBlob, bool? MinPinLength, Fido2CredProtectRegistrationExtensionInput? CredProtect) ReadExtensions(
+    private static (string? AppIdExclude, Fido2LargeBlobRegistrationExtensionInput? LargeBlob, bool? MinPinLength, Fido2CredProtectRegistrationExtensionInput? CredProtect, Fido2PrfRegistrationExtensionInput? Prf) ReadExtensions(
         ref Utf8JsonReader reader)
     {
         if(reader.TokenType != JsonTokenType.StartObject)
@@ -679,6 +685,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
         bool? minPinLength = null;
         string? credentialProtectionPolicy = null;
         bool? enforceCredentialProtectionPolicy = null;
+        Fido2PrfRegistrationExtensionInput? prf = null;
 
         while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
@@ -700,6 +707,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
                 var id when WellKnownWebAuthnExtensionIdentifiers.IsMinPinLength(id) => AssignMinPinLength(ref reader, id, out minPinLength),
                 CredentialProtectionPolicyMember => AssignCredentialProtectionPolicy(ref reader, identifier, out credentialProtectionPolicy),
                 EnforceCredentialProtectionPolicyMember => AssignEnforceCredentialProtectionPolicy(ref reader, identifier, out enforceCredentialProtectionPolicy),
+                var id when WellKnownWebAuthnExtensionIdentifiers.IsPrf(id) => AssignPrf(ref reader, out prf),
                 _ => throw new Fido2FormatException($"The 'extensions' member '{identifier}' is not recognised.")
             };
         }
@@ -728,7 +736,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
             credProtect = null;
         }
 
-        return (appIdExclude, largeBlob, minPinLength, credProtect);
+        return (appIdExclude, largeBlob, minPinLength, credProtect, prf);
 
         static bool AssignAppIdExclude(ref Utf8JsonReader reader, string identifier, out string? appIdExclude)
         {
@@ -770,6 +778,119 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
 
             return true;
         }
+
+        static bool AssignPrf(ref Utf8JsonReader reader, out Fido2PrfRegistrationExtensionInput? prf)
+        {
+            prf = ReadPrfRegistrationInput(ref reader);
+
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads the registration-side <c>extensions.prf</c> member: <c>eval</c> only —
+    /// <c>evalByCredential</c> is assertion-only, so any occurrence here is unrecognised.
+    /// </summary>
+    private static Fido2PrfRegistrationExtensionInput ReadPrfRegistrationInput(ref Utf8JsonReader reader)
+    {
+        if(reader.TokenType != JsonTokenType.StartObject)
+        {
+            throw new Fido2FormatException("The 'extensions.prf' member MUST be a JSON object.");
+        }
+
+        HashSet<string> seenMembers = new(StringComparer.Ordinal);
+        Fido2PrfValues? eval = null;
+
+        while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            string memberName = reader.GetString()!;
+            if(!seenMembers.Add(memberName))
+            {
+                throw new Fido2FormatException($"The 'extensions.prf' member '{memberName}' is repeated.");
+            }
+
+            if(!reader.Read())
+            {
+                throw new Fido2FormatException($"The 'extensions.prf' member '{memberName}' is truncated.");
+            }
+
+            if(memberName == EvalMember)
+            {
+                eval = ReadPrfValues(ref reader);
+            }
+            else
+            {
+                throw new Fido2FormatException($"The 'extensions.prf' member '{memberName}' is not recognised.");
+            }
+        }
+
+        if(eval is null)
+        {
+            throw new Fido2FormatException("The 'extensions.prf' member 'eval' is required.");
+        }
+
+        return new Fido2PrfRegistrationExtensionInput { Eval = eval };
+    }
+
+
+    /// <summary>
+    /// Reads an <c>AuthenticationExtensionsPRFValuesJSON</c> object: <c>first</c> required,
+    /// <c>second</c> optional, both base64url-encoded.
+    /// </summary>
+    private static Fido2PrfValues ReadPrfValues(ref Utf8JsonReader reader)
+    {
+        if(reader.TokenType != JsonTokenType.StartObject)
+        {
+            throw new Fido2FormatException("A 'prf' evaluation-values member MUST be a JSON object.");
+        }
+
+        HashSet<string> seenMembers = new(StringComparer.Ordinal);
+        ReadOnlyMemory<byte>? first = null;
+        ReadOnlyMemory<byte>? second = null;
+
+        while(reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            string memberName = reader.GetString()!;
+            if(!seenMembers.Add(memberName))
+            {
+                throw new Fido2FormatException($"A 'prf' evaluation-values member '{memberName}' is repeated.");
+            }
+
+            if(!reader.Read())
+            {
+                throw new Fido2FormatException($"A 'prf' evaluation-values member '{memberName}' is truncated.");
+            }
+
+            switch(memberName)
+            {
+                case FirstMember:
+                {
+                    first = ReadRequiredBinary(ref reader, memberName);
+                    break;
+                }
+                case SecondMember:
+                {
+                    second = ReadRequiredBinary(ref reader, memberName);
+                    break;
+                }
+                default:
+                {
+                    throw new Fido2FormatException($"A 'prf' evaluation-values member '{memberName}' is not recognised.");
+                }
+            }
+        }
+
+        if(first is null)
+        {
+            throw new Fido2FormatException("A 'prf' evaluation-values member 'first' is required.");
+        }
+
+        return new Fido2PrfValues
+        {
+            First = new TaggedMemory<byte>(first.Value, Fido2BufferTags.PrfValue),
+            Second = second is ReadOnlyMemory<byte> secondValue ? new TaggedMemory<byte>(secondValue, Fido2BufferTags.PrfValue) : null
+        };
     }
 
 

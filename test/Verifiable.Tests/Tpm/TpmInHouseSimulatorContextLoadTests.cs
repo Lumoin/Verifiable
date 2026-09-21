@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Drives <c>TPM2_ContextLoad()</c> against the in-house behavioural <see cref="TpmSimulator"/> through the
 /// production command path (<see cref="TpmCommandExecutor"/> with <see cref="ContextLoadInput"/> and
-/// <see cref="TpmResponseCodec.ContextLoad"/>), and the <c>TPM2_FlushContext()</c> arm a saved session takes:
+/// <c>TpmResponseCodec.ContextLoad</c>), and the <c>TPM2_FlushContext()</c> arm a saved session takes:
 /// "This command is used to reload a context that has been saved by TPM2_ContextSave()."
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 28.3.1</see>.
 /// </summary>

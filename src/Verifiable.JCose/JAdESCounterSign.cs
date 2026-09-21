@@ -22,9 +22,9 @@ namespace Verifiable.JCose;
 /// thin, spec-documenting composition.
 /// </para>
 /// <para>
-/// <strong>Either a plain JWS or a JAdES signature (JA-5.3.2-02/-04/-05).</strong> <typeparamref name="TJwtPart"/>
-/// and <paramref name="protectedHeaderEncoder"/> are the caller's own choice: a plain RFC 7515 header (JA-5.3.2-04)
-/// or a full <see cref="Verifiable.Cryptography.Pki.JAdESProtectedHeaders"/> aggregate with its own encoder
+/// <strong>Either a plain JWS or a JAdES signature (JA-5.3.2-02/-04/-05).</strong> <c>TJwtPart</c>
+/// and <c>protectedHeaderEncoder</c> are the caller's own choice: a plain RFC 7515 header (JA-5.3.2-04)
+/// or a full <see cref="JAdESProtectedHeaders"/> aggregate with its own encoder
 /// (JA-5.3.2-05) both flow through the identical call shape — this class asserts no opinion on which.
 /// </para>
 /// <para>
@@ -39,7 +39,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// <para>
 /// <strong>Scope: exactly one signature.</strong> Mirrors <see cref="TryParseJAdESMessageDelegate"/>'s own
-/// scope — a <paramref name="counterSignature"/>/<see langword="counterSignature"/> carrying more than one
+/// scope — a <c>counterSignature</c> carrying more than one
 /// signature (a General JSON serialization with several signers) is out of scope and reported as a verification
 /// failure, not silently narrowed to the first entry.
 /// </para>

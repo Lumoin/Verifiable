@@ -139,77 +139,84 @@ internal sealed class GlobalLogoutDualChannelHttpTests
         //The OP: a Global Token Revocation endpoint whose revoke-subject seam composes BOTH
         //fan-outs and pushes them over real HTTP.
         await using TestHostShell op = new(TimeProvider);
-        using VerifierKeyMaterial gtrMaterial = op.RegisterClient(GtrClientId, GtrClientBaseUri, GtrCapabilities);
+        using VerifierKeyMaterial gtrMaterial = await op.RegisterClientAsync(GtrClientId, GtrClientBaseUri, GtrCapabilities).ConfigureAwait(false);
 
         using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(ssfReceiver.Certificate);
-        op.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
-        _ = op.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
-        op.Server.OAuth().RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
+        await TestHostShell.AlterAsync(op.Server, candidateIntegration =>
         {
-            //Channel 1 (older — OIDC Back-Channel Logout): tell every RP holding the subject's
-            //session to drop it. aud = that RP's client_id; the token carries sub + the shared sid.
-            foreach(RegisteredRelyingParty relyingParty in sessionRelyingParties)
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+
+
+            _ = candidateIntegration.UseDefaultGlobalTokenRevocationJsonParsing();
+
+
+            candidateIntegration.RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
             {
-                string logoutToken = await BackChannelLogout.BuildLogoutTokenAsync(
+                //Channel 1 (older — OIDC Back-Channel Logout): tell every RP holding the subject's
+                //session to drop it. aud = that RP's client_id; the token carries sub + the shared sid.
+                foreach(RegisteredRelyingParty relyingParty in sessionRelyingParties)
+                {
+                    string logoutToken = await BackChannelLogout.BuildLogoutTokenAsync(
+                        OpIssuer,
+                        relyingParty.ClientId,
+                        jwtId: Guid.NewGuid().ToString("N"),
+                        issuedAt: TimeProvider.GetUtcNow(),
+                        subject: RevokedSubject,
+                        sessionId: SsoSessionId,
+                        opPrivate,
+                        TestSetup.Base64UrlEncoder,
+                        SecurityEventTestJson.HeaderSerializer,
+                        SecurityEventTestJson.PayloadSerializer,
+                        Pool,
+                        cancellationToken: ct,
+                        signingKeyId: "op-key-1").ConfigureAwait(false);
+
+                    using FormUrlEncodedContent content = new(
+                        [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
+                    using HttpClient deliveryClient = LoopbackTls.CreatePinnedHttpClient(relyingParty.Certificate);
+                    using HttpResponseMessage delivery = await deliveryClient.PostAsync(
+                        relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
+                    Assert.AreEqual(200, (int)delivery.StatusCode,
+                        $"RP '{relyingParty.ClientId}' must acknowledge the Logout Token with 200.");
+                }
+
+                //Channel 2 (newer — Shared Signals / CAEP session-revoked): signal the SSF Receiver.
+                var sessionRevoked = new CaepSessionRevokedEvent
+                {
+                    Common = new CaepEventClaims
+                    {
+                        EventTimestamp = TimeProvider.GetUtcNow(),
+                        InitiatingEntity = CaepInitiatingEntityValues.Admin,
+                        ReasonAdmin = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["en"] = "Global subject revocation."
+                        }
+                    }
+                };
+
+                string set = await SecurityEventTokenIssuance.IssueAsync(
                     OpIssuer,
-                    relyingParty.ClientId,
+                    [ReceiverAudience],
                     jwtId: Guid.NewGuid().ToString("N"),
                     issuedAt: TimeProvider.GetUtcNow(),
-                    subject: RevokedSubject,
-                    sessionId: SsoSessionId,
+                    [sessionRevoked.ToSecurityEvent()],
                     opPrivate,
                     TestSetup.Base64UrlEncoder,
                     SecurityEventTestJson.HeaderSerializer,
                     SecurityEventTestJson.PayloadSerializer,
                     Pool,
-                    cancellationToken: ct,
-                    signingKeyId: "op-key-1").ConfigureAwait(false);
+                    signingKeyId: "op-key-1",
+                    subjectId: subId,
+                    cancellationToken: ct).ConfigureAwait(false);
 
-                using FormUrlEncodedContent content = new(
-                    [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
-                using HttpClient deliveryClient = LoopbackTls.CreatePinnedHttpClient(relyingParty.Certificate);
-                using HttpResponseMessage delivery = await deliveryClient.PostAsync(
-                    relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
-                Assert.AreEqual(200, (int)delivery.StatusCode,
-                    $"RP '{relyingParty.ClientId}' must acknowledge the Logout Token with 200.");
-            }
+                using StringContent setContent = new(set, Encoding.UTF8, WellKnownMediaTypes.Application.SecEventJwt);
+                using HttpResponseMessage push = await transmitterClient.PostAsync(
+                    new Uri(ssfReceiver.BaseAddress, "/ssf/push"), setContent, cancellationToken: ct).ConfigureAwait(false);
+                Assert.AreEqual(202, (int)push.StatusCode, "The SSF Receiver must accept the session-revoked SET.");
 
-            //Channel 2 (newer — Shared Signals / CAEP session-revoked): signal the SSF Receiver.
-            var sessionRevoked = new CaepSessionRevokedEvent
-            {
-                Common = new CaepEventClaims
-                {
-                    EventTimestamp = TimeProvider.GetUtcNow(),
-                    InitiatingEntity = CaepInitiatingEntityValues.Admin,
-                    ReasonAdmin = new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        ["en"] = "Global subject revocation."
-                    }
-                }
+                return GlobalTokenRevocationOutcome.Initiated;
             };
-
-            string set = await SecurityEventTokenIssuance.IssueAsync(
-                OpIssuer,
-                [ReceiverAudience],
-                jwtId: Guid.NewGuid().ToString("N"),
-                issuedAt: TimeProvider.GetUtcNow(),
-                [sessionRevoked.ToSecurityEvent()],
-                opPrivate,
-                TestSetup.Base64UrlEncoder,
-                SecurityEventTestJson.HeaderSerializer,
-                SecurityEventTestJson.PayloadSerializer,
-                Pool,
-                signingKeyId: "op-key-1",
-                subjectId: subId,
-                cancellationToken: ct).ConfigureAwait(false);
-
-            using StringContent setContent = new(set, Encoding.UTF8, WellKnownMediaTypes.Application.SecEventJwt);
-            using HttpResponseMessage push = await transmitterClient.PostAsync(
-                new Uri(ssfReceiver.BaseAddress, "/ssf/push"), setContent, cancellationToken: ct).ConfigureAwait(false);
-            Assert.AreEqual(202, (int)push.StatusCode, "The SSF Receiver must accept the session-revoked SET.");
-
-            return GlobalTokenRevocationOutcome.Initiated;
-        };
+        }).ConfigureAwait(false);
 
         //The single trigger: revoke the subject everywhere.
         ServerHttpResponse response = await op.DispatchAtEndpointAsync(

@@ -6,7 +6,7 @@ namespace Verifiable.Tpm;
 /// <remarks>
 /// <para>
 /// <b>Purpose:</b> TBS is the Windows API layer that manages TPM access. These result
-/// codes indicate errors at the TBS layer, distinct from TPM response codes (<see cref="TpmRc"/>).
+/// codes indicate errors at the TBS layer, distinct from TPM response codes (<see cref="Verifiable.Tpm.Spec.Constants.TpmRcConstants"/>).
 /// </para>
 /// <para>
 /// <b>Error categories:</b>

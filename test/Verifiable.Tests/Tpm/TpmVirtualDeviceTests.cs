@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Coverage for <see cref="TpmVirtualDevice"/>: raw record/replay behaviour, the
 /// no-match failure response, loading from a recording, and an end-to-end replay through
-/// <see cref="TpmCommandExecutor"/> via <see cref="TpmDevice.Create(TpmSubmitHandler, Action?)"/>.
+/// <see cref="TpmCommandExecutor"/> via <see cref="TpmDevice.Create(TpmSubmitHandler, BaseMemoryPool, Verifiable.Cryptography.FillEntropyDelegate, Action?)"/>.
 /// </summary>
 [TestClass]
 internal sealed class TpmVirtualDeviceTests

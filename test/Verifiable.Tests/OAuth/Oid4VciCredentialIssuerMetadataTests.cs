@@ -59,12 +59,15 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task ServesDerivedEndpointsAndContributedCatalog()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -108,12 +111,15 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task CredentialConfigurationsSupportedIsAlwaysEmitted()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(CredentialIssuerMetadataContribution.Empty);
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(CredentialIssuerMetadataContribution.Empty);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -135,22 +141,28 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task SignedMetadataEmbedsTheAssembledClaimSet()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        }).ConfigureAwait(false);
 
         const string signedJwt = "eyJ0eXAiOiJvcGVuaWR2Y2ktaXNzdWVyLW1ldGFkYXRhK2p3dCJ9.eyJzdWIiOiJpc3MifQ.sig";
         JwtPayload? seenClaims = null;
-        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
-            (metadata, registration, context, ct) =>
-            {
-                seenClaims = metadata;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SignCredentialIssuerMetadataAsync =
+                (metadata, registration, context, ct) =>
+                {
+                    seenClaims = metadata;
 
-                return ValueTask.FromResult<string?>(signedJwt);
-            };
+                    return ValueTask.FromResult<string?>(signedJwt);
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -184,12 +196,15 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task SignedMetadataHelperProducesConformantJws()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        }).ConfigureAwait(false);
 
         //The reference path: the app seam composes the signed_metadata JWS THROUGH the library
         //helper, inheriting the §12.2.3 guarantees rather than re-deriving them. The deployment
@@ -200,19 +215,22 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         using PrivateKeyMemory issuerPrivate = keys.PrivateKey;
         string expectedIssuer = $"https://issuer.test/{segment}";
 
-        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
-            async (metadata, registration, context, ct) =>
-                await SignedCredentialIssuerMetadata.CreateAsync(
-                    metadata,
-                    expectedIssuer,
-                    issuerPrivate,
-                    Kid,
-                    TimeProvider.GetUtcNow(),
-                    AppendHeaderSerializer,
-                    AppendPayloadSerializer,
-                    TestSetup.Base64UrlEncoder,
-                    BaseMemoryPool.Shared,
-                    ct).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SignCredentialIssuerMetadataAsync =
+                async (metadata, registration, context, ct) =>
+                    await SignedCredentialIssuerMetadata.CreateAsync(
+                        metadata,
+                        expectedIssuer,
+                        issuerPrivate,
+                        Kid,
+                        TimeProvider.GetUtcNow(),
+                        AppendHeaderSerializer,
+                        AppendPayloadSerializer,
+                        TestSetup.Base64UrlEncoder,
+                        BaseMemoryPool.Shared,
+                        ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -283,10 +301,10 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task MetadataEndpointAbsentWhenContributionSeamUnwired()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -305,13 +323,16 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     {
         await using TestHostShell host = new(TimeProvider);
         //Only the metadata capability — the Credential Endpoint is deliberately absent.
-        using VerifierKeyMaterial material = host.RegisterClient(
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
             ClientId, ClientBaseUri,
-            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata));
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata)).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -329,22 +350,25 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task FailsLoudWhenCredentialConfigurationMissingFormat()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(new CredentialIssuerMetadataContribution
-            {
-                CredentialConfigurationsSupported = new Dictionary<string, object>(StringComparer.Ordinal)
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
-                    //No "format" — the §12.2.4 REQUIRED inner member is missing.
-                    [ConfigurationId] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    CredentialConfigurationsSupported = new Dictionary<string, object>(StringComparer.Ordinal)
                     {
-                        ["scope"] = "UniversityDegree"
+                        //No "format" — the §12.2.4 REQUIRED inner member is missing.
+                        [ConfigurationId] = new Dictionary<string, object>(StringComparer.Ordinal)
+                        {
+                            ["scope"] = "UniversityDegree"
+                        }
                     }
-                }
-            });
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -362,26 +386,29 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task FailsLoudWhenProofTypeMissingSigningAlgValues()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(new CredentialIssuerMetadataContribution
-            {
-                CredentialConfigurationsSupported = new Dictionary<string, object>(StringComparer.Ordinal)
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
-                    [ConfigurationId] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    CredentialConfigurationsSupported = new Dictionary<string, object>(StringComparer.Ordinal)
                     {
-                        ["format"] = "dc+sd-jwt",
-                        ["proof_types_supported"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                        [ConfigurationId] = new Dictionary<string, object>(StringComparer.Ordinal)
                         {
-                            //The "jwt" proof type omits the REQUIRED proof_signing_alg_values_supported.
-                            ["jwt"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                            ["format"] = "dc+sd-jwt",
+                            ["proof_types_supported"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                            {
+                                //The "jwt" proof type omits the REQUIRED proof_signing_alg_values_supported.
+                                ["jwt"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                            }
                         }
                     }
-                }
-            });
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -399,19 +426,22 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task FailsLoudWhenBatchSizeBelowTwo()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
-            {
-                BatchCredentialIssuance = new Dictionary<string, object>(StringComparer.Ordinal)
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
                 {
-                    //§12.2.4: batch_size MUST be 2 or greater — 1 is non-conformant.
-                    ["batch_size"] = 1
-                }
-            });
+                    BatchCredentialIssuance = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        //§12.2.4: batch_size MUST be 2 or greater — 1 is non-conformant.
+                        ["batch_size"] = 1
+                    }
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -430,20 +460,23 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task FailsLoudWhenResponseEncryptionMissingAlgValues()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
-            {
-                CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
                 {
-                    //No alg_values_supported — the §12.2.4 REQUIRED inner member is missing.
-                    ["enc_values_supported"] = new List<object> { "A128GCM" },
-                    ["encryption_required"] = false
-                }
-            });
+                    CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        //No alg_values_supported — the §12.2.4 REQUIRED inner member is missing.
+                        ["enc_values_supported"] = new List<object> { "A128GCM" },
+                        ["encryption_required"] = false
+                    }
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -496,12 +529,15 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task AcceptApplicationJwtServesSignedDocument()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        }).ConfigureAwait(false);
 
         const string Kid = "issuer-signing-key-1";
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
@@ -509,12 +545,15 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         using PrivateKeyMemory issuerPrivate = keys.PrivateKey;
         string expectedIssuer = $"https://issuer.test/{segment}";
 
-        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
-            async (metadata, registration, context, ct) =>
-                await SignedCredentialIssuerMetadata.CreateAsync(
-                    metadata, expectedIssuer, issuerPrivate, Kid, TimeProvider.GetUtcNow(),
-                    AppendHeaderSerializer, AppendPayloadSerializer, TestSetup.Base64UrlEncoder,
-                    BaseMemoryPool.Shared, ct).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SignCredentialIssuerMetadataAsync =
+                async (metadata, registration, context, ct) =>
+                    await SignedCredentialIssuerMetadata.CreateAsync(
+                        metadata, expectedIssuer, issuerPrivate, Kid, TimeProvider.GetUtcNow(),
+                        AppendHeaderSerializer, AppendPayloadSerializer, TestSetup.Base64UrlEncoder,
+                        BaseMemoryPool.Shared, ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(
             host, segment, SingleHeader(WellKnownHttpHeaderNames.Accept, WellKnownMediaTypes.Application.Jwt))
@@ -555,16 +594,22 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task AcceptApplicationJsonServesPlainDocument()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
+        }).ConfigureAwait(false);
 
         const string signedJwt = "eyJ0eXAiOiJvcGVuaWR2Y2ktaXNzdWVyLW1ldGFkYXRhK2p3dCJ9.eyJzdWIiOiJpc3MifQ.sig";
-        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
-            (metadata, registration, context, ct) => ValueTask.FromResult<string?>(signedJwt);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SignCredentialIssuerMetadataAsync =
+                (metadata, registration, context, ct) => ValueTask.FromResult<string?>(signedJwt);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(
             host, segment, SingleHeader(WellKnownHttpHeaderNames.Accept, WellKnownMediaTypes.Application.Json))
@@ -592,19 +637,22 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task AcceptLanguageFiltersDisplayAndSetsContentLanguage()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
-            {
-                Display = new List<object>
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
                 {
-                    new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Example Issuer", ["locale"] = "en" },
-                    new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Beispiel-Aussteller", ["locale"] = "de" }
-                }
-            });
+                    Display = new List<object>
+                    {
+                        new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Example Issuer", ["locale"] = "en" },
+                        new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Beispiel-Aussteller", ["locale"] = "de" }
+                    }
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(
             host, segment, SingleHeader(WellKnownHttpHeaderNames.AcceptLanguage, "de")).ConfigureAwait(false);
@@ -633,19 +681,22 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     public async Task NoAcceptLanguageServesAllDisplayLanguages()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, MetadataCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, MetadataCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
-        WireChainEndpointSeams(host);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
-            (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
-            {
-                Display = new List<object>
+        await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
                 {
-                    new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Example Issuer", ["locale"] = "en" },
-                    new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Beispiel-Aussteller", ["locale"] = "de" }
-                }
-            });
+                    Display = new List<object>
+                    {
+                        new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Example Issuer", ["locale"] = "en" },
+                        new Dictionary<string, object>(StringComparer.Ordinal) { ["name"] = "Beispiel-Aussteller", ["locale"] = "de" }
+                    }
+                });
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
@@ -690,14 +741,20 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     /// Wires the Credential and Nonce Endpoint seams so both land on the per-request chain and
     /// the metadata document can derive their URLs.
     /// </summary>
-    private static void WireChainEndpointSeams(TestHostShell host)
+    private static async Task WireChainEndpointSeamsAsync(TestHostShell host)
     {
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync =
-            (request, accessToken, registration, context, ct) =>
-                ValueTask.FromResult(CredentialIssuanceDecision.Issue(["credential"]));
-        host.Server.OAuth().IssueCredentialNonceAsync =
-            (_, _) => ValueTask.FromResult("c-nonce");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync =
+                (request, accessToken, registration, context, ct) =>
+                    ValueTask.FromResult(CredentialIssuanceDecision.Issue(["credential"]));
+
+            candidateIntegration.IssueCredentialNonceAsync =
+                (_, _) => ValueTask.FromResult("c-nonce");
+        }).ConfigureAwait(false);
     }
 
 

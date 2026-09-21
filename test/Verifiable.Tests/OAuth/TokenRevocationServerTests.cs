@@ -41,17 +41,22 @@ internal sealed class TokenRevocationServerTests
     public async Task RevocationEndpointAuthenticatesClientAndRelaysTokenToSeam()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, RevocationCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, RevocationCapabilities).ConfigureAwait(false);
 
         List<(string Token, string? Hint, ClientRecord Client)> revoked = [];
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().RevokeTokenAsync = (token, hint, registration, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            revoked.Add((token, hint, registration));
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.RevokeTokenAsync = (token, hint, registration, _, _) =>
+            {
+                revoked.Add((token, hint, registration));
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -86,17 +91,22 @@ internal sealed class TokenRevocationServerTests
     public async Task RevocationEndpointRejectsUnauthenticatedClientWithoutTouchingTheStore()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, RevocationCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, RevocationCapabilities).ConfigureAwait(false);
 
         bool seamInvoked = false;
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(false);
-        host.Server.OAuth().RevokeTokenAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            seamInvoked = true;
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(false);
+
+            candidateIntegration.RevokeTokenAsync = (_, _, _, _, _) =>
+            {
+                seamInvoked = true;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -121,17 +131,22 @@ internal sealed class TokenRevocationServerTests
     public async Task RevocationEndpointIsIdempotentAcrossRepeatedRequests()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, RevocationCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, RevocationCapabilities).ConfigureAwait(false);
 
         int seamCalls = 0;
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
-        host.Server.OAuth().RevokeTokenAsync = (_, _, _, _, _) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            seamCalls++;
-            return ValueTask.CompletedTask;
-        };
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.RevokeTokenAsync = (_, _, _, _, _) =>
+            {
+                seamCalls++;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
 
         RequestFields fields = new() { [OAuthRequestParameterNames.Token] = "repeated-token" };
 
@@ -157,13 +172,16 @@ internal sealed class TokenRevocationServerTests
     public async Task RevocationEndpointAbsentWhenSeamUnwired()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterClient(
-            ClientId, ClientBaseUri, RevocationCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, RevocationCapabilities).ConfigureAwait(false);
 
         //Client authentication is wired but the revocation seam is not — the
         //candidate gate requires both, so the endpoint must not materialize.
-        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(true);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

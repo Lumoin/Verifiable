@@ -4,7 +4,6 @@ using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Did;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
 
@@ -52,7 +51,7 @@ internal sealed class TypeSelectorTests
         var customServiceConverter = new ServiceConverter(serviceSelector ?? ServiceTypeSelectors.Default);
         var options = new JsonSerializerOptions();
         options.Converters.Insert(0, customServiceConverter);
-        _ = options.ApplyVerifiableDefaults();
+        _ = options.ApplyVerifiableDefaults(BaseMemoryPool.Shared);
         //Combine so ServiceConverter.GetTypeInfo can resolve both library and test-internal types.
         options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
             VerifiableJsonContext.Default,

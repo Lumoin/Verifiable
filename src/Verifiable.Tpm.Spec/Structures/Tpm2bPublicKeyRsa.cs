@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// <para>
 /// The content is public key material, so this carrier holds no
-/// <see cref="Verifiable.Cryptography.SensitiveMemory"/> tag; it follows the hand-rolled pooled shape of
+/// <c>Verifiable.Cryptography.SensitiveMemory</c> tag; it follows the hand-rolled pooled shape of
 /// <see cref="Tpm2bName"/> and <see cref="Tpm2bOperand"/>. Instance identity is ownership identity: two
 /// carriers are the same carrier only when they are the same instance, so a record holding one compares it by
 /// reference and never reads a possibly-released buffer's content.

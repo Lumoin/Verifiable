@@ -65,20 +65,23 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task DeferredEndpointDeliversIssuedCredentials()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
         string? seenTransactionId = null;
         string? seenSubject = null;
-        host.Server.OAuth().ResolveDeferredCredentialAsync =
-            (transactionId, accessToken, registration, context, ct) =>
-            {
-                seenTransactionId = transactionId;
-                seenSubject = accessToken.TryGetValue("sub", out object? s) ? s as string : null;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveDeferredCredentialAsync =
+                (transactionId, accessToken, registration, context, ct) =>
+                {
+                    seenTransactionId = transactionId;
+                    seenSubject = accessToken.TryGetValue("sub", out object? s) ? s as string : null;
 
-                return ValueTask.FromResult(DeferredCredentialDecision.Issue(
-                    [IssuedCredential], NotificationId));
-            };
+                    return ValueTask.FromResult(DeferredCredentialDecision.Issue(
+                        [IssuedCredential], NotificationId));
+                };
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         ServerHttpResponse response = await DispatchDeferredAsync(
@@ -109,11 +112,14 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task DeferredEndpointEchoesPendingTransaction()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
-        host.Server.OAuth().ResolveDeferredCredentialAsync =
-            static (_, _, _, _, _) => ValueTask.FromResult(DeferredCredentialDecision.Defer(86400));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveDeferredCredentialAsync =
+                static (_, _, _, _, _) => ValueTask.FromResult(DeferredCredentialDecision.Defer(86400));
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         ServerHttpResponse response = await DispatchDeferredAsync(
@@ -138,13 +144,16 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task DeferredEndpointMapsRefusalsToTheSpecErrors()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
         DeferredCredentialDecision decision = DeferredCredentialDecision.Refuse(
             DeferredCredentialError.InvalidTransactionId);
-        host.Server.OAuth().ResolveDeferredCredentialAsync =
-            (_, _, _, _, _) => ValueTask.FromResult(decision);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveDeferredCredentialAsync =
+                (_, _, _, _, _) => ValueTask.FromResult(decision);
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         ServerHttpResponse unknownId = await DispatchDeferredAsync(
@@ -173,17 +182,20 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task DeferredEndpointRequiresBearerAndTransactionId()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
         bool seamConsulted = false;
-        host.Server.OAuth().ResolveDeferredCredentialAsync =
-            (_, _, _, _, _) =>
-            {
-                seamConsulted = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveDeferredCredentialAsync =
+                (_, _, _, _, _) =>
+                {
+                    seamConsulted = true;
 
-                return ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
-            };
+                    return ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
+                };
+        }).ConfigureAwait(false);
 
         ServerHttpResponse noBearer = await DispatchDeferredAsync(
             host, material, bearer: null,
@@ -209,17 +221,20 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task NotificationEndpointAcknowledgesAcceptedEvent()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
         List<CredentialNotification> seen = [];
-        host.Server.OAuth().ProcessCredentialNotificationAsync =
-            (notification, accessToken, registration, context, ct) =>
-            {
-                seen.Add(notification);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ProcessCredentialNotificationAsync =
+                (notification, accessToken, registration, context, ct) =>
+                {
+                    seen.Add(notification);
 
-                return ValueTask.FromResult(CredentialNotificationDecision.Accept);
-            };
+                    return ValueTask.FromResult(CredentialNotificationDecision.Accept);
+                };
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         string body = $"{{\"notification_id\":\"{NotificationId}\",\"event\":\"credential_accepted\"}}";
@@ -247,17 +262,20 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task NotificationEndpointRelaysFailureEventWithDescription()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
         CredentialNotification? seen = null;
-        host.Server.OAuth().ProcessCredentialNotificationAsync =
-            (notification, _, _, _, _) =>
-            {
-                seen = notification;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ProcessCredentialNotificationAsync =
+                (notification, _, _, _, _) =>
+                {
+                    seen = notification;
 
-                return ValueTask.FromResult(CredentialNotificationDecision.Accept);
-            };
+                    return ValueTask.FromResult(CredentialNotificationDecision.Accept);
+                };
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         ServerHttpResponse response = await DispatchNotificationAsync(
@@ -283,17 +301,20 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task NotificationEventDescriptionIsSanitizedToTheAllowedCharset()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
         CredentialNotification? seen = null;
-        host.Server.OAuth().ProcessCredentialNotificationAsync =
-            (notification, _, _, _, _) =>
-            {
-                seen = notification;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ProcessCredentialNotificationAsync =
+                (notification, _, _, _, _) =>
+                {
+                    seen = notification;
 
-                return ValueTask.FromResult(CredentialNotificationDecision.Accept);
-            };
+                    return ValueTask.FromResult(CredentialNotificationDecision.Accept);
+                };
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -321,17 +342,20 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     public async Task NotificationEndpointRejectsInvalidRequests()
     {
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
 
         bool seamConsulted = false;
-        host.Server.OAuth().ProcessCredentialNotificationAsync =
-            (_, _, _, _, _) =>
-            {
-                seamConsulted = true;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ProcessCredentialNotificationAsync =
+                (_, _, _, _, _) =>
+                {
+                    seamConsulted = true;
 
-                return ValueTask.FromResult(CredentialNotificationDecision.RejectUnknownId());
-            };
+                    return ValueTask.FromResult(CredentialNotificationDecision.RejectUnknownId());
+                };
+        }).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         string bearer = "Bearer " + accessToken;
@@ -381,20 +405,28 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         ]);
 
         await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, capabilities);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, capabilities).ConfigureAwait(false);
 
         //The fail-closed gates keep each endpoint off the chain until its seams are wired;
         //the metadata derives the advertised URLs from the chain.
-        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
-        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
-        host.Server.OAuth().ProcessCredentialNotificationAsync = static (_, _, _, _, _) =>
-            ValueTask.FromResult(CredentialNotificationDecision.Accept);
-        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(CredentialIssuerMetadataContribution.Empty);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+
+            candidateIntegration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
+
+            candidateIntegration.ProcessCredentialNotificationAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialNotificationDecision.Accept);
+
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(CredentialIssuerMetadataContribution.Empty);
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -428,11 +460,14 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
-        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
-        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
-            (code, txCode, clientId, registration, context, ct) =>
-                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+        }).ConfigureAwait(false);
 
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,

@@ -265,6 +265,215 @@ public static class OAuthResponseParsers
     }
 
 
+    /// <summary>
+    /// Parses an authorization server (or OpenID Provider) metadata document per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.2">RFC 8414 §3.2</see>.
+    /// </summary>
+    /// <remarks>
+    /// Every <see cref="Uri"/> member is read as an absolute URI; a present-but-malformed value is
+    /// an <see cref="OAuthInvalidFieldValue"/> naming the member, per RFC 8414 §2's per-member
+    /// "URL of the authorization server's ... endpoint" definitions. Every <c>*_supported</c> member
+    /// is read as a JSON string array via <see cref="TryGetStringArrayField"/>; an absent boolean
+    /// member reads as <see langword="false"/>, the unstated default RFC 8414 §2's OPTIONAL boolean
+    /// members carry. A member this type does not carry is ignored per RFC 8414 §3.2: "a JSON object
+    /// ... that contains a set of claims as its members that are a subset of the metadata values
+    /// defined in Section 2. Other claims MAY also be returned."
+    /// </remarks>
+    public static Result<AuthorizationServerMetadata, OAuthParseError> ParseAuthorizationServerMetadata(
+        HttpResponseData response)
+    {
+        ReadOnlySpan<char> body = response.Body.AsSpan().Trim();
+
+        if(body.IsEmpty)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(
+                new OAuthMalformedResponse(
+                    response.Body,
+                    new DecisionSupport("The authorization server metadata response was empty.")
+                    {
+                        LikelyCause = "The well-known metadata URL may be incorrect, a proxy may " +
+                                      "have intercepted the request, or the server has a bug.",
+                        SpecificationReference = "RFC 8414 §3.2"
+                    }).WithTransportMetadata(response));
+        }
+
+        if(!TryGetStringField(body, AuthorizationServerMetadataParameterNames.Issuer, out ReadOnlySpan<char> issuerSpan)
+            || issuerSpan.IsEmpty)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(
+                new OAuthMalformedResponse(
+                    response.Body,
+                    new DecisionSupport("The authorization server metadata document did not contain an issuer.")
+                    {
+                        LikelyCause = "RFC 8414 §2 makes the issuer member REQUIRED: \"The authorization " +
+                                      "server's issuer identifier, which is a URL that uses the 'https' " +
+                                      "scheme and has no query or fragment components.\"",
+                        SpecificationReference = "RFC 8414 §2"
+                    }).WithTransportMetadata(response));
+        }
+
+        string issuerString = issuerSpan.ToString();
+        if(!Uri.TryCreate(issuerString, UriKind.Absolute, out Uri? issuerUri))
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(
+                new OAuthInvalidFieldValue(
+                    AuthorizationServerMetadataParameterNames.Issuer,
+                    issuerString,
+                    "The issuer value is not an absolute URI.",
+                    new DecisionSupport("The authorization server metadata document's issuer value is not a valid absolute URI.")
+                    {
+                        SpecificationReference = "RFC 8414 §2"
+                    }).WithTransportMetadata(response));
+        }
+
+        (Uri? authorizationEndpoint, OAuthParseError? authorizationEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.AuthorizationEndpoint, response);
+        if(authorizationEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(authorizationEndpointError);
+        }
+
+        (Uri? tokenEndpoint, OAuthParseError? tokenEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.TokenEndpoint, response);
+        if(tokenEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(tokenEndpointError);
+        }
+
+        (Uri? pushedAuthorizationRequestEndpoint, OAuthParseError? pushedAuthorizationRequestEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint, response);
+        if(pushedAuthorizationRequestEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(pushedAuthorizationRequestEndpointError);
+        }
+
+        (Uri? revocationEndpoint, OAuthParseError? revocationEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.RevocationEndpoint, response);
+        if(revocationEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(revocationEndpointError);
+        }
+
+        (Uri? introspectionEndpoint, OAuthParseError? introspectionEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.IntrospectionEndpoint, response);
+        if(introspectionEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(introspectionEndpointError);
+        }
+
+        (Uri? jwksUri, OAuthParseError? jwksUriError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.JwksUri, response);
+        if(jwksUriError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(jwksUriError);
+        }
+
+        (Uri? registrationEndpoint, OAuthParseError? registrationEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.RegistrationEndpoint, response);
+        if(registrationEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(registrationEndpointError);
+        }
+
+        (Uri? endSessionEndpoint, OAuthParseError? endSessionEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.EndSessionEndpoint, response);
+        if(endSessionEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(endSessionEndpointError);
+        }
+
+        (Uri? userInfoEndpoint, OAuthParseError? userInfoEndpointError) =
+            TryParseOptionalUriField(body, OpenIdProviderMetadataParameterNames.UserinfoEndpoint, response);
+        if(userInfoEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(userInfoEndpointError);
+        }
+
+        (Uri? deviceAuthorizationEndpoint, OAuthParseError? deviceAuthorizationEndpointError) =
+            TryParseOptionalUriField(body, AuthorizationServerMetadataParameterNames.DeviceAuthorizationEndpoint, response);
+        if(deviceAuthorizationEndpointError is not null)
+        {
+            return Result.Failure<AuthorizationServerMetadata, OAuthParseError>(deviceAuthorizationEndpointError);
+        }
+
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.ResponseTypesSupported, out List<string> responseTypesSupported);
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.GrantTypesSupported, out List<string> grantTypesSupported);
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported, out List<string> tokenEndpointAuthMethodsSupported);
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.TokenEndpointAuthSigningAlgValuesSupported, out List<string> tokenEndpointAuthSigningAlgValuesSupported);
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.ScopesSupported, out List<string> scopesSupported);
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported, out List<string> codeChallengeMethodsSupported);
+        _ = TryGetStringArrayField(body, OpenIdProviderMetadataParameterNames.IdTokenSigningAlgValuesSupported, out List<string> idTokenSigningAlgValuesSupported);
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.RequestObjectSigningAlgValuesSupported, out List<string> requestObjectSigningAlgValuesSupported);
+        _ = TryGetStringArrayField(body, AuthorizationServerMetadataParameterNames.DpopSigningAlgValuesSupported, out List<string> dpopSigningAlgValuesSupported);
+
+        _ = TryGetBooleanField(body, AuthorizationServerMetadataParameterNames.RequirePushedAuthorizationRequests, out bool requirePushedAuthorizationRequests);
+        _ = TryGetBooleanField(body, AuthorizationServerMetadataParameterNames.AuthorizationResponseIssParameterSupported, out bool authorizationResponseIssParameterSupported);
+        _ = TryGetBooleanField(body, AuthorizationServerMetadataParameterNames.RequireSignedRequestObject, out bool requireSignedRequestObject);
+        _ = TryGetBooleanField(body, AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported, out bool clientIdMetadataDocumentSupported);
+
+        return Result.Success<AuthorizationServerMetadata, OAuthParseError>(
+            new AuthorizationServerMetadata
+            {
+                Issuer = issuerUri,
+                AuthorizationEndpoint = authorizationEndpoint,
+                TokenEndpoint = tokenEndpoint,
+                PushedAuthorizationRequestEndpoint = pushedAuthorizationRequestEndpoint,
+                RevocationEndpoint = revocationEndpoint,
+                IntrospectionEndpoint = introspectionEndpoint,
+                JwksUri = jwksUri,
+                RegistrationEndpoint = registrationEndpoint,
+                EndSessionEndpoint = endSessionEndpoint,
+                UserInfoEndpoint = userInfoEndpoint,
+                DeviceAuthorizationEndpoint = deviceAuthorizationEndpoint,
+                ResponseTypesSupported = responseTypesSupported,
+                GrantTypesSupported = grantTypesSupported,
+                TokenEndpointAuthMethodsSupported = tokenEndpointAuthMethodsSupported,
+                TokenEndpointAuthSigningAlgValuesSupported = tokenEndpointAuthSigningAlgValuesSupported,
+                ScopesSupported = scopesSupported,
+                CodeChallengeMethodsSupported = codeChallengeMethodsSupported,
+                IdTokenSigningAlgValuesSupported = idTokenSigningAlgValuesSupported,
+                RequestObjectSigningAlgValuesSupported = requestObjectSigningAlgValuesSupported,
+                DpopSigningAlgValuesSupported = dpopSigningAlgValuesSupported,
+                RequirePushedAuthorizationRequests = requirePushedAuthorizationRequests,
+                AuthorizationResponseIssParameterSupported = authorizationResponseIssParameterSupported,
+                RequireSignedRequestObject = requireSignedRequestObject,
+                ClientIdMetadataDocumentSupported = clientIdMetadataDocumentSupported
+            });
+    }
+
+
+    /// <summary>
+    /// Reads an OPTIONAL <see cref="Uri"/>-valued member of an authorization server metadata
+    /// document. A member the document does not carry parses as <see langword="null"/> with no
+    /// error, per RFC 8414 §2's members being OPTIONAL unless stated REQUIRED; a member present but
+    /// not an absolute URI is an <see cref="OAuthInvalidFieldValue"/> naming
+    /// <paramref name="memberName"/>.
+    /// </summary>
+    private static (Uri? Value, OAuthParseError? Error) TryParseOptionalUriField(
+        ReadOnlySpan<char> body, string memberName, HttpResponseData response)
+    {
+        if(!TryGetStringField(body, memberName, out ReadOnlySpan<char> valueSpan))
+        {
+            return (null, null);
+        }
+
+        string valueString = valueSpan.ToString();
+        if(Uri.TryCreate(valueString, UriKind.Absolute, out Uri? uri))
+        {
+            return (uri, null);
+        }
+
+        return (null, new OAuthInvalidFieldValue(
+            memberName,
+            valueString,
+            $"The {memberName} value is not an absolute URI.",
+            new DecisionSupport($"The authorization server metadata document's {memberName} value is not a valid absolute URI.")
+            {
+                SpecificationReference = "RFC 8414 §2"
+            }).WithTransportMetadata(response));
+    }
+
+
     private static Result<T, OAuthParseError> BuildProtocolError<T>(
         ReadOnlySpan<char> errorCode,
         ReadOnlySpan<char> body,
@@ -483,6 +692,139 @@ public static class OAuthResponseParsers
         }
 
         return int.TryParse(afterColon[..end], out value);
+    }
+
+
+    /// <summary>
+    /// Finds <c>"key":[...]</c> in a flat JSON object and returns its elements as strings.
+    /// Handles optional whitespace around the colon, before the opening bracket, and between
+    /// elements. Returns <see langword="false"/> (with <paramref name="values"/> set to an empty
+    /// list) if the key is not present, the value is not a JSON array, or an element is not a
+    /// JSON string.
+    /// </summary>
+    internal static bool TryGetStringArrayField(
+        ReadOnlySpan<char> json,
+        string key,
+        out List<string> values)
+    {
+        values = [];
+
+        Span<char> keyPattern = stackalloc char[key.Length + 2];
+        keyPattern[0] = '"';
+        key.AsSpan().CopyTo(keyPattern[1..]);
+        keyPattern[key.Length + 1] = '"';
+
+        int keyIndex = json.IndexOf(keyPattern);
+        if(keyIndex < 0)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> afterKey = json[(keyIndex + keyPattern.Length)..].TrimStart();
+        if(afterKey.IsEmpty || afterKey[0] != ':')
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> afterColon = afterKey[1..].TrimStart();
+        if(afterColon.IsEmpty || afterColon[0] != '[')
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> cursor = afterColon[1..].TrimStart();
+        if(!cursor.IsEmpty && cursor[0] == ']')
+        {
+            return true;
+        }
+
+        while(true)
+        {
+            if(cursor.IsEmpty || cursor[0] != '"')
+            {
+                values = [];
+
+                return false;
+            }
+
+            cursor = cursor[1..];
+            int end = FindClosingQuote(cursor);
+            if(end < 0)
+            {
+                values = [];
+
+                return false;
+            }
+
+            values.Add(cursor[..end].ToString());
+            cursor = cursor[(end + 1)..].TrimStart();
+
+            if(!cursor.IsEmpty && cursor[0] == ',')
+            {
+                cursor = cursor[1..].TrimStart();
+
+                continue;
+            }
+
+            if(!cursor.IsEmpty && cursor[0] == ']')
+            {
+                return true;
+            }
+
+            values = [];
+
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    /// Finds <c>"key":true|false</c> in a flat JSON object and returns the parsed boolean.
+    /// Handles optional whitespace around the colon. Returns <see langword="false"/> (with
+    /// <paramref name="value"/> set to <see langword="false"/>) if the key is not present or the
+    /// value is not a JSON boolean literal.
+    /// </summary>
+    internal static bool TryGetBooleanField(
+        ReadOnlySpan<char> json,
+        string key,
+        out bool value)
+    {
+        value = false;
+
+        Span<char> keyPattern = stackalloc char[key.Length + 2];
+        keyPattern[0] = '"';
+        key.AsSpan().CopyTo(keyPattern[1..]);
+        keyPattern[key.Length + 1] = '"';
+
+        int keyIndex = json.IndexOf(keyPattern);
+        if(keyIndex < 0)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> afterKey = json[(keyIndex + keyPattern.Length)..].TrimStart();
+        if(afterKey.IsEmpty || afterKey[0] != ':')
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> afterColon = afterKey[1..].TrimStart();
+
+        if(afterColon.StartsWith("true", StringComparison.Ordinal))
+        {
+            value = true;
+
+            return true;
+        }
+
+        if(afterColon.StartsWith("false", StringComparison.Ordinal))
+        {
+            value = false;
+
+            return true;
+        }
+
+        return false;
     }
 
 

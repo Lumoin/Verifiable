@@ -74,17 +74,26 @@ internal sealed class AuthZenEvaluationMatrixTests
     ];
 
 
+    /// <summary>
+    /// Returns each application policy decision for the supplied subject and action.
+    /// <see href="https://openid.net/specs/authorization-api-1_0.html#section-6.2">Authorization API §6.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task EvaluationDecisionsMatchTheRoleMatrix()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial pdp = app.RegisterClient(
+        using VerifierKeyMaterial pdp = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
-            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi)).ConfigureAwait(false);
 
-        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
-        app.Server.OAuth().EvaluateAccessAsync = Policy;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthZenJsonParsing();
+
+
+            candidateIntegration.EvaluateAccessAsync = Policy;
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");

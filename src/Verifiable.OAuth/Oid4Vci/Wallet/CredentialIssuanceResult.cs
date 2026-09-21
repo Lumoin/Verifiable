@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 /// The Wallet-side outcome of an OID4VCI 1.0 §8.3 Credential Response (or a §9.2 Deferred Credential
 /// Response): either the issued Credentials with an optional §11 <c>notification_id</c>, or a §9
 /// deferral carrying the <c>transaction_id</c> the Wallet polls with. The richer return that
-/// <see cref="Oid4VciWalletClient.IssuePreAuthorizedDetailedAsync(PreAuthorizedCodeOfferGrant, System.Uri, string, Verifiable.Cryptography.PrivateKeyMemory, Verifiable.Cryptography.PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, System.Threading.CancellationToken)"/>
+/// <see cref="Oid4VciWalletClient.IssuePreAuthorizedDetailedAsync(PreAuthorizedCodeOfferGrant, System.Uri, string, Verifiable.Cryptography.PrivateKeyMemory, Verifiable.Cryptography.PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, Verifiable.Core.ExchangeContext, System.Threading.CancellationToken)"/>
 /// surfaces in place of the single first-Credential string.
 /// </summary>
 /// <remarks>
@@ -53,6 +53,16 @@ public sealed record CredentialIssuanceResult
 
     /// <summary>The access token's type (<c>Bearer</c> or <c>DPoP</c>) for the follow-up requests' authorization.</summary>
     public required string TokenType { get; init; }
+
+    /// <summary>
+    /// The instant <see cref="AccessToken"/> expires — the §6 Token Response's <c>expires_in</c>
+    /// added to the instant the Wallet sent the Token Request — or <see langword="null"/> when the
+    /// Token Response carried no <c>expires_in</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see> counts
+    /// <c>expires_in</c> from the time the response was generated; the request instant is never
+    /// later than that, so this never overstates the token's remaining lifetime.
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
 
     /// <summary>Whether the issuance was deferred — the Wallet must poll the Deferred Credential Endpoint with <see cref="TransactionId"/>.</summary>
     public bool IsDeferred => TransactionId is not null;

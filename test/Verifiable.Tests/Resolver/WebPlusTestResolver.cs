@@ -109,6 +109,14 @@ internal sealed class RoutingTransport
     }
 
 
+    /// <summary>
+    /// Additive per-URL response headers, consulted by <see cref="Delegate"/>. Left empty by every existing
+    /// route, so a caller that never sets an entry here sees the same header-less <see cref="OutboundResponse"/>
+    /// as before.
+    /// </summary>
+    public Dictionary<string, HttpHeaderSet> ResponseHeaders { get; } = new(StringComparer.Ordinal);
+
+
     /// <summary>The transport delegate dispatching each request by its absolute URL.</summary>
     public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
     {
@@ -121,6 +129,10 @@ internal sealed class RoutingTransport
             ? TaggedMemory<byte>.Empty
             : new TaggedMemory<byte>(Encoding.UTF8.GetBytes(route.Body), BufferTags.Json);
 
-        return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body });
+        HttpHeaderSet headers = ResponseHeaders.TryGetValue(request.Target.AbsoluteUri, out HttpHeaderSet? configuredHeaders)
+            ? configuredHeaders
+            : HttpHeaderSet.Empty;
+
+        return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
     };
 }

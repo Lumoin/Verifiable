@@ -100,7 +100,7 @@ public static class CryptosuiteInfoExtensions
         public static EcdsaSd2023CryptosuiteInfo EcdsaSd2023 => EcdsaSd2023CryptosuiteInfo.Instance;
 
         /// <summary>
-        /// BBS cryptosuite with unlinkable selective disclosure using BLS12-381 G2 signatures and RDFC-1.0 canonicalization.
+        /// BBS cryptosuite with unlinkable selective disclosure using BLS12-381 G1 signatures and RDFC-1.0 canonicalization.
         /// See <see href="https://www.w3.org/TR/vc-di-bbs/#bbs-2023">BBS Cryptosuites §3.4</see>.
         /// </summary>
         public static Bbs2023CryptosuiteInfo Bbs2023 => Bbs2023CryptosuiteInfo.Instance;
@@ -121,7 +121,7 @@ public static class CryptosuiteInfoExtensions
         /// </para>
         /// <para>
         /// For custom cryptosuites, provide a factory delegate to
-        /// <see cref="Serialization.Json.DataIntegrityProofConverter"/> that chains to this method:
+        /// <c>Verifiable.Json.Converters.DataIntegrityProofConverter</c> that chains to this method:
         /// </para>
         /// <code>
         /// var converter = new DataIntegrityProofConverter(name =>

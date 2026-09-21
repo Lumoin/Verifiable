@@ -95,6 +95,7 @@ public static class KbCwtVerification
     /// Delegate that builds the COSE Sig_structure for the holder-signature check.
     /// Wired to <c>Verifiable.Cbor.CoseSerialization.BuildSigStructure</c>.
     /// </param>
+    /// <param name="saltReuseSeam">The commitment-reuse detection seam guarding against a replayed disclosure salt, or <see langword="null"/> to skip that check.</param>
     /// <param name="pool">Memory pool for cryptographic allocations.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The parsed and crypto-verified KBT contents.</returns>

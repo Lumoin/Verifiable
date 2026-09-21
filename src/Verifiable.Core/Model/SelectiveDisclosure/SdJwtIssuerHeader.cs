@@ -57,4 +57,40 @@ public static class SdJwtIssuerHeader
 
         return true;
     }
+
+
+    /// <summary>
+    /// Reads the <c>kid</c> header member from <paramref name="issuerSignedCompactJws"/>'s protected
+    /// header, per <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.4">RFC 7515, Section
+    /// 4.1.4</see> — the key identifier SD-JWT VC draft-19 §4.2 recommends the Issuer-signed JWT carry
+    /// so a Verifier can select the matching key from the JWT VC Issuer Metadata's JWK Set.
+    /// </summary>
+    /// <param name="issuerSignedCompactJws">The compact-serialized issuer JWS — <c>SdToken{TEnvelope}.IssuerSigned</c> for the JWT envelope.</param>
+    /// <param name="base64UrlDecoder">Decodes the base64url-encoded protected header segment.</param>
+    /// <param name="pool">Memory pool for the decoded header bytes.</param>
+    /// <param name="kid">The header's <c>kid</c> value; <see langword="null"/> when the header carries none.</param>
+    /// <returns><see langword="true"/> when the header carries a <c>kid</c> member; otherwise <see langword="false"/>.</returns>
+    public static bool TryReadKid(
+        string issuerSignedCompactJws,
+        DecodeDelegate base64UrlDecoder,
+        BaseMemoryPool pool,
+        out string? kid)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issuerSignedCompactJws);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        kid = null;
+
+        int firstDot = issuerSignedCompactJws.IndexOf('.', StringComparison.Ordinal);
+        if(firstDot < 0)
+        {
+            return false;
+        }
+
+        using IMemoryOwner<byte> headerBytes = base64UrlDecoder(issuerSignedCompactJws.AsSpan(0, firstDot), pool);
+        kid = JwkJsonReader.ExtractStringValue(headerBytes.Memory.Span, WellKnownJwkMemberNames.KidUtf8);
+
+        return kid is not null;
+    }
 }

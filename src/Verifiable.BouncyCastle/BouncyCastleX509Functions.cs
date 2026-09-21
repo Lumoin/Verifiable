@@ -28,7 +28,7 @@ namespace Verifiable.BouncyCastle;
 /// WASM-compatible.
 /// </para>
 /// <para>
-/// Typical wiring alongside <see cref="MicrosoftX509Functions"/> for cross-checking:
+/// Typical wiring alongside <c>MicrosoftX509Functions</c> for cross-checking:
 /// </para>
 /// <code>
 /// ResolveKeyFromX509SanDnsDelegate bouncyCastleResolver =
@@ -105,6 +105,10 @@ public static class BouncyCastleX509Functions
     /// using <see cref="PkixCertPathBuilder"/> per RFC 5280 and returns the leaf
     /// certificate's public key as a <see cref="PublicKeyMemory"/>.
     /// </summary>
+    /// <param name="chain">The certificate chain to validate, leaf first.</param>
+    /// <param name="trustAnchors">The trusted root certificates the chain must build to.</param>
+    /// <param name="validationTime">The point in time chain validity is checked against.</param>
+    /// <param name="pool">Memory pool for the returned public key.</param>
     /// <param name="checkRevocation">
     /// An optional revocation-status checker. When supplied, every certificate in <paramref name="chain"/> that is
     /// not byte-equal to a supplied trust anchor — the leaf and every intermediate CA certificate the chain
@@ -302,7 +306,7 @@ public static class BouncyCastleX509Functions
     /// that extension omits the KeyIdentifier (e.g. it identifies the issuer by name + serial instead).
     /// </summary>
     /// <param name="certificate">The certificate to read — typically the leaf of an mdoc IssuerAuth x5chain.</param>
-    /// <returns>The certificate's <see cref="Pki.AuthorityKeyIdentifier"/>, or <see langword="null"/>.</returns>
+    /// <returns>The certificate's <see cref="Verifiable.Cryptography.Pki.AuthorityKeyIdentifier"/>, or <see langword="null"/>.</returns>
     public static PkiAuthorityKeyIdentifier? GetAuthorityKeyIdentifier(PkiCertificateMemory certificate)
     {
         ArgumentNullException.ThrowIfNull(certificate);
@@ -430,7 +434,7 @@ public static class BouncyCastleX509Functions
     /// <summary>
     /// Implements <see cref="ReadCertificateExtensionValueDelegate"/>. Reads a single named
     /// extension of the certificate and returns its raw DER contents and criticality flag, using
-    /// BouncyCastle — matching <see cref="MicrosoftX509Functions.ReadCertificateExtensionValue"/>'s
+    /// BouncyCastle — matching <c>MicrosoftX509Functions.ReadCertificateExtensionValue</c>'s
     /// contract byte-for-byte.
     /// </summary>
     /// <param name="certificate">The certificate to inspect.</param>

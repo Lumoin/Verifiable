@@ -46,7 +46,7 @@ internal sealed class XAdESSignatureFactsTests
     /// <summary>
     /// One <c>ds:Signature</c>, Id <c>sig1</c>, a <c>SignedProperties</c>/<c>#data1</c> reference pair, and a
     /// <c>ds:Object</c> carrying <c>QualifyingProperties</c> whose <c>Target</c> binds to <c>sig1</c> and whose
-    /// body is <paramref name="signedProperties"/>/<paramref name="unsignedProperties"/>, EXACTLY the wrapping
+    /// body is <paramref name="signedSignatureProperties"/>/<paramref name="unsignedSignatureProperties"/>, EXACTLY the wrapping
     /// shape <c>XAdESQualifyingPropertiesDiscoveryTests.WellFormedDocument</c> uses.
     /// </summary>
     private static string Document(string signedSignatureProperties, string signedDataObjectProperties, string? unsignedSignatureProperties = null)

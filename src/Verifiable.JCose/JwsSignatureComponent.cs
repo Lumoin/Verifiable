@@ -127,6 +127,10 @@ public sealed class JwsSignatureComponent: IEquatable<JwsSignatureComponent>, ID
     }
 
 
+    /// <summary>Compares two signature components for equality by their protected header and signature bytes.</summary>
+    /// <param name="left">The first signature component, or <see langword="null"/>.</param>
+    /// <param name="right">The second signature component, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when both are <see langword="null"/> or carry equal content.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator ==(JwsSignatureComponent? left, JwsSignatureComponent? right)
     {
@@ -134,6 +138,10 @@ public sealed class JwsSignatureComponent: IEquatable<JwsSignatureComponent>, ID
     }
 
 
+    /// <summary>Compares two signature components for inequality by their protected header and signature bytes.</summary>
+    /// <param name="left">The first signature component, or <see langword="null"/>.</param>
+    /// <param name="right">The second signature component, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the two carry different content.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator !=(JwsSignatureComponent? left, JwsSignatureComponent? right)
     {

@@ -1467,7 +1467,7 @@ public sealed record TpmCreateRsaPrimaryRequested(
 /// unrestricted key, no ticket supplied) carries the dispose-immune <see cref="Tpm2bDigest.Empty"/> singleton
 /// instead of a rental, so that arm never owns a live carrier to release, and the digest-width check runs
 /// directly (TPM 2.0 Library Part 4, <c>Sign.c</c>'s <c>TPM2_Sign()</c> if/else). Every refusing arm releases it through this
-/// record's <see cref="IDisposable.Dispose"/>. The KEYEDHASH arm (<see cref="OnSignKeyedHash"/>) models the
+/// record's <see cref="IDisposable.Dispose"/>. The KEYEDHASH arm (<see cref="TpmLifecycleTransitions.OnSignKeyedHash"/>) models the
 /// NULL-ticket form only and releases a caller-supplied ticket here unconsulted.
 /// </param>
 public sealed record TpmSignRequested(
@@ -2801,7 +2801,7 @@ public sealed record TpmLoadObjectRequested(
 /// The caller-supplied sensitive area (<c>TPMT_SENSITIVE</c>, TPM 2.0 Library Part 2, clause 12.3.2, Table
 /// 240), or <see langword="null"/> for the public-only form ("A public-only load occurs when the inPrivate
 /// parameter to TPM2_LoadExternal() has a size of zero", Part 1, clause 26.3). OWNED: rented at parse
-/// (<see cref="Structures.Tpm2bSensitive.Parse"/>'s inner value); TRANSFERRED into
+/// (<see cref="Verifiable.Tpm.Spec.Structures.Tpm2bSensitive.Parse"/>'s inner value); TRANSFERRED into
 /// <see cref="Automata.TpmLoadExternalAction"/> on acceptance, whose effect is its terminal owner; released
 /// through this record's <see cref="IDisposable.Dispose"/> on every refusing path.
 /// </param>
@@ -5615,7 +5615,7 @@ public sealed record TpmRandomStirred(TpmCcConstants CommandCode, TpmSimulatorIn
 /// The already-unmarshalled algorithm parameters (<c>TPMT_PUBLIC_PARMS</c>, TPM 2.0 Library Part 2, clause
 /// 12.2.3.10, Table 234): unmarshalling successfully is the whole of the command's own effect (Part 4
 /// <c>TestParms.c</c>'s <c>TPM2_TestParms()</c>: "We do nothing in command action"), so this record carries no pooled carrier at all —
-/// every field <see cref="Structures.TpmtPublicParms"/> and its union arms hold is a primitive or another
+/// every field <see cref="Verifiable.Tpm.Spec.Structures.TpmtPublicParms"/> and its union arms hold is a primitive or another
 /// value type.
 /// </param>
 public sealed record TpmTestParmsRequested(TpmtPublicParms Parameters): TpmSimulatorInput;
@@ -5827,6 +5827,16 @@ public sealed record PolicySecretAuthorizingSession(
 /// <see cref="IDisposable.Dispose"/>.
 /// </param>
 /// <param name="Expiration">The requested expiration (seconds); 0 = no expiry, negative = ticket requested (non-trial only; ignored on a trial session).</param>
+/// <param name="ResolvedIndexName">
+/// The NV Index's computed Name (<c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c>), when <see cref="AuthHandle"/>
+/// names a defined NV Index rather than a permanent handle or a loaded object (TPM 2.0 Library Part 3, clause
+/// 23.4.1: "authEntity ... may be any TPM entity with a handle and an associated authValue ... This includes ...
+/// NV Indexes"): the digest seam a pure transition cannot reach populates it through
+/// <see cref="Automata.TpmComputeNvIndexNameAction"/>/<see cref="TpmNvIndexNameComputed"/> before the command
+/// HMAC is verified, and this record carries it forward as the cpHash Name1 term and, on success, the
+/// <c>PolicyUpdate</c> Name term. <see langword="null"/> for a permanent handle (whose Name is its own raw
+/// bytes) or a loaded object (whose Name is a durable, already-computed field the object itself owns).
+/// </param>
 public sealed record TpmPolicySecretOverSessionRequested(
     TpmiDhEntity AuthHandle,
     TpmiShPolicy PolicySession,
@@ -5838,13 +5848,14 @@ public sealed record TpmPolicySecretOverSessionRequested(
     Tpm2bNonce NonceTpm,
     Tpm2bDigest CpHashA,
     Tpm2bNonce PolicyRef,
-    int Expiration): TpmSimulatorInput, IDisposable
+    int Expiration,
+    Tpm2bName? ResolvedIndexName = null): TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="CpHashA"/>, <see cref="PolicyRef"/>, <see cref="RawParameterArea"/>,
-    /// <see cref="NonceTpm"/> and session-slot carriers on a refusing path — including the command-HMAC
-    /// mismatch and cancellation arms this record is enrolled in; the accepting arms transfer or release them
-    /// explicitly instead, and never call this.
+    /// <see cref="NonceTpm"/>, <see cref="ResolvedIndexName"/> and session-slot carriers on a refusing path —
+    /// including the command-HMAC mismatch and cancellation arms this record is enrolled in; the accepting arms
+    /// transfer or release them explicitly instead, and never call this.
     /// </summary>
     public void Dispose()
     {
@@ -5854,6 +5865,38 @@ public sealed record TpmPolicySecretOverSessionRequested(
         NonceTpm.Dispose();
         NonceCaller.Dispose();
         Hmac.Dispose();
+        ResolvedIndexName?.Dispose();
+    }
+}
+
+/// <summary>
+/// The suspended <c>TPM2_PolicySecret()</c> password-arm state that resumes once its NV Index authHandle's
+/// Name has been computed (TPM 2.0 Library Part 3, clause 23.4): the authValue compare and the nonceTPM check
+/// have already run against the Index's raw authValue (neither needs a Name), so only the fields the
+/// digest fold and the deadline/ticket ladder still need are carried across the digest seam's async hop.
+/// </summary>
+/// <param name="NvIndex">The NV Index whose Name was requested, so the resume can recover its live record.</param>
+/// <param name="PolicySession">The policy session being extended.</param>
+/// <param name="IsNonceTpmEmpty">Whether the caller's nonceTPM was empty — the session-unbound form (Part 3, clause 23.2.2).</param>
+/// <param name="CpHashA">The command-parameter digest being authorized, in an owned carrier transferred out of the original request; released by <see cref="IDisposable.Dispose"/> if the resume shape is ever unrecognized, and otherwise transferred onward.</param>
+/// <param name="PolicyRef">The policy reference, in an owned carrier transferred out of the original request; released the same way.</param>
+/// <param name="Expiration">The requested expiration (seconds); 0 = no expiry, negative = ticket requested.</param>
+public sealed record TpmPolicySecretPasswordArmNvNameResume(
+    TpmiRhNvIndex NvIndex,
+    TpmiShPolicy PolicySession,
+    bool IsNonceTpmEmpty,
+    Tpm2bDigest CpHashA,
+    Tpm2bNonce PolicyRef,
+    int Expiration): TpmSimulatorInput, IDisposable
+{
+    /// <summary>
+    /// Releases the owned <see cref="CpHashA"/> and <see cref="PolicyRef"/> carriers; called only when the
+    /// resume shape is not recognized downstream, since every normal path transfers them onward instead.
+    /// </summary>
+    public void Dispose()
+    {
+        CpHashA.Dispose();
+        PolicyRef.Dispose();
     }
 }
 
@@ -6496,7 +6539,7 @@ public sealed record TpmContextSaveRequested(TpmiDhContext SaveHandle): TpmSimul
 /// </summary>
 /// <param name="ResponseCode">
 /// <c>TPM_RC_SUCCESS</c> with <see cref="Context"/> populated, <c>TPM_RC_MEMORY</c> when the serialized
-/// resource would not fit <see cref="Structures.Tpm2bContextData.MaxSize"/> (Table 3: "need space for
+/// resource would not fit <see cref="Verifiable.Tpm.Spec.Structures.Tpm2bContextData.MaxSize"/> (Table 3: "need space for
 /// internal operations"), or <c>TPM_RC_FAILURE</c> when <see cref="IsInternalFailure"/> is set.
 /// </param>
 /// <param name="Context">
@@ -6545,7 +6588,7 @@ public sealed record TpmContextSaved(
 public sealed record TpmContextLoadRequested(TpmsContext Context): TpmSimulatorInput, IDisposable
 {
     /// <summary>
-    /// Releases the owned <see cref="Context"/> (and, through it, its <see cref="Structures.TpmsContext.ContextBlob"/>)
+    /// Releases the owned <see cref="Context"/> (and, through it, its <see cref="Verifiable.Tpm.Spec.Structures.TpmsContext.ContextBlob"/>)
     /// on a refusing path; the accepting transition instead transfers it whole into
     /// <see cref="Automata.TpmContextLoadAction"/> and never calls this.
     /// </summary>

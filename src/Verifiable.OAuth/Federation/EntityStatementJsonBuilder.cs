@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Federation;
 /// wire output and is intentionally small enough to be audited
 /// individually. Federation EC claim shapes are arbitrary nested JSON
 /// — primitives, arrays, and recursive dictionaries — so the
-/// <see cref="AppendValue"/> walker is recursive. The walker accepts the
+/// <see cref="Verifiable.Server.JsonAppender.AppendValue"/> walker is recursive. The walker accepts the
 /// CLR types an application naturally constructs:
 /// <see cref="string"/>, <see cref="bool"/>, integer and floating-point
 /// numeric primitives, <see cref="Uri"/>, nested
@@ -111,6 +111,7 @@ public static class EntityStatementJsonBuilder
     /// claims. May be <see cref="FederationEntityConfigurationContribution.Empty"/>
     /// when only the structural claims are needed.
     /// </param>
+    /// <param name="clientRegistrationTypesSupported">The <c>client_registration_types_supported</c> values this entity advertises.</param>
     public static Dictionary<string, object> BuildConfigurationPayload(
         Uri entityIdentifier,
         DateTimeOffset issuedAt,

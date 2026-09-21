@@ -1,5 +1,6 @@
 using Lumoin.Veritas.Cbor;
 using System.Buffers;
+using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -18,7 +19,14 @@ namespace Verifiable.Cbor.Ctap;
 /// capable of emitting an <c>options.rk</c> value if <see cref="CtapGetAssertionRequest.Options"/>
 /// carries one — a conformant platform never does this (CTAP 2.3 forbids sending <c>rk</c> here), but a
 /// capstone-level negative test needs exactly this writer to construct the wire vector that proves the
-/// authenticator rejects it.
+/// authenticator rejects it. <see cref="CtapGetAssertionRequest.Extensions"/>, when present, is the wire
+/// truth and is written verbatim — a request built from a decoded wire message carries both the raw
+/// bytes and the decoded convenience members, and the raw bytes win. When
+/// <see cref="CtapGetAssertionRequest.Extensions"/> is absent, the <c>extensions</c> map is instead built
+/// from whichever of <see cref="CtapGetAssertionRequest.HmacSecret"/> and
+/// <see cref="CtapGetAssertionRequest.LargeBlobKey"/> are set, in CTAP2-canonical shorter-key-first order
+/// (RFC 8949 §4.2.1): <c>"hmac-secret"</c> (11 characters) before <c>"largeBlobKey"</c> (12 characters).
+/// When neither the raw bytes nor either decoded member is set, no <c>extensions</c> member is written.
 /// </remarks>
 public static class CtapGetAssertionRequestCborWriter
 {
@@ -38,12 +46,14 @@ public static class CtapGetAssertionRequestCborWriter
         ArgumentNullException.ThrowIfNull(request.RpId);
         ArgumentNullException.ThrowIfNull(request.ClientDataHash);
 
+        bool hasExtensions = request.Extensions is not null || request.LargeBlobKey is not null || request.HmacSecret is not null;
+
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = 2
             + (request.AllowList is not null ? 1 : 0)
-            + (request.Extensions is not null ? 1 : 0)
+            + (hasExtensions ? 1 : 0)
             + (request.Options is not null ? 1 : 0)
             + (request.PinUvAuthParam is not null ? 1 : 0)
             + (request.PinUvAuthProtocol is not null ? 1 : 0);
@@ -61,10 +71,18 @@ public static class CtapGetAssertionRequestCborWriter
             CtapCommandEntityCborCodec.WriteDescriptorArray(writer, allowList);
         }
 
-        if(request.Extensions is ReadOnlyMemory<byte> extensions)
+        if(hasExtensions)
         {
             writer.WriteInt32(WellKnownCtapGetAssertionRequestKeys.Extensions);
-            writer.WriteEncodedValue(extensions.Span);
+
+            if(request.Extensions is ReadOnlyMemory<byte> extensions)
+            {
+                writer.WriteEncodedValue(extensions.Span);
+            }
+            else
+            {
+                WriteExtensionsMap(writer, request.HmacSecret, request.LargeBlobKey);
+            }
         }
 
         if(request.Options is CtapCommandOptions options)
@@ -90,5 +108,46 @@ public static class CtapGetAssertionRequestCborWriter
         byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapGetAssertionRequestPayload);
+    }
+
+    /// <summary>
+    /// Writes the <c>extensions</c> map body from whichever of <paramref name="hmacSecret"/> and
+    /// <paramref name="largeBlobKey"/> are set, in the class's own documented CTAP2-canonical
+    /// shorter-key-first order. Called only when at least one is set; <c>writer</c> is positioned
+    /// immediately after the outer map's <c>extensions</c> key.
+    /// </summary>
+    private static void WriteExtensionsMap(CborWriter writer, CtapGetAssertionHmacSecretInput? hmacSecret, bool? largeBlobKey)
+    {
+        int memberCount = (hmacSecret is not null ? 1 : 0) + (largeBlobKey is not null ? 1 : 0);
+        writer.WriteStartMap(memberCount);
+
+        if(hmacSecret is CtapGetAssertionHmacSecretInput hmacSecretValue)
+        {
+            writer.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.HmacSecret);
+
+            int innerMemberCount = 3 + (hmacSecretValue.PinUvAuthProtocol is not null ? 1 : 0);
+            writer.WriteStartMap(innerMemberCount);
+            writer.WriteInt32(WellKnownCtapHmacSecretExtensionKeys.KeyAgreement);
+            writer.WriteEncodedValue(CredentialPublicKeyCborWriter.Write(hmacSecretValue.KeyAgreement).Span);
+            writer.WriteInt32(WellKnownCtapHmacSecretExtensionKeys.SaltEnc);
+            writer.WriteByteString(hmacSecretValue.SaltEnc.Span);
+            writer.WriteInt32(WellKnownCtapHmacSecretExtensionKeys.SaltAuth);
+            writer.WriteByteString(hmacSecretValue.SaltAuth.Span);
+            if(hmacSecretValue.PinUvAuthProtocol is int pinUvAuthProtocolValue)
+            {
+                writer.WriteInt32(WellKnownCtapHmacSecretExtensionKeys.PinUvAuthProtocol);
+                writer.WriteInt32(pinUvAuthProtocolValue);
+            }
+
+            writer.WriteEndMap();
+        }
+
+        if(largeBlobKey is bool largeBlobKeyValue)
+        {
+            writer.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.LargeBlobKey);
+            writer.WriteBoolean(largeBlobKeyValue);
+        }
+
+        writer.WriteEndMap();
     }
 }

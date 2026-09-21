@@ -17,7 +17,7 @@ namespace Verifiable.OAuth.IdJag;
 /// Section 5.2 of [RFC7521] applies" signature step: it resolves the verification key for the
 /// grant's <c>iss</c> (only a trusted IdP's key resolves, which is how issuer trust is established —
 /// §9.5 forbids deriving trust from <c>sub_id.issuer</c>), verifies the signature (for example via
-/// <see cref="Jws.VerifyAndDecodeAsync"/>), and then calls <see cref="Validate"/> to enforce the
+/// <see cref="Jws.VerifyAndDecodeAsync(string, Verifiable.Cryptography.DecodeDelegate, JwtPartDecoder, BaseMemoryPool, Verifiable.Cryptography.PublicKeyMemory, CancellationToken)"/>), and then calls <see cref="Validate"/> to enforce the
 /// ID-JAG-specific claim rules. On success the caller shapes a
 /// <see cref="JwtBearer.JwtBearerGrant"/> from <see cref="IdJagAssertionValidationResult.Subject"/>
 /// and <see cref="IdJagAssertionValidationResult.Scope"/>; on failure it returns <see langword="null"/>
@@ -251,6 +251,7 @@ public static class IdJagAssertionValidation
         Rfc7523TemporalOutcome.Expired => IdJagValidationFailureReason.Expired,
         Rfc7523TemporalOutcome.NotYetValid => IdJagValidationFailureReason.NotYetValid,
         Rfc7523TemporalOutcome.InconsistentTemporalClaims => IdJagValidationFailureReason.InconsistentTemporalClaims,
+        Rfc7523TemporalOutcome.Valid => IdJagValidationFailureReason.InconsistentTemporalClaims,
 
         _ => IdJagValidationFailureReason.InconsistentTemporalClaims
     };

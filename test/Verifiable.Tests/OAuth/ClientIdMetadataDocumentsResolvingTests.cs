@@ -9,12 +9,13 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Tests for <see cref="ClientIdMetadataDocuments.BuildResolving"/> — the Client ID Metadata
-/// Document fetch-validate-cache pipeline (draft-ietf-oauth-client-id-metadata-document-02
-/// §5). The single-hop transport is scripted (the established outbound-fetch-consumer test
-/// pattern, mirroring <c>WebDidResolverResolvingTests</c>), so the guarded fetch, the
-/// conformance checks, the client_id match, the additional-validation hook, logo prefetch, and
-/// caching are all exercised deterministically without a live network.
+/// Tests for <see cref="ClientIdMetadataDocuments.ResolveAsync"/> — the Client ID Metadata
+/// Document fetch-validate attempt (draft-ietf-oauth-client-id-metadata-document-02 §5) — and for
+/// <see cref="ClientMetadataResolutionCache"/>, the reference application-layer cache built on top
+/// of it and of <see cref="JwksUriResolver.ResolveAsync"/>. The single-hop transport is scripted (the
+/// established outbound-fetch-consumer test pattern, mirroring <c>WebDidResolverResolvingTests</c>),
+/// so the guarded fetch, the conformance checks, the client_id match, the additional-validation hook,
+/// logo prefetch, and caching are all exercised deterministically without a live network.
 /// </summary>
 [TestClass]
 internal sealed class ClientIdMetadataDocumentsResolvingTests
@@ -188,8 +189,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, new ClientIdMetadataDocumentResolverOptions(), timeProvider);
+        ResolveClientMetadataDelegate resolve = NewCache(transport, timeProvider).ResolveDocumentAsync;
 
         ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
         ClientIdMetadataResolution second = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
@@ -211,8 +211,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, new ClientIdMetadataDocumentResolverOptions(), timeProvider);
+        ResolveClientMetadataDelegate resolve = NewCache(transport, timeProvider).ResolveDocumentAsync;
 
         ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
         timeProvider.Advance(TimeSpan.FromSeconds(301));
@@ -225,8 +224,9 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
 
     /// <summary>
-    /// A huge <c>max-age</c> is clamped to <see cref="ClientIdMetadataDocumentResolverOptions.MaximumCacheLifetime"/>
-    /// rather than honored literally (CIMD-038).
+    /// A huge <c>max-age</c> is clamped to the cache's own configured maximum lifetime rather than
+    /// honored literally (CIMD-038) — the clamp bound is now the caller's cache option, not a library
+    /// option, since caching itself is an application-layer concern.
     /// </summary>
     [TestMethod]
     public async Task MaxAgeIsClampedByMaximumCacheLifetimeOption()
@@ -238,9 +238,9 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             contentType: "application/json", headers: Headers(("Cache-Control", "max-age=999999")));
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ClientIdMetadataDocumentResolverOptions options = new() { MaximumCacheLifetime = TimeSpan.FromSeconds(60) };
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, options, timeProvider);
+        ClientMetadataResolutionCache cache = NewCache(
+            transport, timeProvider, documentMaximumCacheLifetime: TimeSpan.FromSeconds(60));
+        ResolveClientMetadataDelegate resolve = cache.ResolveDocumentAsync;
 
         ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
         timeProvider.Advance(TimeSpan.FromSeconds(61));
@@ -253,45 +253,31 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
     }
 
 
-    /// <summary>A 500-then-200 sequence proves an error response was never cached (CIMD-039).</summary>
+    /// <summary>An error response's attempt reports a freshness that is not storable (CIMD-039).</summary>
     [TestMethod]
     public async Task ErrorResponseIsNeverCached()
     {
         ScriptedTransport transport = new();
         transport.Enqueue(ClientMetadataUrl, 500);
-        transport.Enqueue(ClientMetadataUrl, 200, ValidDocumentJson(ClientMetadataUrl), contentType: "application/json");
 
-        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, new ClientIdMetadataDocumentResolverOptions(), timeProvider);
+        ClientIdMetadataResolution resolution = await ResolveAsync(ClientMetadataUrl, transport).ConfigureAwait(false);
 
-        ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
-        ClientIdMetadataResolution second = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
-
-        Assert.AreEqual(ClientIdMetadataResolutionOutcome.FetchFailed, first.Outcome);
-        Assert.IsTrue(second.IsResolved, $"The second call must re-fetch and succeed. Defect: {second.Defect}");
-        Assert.HasCount(2, transport.Calls);
+        Assert.AreEqual(ClientIdMetadataResolutionOutcome.FetchFailed, resolution.Outcome);
+        Assert.IsFalse(resolution.Freshness.IsStorable, "An error response must report a freshness that is not storable.");
     }
 
 
-    /// <summary>An invalid-then-valid sequence proves an invalid document was never cached (CIMD-040).</summary>
+    /// <summary>An invalid document's attempt reports a freshness that is not storable (CIMD-040).</summary>
     [TestMethod]
     public async Task InvalidDocumentIsNeverCached()
     {
         ScriptedTransport transport = new();
         transport.Enqueue(ClientMetadataUrl, 200, """{"client_secret":"leaked"}""", contentType: "application/json");
-        transport.Enqueue(ClientMetadataUrl, 200, ValidDocumentJson(ClientMetadataUrl), contentType: "application/json");
 
-        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, new ClientIdMetadataDocumentResolverOptions(), timeProvider);
+        ClientIdMetadataResolution resolution = await ResolveAsync(ClientMetadataUrl, transport).ConfigureAwait(false);
 
-        ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
-        ClientIdMetadataResolution second = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
-
-        Assert.AreEqual(ClientIdMetadataResolutionOutcome.InvalidDocument, first.Outcome);
-        Assert.IsTrue(second.IsResolved, $"The second call must re-fetch and succeed. Defect: {second.Defect}");
-        Assert.HasCount(2, transport.Calls);
+        Assert.AreEqual(ClientIdMetadataResolutionOutcome.InvalidDocument, resolution.Outcome);
+        Assert.IsFalse(resolution.Freshness.IsStorable, "An invalid document must report a freshness that is not storable.");
     }
 
 
@@ -349,10 +335,9 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
 
     /// <summary>
-    /// A <c>Cache-Control: no-cache</c> response is never served fresh even when the deployment
-    /// configures a <see cref="ClientIdMetadataDocumentResolverOptions.MinimumCacheLifetime"/> floor:
-    /// the floor must not manufacture freshness the headers denied (RFC 9111 §5.2.2.4), so the second
-    /// flow re-fetches (CIMD-030/037).
+    /// A <c>Cache-Control: no-cache</c> response's attempt reports that it must be revalidated before
+    /// reuse, so a caller's own minimum-cache-lifetime floor cannot manufacture freshness the headers
+    /// denied (RFC 9111 §5.2.2.4, CIMD-030/037).
     /// </summary>
     [TestMethod]
     public async Task NoCacheIsNotCachedEvenWithAMinimumCacheLifetimeFloor()
@@ -360,29 +345,19 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
         ScriptedTransport transport = new();
         transport.Enqueue(ClientMetadataUrl, 200, ValidDocumentJson(ClientMetadataUrl),
             contentType: "application/json", headers: Headers(("Cache-Control", "no-cache")));
-        transport.Enqueue(ClientMetadataUrl, 200, ValidDocumentJson(ClientMetadataUrl),
-            contentType: "application/json", headers: Headers(("Cache-Control", "no-cache")));
 
-        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ClientIdMetadataDocumentResolverOptions options = new() { MinimumCacheLifetime = TimeSpan.FromMinutes(5) };
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, options, timeProvider);
+        ClientIdMetadataResolution resolution = await ResolveAsync(ClientMetadataUrl, transport).ConfigureAwait(false);
 
-        ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
-        ClientIdMetadataResolution second = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
-
-        Assert.IsTrue(first.IsResolved);
-        Assert.IsTrue(second.IsResolved);
-        Assert.HasCount(2, transport.Calls,
-            "A no-cache response must revalidate before reuse; a MinimumCacheLifetime floor must not cache it.");
+        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
+        Assert.IsTrue(resolution.Freshness.MustRevalidate,
+            "A no-cache response must report that it must be revalidated before reuse.");
     }
 
 
     /// <summary>
-    /// A document with no cache headers IS eligible for a
-    /// <see cref="ClientIdMetadataDocumentResolverOptions.MinimumCacheLifetime"/> floor (CIMD-038): the
-    /// second flow within the floor is a cache hit — distinguishing an absent expiration signal from an
-    /// explicit no-cache.
+    /// A document with no cache headers IS eligible for the cache's own configured minimum-lifetime
+    /// floor (CIMD-038): the second flow within the floor is a cache hit — distinguishing an absent
+    /// expiration signal from an explicit no-cache.
     /// </summary>
     [TestMethod]
     public async Task NoCacheHeadersAreEligibleForTheMinimumCacheLifetimeFloor()
@@ -391,9 +366,9 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
         transport.Enqueue(ClientMetadataUrl, 200, ValidDocumentJson(ClientMetadataUrl), contentType: "application/json");
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ClientIdMetadataDocumentResolverOptions options = new() { MinimumCacheLifetime = TimeSpan.FromMinutes(5) };
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, options, timeProvider);
+        ClientMetadataResolutionCache cache = NewCache(
+            transport, timeProvider, documentMinimumCacheLifetime: TimeSpan.FromMinutes(5));
+        ResolveClientMetadataDelegate resolve = cache.ResolveDocumentAsync;
 
         ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
         timeProvider.Advance(TimeSpan.FromMinutes(1));
@@ -408,7 +383,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
     /// <summary>
     /// A private_key_jwt client that advertises a <c>jwks_uri</c> instead of an inline <c>jwks</c> — the
-    /// spec's own §8.2 example — has its key set discovered through the same guarded fetch and folded
+    /// spec's own §8.2 example — has its key set discovered through the wired resolution seam and folded
     /// inline so the token endpoint can authenticate it (CIMD-048/050).
     /// </summary>
     [TestMethod]
@@ -421,9 +396,11 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             contentType: "application/json");
         transport.Enqueue(JwksUrl, 200, jwksJson, contentType: "application/json");
 
-        ClientIdMetadataResolution resolution = await ResolveAsync(ClientMetadataUrl, transport).ConfigureAwait(false);
+        ClientIdMetadataResolution resolution = await ResolveAsync(
+            ClientMetadataUrl, transport, WithDirectJwksResolver(transport)).ConfigureAwait(false);
 
         Assert.IsTrue(resolution.IsResolved, $"Resolution must succeed. Defect: {resolution.Defect}");
+        Assert.IsTrue(resolution.HasJwksUriKeySet, "A jwks_uri-discovered key set must be reported as such.");
         Assert.IsNotNull(resolution.Document!.Jwks, "The jwks_uri key set must be discovered and folded inline.");
         Assert.Contains("f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU", resolution.Document.Jwks!, StringComparison.Ordinal);
         Assert.Contains(JwksUrl, transport.Calls.ConvertAll(static c => c.Target.AbsoluteUri));
@@ -443,34 +420,511 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             contentType: "application/json");
         transport.Enqueue(JwksUrl, 500);
 
-        ClientIdMetadataResolution resolution = await ResolveAsync(ClientMetadataUrl, transport).ConfigureAwait(false);
+        ClientIdMetadataResolution resolution = await ResolveAsync(
+            ClientMetadataUrl, transport, WithDirectJwksResolver(transport)).ConfigureAwait(false);
 
         Assert.IsTrue(resolution.IsResolved, $"A jwks_uri discovery failure must not fail resolution. Defect: {resolution.Defect}");
         Assert.IsNull(resolution.Document!.Jwks, "A failed jwks_uri discovery must leave the inline key set unset.");
     }
 
 
-    //Runs the resolving delegate once against a freshly built resolver over the scripted transport.
-    private async Task<ClientIdMetadataResolution> ResolveAsync(
-        string clientMetadataUri,
-        ScriptedTransport transport,
-        ClientIdMetadataDocumentResolverOptions? options = null)
+    /// <summary>
+    /// A <c>jwks_uri</c> that answers nothing cacheable is dialled again no sooner than the reference
+    /// cache's own key-set retry floor, however many resolutions arrive meanwhile. A cached document
+    /// whose key set is refreshed per resolution would otherwise put one outbound request on a host
+    /// the client names for every authorization request that reaches it, which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-4">RFC 9111 §4</see>'s reuse rules
+    /// exist to bound.
+    /// </summary>
+    [TestMethod]
+    public async Task AKeySetThatAnswersNothingCacheableIsNotRedialledPerResolution()
     {
-        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
-            transport.Delegate, options ?? new ClientIdMetadataDocumentResolverOptions(), timeProvider);
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, JwksUrl),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=3600")));
+        transport.Enqueue(JwksUrl, 500);
+        transport.Enqueue(JwksUrl, 500);
+        transport.Enqueue(JwksUrl, 500);
 
-        return await Resolve(resolve, clientMetadataUri).ConfigureAwait(false);
+        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
+        ResolveClientMetadataDelegate resolve = NewCache(transport, timeProvider).ResolveDocumentAsync;
+
+        ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+        ClientIdMetadataResolution second = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+        ClientIdMetadataResolution third = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+
+        Assert.IsTrue(first.IsResolved, $"Defect: {first.Defect}");
+        Assert.IsTrue(second.IsResolved, $"Defect: {second.Defect}");
+        Assert.IsTrue(third.IsResolved, $"Defect: {third.Defect}");
+        Assert.HasCount(1, transport.Calls.FindAll(c => c.Target.AbsoluteUri == JwksUrl),
+            "Three resolutions served from one cached document must not put three requests on the " +
+            "client's jwks_uri host.");
     }
 
 
-    private async Task<ClientIdMetadataResolution> Resolve(ResolveClientMetadataDelegate resolve, string clientMetadataUri)
+    /// <summary>
+    /// The discovered key set is cached under its OWN <c>jwks_uri</c> and its freshness is computed
+    /// from that response's OWN <c>Cache-Control</c> header, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>: a second
+    /// resolution within that lifetime answers without a second dial to <c>jwks_uri</c>, and a
+    /// resolution after it lapses re-dials — even though the enclosing document's own cache entry is
+    /// still fresh throughout.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscoveredKeySetIsServedFromItsOwnCacheThenRefetchesOnceItsOwnFreshnessLapses()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, JwksUrl),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=3600")));
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV2, RotationKeyXV2, RotationKeyYV2),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
+
+        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
+        ResolveClientMetadataDelegate resolve = NewCache(transport, timeProvider).ResolveDocumentAsync;
+
+        ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+        ClientIdMetadataResolution second = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+
+        Assert.IsTrue(first.IsResolved, $"Defect: {first.Defect}");
+        Assert.IsTrue(second.IsResolved, $"Defect: {second.Defect}");
+        Assert.HasCount(1, transport.Calls.FindAll(c => c.Target.AbsoluteUri == JwksUrl),
+            "A second resolution within the key set's own freshness must not re-dial jwks_uri.");
+
+        timeProvider.Advance(TimeSpan.FromSeconds(301));
+        ClientIdMetadataResolution third = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+
+        Assert.IsTrue(third.IsResolved, $"Defect: {third.Defect}");
+        Assert.HasCount(2, transport.Calls.FindAll(c => c.Target.AbsoluteUri == JwksUrl),
+            "A resolution after the key set's OWN freshness lapses must re-dial jwks_uri, " +
+            "even though the enclosing document is still cached.");
+    }
+
+
+    /// <summary>
+    /// The point of this seam: a document whose own cache lifetime is long and a key set whose own
+    /// cache lifetime is short. After the key set's lifetime lapses but well inside the document's, a
+    /// resolution sees the ROTATED key set, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see> applied to
+    /// the key set's OWN response rather than the document's.
+    /// </summary>
+    [TestMethod]
+    public async Task RotatedKeySetBecomesVisibleOnItsOwnScheduleNotTheDocuments()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, JwksUrl),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=3600")));
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV2, RotationKeyXV2, RotationKeyYV2),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
+
+        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
+        ResolveClientMetadataDelegate resolve = NewCache(transport, timeProvider).ResolveDocumentAsync;
+
+        ClientIdMetadataResolution first = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+        Assert.Contains(RotationKeyIdV1, first.Document!.Jwks!, StringComparison.Ordinal);
+
+        timeProvider.Advance(TimeSpan.FromSeconds(301));
+        ClientIdMetadataResolution second = await Resolve(resolve, ClientMetadataUrl).ConfigureAwait(false);
+
+        Assert.IsTrue(second.IsResolved, $"Defect: {second.Defect}");
+        Assert.Contains(RotationKeyIdV2, second.Document!.Jwks!, StringComparison.Ordinal,
+            "Once the key set's OWN freshness lapses, a resolution must see the rotated key — " +
+            "the document's own (still-fresh) cache entry must not pin the old key.");
+        Assert.DoesNotContain(RotationKeyIdV1, second.Document.Jwks!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>: "A
+    /// cache MUST NOT generate a stale response unless it is disconnected or doing so is explicitly
+    /// permitted by the client or origin server." Once a key set's freshness lapses and the re-attempt
+    /// fails, the reference cache must not keep answering with the stale entry it already had.
+    /// </summary>
+    [TestMethod]
+    public async Task ReferenceCacheNeverServesStaleKeySetAfterFailedReattempt()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
+        transport.Enqueue(JwksUrl, 500);
+
+        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
+        ClientMetadataResolutionCache cache = NewCache(transport, timeProvider);
+
+        JwksUriResolution first = await cache.ResolveJwksAsync(
+            new Uri(JwksUrl), NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(first.IsResolved, $"Defect: {first.Defect}");
+
+        timeProvider.Advance(TimeSpan.FromSeconds(301));
+        JwksUriResolution second = await cache.ResolveJwksAsync(
+            new Uri(JwksUrl), NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(second.IsResolved,
+            "A failed re-attempt after the key set's freshness lapses must not keep serving the stale key.");
+        Assert.IsNull(second.Jwks);
+    }
+
+
+    /// <summary>
+    /// A key set whose body is not a well-formed JSON value is refused: RFC 7517 §5's
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-5">"The JSON object MUST have a
+    /// 'keys' member, with its value being an array of JWKs"</see> presupposes a well-formed JSON
+    /// object, and a document repeating a member name within one key is not one
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>). The client
+    /// fails closed: the document itself still resolves, but no key set is folded in.
+    /// </summary>
+    [TestMethod]
+    public async Task MalformedJwksBodyIsRefusedAndLeavesTheKeySetUnset()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, JwksUrl),
+            contentType: "application/json");
+        transport.Enqueue(JwksUrl, 200, MalformedDuplicateMemberJwksJson, contentType: "application/json");
+
+        ClientIdMetadataResolution resolution = await ResolveAsync(
+            ClientMetadataUrl, transport, WithDirectJwksResolver(transport)).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved,
+            $"A malformed key set must not fail the surrounding document resolution. Defect: {resolution.Defect}");
+        Assert.IsNull(resolution.Document!.Jwks, "A malformed JWK Set document must never be folded in as the client's key set.");
+    }
+
+
+    /// <summary>
+    /// The key-set size cap is the caller's own — the same double-application pattern
+    /// draft-ietf-oauth-client-id-metadata-document-02 Section 8.7 applies to the document itself —
+    /// and a key set exceeding it is refused rather than folded in.
+    /// </summary>
+    [TestMethod]
+    public async Task JwksExceedingTheSizeCapIsRefused()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, JwksUrl),
+            contentType: "application/json");
+        transport.Enqueue(JwksUrl, 200, OversizedJwksJson(), contentType: "application/json");
+
+        ClientIdMetadataResolution resolution = await ResolveAsync(
+            ClientMetadataUrl, transport, WithDirectJwksResolver(transport)).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved,
+            $"An oversized key set must not fail the surrounding document resolution. Defect: {resolution.Defect}");
+        Assert.IsNull(resolution.Document!.Jwks, "A key set exceeding the configured maximum size must never be folded in.");
+    }
+
+
+    /// <summary>
+    /// The <c>jwks_uri</c> fetch is policed by the SAME SSRF policy as every other guarded fetch this
+    /// resolver drives (draft-ietf-oauth-client-id-metadata-document-02 Section 8.6): a loopback
+    /// <c>jwks_uri</c> is denied before any transport call, exactly as
+    /// <see cref="PolicyDenialHappensBeforeAnyTransportCall"/> proves for the document URL itself.
+    /// </summary>
+    [TestMethod]
+    public async Task JwksUriDeniedByPolicyIsNeverDialled()
+    {
+        const string LoopbackJwksUri = "https://127.0.0.1/jwks.json";
+
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, LoopbackJwksUri),
+            contentType: "application/json");
+
+        ClientIdMetadataResolution resolution = await ResolveAsync(
+            ClientMetadataUrl, transport, WithDirectJwksResolver(transport)).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved,
+            $"A policy-denied key set fetch must not fail the surrounding document resolution. Defect: {resolution.Defect}");
+        Assert.IsNull(resolution.Document!.Jwks);
+        Assert.IsEmpty(transport.Calls.FindAll(static c => c.Target.Host == "127.0.0.1"),
+            "SecureDefault MUST deny a loopback jwks_uri before any transport call.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">
+    /// draft-ietf-oauth-client-id-metadata-document-02 §8.2</see>'s <c>jwks_uri</c> discovery is an
+    /// application-wired seam: with no key-set resolver supplied, the document still resolves (the
+    /// front channel proceeds) but its <c>jwks_uri</c> is never dereferenced — the same non-fatal
+    /// path a discovery failure already takes.
+    /// </summary>
+    [TestMethod]
+    public async Task NoResolverWiredNeverDialsJwksUri()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, JwksUrl),
+            contentType: "application/json");
+
+        ClientIdMetadataResolution resolution = await ResolveAsync(ClientMetadataUrl, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
+        Assert.IsNull(resolution.Document!.Jwks, "With no resolver wired, the jwks_uri must never be dereferenced.");
+        Assert.DoesNotContain(JwksUrl, transport.Calls.ConvertAll(static c => c.Target.AbsoluteUri));
+    }
+
+
+    /// <summary>The key-set attempt reports the storable lifetime a <c>max-age</c> response header implies.</summary>
+    [TestMethod]
+    public async Task JwksUriAttemptReportsStorableFreshnessFromMaxAge()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
+
+        JwksUriResolution resolution = await ResolveJwksAsync(JwksUrl, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
+        Assert.IsTrue(resolution.Freshness.IsStorable);
+        Assert.AreEqual(TimeSpan.FromSeconds(300), resolution.Freshness.FreshnessLifetime);
+    }
+
+
+    /// <summary>The key-set attempt reports a resolved but not-storable freshness for a <c>no-store</c> response.</summary>
+    [TestMethod]
+    public async Task JwksUriAttemptReportsNoStoreAsNotStorable()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/json", headers: Headers(("Cache-Control", "no-store")));
+
+        JwksUriResolution resolution = await ResolveJwksAsync(JwksUrl, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
+        Assert.IsFalse(resolution.Freshness.IsStorable, "A no-store response must report a freshness that is not storable.");
+    }
+
+
+    /// <summary>The key-set attempt reports a not-storable freshness for a failed fetch.</summary>
+    [TestMethod]
+    public async Task JwksUriAttemptReportsFetchFailureAsNotStorable()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 500);
+
+        JwksUriResolution resolution = await ResolveJwksAsync(JwksUrl, transport).ConfigureAwait(false);
+
+        Assert.AreEqual(JwksUriResolutionOutcome.FetchFailed, resolution.Outcome);
+        Assert.IsFalse(resolution.Freshness.IsStorable, "A failed fetch must report a freshness that is not storable.");
+    }
+
+
+    /// <summary>A content type that is neither application/json nor a +json suffix is an invalid document.</summary>
+    [TestMethod]
+    public async Task JwksUriWrongContentTypeIsInvalidDocument()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1), contentType: "text/html");
+
+        JwksUriResolution resolution = await ResolveJwksAsync(JwksUrl, transport).ConfigureAwait(false);
+
+        Assert.AreEqual(JwksUriResolutionOutcome.InvalidDocument, resolution.Outcome);
+    }
+
+
+    /// <summary>A 200 response carrying no Content-Type header is refused the same way a wrong one is.</summary>
+    [TestMethod]
+    public async Task JwksUriMissingContentTypeIsInvalidDocument()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1));
+
+        JwksUriResolution resolution = await ResolveJwksAsync(JwksUrl, transport).ConfigureAwait(false);
+
+        Assert.AreEqual(JwksUriResolutionOutcome.InvalidDocument, resolution.Outcome);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 §8.3.1</see>: "The
+    /// type/subtype MAY be followed by semicolon-delimited parameters." A charset parameter does not
+    /// change the media type the gate compares against.
+    /// </summary>
+    [TestMethod]
+    public async Task JwksUriContentTypeParameterIsAccepted()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/json; charset=utf-8");
+
+        JwksUriResolution resolution = await ResolveJwksAsync(JwksUrl, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved, $"A charset parameter must not affect the media-type comparison. Defect: {resolution.Defect}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-8.5.1">RFC 7517 §8.5.1</see> registers
+    /// the <c>application/jwk-set+json</c> media type for a JWK Set; the <c>+json</c> structured suffix
+    /// is accepted alongside the bare <c>application/json</c> media type.
+    /// </summary>
+    [TestMethod]
+    public async Task JwksUriStructuredSuffixContentTypeIsAccepted()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/jwk-set+json");
+
+        JwksUriResolution resolution = await ResolveJwksAsync(JwksUrl, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved, $"RFC 7517 §8.5.1's application/jwk-set+json must be accepted. Defect: {resolution.Defect}");
+    }
+
+
+    /// <summary>
+    /// The document attempt reports the same storable-lifetime freshness reporting as the key-set
+    /// attempt, and reports no discovered key set for a document naming no <c>jwks_uri</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task DocumentAttemptReportsStorableFreshnessFromHeaders()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, ValidDocumentJson(ClientMetadataUrl),
+            contentType: "application/json", headers: Headers(("Cache-Control", "max-age=300")));
+
+        ClientIdMetadataResolution resolution = await ResolveAsync(ClientMetadataUrl, transport).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
+        Assert.IsTrue(resolution.Freshness.IsStorable);
+        Assert.AreEqual(TimeSpan.FromSeconds(300), resolution.Freshness.FreshnessLifetime);
+        Assert.IsFalse(resolution.HasJwksUriKeySet, "A document with no jwks_uri must not report a discovered key set.");
+    }
+
+
+    /// <summary>The document attempt reports a discovered key set for a private_key_jwt document naming a jwks_uri.</summary>
+    [TestMethod]
+    public async Task DocumentAttemptReportsKeySetDiscoveredFromJwksUri()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(ClientMetadataUrl, 200, PrivateKeyJwtWithJwksUriDocument(ClientMetadataUrl, JwksUrl),
+            contentType: "application/json");
+        transport.Enqueue(JwksUrl, 200, JwksWithKey(RotationKeyIdV1, RotationKeyXV1, RotationKeyYV1),
+            contentType: "application/json");
+
+        ClientIdMetadataResolution resolution = await ResolveAsync(
+            ClientMetadataUrl, transport, WithDirectJwksResolver(transport)).ConfigureAwait(false);
+
+        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
+        Assert.IsTrue(resolution.HasJwksUriKeySet,
+            "A private_key_jwt document naming a jwks_uri instead of an inline jwks must report the key set as discovered.");
+    }
+
+
+    /// <summary>A resolved key-set answer from the refresh helper replaces the resolution's key set.</summary>
+    [TestMethod]
+    public async Task RefreshHelperReplacesKeySetOnResolvedAnswer()
+    {
+        const string RefreshedJwksJson = """{"keys":[{"kty":"EC","crv":"P-256","kid":"refreshed"}]}""";
+        ClientIdMetadataResolution resolution = ResolutionWithJwksUriDocument("original");
+
+        static ValueTask<JwksUriResolution> ResolveJwksUriAsync(Uri uri, ExchangeContext context, CancellationToken ct) =>
+            ValueTask.FromResult(new JwksUriResolution { Outcome = JwksUriResolutionOutcome.Resolved, Jwks = RefreshedJwksJson });
+
+        ClientIdMetadataResolution refreshed = await ClientIdMetadataDocuments.RefreshJwksAsync(
+            resolution, ResolveJwksUriAsync, NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(RefreshedJwksJson, refreshed.Document!.Jwks);
+    }
+
+
+    /// <summary>A <c>NotRefreshed</c> answer from the refresh helper leaves the resolution unchanged.</summary>
+    [TestMethod]
+    public async Task RefreshHelperLeavesResolutionUnchangedOnNotRefreshed()
+    {
+        ClientIdMetadataResolution resolution = ResolutionWithJwksUriDocument("original");
+
+        static ValueTask<JwksUriResolution> ResolveJwksUriAsync(Uri uri, ExchangeContext context, CancellationToken ct) =>
+            ValueTask.FromResult(new JwksUriResolution { Outcome = JwksUriResolutionOutcome.NotRefreshed });
+
+        ClientIdMetadataResolution refreshed = await ClientIdMetadataDocuments.RefreshJwksAsync(
+            resolution, ResolveJwksUriAsync, NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("original", refreshed.Document!.Jwks);
+    }
+
+
+    /// <summary>A failed answer from the refresh helper leaves the resolution unchanged.</summary>
+    [TestMethod]
+    public async Task RefreshHelperLeavesResolutionUnchangedOnFailedAnswer()
+    {
+        ClientIdMetadataResolution resolution = ResolutionWithJwksUriDocument("original");
+
+        static ValueTask<JwksUriResolution> ResolveJwksUriAsync(Uri uri, ExchangeContext context, CancellationToken ct) =>
+            ValueTask.FromResult(new JwksUriResolution { Outcome = JwksUriResolutionOutcome.FetchFailed, Defect = "boom" });
+
+        ClientIdMetadataResolution refreshed = await ClientIdMetadataDocuments.RefreshJwksAsync(
+            resolution, ResolveJwksUriAsync, NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("original", refreshed.Document!.Jwks);
+    }
+
+
+    private static ClientIdMetadataResolution ResolutionWithJwksUriDocument(string? existingJwks) =>
+        new()
+        {
+            Outcome = ClientIdMetadataResolutionOutcome.Resolved,
+            Document = new() { ClientId = ClientMetadataUrl, JwksUri = new Uri(JwksUrl), Jwks = existingJwks },
+            HasJwksUriKeySet = true
+        };
+
+
+    //Builds the reference application-layer cache under test, over the scripted transport and pinned clock.
+    private static ClientMetadataResolutionCache NewCache(
+        ScriptedTransport transport,
+        TimeProvider timeProvider,
+        TimeSpan? documentMinimumCacheLifetime = null,
+        TimeSpan? documentMaximumCacheLifetime = null) =>
+        new(
+            transport.Delegate,
+            new ClientIdMetadataDocumentResolverOptions(),
+            new JwksUriResolverOptions(),
+            timeProvider,
+            documentMinimumCacheLifetime: documentMinimumCacheLifetime,
+            documentMaximumCacheLifetime: documentMaximumCacheLifetime);
+
+
+    //A key-set resolution seam that dials JwksUriResolver.ResolveAsync directly over the SAME scripted
+    //transport, with no cache in front of it — what a document-attempt test wires when it only needs
+    //jwks_uri to be dereferenced once, not the reference cache's own storage behavior.
+    private static ClientIdMetadataDocumentResolverOptions WithDirectJwksResolver(ScriptedTransport transport) =>
+        new() { ResolveJwksUri = DirectJwksResolver(transport) };
+
+
+    private static ResolveJwksUriDelegate DirectJwksResolver(ScriptedTransport transport) =>
+        (jwksUri, context, cancellationToken) =>
+            JwksUriResolver.ResolveAsync(jwksUri, context, transport.Delegate, new JwksUriResolverOptions(), cancellationToken);
+
+
+    //Runs the document attempt once directly against a scripted transport, with no cache in front.
+    private async Task<ClientIdMetadataResolution> ResolveAsync(
+        string clientMetadataUri,
+        ScriptedTransport transport,
+        ClientIdMetadataDocumentResolverOptions? options = null) =>
+        await ClientIdMetadataDocuments.ResolveAsync(
+            new Uri(clientMetadataUri, UriKind.Absolute), NewContext(), transport.Delegate,
+            options ?? new ClientIdMetadataDocumentResolverOptions(), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+
+    //Runs the key-set attempt once directly against a scripted transport, with no cache in front.
+    private async Task<JwksUriResolution> ResolveJwksAsync(
+        string jwksUri, ScriptedTransport transport, JwksUriResolverOptions? options = null) =>
+        await JwksUriResolver.ResolveAsync(
+            new Uri(jwksUri, UriKind.Absolute), NewContext(), transport.Delegate,
+            options ?? new JwksUriResolverOptions(), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+
+    private async Task<ClientIdMetadataResolution> Resolve(ResolveClientMetadataDelegate resolve, string clientMetadataUri) =>
+        await resolve(new Uri(clientMetadataUri, UriKind.Absolute), NewContext(), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+
+    private static ExchangeContext NewContext()
     {
         ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
-        return await resolve(new Uri(clientMetadataUri, UriKind.Absolute), context, TestContext.CancellationToken)
-            .ConfigureAwait(false);
+        return context;
     }
 
 
@@ -484,6 +938,34 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
     private static string PrivateKeyJwtWithJwksUriDocument(string clientId, string jwksUri) =>
         $$"""{"client_id":"{{clientId}}","token_endpoint_auth_method":"private_key_jwt","jwks_uri":"{{jwksUri}}"}""";
+
+
+    private const string RotationKeyIdV1 = "rotation-key-v1";
+    private const string RotationKeyXV1 = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU";
+    private const string RotationKeyYV1 = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0";
+
+    private const string RotationKeyIdV2 = "rotation-key-v2";
+    private const string RotationKeyXV2 = "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4";
+    private const string RotationKeyYV2 = "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM";
+
+
+    //A single-key JWK Set carrying one EC P-256 key under the given identifier and coordinates — the
+    //same shape the resolver's own well-formedness/"keys" checks accept.
+    private static string JwksWithKey(string keyId, string x, string y) =>
+        $$"""{"keys":[{"kty":"EC","crv":"P-256","kid":"{{keyId}}","x":"{{x}}","y":"{{y}}"}]}""";
+
+
+    //RFC 8259 §4: a JWK object repeating "kid" is not exactly one well-formed JSON value, even though
+    //a first-match scanner that never checks for duplicates would still find "keys" and a "kid" value.
+    private const string MalformedDuplicateMemberJwksJson =
+        """{"keys":[{"kty":"EC","crv":"P-256","kid":"dup","kid":"dup","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"}]}""";
+
+
+    //A well-formed, otherwise-valid JWK Set padded past the resolver's default 5120-byte cap with an
+    //oversized (but harmless, since well-formedness never validates a JWK's own field semantics)
+    //x5c-shaped filler member.
+    private static string OversizedJwksJson() =>
+        $$"""{"keys":[{"kty":"EC","crv":"P-256","kid":"k1","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0","x5c":"{{new string('a', 6000)}}"}]}""";
 
 
     private static Dictionary<string, string> Headers(params (string Name, string Value)[] headers)

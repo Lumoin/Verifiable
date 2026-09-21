@@ -36,7 +36,7 @@ public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJw
 
     /// <summary>
     /// The decoded protected header parameters. Attacker-controlled until the
-    /// signature has been verified — use <see cref="JwtHeaderChecks"/> extension
+    /// signature has been verified — use <see cref="JwtChecks"/> extension
     /// methods on this value before verification.
     /// </summary>
     public UnverifiedJwtHeader ProtectedHeader { get; }
@@ -88,6 +88,7 @@ public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJw
     }
 
 
+    /// <summary>Disposes the owned <see cref="SignatureBytes"/>.</summary>
     public void Dispose()
     {
         if(!disposed)
@@ -108,6 +109,9 @@ public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJw
     }
 
 
+    /// <summary>Compares by <see cref="Protected"/> and <see cref="SignatureBytes"/> content, not by reference.</summary>
+    /// <param name="other">The instance to compare against.</param>
+    /// <returns><see langword="true"/> when the protected header string and signature bytes are equal.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(UnverifiedJwsSignature? other)
     {
@@ -126,11 +130,16 @@ public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJw
     }
 
 
+    /// <summary>Compares by <see cref="Protected"/> and <see cref="SignatureBytes"/> content when <paramref name="obj"/> is an <see cref="UnverifiedJwsSignature"/>.</summary>
+    /// <param name="obj">The instance to compare against.</param>
+    /// <returns><see langword="true"/> when <paramref name="obj"/> is an equal <see cref="UnverifiedJwsSignature"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public override bool Equals([NotNullWhen(true)] object? obj) =>
         obj is UnverifiedJwsSignature other && Equals(other);
 
 
+    /// <summary>Computes a hash code from <see cref="Protected"/> and the <see cref="SignatureBytes"/> content.</summary>
+    /// <returns>The hash code.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public override int GetHashCode()
     {

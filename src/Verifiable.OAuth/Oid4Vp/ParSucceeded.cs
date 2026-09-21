@@ -5,8 +5,8 @@ using Verifiable.Cryptography;
 namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
-/// Carries a successful PAR HTTP response. Transitions from <see cref="ParRequestReady"/>
-/// to <see cref="ParCompleted"/>. This input arrives at the first DB persistence point.
+/// Carries a successful PAR HTTP response. Transitions from <see cref="Verifiable.OAuth.AuthCode.States.ParRequestReadyState"/>
+/// to <see cref="Verifiable.OAuth.Oid4Vp.States.ParCompletedState"/>. This input arrives at the first DB persistence point.
 /// </summary>
 /// <param name="Par">The PAR response body parsed from the authorization server.</param>
 /// <param name="Nonce">The freshly generated transaction nonce for this flow.</param>

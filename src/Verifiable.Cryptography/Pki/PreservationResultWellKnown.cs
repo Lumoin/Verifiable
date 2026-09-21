@@ -27,7 +27,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// <para>
 /// <strong>Comparison is ordinal and case-sensitive.</strong> Two of the codes carry capitals inside the last
-/// segment (<see cref="PreservationObjectFormatError"/> and <see cref="DeltaPocInternalProblem"/>) while every
+/// segment (<see cref="PreservationObjectFormatError"/> and <see cref="DeltaContainerInternalProblem"/>) while every
 /// other code begins in lower case, so a case-folding comparison would accept spellings the document does not
 /// state.
 /// </para>

@@ -10,7 +10,7 @@ namespace Verifiable.Tests.WebFinger;
 /// <see href="https://www.rfc-editor.org/rfc/rfc7033#section-4">RFC 7033 §4</see>
 /// <c>GET /.well-known/webfinger</c> endpoint (<see cref="WebFingerEndpoints"/>), driven through the
 /// REAL shipped dispatch path — <see cref="EndpointServer.DispatchAsync"/> via
-/// <see cref="WebFingerHttpApplication.BuildServer"/> — never a hand-called <c>BuildInputAsync</c>.
+/// <see cref="WebFingerHttpApplication.BuildServerAsync"/> — never a hand-called <c>BuildInputAsync</c>.
 /// These are the server-response rows of the conformance matrix (T4); the client-side rows live in the
 /// existing WebFinger test files under this directory, and the firewalled real-wire rows live in
 /// <see cref="WebFingerCrossWireFlowTests"/>.
@@ -29,7 +29,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF12_AbsentResourceParameterYields400()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, new RequestFields()).ConfigureAwait(false);
 
@@ -41,7 +41,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF11_RepeatedResourceParameterYields400()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         RequestFields fields = new();
         fields.Add(WellKnownWebFingerValues.ResourceParameterName, "acct:alice@example.com");
@@ -58,7 +58,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF13_ResolverReturningNullYields404()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(null));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(null)).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
 
@@ -79,7 +79,7 @@ internal sealed class WebFingerServerResponseTests
     public async Task WF17_FullDescriptorRoundTripsThroughTheShippedParser()
     {
         JsonResourceDescriptor descriptor = BuildDescriptor("acct:alice.canonical@example.org");
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(descriptor));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(descriptor)).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
 
@@ -117,7 +117,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF19_UnsupportedAcceptHeaderStillYieldsTheJrdNeverA406()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         RequestHeaders headers = new(new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
@@ -139,7 +139,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF20_WF21_WF51_TheEndpointNeverRedirects()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
 
@@ -156,7 +156,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF27_AnUnrecognisedRelationTypeIsThreadedThroughNeverRejected()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         RequestFields fields = ResourceFields(Resource);
         fields.Add(WellKnownWebFingerValues.RelParameterName, "urn:example:not-a-registered-relation-type");
@@ -178,7 +178,7 @@ internal sealed class WebFingerServerResponseTests
             Subject = Resource,
             Links = [new WebFingerLink { Rel = unrelatedRelation }]
         };
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(descriptor));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(descriptor)).ConfigureAwait(false);
 
         RequestFields fields = ResourceFields(Resource);
         fields.Add(WellKnownWebFingerValues.RelParameterName, WebFingerLinkRelationTypes.Did);
@@ -202,7 +202,7 @@ internal sealed class WebFingerServerResponseTests
             captured = [.. relFilters];
             return ValueTask.FromResult<JsonResourceDescriptor?>(BuildDescriptor(resource));
         }
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(resolve);
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(resolve).ConfigureAwait(false);
 
         RequestFields fields = ResourceFields(Resource);
         fields.Add(WellKnownWebFingerValues.RelParameterName, WebFingerLinkRelationTypes.Did);
@@ -221,7 +221,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF35_WF36_ASerializedLinkCarriesExactlyOnePresentRel()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
 
@@ -236,14 +236,14 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF46_AccessControlAllowOriginIsPresentOnSuccessBadRequestAndNotFound()
     {
-        using EndpointServer successServer = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer successServer = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
         ServerHttpResponse okResponse = await Dispatch(successServer, ResourceFields(Resource)).ConfigureAwait(false);
         AssertHasCorsHeader(okResponse);
 
         ServerHttpResponse badRequestResponse = await Dispatch(successServer, new RequestFields()).ConfigureAwait(false);
         AssertHasCorsHeader(badRequestResponse);
 
-        using EndpointServer notFoundServer = WebFingerHttpApplication.BuildServer(StaticResolver(null));
+        using EndpointServer notFoundServer = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(null)).ConfigureAwait(false);
         ServerHttpResponse notFoundResponse = await Dispatch(notFoundServer, ResourceFields(Resource)).ConfigureAwait(false);
         AssertHasCorsHeader(notFoundResponse);
     }
@@ -253,7 +253,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF47_DefaultAccessControlAllowOriginIsTheWildcard()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
 
@@ -268,9 +268,9 @@ internal sealed class WebFingerServerResponseTests
     public async Task WF48_WF49_AWiredCorsResolverProducesTheSpecificOriginNeverTheWildcard()
     {
         const string trustedOrigin = "https://intranet.example.internal";
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(
             StaticResolver(BuildDescriptor(Resource)),
-            static (registration, context, ct) => ValueTask.FromResult(trustedOrigin));
+            static (registration, context, ct) => ValueTask.FromResult(trustedOrigin)).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
 
@@ -291,7 +291,7 @@ internal sealed class WebFingerServerResponseTests
             string signal = context.TryGetValue(signalKey, out object? value) && value is string s ? s : "default";
             return ValueTask.FromResult<JsonResourceDescriptor?>(new JsonResourceDescriptor { Subject = $"acct:{signal}@example.com" });
         }
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(resolve);
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(resolve).ConfigureAwait(false);
 
         ExchangeContext contextA = new() { [signalKey] = "alice" };
         ExchangeContext contextB = new() { [signalKey] = "bob" };
@@ -316,7 +316,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task ARequestToAnotherPathDoesNotMatchAndYields404()
     {
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(StaticResolver(BuildDescriptor(Resource)));
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(StaticResolver(BuildDescriptor(Resource))).ConfigureAwait(false);
 
         IncomingRequest wrongPath = new(
             Path: "/.well-known/not-webfinger",
@@ -346,7 +346,7 @@ internal sealed class WebFingerServerResponseTests
             resolverConsulted = true;
             return ValueTask.FromResult<JsonResourceDescriptor?>(BuildDescriptor(resource));
         }
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(resolve);
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(resolve).ConfigureAwait(false);
 
         RequestFields fields = new();
         fields.Add(WellKnownWebFingerValues.ResourceParameterName, string.Empty);
@@ -367,7 +367,7 @@ internal sealed class WebFingerServerResponseTests
     public async Task WF46_CorsHeaderIsPresentEvenWhenTheResolverThrows()
     {
         static ValueTask<JsonResourceDescriptor?> faulting(string resource, IReadOnlyList<string> relFilters, IRegistrationRecord registration, ExchangeContext context, CancellationToken ct) => throw new InvalidOperationException("resolver failure");
-        using EndpointServer server = WebFingerHttpApplication.BuildServer(faulting);
+        using EndpointServer server = await WebFingerHttpApplication.BuildServerAsync(faulting).ConfigureAwait(false);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
 

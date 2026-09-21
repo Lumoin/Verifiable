@@ -56,6 +56,17 @@ public sealed record ServerHttpResponse
     public ImmutableDictionary<string, string> Headers { get; init; } =
         ImmutableDictionary.Create<string, string>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The error code passed to the factory that built this response, or
+    /// <see langword="null"/> for a response built from a factory that takes no error code
+    /// (for example <see cref="Ok(string, string)"/> or <see cref="Redirect(string)"/>). The
+    /// error factories JSON-serialize the same code into <see cref="Body"/> before this response
+    /// leaves the handler; this member carries it typed so a caller inspecting the response — for
+    /// example the dispatch span tagging in <c>EndpointServer.DispatchCapturedAsync</c> — reads it
+    /// without re-parsing <see cref="Body"/>.
+    /// </summary>
+    public string? ErrorCode { get; init; }
+
 
     /// <summary>
     /// Returns a copy of this response with <paramref name="name"/> set to
@@ -149,7 +160,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.BadRequest,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 
@@ -159,7 +171,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.Unauthorized,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 
@@ -169,7 +182,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.Forbidden,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 
@@ -193,7 +207,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.NotFound,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 
@@ -207,7 +222,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.Conflict,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 
@@ -222,7 +238,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.UnprocessableEntity,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 
@@ -249,7 +266,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.TooManyRequests,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 
@@ -288,7 +306,8 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.InternalServerError,
             Body = BuildErrorBody(error, description),
-            ContentType = WellKnownMediaTypes.Application.Json
+            ContentType = WellKnownMediaTypes.Application.Json,
+            ErrorCode = error
         };
 
 

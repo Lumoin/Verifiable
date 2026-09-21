@@ -36,6 +36,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// Loads files from a given directory with a given search pattern.
         /// </summary>
         /// <param name="directory">The absolute or relative path to the JSON file to load</param>
+        /// <param name="searchPattern">The file name search pattern (for example <c>*.json</c>) files must match.</param>
         public FilesDataAttribute(string directory, string searchPattern) : this(directory, searchPattern, SearchOption.AllDirectories) { }
 
 

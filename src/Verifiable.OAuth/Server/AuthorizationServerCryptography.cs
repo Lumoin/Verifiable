@@ -17,59 +17,151 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerCryptography Validated={IsValidated}")]
-public sealed class AuthorizationServerCryptography
+public sealed class AuthorizationServerCryptography: WiringComponent
 {
     /// <summary>
     /// Resolves a private signing key by identifier. Required.
     /// </summary>
-    public ServerSigningKeyResolverDelegate? SigningKeyResolver { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ServerSigningKeyResolverDelegate? SigningKeyResolver
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves a private decryption key by identifier. Required when
     /// <see cref="WellKnownCapabilityIdentifiers.VcVerifiablePresentation"/> is enabled
     /// for any registration, otherwise optional.
     /// </summary>
-    public ServerDecryptionKeyResolverDelegate? DecryptionKeyResolver { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ServerDecryptionKeyResolverDelegate? DecryptionKeyResolver
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Resolves a public verification key by identifier. Required.
     /// </summary>
-    public ServerVerificationKeyResolverDelegate? VerificationKeyResolver { get; set; }
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ServerVerificationKeyResolverDelegate? VerificationKeyResolver
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
-    /// Selects which <see cref="KeyId"/> to sign with at a given library call site.
+    /// Selects which <see cref="Verifiable.Cryptography.KeyId"/> to sign with at a given library call site.
     /// Optional. When <see langword="null"/>, the library calls
     /// <see cref="ClientRecord.GetDefaultSigningKeyId"/> which returns the
     /// first entry in the registration's <c>SigningKeys[usage].Current</c> list.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Applications set this delegate to implement per-caller key binding,
     /// algorithm-specific selection across multi-algorithm deployments, or any
     /// other selection policy that depends on request context. The delegate
     /// receives the full per-request context bag so it can read caller identity,
     /// tenant-scoped attributes, and whatever else the skin chose to surface.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public SelectSigningKeyDelegate? SelectSigningKey { get; set; }
+    public SelectSigningKeyDelegate? SelectSigningKey
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
 
     /// <summary>
-    /// Builds the <see cref="JwksDocument"/> to serve at the JWKS endpoint.
+    /// Builds the <see cref="Verifiable.JCose.JwksDocument"/> to serve at the JWKS endpoint.
     /// Required when <see cref="WellKnownCapabilityIdentifiers.OAuthJwksEndpoint"/> is enabled
     /// for any registration, otherwise optional.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The implementation receives the resolved <see cref="ClientRecord"/>
     /// and the per-request context bag, and decides which keys to include —
     /// typically all active signing keys for the registration, including keys
     /// in a rotation grace period. The library never prescribes which keys to
     /// include.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
-    public BuildJwksDocumentDelegate? BuildJwksDocumentAsync { get; set; }
-
-
-    /// <summary>
-    /// Whether <see cref="Validate"/> has been called successfully on this group.
-    /// </summary>
-    public bool IsValidated { get; private set; }
+    public BuildJwksDocumentDelegate? BuildJwksDocumentAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -80,6 +172,7 @@ public sealed class AuthorizationServerCryptography
     /// </exception>
     public void Validate()
     {
+        IsValidated = false;
         var missing = new List<string>();
 
         if(SigningKeyResolver is null) { missing.Add(nameof(SigningKeyResolver)); }

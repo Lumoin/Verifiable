@@ -130,7 +130,7 @@ public record DcqlCoarsePredicates
             return null;
         }
 
-        return new(constraints);
+        return [.. constraints];
     }
 
 

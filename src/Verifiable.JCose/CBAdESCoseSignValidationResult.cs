@@ -133,7 +133,7 @@ public sealed class CBAdESCoseSignSignerValidationResult: IDisposable
 /// rule bodies the <c>COSE_Sign1</c> path uses. Timestamp-token CONTENT verification (opening and
 /// message-imprint-binding a <c>sigTst</c>/<c>valData</c>/<c>refs</c>/<c>arcTst</c> element's own material) is
 /// NOT replicated here — <see cref="CBAdESCoseSignSignerValidationResult.Violations"/> reports Table 14
-/// presence/cardinality conformance (<see cref="CBAdESLevelRules"/>) for whichever <paramref name="level"/> was
+/// presence/cardinality conformance (<see cref="CBAdESLevelRules"/>) for whichever baseline level was
 /// declared, not content-level token verification; a caller needing that depth for a specific signer composes
 /// it separately, the same way the message-imprint threading test proves the underlying
 /// <c>TryBuildArchiveTimestampValidationMessageImprintInput</c> seam already accepts a <c>COSE_Sign</c> signer's
@@ -179,7 +179,7 @@ public sealed class CBAdESCoseSignValidationResult: IDisposable
 
     /// <summary>
     /// Gets whether the wire bytes failed to decode as a well-formed CB-AdES <c>COSE_Sign</c> structure at all
-    /// (clause 4.4's own structural checks, <see cref="CBAdESSignatureSerialization.ParseCBAdESSign"/>) —
+    /// (clause 4.4's own structural checks, <c>CBAdESSignatureSerialization.ParseCBAdESSign</c>) —
     /// when <see langword="true"/>, <see cref="Signers"/> is empty and no per-signer fact exists.
     /// </summary>
     public bool IsMalformed { get; }

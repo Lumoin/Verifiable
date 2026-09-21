@@ -188,7 +188,7 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
     /// <summary>
     /// Builds and self-hashes a did:webplus root DID document for <paramref name="host"/>, publishing
     /// <paramref name="updateKey"/> as the verification method and as the <c>updateRules</c> key rule. The
-    /// resolved DID is the returned document's <see cref="WebPlusDidDocument.Id"/>; its
+    /// resolved DID is the returned document's <see cref="DidDocument.Id"/>; its
     /// <see cref="WebPlusDidDocument.SelfHash"/> is the root self-hash committed to by the DID's trailing segment.
     /// </summary>
     /// <param name="updateKey">The key published as the verification method and named by the root <c>updateRules</c>.</param>

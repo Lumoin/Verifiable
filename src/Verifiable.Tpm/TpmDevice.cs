@@ -84,13 +84,13 @@ public delegate ValueTask<TpmResult<TpmResponse>> TpmSubmitHandler(
 /// </code>
 /// <para>
 /// <b>Thread safety:</b> A single TpmDevice instance is not thread-safe for concurrent
-/// <see cref="Submit"/> calls. Create separate instances or synchronize externally.
+/// <see cref="SubmitAsync"/> calls. Create separate instances or synchronize externally.
 /// Observer subscription management is thread-safe.
 /// </para>
 /// <para>
 /// <b>Transport health:</b> The device tracks transport failures. Once a transport error
 /// occurs (I/O failure on Linux, TBS error on Windows), the device transitions to a
-/// permanently failed state. All subsequent <see cref="Submit"/> calls return the same
+/// permanently failed state. All subsequent <see cref="SubmitAsync"/> calls return the same
 /// transport error immediately. Check <see cref="IsHealthy"/> to detect this, and inspect
 /// <see cref="Failure"/> for diagnostic details. The caller should dispose the failed device
 /// and create a new one. There is no reconnect — the kernel resource manager flushes all
@@ -183,7 +183,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// </summary>
     /// <remarks>
     /// Once a transport failure occurs, the device is permanently unhealthy.
-    /// All subsequent <see cref="Submit"/> calls will return the same transport error.
+    /// All subsequent <see cref="SubmitAsync"/> calls will return the same transport error.
     /// The caller should dispose this device and create a new one.
     /// </remarks>
     public bool IsHealthy
@@ -547,7 +547,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
             //Wrap the validated descriptor. SafeFileHandle takes ownership, so if the FileStream
             //constructor succeeds, we must not call LinuxClose manually.
             //isAsync: true enables genuine kernel-level async I/O via epoll/io_uring against
-            ///dev/tpmrm0; SubmitAsync awaits the kernel TPM round-trip rather than blocking.
+            //dev/tpmrm0; SubmitAsync awaits the kernel TPM round-trip rather than blocking.
             var safeHandle = new Microsoft.Win32.SafeHandles.SafeFileHandle(fd, ownsHandle: true);
             linuxStream = new FileStream(safeHandle, FileAccess.ReadWrite, bufferSize: 0, isAsync: true);
             Endpoint = LinuxTpmResourceManagerPath;

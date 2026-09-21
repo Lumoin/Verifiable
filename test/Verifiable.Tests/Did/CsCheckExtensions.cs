@@ -1,4 +1,5 @@
 using CsCheck;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Did
 {
@@ -16,7 +17,7 @@ namespace Verifiable.Tests.Did
         /// <param name="property">The property function that should return true for all generated values.</param>
         public static void ForAll<T>(this Gen<T> gen, Func<T, bool> property)
         {
-            Check.Sample(gen, property);
+            Check.Sample(gen, property, threads: CsCheckSampling.Threads);
         }
     }
 }

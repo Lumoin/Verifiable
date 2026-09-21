@@ -27,30 +27,28 @@ internal sealed class Fido2CredentialSignerPropertyTests
     /// across the input space, not just the hand-picked vectors in the other tests of this class.
     /// </summary>
     [TestMethod]
-    [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until each async call fully completes.")]
-    public void SignThenVerifyRoundTripsAcrossRandomChallengesAndSignCountsForEs256()
+    public async Task SignThenVerifyRoundTripsAcrossRandomChallengesAndSignCountsForEs256()
     {
         using CredentialFixture credential = CreateCredential(WellKnownCoseAlgorithms.Es256);
 
-        (from challengeLength in Gen.Int[1, 32]
-         from challengeSeed in Gen.Int[0, int.MaxValue]
-         from signCount in Gen.UInt[1, 1000]
-         select (challengeLength, challengeSeed, signCount))
-        .Sample(sample =>
+        await (from challengeLength in Gen.Int[1, 32]
+               from challengeSeed in Gen.Int[0, int.MaxValue]
+               from signCount in Gen.UInt[1, 1000]
+               select (challengeLength, challengeSeed, signCount))
+        .SampleAsync(async sample =>
         {
             string challenge = BuildBase64UrlChallenge(sample.challengeLength, sample.challengeSeed);
             byte[] rpIdHash = Fido2TestVectors.CreateRpIdHash();
             byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, ValidFlags, sample.signCount);
             byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, challenge, ValidOrigin, crossOrigin: null, topOrigin: null);
 
-            (Fido2AssertionOutcome outcome, _, _) = SignAndVerifyAsync(
+            (Fido2AssertionOutcome outcome, _, _) = await SignAndVerifyAsync(
                 credential, authenticatorData, clientDataJson, challenge, rpIdHash, TestContext.CancellationToken)
-                .AsTask().GetAwaiter().GetResult();
+                .AsTask();
 
             Assert.IsTrue(outcome.SignatureValid);
             Assert.IsTrue(outcome.IsAcceptable);
-        });
+        }, threads: CsCheckSampling.Threads);
     }
 
 

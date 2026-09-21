@@ -120,6 +120,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
             issuerDidDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            resolvedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,

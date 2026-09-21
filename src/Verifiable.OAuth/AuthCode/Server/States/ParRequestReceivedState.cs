@@ -42,11 +42,15 @@ public sealed record ParRequestReceivedState: FlowState
     public required string CodeChallenge { get; init; }
 
     /// <summary>
-    /// The <c>code_challenge_method</c> bound at PAR time — <c>S256</c> or, under a deployment that
-    /// accepts it, <c>plain</c> — per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>. Carried
-    /// to <see cref="ServerCodeIssuedState"/> so the token endpoint verifies <c>code_verifier</c>
-    /// against this PERSISTED method rather than a method named on the token request.
+    /// The accepted S256 wire method from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>, retained
+    /// for code binding per <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4">§4.4</see>:
+    /// "it MUST associate the "code_challenge" and
+    /// "code_challenge_method" values with the authorization code so it can be verified later."
+    /// Token verification selects this bound method per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.5">§4.5</see>.
+    /// The library accepts S256 only, consistent with
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-7.5.2">OAuth 2.1 §7.5.2</see>.
     /// </summary>
     public required string CodeChallengeMethod { get; init; }
 
@@ -114,6 +118,16 @@ public sealed record ParRequestReceivedState: FlowState
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>.
     /// </summary>
     public int? MaxAge { get; init; }
+
+    /// <summary>
+    /// The <c>prompt</c> from the PAR request (space-delimited), or <see langword="null"/> when
+    /// none was requested. Carried forward so the authorization endpoint evaluates it against
+    /// the established authentication per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>.
+    /// Authoritative over any front-channel duplicate per RFC 9101 §6.3 via RFC 9126 §4 — the
+    /// authorize completion never reads a query-string <c>prompt</c>.
+    /// </summary>
+    public string? Prompt { get; init; }
 
     /// <summary>
     /// The opaque <c>state</c> value from the pushed authorization request, carried forward so

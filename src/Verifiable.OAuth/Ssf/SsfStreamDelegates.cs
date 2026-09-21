@@ -82,29 +82,39 @@ public sealed record SsfStreamWriteResult
 
 
 /// <summary>
-/// Creates an Event Stream (SSF 1.0 §8.1.1.1). The store assigns
-/// <c>stream_id</c>, fills the Transmitter-supplied properties (<c>iss</c>,
-/// <c>aud</c>, <c>events_supported</c>, <c>events_delivered</c>), and — when the
-/// request carried no <c>delivery</c> — applies the poll default and supplies
-/// the polling <c>endpoint_url</c>.
+/// Creates an Event Stream (SSF 1.0 §8.1.1.1). The store MUST associate the new
+/// stream with <paramref name="receiver"/> — <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8-3">SSF 1.0 §8</see>
+/// requires every later operation naming this stream to resolve to the same
+/// Receiver. The store also assigns <c>stream_id</c>, fills the
+/// Transmitter-supplied properties (<c>iss</c>, <c>aud</c>,
+/// <c>events_supported</c>, <c>events_delivered</c>), and — when the request
+/// carried no <c>delivery</c> — applies the poll default and supplies the
+/// polling <c>endpoint_url</c>.
 /// </summary>
 public delegate ValueTask<SsfStreamWriteResult> CreateSsfStreamDelegate(
     SsfStreamCreateRequest request,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Reads stream configurations (SSF 1.0 §8.1.1.2). With a
-/// <paramref name="streamId"/>, returns a single-element list for the stream or
-/// <see langword="null"/> when it does not exist (404). With
-/// <paramref name="streamId"/> <see langword="null"/>, returns all streams for
-/// this Receiver — possibly empty, never <see langword="null"/>.
+/// Reads stream configurations (SSF 1.0 §8.1.1.2). The store MUST scope every
+/// result to <paramref name="receiver"/> —
+/// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.1.2-2">SSF 1.0 §8.1.1.2</see>
+/// requires a list read to return "the stream configurations available to this
+/// Receiver" only. With a <paramref name="streamId"/>, returns a single-element
+/// list for the stream when it belongs to <paramref name="receiver"/>, or
+/// <see langword="null"/> when it does not exist or belongs to a different
+/// Receiver (both answer 404 alike). With <paramref name="streamId"/>
+/// <see langword="null"/>, returns all of <paramref name="receiver"/>'s streams
+/// — possibly empty, never <see langword="null"/>.
 /// </summary>
 public delegate ValueTask<IReadOnlyList<SsfStreamConfiguration>?> ReadSsfStreamsDelegate(
     string? streamId,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
@@ -112,11 +122,15 @@ public delegate ValueTask<IReadOnlyList<SsfStreamConfiguration>?> ReadSsfStreams
 /// <summary>
 /// Updates a stream with PATCH semantics (SSF 1.0 §8.1.1.3): present
 /// Receiver-supplied properties are changed, absent ones are left untouched, and
-/// echoed Transmitter-supplied properties must match.
+/// echoed Transmitter-supplied properties must match. The store MUST answer
+/// <see cref="SsfStreamWriteOutcome.NotFound"/> when <c>request.StreamId</c>
+/// does not belong to <paramref name="receiver"/>, whether or not it exists for
+/// another Receiver on the same tenant (SSF 1.0 §8-3).
 /// </summary>
 public delegate ValueTask<SsfStreamWriteResult> UpdateSsfStreamDelegate(
     SsfStreamUpdateRequest request,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
@@ -124,11 +138,15 @@ public delegate ValueTask<SsfStreamWriteResult> UpdateSsfStreamDelegate(
 /// <summary>
 /// Replaces a stream with PUT semantics (SSF 1.0 §8.1.1.4): the request carries
 /// the full Receiver-supplied set and absent Receiver-supplied properties are
-/// deleted; echoed Transmitter-supplied properties must match.
+/// deleted; echoed Transmitter-supplied properties must match. The store MUST
+/// answer <see cref="SsfStreamWriteOutcome.NotFound"/> when <c>request.StreamId</c>
+/// does not belong to <paramref name="receiver"/>, whether or not it exists for
+/// another Receiver on the same tenant (SSF 1.0 §8-3).
 /// </summary>
 public delegate ValueTask<SsfStreamWriteResult> ReplaceSsfStreamDelegate(
     SsfStreamUpdateRequest request,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
@@ -137,11 +155,15 @@ public delegate ValueTask<SsfStreamWriteResult> ReplaceSsfStreamDelegate(
 /// Deletes a stream (SSF 1.0 §8.1.1.5). The endpoint maps
 /// <see cref="SsfStreamWriteOutcome.Success"/> to 204,
 /// <see cref="SsfStreamWriteOutcome.NotFound"/> to 404, and
-/// <see cref="SsfStreamWriteOutcome.Forbidden"/> to 403.
+/// <see cref="SsfStreamWriteOutcome.Forbidden"/> to 403. The store MUST answer
+/// <see cref="SsfStreamWriteOutcome.NotFound"/> when <paramref name="streamId"/>
+/// does not belong to <paramref name="receiver"/>, whether or not it exists for
+/// another Receiver on the same tenant (SSF 1.0 §8-3).
 /// </summary>
 public delegate ValueTask<SsfStreamWriteOutcome> DeleteSsfStreamDelegate(
     string streamId,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
@@ -241,95 +263,76 @@ public sealed record SsfStreamStatusResult
 
 /// <summary>
 /// Reads a stream's status (SSF 1.0 §8.1.2.1). Returns <see langword="null"/>
-/// when no stream with <paramref name="streamId"/> exists for this Receiver (404).
+/// when no stream with <paramref name="streamId"/> exists for
+/// <paramref name="receiver"/> (404) — whether the stream is unknown on the
+/// tenant or belongs to a different Receiver (SSF 1.0 §8-3).
 /// </summary>
 public delegate ValueTask<SsfStreamStatus?> ReadSsfStreamStatusDelegate(
     string streamId,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Updates a stream's status (SSF 1.0 §8.1.2.2). A Transmitter that changes the
-/// status MUST also send the <c>stream-updated</c> event when the change is
-/// transmitter-visible (§8.1.5) — emission is the application's, behind this seam.
+/// Updates a stream's status (SSF 1.0 §8.1.2.2). The store MUST answer
+/// <see cref="SsfStreamOperationOutcome.NotFound"/> when
+/// <c>requestedStatus.StreamId</c> does not belong to <paramref name="receiver"/>
+/// (SSF 1.0 §8-3). A Transmitter that changes the status MUST also send the
+/// <c>stream-updated</c> event when the change is transmitter-visible (§8.1.5) —
+/// emission is the application's, behind this seam.
 /// </summary>
 public delegate ValueTask<SsfStreamStatusResult> UpdateSsfStreamStatusDelegate(
     SsfStreamStatus requestedStatus,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Adds a subject to a stream (SSF 1.0 §8.1.3.2). The endpoint maps
-/// <see cref="SsfStreamOperationOutcome.Success"/> to an empty 200. A Transmitter
-/// MAY silently accept a subject it will not act on (§8.1.3.2 privacy guidance).
+/// Adds a subject to a stream (SSF 1.0 §8.1.3.2). The store MUST answer
+/// <see cref="SsfStreamOperationOutcome.NotFound"/> when <c>request.StreamId</c>
+/// does not belong to <paramref name="receiver"/> (SSF 1.0 §8-3). The endpoint
+/// maps <see cref="SsfStreamOperationOutcome.Success"/> to an empty 200. A
+/// Transmitter MAY silently accept a subject it will not act on (§8.1.3.2
+/// privacy guidance).
 /// </summary>
 public delegate ValueTask<SsfStreamOperationOutcome> AddSsfSubjectDelegate(
     SsfAddSubjectRequest request,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Removes a subject from a stream (SSF 1.0 §8.1.3.3). The endpoint maps
-/// <see cref="SsfStreamOperationOutcome.Success"/> to 204.
+/// Removes a subject from a stream (SSF 1.0 §8.1.3.3). The store MUST answer
+/// <see cref="SsfStreamOperationOutcome.NotFound"/> when <c>request.StreamId</c>
+/// does not belong to <paramref name="receiver"/> (SSF 1.0 §8-3). The endpoint
+/// maps <see cref="SsfStreamOperationOutcome.Success"/> to 204.
 /// </summary>
 public delegate ValueTask<SsfStreamOperationOutcome> RemoveSsfSubjectDelegate(
     SsfRemoveSubjectRequest request,
     ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Requests a Verification Event over a stream (SSF 1.0 §8.1.4.2). The endpoint
-/// maps <see cref="SsfStreamOperationOutcome.Success"/> to 204 — acceptance only;
-/// the <c>verification</c> SET itself MAY be transmitted asynchronously by the
-/// application, echoing the request's <c>state</c>.
+/// Requests a Verification Event over a stream (SSF 1.0 §8.1.4.2). The store
+/// MUST answer <see cref="SsfStreamOperationOutcome.NotFound"/> when
+/// <c>request.StreamId</c> does not belong to <paramref name="receiver"/> (SSF
+/// 1.0 §8-3). The endpoint maps <see cref="SsfStreamOperationOutcome.Success"/>
+/// to 204 — acceptance only; the <c>verification</c> SET itself MAY be
+/// transmitted asynchronously by the application, echoing the request's
+/// <c>state</c>.
 /// </summary>
 public delegate ValueTask<SsfStreamOperationOutcome> TriggerSsfVerificationDelegate(
     SsfVerificationRequest request,
     ClientRecord registration,
-    ExchangeContext context,
-    CancellationToken cancellationToken);
-
-
-/// <summary>The authorization disposition of one stream-management request.</summary>
-public enum SsfRequestAuthorization
-{
-    /// <summary>The request carries a token granting the operation's required scope.</summary>
-    Authorized = 0,
-
-    /// <summary>Authorization failed or is missing — 401.</summary>
-    Unauthorized,
-
-    /// <summary>The token is valid but its scope does not permit the operation — 403.</summary>
-    Forbidden
-}
-
-
-/// <summary>
-/// Authorizes one stream-management request per CAEP Interoperability Profile
-/// 1.0 §2.7.3: validate the request's Bearer token and check the granted scope
-/// satisfies <paramref name="requiredScope"/> (read APIs accept
-/// <c>ssf.read</c>, management APIs accept <c>ssf.manage</c>; coverage per
-/// <c>WellKnownScopes.SsfScopeSatisfies</c>). The token-validation composition
-/// (<c>JwsAccessTokenValidator</c>, introspection, RFC 9728 scope discovery) is
-/// the application's. When this seam is unset, the endpoints enforce no
-/// authorization.
-/// </summary>
-/// <param name="request">The incoming request, carrying the Authorization header.</param>
-/// <param name="requiredScope">The scope the operation requires.</param>
-/// <param name="registration">The <see cref="ClientRecord"/> serving the Transmitter endpoint.</param>
-/// <param name="context">The per-request context bag.</param>
-/// <param name="cancellationToken">Cancellation token.</param>
-public delegate ValueTask<SsfRequestAuthorization> AuthorizeSsfRequestDelegate(
-    IncomingRequest request,
-    string requiredScope,
-    ClientRecord registration,
+    SsfReceiver receiver,
     ExchangeContext context,
     CancellationToken cancellationToken);

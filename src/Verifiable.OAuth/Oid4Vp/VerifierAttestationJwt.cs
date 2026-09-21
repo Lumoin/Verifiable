@@ -33,7 +33,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 ///   </description></item>
 /// </list>
 /// <para>
-/// Validation is performed by a <see cref="VerifierAttestationValidationDelegate"/>
+/// Validation is performed by a <see cref="ResolveKeyFromVerifierAttestationDelegate"/>
 /// supplied by the application. The library provides the parsed JWT string; the
 /// application provides the trust anchor key and the validation logic.
 /// </para>

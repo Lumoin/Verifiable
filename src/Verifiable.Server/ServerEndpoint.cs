@@ -16,8 +16,8 @@ namespace Verifiable.Server;
 /// <strong>Routing model.</strong>
 /// The library owns routing end-to-end. The application skin produces a
 /// typed <see cref="IncomingRequest"/> and hands it to
-/// <see cref="EndpointServer.DispatchAsync(IncomingRequest, CancellationToken)"/>;
-/// the library walks the per-registration <see cref="EndpointChain"/> and
+/// <see cref="EndpointServer.DispatchAsync(IncomingRequest, ExchangeContext, CancellationToken)"/>;
+/// the library walks the per-registration <see cref="Verifiable.Server.Pipeline.EndpointChain"/> and
 /// invokes each endpoint's <see cref="MatchesRequest"/> in order. The first
 /// matcher to return non-<see langword="null"/> wins.
 /// </para>
@@ -49,7 +49,7 @@ namespace Verifiable.Server;
 /// The dispatcher drives a matched endpoint in order:
 /// </para>
 /// <list type="number">
-///   <item><description><see cref="Kind"/> — provides <see cref="FlowKind.Create"/> and <see cref="FlowKind.Step"/> for the flow.</description></item>
+///   <item><description><see cref="Kind"/> — provides <see cref="StatefulFlowKind.CreateAsync"/> and <see cref="StatefulFlowKind.StepAsync"/> for the flow.</description></item>
 ///   <item><description><see cref="BuildInputAsync"/> — validates fields, performs effectful work, returns the PDA input.</description></item>
 ///   <item><description><see cref="BuildResponse"/> — turns the resulting state into an HTTP response.</description></item>
 /// </list>
@@ -90,9 +90,9 @@ public sealed record ServerEndpoint
     public required CapabilityIdentifier Capability { get; init; }
 
     /// <summary>
-    /// The flow kind this endpoint belongs to. Provides <see cref="FlowKind.Create"/>
-    /// for new flows and <see cref="FlowKind.Step"/> for continuing flows.
-    /// Use <see cref="FlowKind.Stateless"/> for endpoints that serve computed
+    /// The flow kind this endpoint belongs to. Provides <see cref="StatefulFlowKind.CreateAsync"/>
+    /// for new flows and <see cref="StatefulFlowKind.StepAsync"/> for continuing flows.
+    /// Use <see cref="StatelessFlowKind.Instance"/> for endpoints that serve computed
     /// responses without session state — JWKS, discovery, and similar metadata
     /// endpoints.
     /// </summary>
@@ -100,10 +100,10 @@ public sealed record ServerEndpoint
 
     /// <summary>
     /// Whether this endpoint starts a new flow session. When <see langword="true"/>
-    /// the dispatcher calls <see cref="FlowKind.Create"/>. When <see langword="false"/>
-    /// it loads persisted state and calls <see cref="FlowKind.Step"/>.
+    /// the dispatcher calls <see cref="StatefulFlowKind.CreateAsync"/>. When <see langword="false"/>
+    /// it loads persisted state and calls <see cref="StatefulFlowKind.StepAsync"/>.
     /// Stateless endpoints set this to <see langword="true"/> and use
-    /// <see cref="FlowKind.Stateless"/> — <see cref="ServerEndpoint.BuildInputAsync"/>
+    /// <see cref="StatelessFlowKind.Instance"/> — <see cref="ServerEndpoint.BuildInputAsync"/>
     /// returns an early-exit response before the PDA is ever stepped or persisted.
     /// </summary>
     public required bool StartsNewFlow { get; init; }
@@ -151,7 +151,7 @@ public sealed record ServerEndpoint
     /// <summary>
     /// An optional delegate that extracts the correlation key for this endpoint.
     /// When <see langword="null"/> the dispatcher reads the correlation key from
-    /// <see cref="ExchangeContextServerExtensions.CorrelationKey"/> on the request
+    /// <c>ExchangeContextServerExtensions.CorrelationKey</c> on the request
     /// context.
     /// </summary>
     /// <remarks>
@@ -173,6 +173,13 @@ public sealed record ServerEndpoint
     /// logging.
     /// </summary>
     public required BuildResponseDelegate BuildResponse { get; init; }
+
+    /// <summary>
+    /// The endpoint's own pre-correlation check. See <see cref="BeforeCorrelationDelegate"/>
+    /// for the full remarks. <see langword="null"/> (the default) runs no such
+    /// check for this endpoint.
+    /// </summary>
+    public BeforeCorrelationDelegate? BeforeCorrelationAsync { get; init; }
 
     /// <summary>
     /// The per-request absolute URL this endpoint is reachable at, computed
@@ -208,4 +215,12 @@ public sealed record ServerEndpoint
     /// <see langword="null"/> falls back to the host-generic description.
     /// </summary>
     public string? HandleNotFoundErrorDescription { get; init; }
+
+    /// <summary>
+    /// The <c>invalid_request</c> description naming this endpoint's missing correlation
+    /// parameter. See <see cref="EndpointCandidate.MissingCorrelationKeyErrorDescription"/> for the
+    /// full remarks; this is that value carried onto the resolved endpoint.
+    /// <see langword="null"/> falls back to the host-generic description.
+    /// </summary>
+    public string? MissingCorrelationKeyErrorDescription { get; init; }
 }

@@ -10,6 +10,8 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.States;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -73,9 +75,9 @@ internal sealed class JwtBearerGrantTests
     public async Task ValidAssertionIssuesBearerAccessTokenOverHttpWire()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -124,9 +126,9 @@ internal sealed class JwtBearerGrantTests
     public async Task MissingOrEmptyAssertionIsRejectedAsInvalidRequest()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -167,14 +169,17 @@ internal sealed class JwtBearerGrantTests
     public async Task RejectedAssertionIsInvalidGrantNotInvalidRequest()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The seam rejects every assertion (a stand-in for a §3 failure: bad signature, untrusted iss,
         //wrong aud, expired window).
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -213,16 +218,19 @@ internal sealed class JwtBearerGrantTests
         const string WrongAudienceMarker = "aud=some-other-as";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //RFC 7523 §3 rule 3: accept only when the assertion's intended audience is THIS AS.
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(
-                    assertion.Contains(AsAudienceMarker, StringComparison.Ordinal)
-                        ? new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope }
-                        : null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(
+                        assertion.Contains(AsAudienceMarker, StringComparison.Ordinal)
+                            ? new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope }
+                            : null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -266,9 +274,9 @@ internal sealed class JwtBearerGrantTests
     public async Task UnidentifiedClientCannotObtainAToken()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -299,9 +307,9 @@ internal sealed class JwtBearerGrantTests
     public async Task PresentButInvalidClientCredentialsAreRejectedAsInvalidClient()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -331,10 +339,10 @@ internal sealed class JwtBearerGrantTests
     public async Task UnwiredValidationSeamDoesNotMaterializeTheGrant()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
 
         //Client authentication is wired, but the assertion-validation seam is deliberately absent.
-        WireClientAuthentication(app);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -399,8 +407,8 @@ internal sealed class JwtBearerGrantTests
     public async Task EndToEndRealAssertionIsValidatedExchangedAndUsed()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -439,25 +447,30 @@ internal sealed class JwtBearerGrantTests
         //JwsAccessTokenValidator against the AS JWKS — signature (§3 rule 9), iss (§3 rule 1), timing
         //(§3 rules 4–5) — AND enforces §3 rule 3 by requiring aud == this AS (ResourceServerAudience).
         //A forgery, wrong issuer, or wrong audience returns null and the grant is refused.
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            async (presentedAssertion, requestedScope, registration, context, ct) =>
-            {
-                JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
-                    presentedAssertion, asIssuer, jwksResolver).ConfigureAwait(false);
-                if(!result.IsSuccess)
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                async (presentedAssertion, requestedScope, registration, context, ct) =>
                 {
-                    return null;
-                }
+                    JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
+                        presentedAssertion, asIssuer, jwksResolver).ConfigureAwait(false);
+                    if(!result.IsSuccess)
+                    {
 
-                //RFC 7523 §3 rule 3 (the aud MUST): the assertion must name THIS AS as its intended
-                //audience. VerifyAgainstAsAsync already enforced aud == ResourceServerAudience (the AS's
-                //audience identity), so a success here means the audience check passed.
-                return new JwtBearerGrant
-                {
-                    Subject = result.Claims!.Subject,
-                    Scope = result.Claims.Scope ?? GrantedScope
+                        return null;
+                    }
+
+                    //RFC 7523 §3 rule 3 (the aud MUST): the assertion must name THIS AS as its intended
+                    //audience. VerifyAgainstAsAsync already enforced aud == ResourceServerAudience (the AS's
+                    //audience identity), so a success here means the audience check passed.
+
+                    return new JwtBearerGrant
+                    {
+                        Subject = result.Claims!.Subject,
+                        Scope = result.Claims.Scope ?? GrantedScope
+                    };
                 };
-            };
+        }).ConfigureAwait(false);
 
         //STEP 3 — Present the REAL assertion to the jwt-bearer grant (RFC 7523 §2.1).
         OutgoingFormFields grantForm = BuildRequest(new JwtBearerBuilderOptions
@@ -506,10 +519,10 @@ internal sealed class JwtBearerGrantTests
     public async Task AnonymousRequestWithoutClientCredentialsIssuesToken()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
 
         //No WireClientAuthentication — the anonymous path must not depend on the client-auth seam.
-        WireAcceptingValidator(app);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -552,11 +565,11 @@ internal sealed class JwtBearerGrantTests
     public async Task PresentCredentialsWithNoClientAuthSeamAreRejectedAsInvalidClient()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
 
         //Only the assertion validator is wired. The client-authentication seam is deliberately absent,
         //so presented credentials cannot be validated.
-        WireAcceptingValidator(app);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -592,10 +605,10 @@ internal sealed class JwtBearerGrantTests
     public async Task DeclaredConfidentialClientWithoutCredentialsIsRejectedAsInvalidClient()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.ClientSecretPost);
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        _ = await app.SetTokenEndpointAuthMethodAsync(material, ClientAuthenticationMethod.ClientSecretPost, hostName: "default", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -628,11 +641,11 @@ internal sealed class JwtBearerGrantTests
     public async Task DeclaredConfidentialClientWithUnwiredAuthSeamFailsClosed()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.ClientSecretPost);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        _ = await app.SetTokenEndpointAuthMethodAsync(material, ClientAuthenticationMethod.ClientSecretPost, hostName: "default", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Only the assertion validator is wired — the client-authentication seam is deliberately absent.
-        WireAcceptingValidator(app);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -663,19 +676,22 @@ internal sealed class JwtBearerGrantTests
     public async Task DeclaredConfidentialClientWithValidCredentialsIsIssuedTokenWithoutDoubleValidation()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.ClientSecretPost);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        _ = await app.SetTokenEndpointAuthMethodAsync(material, ClientAuthenticationMethod.ClientSecretPost, hostName: "default", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         int validationCallCount = 0;
-        app.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            validationCallCount++;
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                validationCallCount++;
 
-            return ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
-        };
+                return ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -715,11 +731,11 @@ internal sealed class JwtBearerGrantTests
     public async Task DeclaredNoneClientWithoutCredentialsIssuesToken()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.None);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        _ = await app.SetTokenEndpointAuthMethodAsync(material, ClientAuthenticationMethod.None, hostName: "default", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //No WireClientAuthentication — a declared-none public client must not require the seam.
-        WireAcceptingValidator(app);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -757,8 +773,8 @@ internal sealed class JwtBearerGrantTests
     public async Task RealTamperedOrExpiredAssertionIsRejectedAsInvalidGrant()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -779,16 +795,19 @@ internal sealed class JwtBearerGrantTests
         //Wire the REAL assertion validator — it runs JwsAccessTokenValidator (signature §3 rule 9, iss
         //§3 rule 1, timing §3 rules 4–5, and aud == this AS §3 rule 3). A forgery or expired window
         //returns null and the grant is refused with invalid_grant.
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            async (presentedAssertion, requestedScope, registration, context, ct) =>
-            {
-                JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
-                    presentedAssertion, asIssuer, jwksResolver).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                async (presentedAssertion, requestedScope, registration, context, ct) =>
+                {
+                    JwsAccessTokenValidationResult result = await VerifyAgainstAsAsync(
+                        presentedAssertion, asIssuer, jwksResolver).ConfigureAwait(false);
 
-                return result.IsSuccess
-                    ? new JwtBearerGrant { Subject = result.Claims!.Subject, Scope = result.Claims.Scope ?? GrantedScope }
-                    : null;
-            };
+                    return result.IsSuccess
+                        ? new JwtBearerGrant { Subject = result.Claims!.Subject, Scope = result.Claims.Scope ?? GrantedScope }
+                        : null;
+                };
+        }).ConfigureAwait(false);
 
         //The compact JWS splits into header.payload.signature. Both tamper cases below leave the header
         //and payload intact and corrupt only the signature segment, deterministically — never relying on
@@ -866,15 +885,18 @@ internal sealed class JwtBearerGrantTests
         const string RequestedScope = "urn:example:custom";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The seam echoes the requestedScope parameter it was handed into the granted scope, proving the
         //request's scope reaches the trust authority verbatim.
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(
-                    new JwtBearerGrant { Subject = AssertionSubject, Scope = requestedScope ?? GrantedScope });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(
+                        new JwtBearerGrant { Subject = AssertionSubject, Scope = requestedScope ?? GrantedScope });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -917,20 +939,23 @@ internal sealed class JwtBearerGrantTests
         const string ConfinedAudience = "https://api.example/orders";
 
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The seam confines the issued token to an explicit target. This audience is not in any
         //ScopeToAudience entry, so its presence in aud can only come from the explicit grant override.
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(
-                    new JwtBearerGrant
-                    {
-                        Subject = AssertionSubject,
-                        Scope = GrantedScope,
-                        Audience = [ConfinedAudience]
-                    });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(
+                        new JwtBearerGrant
+                        {
+                            Subject = AssertionSubject,
+                            Scope = GrantedScope,
+                            Audience = [ConfinedAudience]
+                        });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -970,9 +995,9 @@ internal sealed class JwtBearerGrantTests
     public async Task SuccessResponseCarriesCacheControlNoStore()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1007,14 +1032,17 @@ internal sealed class JwtBearerGrantTests
     public async Task InvalidGrantErrorBodyDoesNotLeakAssertionSubject()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
-        WireClientAuthentication(app);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The seam knows the subject (it is the fixture AssertionSubject) but rejects the assertion. The
         //error body must not echo that subject — a §3 failure surfaces only as the invalid_grant code.
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1051,16 +1079,16 @@ internal sealed class JwtBearerGrantTests
         //Register a client allowed the client_credentials grant capability (plus discovery/jwks, neither
         //a grant capability) but NOT jwt-bearer — the capability that materializes the grant. The seam
         //is wired so the only reason a token could not issue is the missing capability.
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        WireClientAuthentication(app);
-        WireAcceptingValidator(app);
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1098,17 +1126,22 @@ internal sealed class JwtBearerGrantTests
     /// away from every <c>client_credentials</c> grant, so such a grant cannot carry the
     /// audience mapping the end-to-end tests rely on.
     /// </summary>
-    private static VerifierKeyMaterial RegisterJwtBearerClient(TestHostShell app)
+    /// <param name="app">The host to register the client on.</param>
+    /// <param name="profile">
+    /// The client's policy profile — <see cref="PolicyProfile.Rfc6749WithPkce"/> unless a DPoP test
+    /// selects a profile <see cref="ClientPolicyProfiles.RequiresDpop"/> mandates against.
+    /// </param>
+    private static async Task<VerifierKeyMaterial> RegisterJwtBearerClientAsync(TestHostShell app, PolicyProfile? profile = null)
     {
-        VerifierKeyMaterial material = app.RegisterDpopClient(
+        VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
-            profile: PolicyProfile.Rfc6749WithPkce,
+            profile: profile ?? PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthJwtBearer,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
         HostedAuthorizationServer host = app.Host("default");
         string segment = material.Registration.TenantId.Value;
@@ -1123,9 +1156,9 @@ internal sealed class JwtBearerGrantTests
             AllowedScopes = previous.AllowedScopes.Add(MachineScope),
             ScopeToAudience = scopeToAudience
         };
-        host.Registrations[segment] = updated;
-        host.Registrations[updated.ClientId] = updated;
-        host.Server.UpdateClient(previous, updated, []);
+
+
+        updated = await host.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
         material.Registration = updated;
 
         return material;
@@ -1147,7 +1180,7 @@ internal sealed class JwtBearerGrantTests
     public async Task NoIdTokenIsMintedForJwtBearerEvenWithOpenidGrantedAndOidcFeatureEnabled()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = app.RegisterDpopClient(
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
@@ -1155,16 +1188,19 @@ internal sealed class JwtBearerGrantTests
                 WellKnownCapabilityIdentifiers.OAuthJwtBearer,
                 WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        WireClientAuthentication(app);
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The seam grants openid — an app opting in to vouch that the exchanged subject is an
         //End-User (jwt_bearer honors whatever scope the app's authorization
         //seam decides, unlike client_credentials' source-layer narrowing).
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(
-                    new JwtBearerGrant { Subject = AssertionSubject, Scope = WellKnownScopes.OpenId });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(
+                        new JwtBearerGrant { Subject = AssertionSubject, Scope = WellKnownScopes.OpenId });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1198,16 +1234,131 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: "This is
+    /// applicable for all access token requests regardless of grant type." A registration whose
+    /// profile mandates DPoP-bound access tokens (<see cref="ClientPolicyProfiles.RequiresDpop"/>) is
+    /// refused when a jwt-bearer request carries no proof at all. The specification text leaves the
+    /// exact status open; the concrete refusal the shared validator issues for a missing-but-mandated
+    /// proof is the §8 <c>use_dpop_nonce</c> challenge, asserted here by error code.
+    /// </summary>
+    [TestMethod]
+    public async Task RegistrationRequiringDpopWithoutAProofIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, body,
+            "A registration whose profile mandates DPoP must refuse a proof-less jwt-bearer request.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: under a
+    /// registration whose profile mandates DPoP, a jwt-bearer request presenting a valid proof binds
+    /// the issued access token to it — <c>token_type</c> answers <c>DPoP</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task RegistrationRequiringDpopWithAProofAnswersDpopTokenType()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = app.AlignRegistrationToHostHttpBase("default", material.Registration);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+            OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+            {
+                Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //A mandating profile also enforces the §8 nonce mechanism on a nonce-less proof — the
+            //shared helper answers the challenge once, exactly as the client road does, before this
+            //asserts the bound outcome. Reused rather than open-coded here, so this policy has
+            //exactly one implementation across the suite to drift from.
+            async Task<string> BuildProofAsync(string? nonce) =>
+                await DpopProofConstruction.BuildAsync(
+                    new DpopProofClaims
+                    {
+                        Htm = WellKnownHttpMethods.Post,
+                        Htu = tokenUrl.OriginalString,
+                        Iat = TimeProvider.GetUtcNow(),
+                        Jti = Guid.NewGuid().ToString("N"),
+                        Nonce = nonce
+                    },
+                    dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+                    MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+                host.SharedHttpClient!, tokenUrl, form, BuildProofAsync, TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(200, (int)response.StatusCode, body);
+
+                using JsonDocument doc = JsonDocument.Parse(body);
+                Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, doc.RootElement.GetProperty("token_type").GetString(),
+                    "A registration whose profile mandates DPoP must bind the jwt-bearer access token to a presented proof.");
+            }
+        }
+        finally
+        {
+            holderKeys.PublicKey.Dispose();
+            holderKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// Wires the client_secret_post authentication seam (RFC 6749 §2.3.1): the application owns the
     /// secret store and the comparison; this test glue checks the form field against the registered
     /// client's secret. Required only because some tests present credentials (§3.1) — the grant itself
     /// does not require this seam.
     /// </summary>
-    private static void WireClientAuthentication(TestHostShell app) =>
-        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-            ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+    private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
 
 
     /// <summary>
@@ -1215,39 +1366,14 @@ internal sealed class JwtBearerGrantTests
     /// subject and granted scope — the trust-authority stand-in for the happy-path tests where the
     /// §3 processing is not the unit under test.
     /// </summary>
-    private static void WireAcceptingValidator(TestHostShell app) =>
-        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
-            static (assertion, requestedScope, registration, context, ct) =>
-                ValueTask.FromResult<JwtBearerGrant?>(
-                    new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope });
-
-
-    /// <summary>
-    /// Re-registers <paramref name="material"/>'s client with
-    /// <see cref="ClientRecord.TokenEndpointAuthMethod"/> set to <paramref name="method"/> — the
-    /// declared-client shape draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049) gates on.
-    /// Uses the same register-then-upgrade pattern as
-    /// <see cref="TestHostShell.SetAccessTokenLifetime"/>, because the routing dictionaries are
-    /// host-internal.
-    /// </summary>
-    private static void DeclareTokenEndpointAuthMethod(
-        TestHostShell app, VerifierKeyMaterial material, ClientAuthenticationMethod method)
-    {
-        HostedAuthorizationServer host = app.Host("default");
-        string segment = material.Registration.TenantId.Value;
-        ClientRecord previous = host.Registrations[segment];
-        ClientRecord updated = previous with
+    private static async Task WireAcceptingValidatorAsync(TestHostShell app) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            TokenEndpointAuthMethod = method
-        };
-
-        host.Registrations[segment] = updated;
-        host.Registrations[updated.ClientId] = updated;
-
-        host.Server.UpdateClient(previous, updated, []);
-
-        material.Registration = updated;
-    }
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(
+                        new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope });
+        }).ConfigureAwait(false);
 
 
     /// <summary>
@@ -1365,5 +1491,176 @@ internal sealed class JwtBearerGrantTests
         Assert.IsTrue(built.IsSuccess, "The builder must accept a well-formed jwt-bearer request.");
 
         return built.Value;
+    }
+
+
+    /// <summary>
+    /// A mutable call counter a test closure increments — used to prove whether the shared
+    /// <c>(issuer, jti)</c> correlation store was consulted for a given presentation.
+    /// </summary>
+    private sealed class CallCounter
+    {
+        /// <summary>The number of times the wrapped delegate ran.</summary>
+        public int Count { get; set; }
+    }
+
+
+    /// <summary>
+    /// Wraps the host's <c>jti</c> correlation resolver so a recorded entry whose
+    /// <see cref="Verifiable.Server.FlowState.ExpiresAt"/> lies at or before
+    /// <paramref name="timeProvider"/>'s current instant is reported ABSENT — the shape of an
+    /// application store that expires entries on read, unlike the host's own default index, which
+    /// never forgets. Every other correlation kind resolves through the host's real delegate
+    /// unchanged. <paramref name="jtiReplayResolveCount"/> counts every
+    /// <see cref="JtiReplayFlowKind"/> consultation, resolved or not, so a test can prove a
+    /// presentation never reached the guard.
+    /// </summary>
+    private static async Task ExpireJtiEntriesPastTheirRecordedWindowAsync(
+        EndpointServer server, HostedAuthorizationServer hosted, TimeProvider timeProvider, CallCounter jtiReplayResolveCount)
+    {
+        ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
+        await TestHostShell.AlterAsync(server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCorrelationKeyAsync = async (tenantId, flowKind, externalHandle, ctx, ct) =>
+            {
+                if(flowKind != FlowKind.JtiReplay)
+                {
+                    return await original(tenantId, flowKind, externalHandle, ctx, ct).ConfigureAwait(false);
+                }
+
+                jtiReplayResolveCount.Count++;
+                string? flowId = await original(tenantId, flowKind, externalHandle, ctx, ct).ConfigureAwait(false);
+
+                return flowId is not null
+                    && hosted.FlowStates.TryGetValue(flowId, out var entry)
+                    && entry.State is JtiSeenState seen
+                    && seen.ExpiresAt <= timeProvider.GetUtcNow()
+                        ? null
+                        : flowId;
+            };
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3 rule 7: "the authorization server MAY ensure that JWTs are not replayed by
+    /// maintaining the set of used jti values for the length of time for which the JWT would be
+    /// considered valid based on the applicable exp instant"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523, Section 3</see>). The
+    /// grant's <see cref="ValidateJwtBearerAssertionDelegate"/> is the trust authority for the
+    /// assertion's own timing window (§3 rules 4–5) — the library cannot know it independently — so
+    /// the recorded <c>jti</c> entry must stay open at least until <see cref="JwtBearerGrant.Expiration"/>
+    /// plus the exchange's clock-skew tolerance, the library's own floor for a window it does not
+    /// otherwise know. A store that expires a recorded entry on read (an application store with
+    /// expiry) must therefore still be holding the entry open there, or the SAME assertion is
+    /// accepted a second time inside the very window the seam still honours its timing under. Past
+    /// that combined window the seam's own timing check refuses the assertion before the jti guard
+    /// is ever consulted — proved here by the resolve count never advancing on that third call.
+    /// </summary>
+    [TestMethod]
+    public async Task ReplayedJwtBearerAssertionWithinClockSkewToleranceIsRefusedAsInvalidGrant()
+    {
+        const string ReplayAssertion = "eyJhbGciOiJFUzI1NiJ9.replay-window-assertion.signature";
+        const string ReplayJti = "replay-window-jti-001";
+        const string ReplayIssuer = "https://idp.example.com/replay-window";
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        DateTimeOffset assertionIssuedAt = TimeProvider.GetUtcNow();
+        DateTimeOffset assertionExpiration = assertionIssuedAt + TimeSpan.FromSeconds(10);
+
+        //Stands in for the trust authority's own §3 rules 4-5 timing check: it keeps accepting the
+        //fixed assertion until its own exp plus the exchange's clock-skew tolerance, exactly the
+        //floor the library's replay window must also honour.
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                (assertion, requestedScope, registration, context, ct) =>
+                {
+                    if(!string.Equals(assertion, ReplayAssertion, StringComparison.Ordinal))
+                    {
+                        return ValueTask.FromResult<JwtBearerGrant?>(null);
+                    }
+
+                    if(TimeProvider.GetUtcNow() > assertionExpiration + context.ClockSkewTolerance)
+                    {
+                        return ValueTask.FromResult<JwtBearerGrant?>(null);
+                    }
+
+                    return ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant
+                    {
+                        Subject = AssertionSubject,
+                        Scope = GrantedScope,
+                        Jti = ReplayJti,
+                        Issuer = ReplayIssuer,
+                        Expiration = assertionExpiration
+                    });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        CallCounter jtiReplayResolveCount = new();
+        await ExpireJtiEntriesPastTheirRecordedWindowAsync(
+            app.Server, host, TimeProvider, jtiReplayResolveCount).ConfigureAwait(false);
+
+        //First presentation: fresh, recorded, and accepted.
+        OutgoingFormFields firstForm = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = ReplayAssertion
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage firstResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, firstForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string firstBody = await firstResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)firstResponse.StatusCode, firstBody);
+
+        int resolveCountAfterFirst = jtiReplayResolveCount.Count;
+
+        //40s later: past exp (10s) but well inside the default 60s clock-skew tolerance — the seam's
+        //own timing check still accepts the assertion. Re-present the SAME assertion.
+        TimeProvider.Advance(TimeSpan.FromSeconds(40));
+        OutgoingFormFields replayForm = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = ReplayAssertion
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage replayResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, replayForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string replayBody = await replayResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A presentation the guard recognises as a replay on the record it already holds needs
+        //exactly ONE more resolve (the read that finds it still open, answered Replayed). A
+        //presentation the guard wrongly treats as a first use needs TWO more (the miss-triggering
+        //read, then the post-save self-check read that discovers the record it just re-wrote under
+        //the SAME key already expired) — its own defence against a defective store then trips on
+        //its own re-save, surfacing as a server error rather than the replay refusal.
+        Assert.AreEqual(resolveCountAfterFirst + 1, jtiReplayResolveCount.Count,
+            "RFC 7523 §3 rule 7: a presentation still inside the recorded window must be recognised as a " +
+            "replay by the FIRST resolve alone.");
+        Assert.AreEqual(400, (int)replayResponse.StatusCode, replayBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, replayBody, StringComparison.Ordinal);
+        Assert.Contains("replay", replayBody, StringComparison.OrdinalIgnoreCase);
+
+        int resolveCountAfterReplay = jtiReplayResolveCount.Count;
+
+        //A further 40s later (80s total): past exp (10s) PLUS the 60s tolerance (70s) — the seam's
+        //own timing check now refuses the assertion, before the jti guard is ever consulted.
+        TimeProvider.Advance(TimeSpan.FromSeconds(40));
+        OutgoingFormFields expiredForm = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = ReplayAssertion
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage expiredResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, expiredForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string expiredBody = await expiredResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)expiredResponse.StatusCode, expiredBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, expiredBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("replay", expiredBody, StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(resolveCountAfterReplay, jtiReplayResolveCount.Count,
+            "Past exp plus the tolerance the assertion must be refused as EXPIRED by the seam's own timing check before the jti guard is ever consulted — not as a replay.");
     }
 }

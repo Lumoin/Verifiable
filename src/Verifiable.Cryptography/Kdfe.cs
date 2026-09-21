@@ -30,7 +30,7 @@ namespace Verifiable.Cryptography;
 /// <strong>Label terminator:</strong> the reference TPM's <c>CryptKDFe</c> does not itself append a NUL octet
 /// (NIST SP800-56C r2), but every KDFe label the TPM uses is a NUL-terminated string and the TPM verifies that
 /// terminator on the decrypt side, so the NUL octet is part of the hashed input. This implementation appends a
-/// single <c>0x00</c> after the ASCII <paramref name="label"/> to reproduce exactly that input - callers pass
+/// single <c>0x00</c> after the ASCII <c>label</c> to reproduce exactly that input - callers pass
 /// the bare label (for example <c>"SECRET"</c>), not a pre-terminated one.
 /// </para>
 /// <para>

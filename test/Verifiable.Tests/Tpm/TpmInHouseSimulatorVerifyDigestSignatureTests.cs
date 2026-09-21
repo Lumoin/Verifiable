@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -84,7 +85,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateEccSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using SignInput signInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
@@ -140,7 +142,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateEccSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         using VerifyDigestSignatureInput verifyInput = VerifyDigestSignatureInput.ForEcdsa(
             primary.ObjectHandle, digest, PlaceholderEcdsaSignature, TpmAlgIdConstants.TPM_ALG_SHA384, pool);
@@ -166,7 +169,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateEccSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         using VerifyDigestSignatureInput verifyInput = VerifyDigestSignatureInput.ForRsaSsa(
             primary.ObjectHandle, digest, PlaceholderRsaSignature, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
@@ -192,7 +196,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateEccSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using SignInput signInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
@@ -230,7 +235,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateEccSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_NULL).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using SignInput signInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
@@ -308,7 +314,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary (RSA 2048, RSASSA) failed: '{primaryResult.ResponseCode}'.");
 
         using CreatePrimaryResponse primary = primaryResult.Value;
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using SignInput signInput = SignInput.ForRsaSsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
@@ -372,7 +379,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary storage parent failed: '{parentResult.ResponseCode}'.");
 
         using CreatePrimaryResponse parent = parentResult.Value;
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         using VerifyDigestSignatureInput verifyInput = VerifyDigestSignatureInput.ForEcdsa(
             parent.ObjectHandle, digest, PlaceholderEcdsaSignature, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
@@ -405,7 +413,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateEccSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         byte[] nonEmptyContext = [0x01, 0x02, 0x03, 0x04];
         byte[] signatureBody = BuildEcdsaSignatureBody(TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, PlaceholderEcdsaSignature);
@@ -431,7 +440,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
 
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
         byte[] signatureBody = BuildEcdsaSignatureBody(TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, PlaceholderEcdsaSignature);
 
         TpmRcConstants code = await SubmitVerifyDigestSignatureCommandAsync(
@@ -456,7 +466,8 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateEccSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
         (byte[] r, byte[] s) = await SignEcdsaComponentsAsync(tpm, registry, pool, primary.ObjectHandle, digest).ConfigureAwait(false);
 
         byte[] zeroPaddedR = [0x00, .. ToFixed(r, P256ComponentSize)];

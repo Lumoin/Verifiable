@@ -6,8 +6,8 @@ using Verifiable.Xml;
 namespace Verifiable.Tests.Xml;
 
 /// <summary>
-/// Canonicalization-side correctness proofs over <see cref="XmlCanonicalization.TryCanonicalize"/> and
-/// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: a wide-attribute document, a
+/// Canonicalization-side correctness proofs over <see cref="XmlCanonicalization.TryCanonicalize(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, Verifiable.Xml.XmlCanonicalizationAlgorithm, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/> and
+/// <see cref="XmlCanonicalization.TryCanonicalizeExclusive(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, bool, System.ReadOnlySpan{string}, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>: a wide-attribute document, a
 /// wide-namespace document and a sibling-spread document canonicalize to non-empty correct output under
 /// both entry points, and a declaration-heavy start-tag parses to the correct shape, with every buffer
 /// rented from the caller's pool and returned on disposal, observed through <see cref="MeteredHousePool"/>
@@ -110,8 +110,8 @@ internal sealed class XmlCanonicalizationCostTests
     /// asserting success, non-empty canonical octets, and that every pooled buffer returns after disposal.
     /// </summary>
     /// <param name="document">The document octets.</param>
-    /// <param name="isExclusive">Whether <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/> runs
-    /// instead of <see cref="XmlCanonicalization.TryCanonicalize"/>.</param>
+    /// <param name="isExclusive">Whether <see cref="XmlCanonicalization.TryCanonicalizeExclusive(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, bool, System.ReadOnlySpan{string}, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/> runs
+    /// instead of <see cref="XmlCanonicalization.TryCanonicalize(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, Verifiable.Xml.XmlCanonicalizationAlgorithm, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>.</param>
     private static void AssertCanonicalizesWithBalancedPool(byte[] document, bool isExclusive)
     {
         using var metered = new MeteredHousePool();
@@ -135,7 +135,7 @@ internal sealed class XmlCanonicalizationCostTests
 
 
     /// <summary>
-    /// Proves the attribute axis under <see cref="XmlCanonicalization.TryCanonicalize"/>: forty thousand
+    /// Proves the attribute axis under <see cref="XmlCanonicalization.TryCanonicalize(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, Verifiable.Xml.XmlCanonicalizationAlgorithm, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>: forty thousand
     /// descending-named attributes on one element sort into the (namespace URI, local name) order of
     /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.2,
     /// with the pool balanced after disposal. The no-quadratic-behavior throughput obligation for this
@@ -149,7 +149,7 @@ internal sealed class XmlCanonicalizationCostTests
 
 
     /// <summary>
-    /// Proves the attribute axis under <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: forty
+    /// Proves the attribute axis under <see cref="XmlCanonicalization.TryCanonicalizeExclusive(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, bool, System.ReadOnlySpan{string}, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>: forty
     /// thousand descending-named attributes on one element sort into the (namespace URI, local name)
     /// order of <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML
     /// Canonicalization 1.0</see> section 3, with the pool balanced after disposal. The
@@ -164,7 +164,7 @@ internal sealed class XmlCanonicalizationCostTests
 
 
     /// <summary>
-    /// Proves the namespace axis under <see cref="XmlCanonicalization.TryCanonicalize"/>: a root with
+    /// Proves the namespace axis under <see cref="XmlCanonicalization.TryCanonicalize(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, Verifiable.Xml.XmlCanonicalizationAlgorithm, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>: a root with
     /// four thousand namespace declarations and two hundred prefixed children renders every child's axis
     /// with the superfluous-declaration suppression of
     /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.3 —
@@ -180,7 +180,7 @@ internal sealed class XmlCanonicalizationCostTests
 
 
     /// <summary>
-    /// Proves the namespace axis under <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: a root
+    /// Proves the namespace axis under <see cref="XmlCanonicalization.TryCanonicalizeExclusive(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, bool, System.ReadOnlySpan{string}, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>: a root
     /// with four thousand namespace declarations and two hundred prefixed children decides the
     /// visibly-utilizes conditions of
     /// <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML Canonicalization
@@ -197,8 +197,8 @@ internal sealed class XmlCanonicalizationCostTests
 
     /// <summary>
     /// Proves the namespace axis over the sibling-spread shape under
-    /// <see cref="XmlCanonicalization.TryCanonicalize"/> and
-    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: sixty-four thousand siblings, each
+    /// <see cref="XmlCanonicalization.TryCanonicalize(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, Verifiable.Xml.XmlCanonicalizationAlgorithm, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/> and
+    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive(Verifiable.Xml.XmlNodeTable, Verifiable.Xml.XmlNodeSet, bool, System.ReadOnlySpan{string}, Lumoin.Base.BaseMemoryPool, out Verifiable.Foundation.PooledMemory?, out Verifiable.Xml.XmlCanonicalizationError)"/>: sixty-four thousand siblings, each
     /// declaring and using a distinct prefix, render the namespace axes of
     /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.3
     /// and <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML

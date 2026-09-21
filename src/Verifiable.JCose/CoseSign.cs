@@ -121,7 +121,7 @@ public static class CoseSign
     /// <summary>
     /// Creates a COSE_Sign message by signing once per entry of <paramref name="signers"/>,
     /// using registry-resolved signing functions (each signer's own
-    /// <see cref="PrivateKeyMemory.Tag"/> resolves its own algorithm, so signers may use
+    /// <c>PrivateKeyMemory.Tag</c> resolves its own algorithm, so signers may use
     /// different algorithms in the same message).
     /// </summary>
     /// <param name="bodyProtectedHeader">

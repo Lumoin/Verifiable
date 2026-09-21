@@ -167,7 +167,7 @@ public sealed class AsicContainerReadResult: IDisposable
     /// <summary>The entry name that was refused, when a name-shaped status names one.</summary>
     public string? RejectedEntryName { get; init; }
 
-    /// <summary>Which entry-name rule refused it, when <see cref="Status"/> is <see cref="AsicZipReadStatus.EntryNameRefused"/>.</summary>
+    /// <summary>Which entry-name rule refused it, when <see cref="Status"/> is <see cref="AsicZipReadStatus.EntryNameRejected"/>.</summary>
     public AsicZipEntryNameStatus RejectedEntryNameStatus { get; init; }
 
     /// <summary>Whether the facts were read.</summary>
@@ -199,7 +199,7 @@ public sealed class AsicContainerReadResult: IDisposable
 /// <see cref="AsicContainerFacts.MediaTypeReadableAtOffset38"/> states whether the Annex A.1 NOTE recognition —
 /// the one an operating system performs, which reads octets at a fixed offset and consults no directory — reaches
 /// the same value. A container where the two disagree is one the reader has already refused
-/// (<see cref="AsicZipReadStatus.MimetypeEntryNotAtOffsetZero"/> and its neighbours); the fact is surfaced so a
+/// (<see cref="AsicZipReadStatus.MimetypeNotFirstEntry"/> and its neighbours); the fact is surfaced so a
 /// report can state it rather than assume it.
 /// </para>
 /// </remarks>

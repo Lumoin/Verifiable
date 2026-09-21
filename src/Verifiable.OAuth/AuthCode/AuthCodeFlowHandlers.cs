@@ -7,9 +7,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Pkce;
-using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.AuthCode;
@@ -139,8 +137,10 @@ public static class AuthCodeFlowHandlers
     /// Inbound form fields. May include <c>scope</c>; other required values are
     /// taken from <paramref name="registration"/>.
     /// </param>
+    /// <param name="redirectUri">The client's redirect URI to which the authorization response is returned.</param>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
     /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> on success with
@@ -158,6 +158,14 @@ public static class AuthCodeFlowHandlers
 
 
     /// <inheritdoc cref="HandleParAsync(IReadOnlyDictionary{string, string}, Uri, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
+    /// <param name="fields">
+    /// Inbound form fields. May include <c>scope</c>; other required values are
+    /// taken from <paramref name="registration"/>.
+    /// </param>
+    /// <param name="redirectUri">The client's redirect URI to which the authorization response is returned.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
     /// <param name="resource">
     /// The RFC 8707 §2 <c>resource</c> indicator(s) to request (RFC 9126 §2.1 pushes them
     /// alongside the rest of the PAR body). Each entry MUST be one absolute URI — a caller with
@@ -166,6 +174,7 @@ public static class AuthCodeFlowHandlers
     /// entry that itself packs several URIs separated by spaces is a malformed indicator, not a
     /// shorthand for repetition. <see langword="null"/> or empty omits the parameter entirely.
     /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleParAsync(
         IReadOnlyDictionary<string, string> fields,
         Uri redirectUri,
@@ -182,7 +191,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
-            await ResolveValidatedAuthorizationServerMetadataAsync(
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
@@ -215,14 +224,19 @@ public static class AuthCodeFlowHandlers
         //RFC 8707 §2 / RFC 9126 §2.1: each resource indicator becomes its OWN occurrence of the
         //resource key on the wire — the genuine multi-resource wire form — never several
         //indicators joined by a space into one occurrence.
-        AddResourceOccurrences(formFields, resource);
+        TokenEndpointClientOperations.AddResourceOccurrences(formFields, resource);
 
         //RFC 9126 section 2: the pushed request carries the whole authorization request, so fields
         //this handler does not own - OID4VCI's authorization_details and issuer_state among them -
         //ride verbatim, exactly as the JAR path already carries them. The flow-owned parameters
         //above always win: an additional field cannot override the client identity, PKCE material,
         //or state this handler just minted, and scope was already folded in.
-        AddAdditionalParFields(formFields, fields);
+        AddAdditionalAuthorizationFields(formFields, fields);
+
+        if(TokenEndpointClientOperations.EvaluateOutboundPolicy(metadata.PushedAuthorizationRequestEndpoint!, context, infrastructure) is AuthCodeFlowEndpointResult parPolicyDenial)
+        {
+            return parPolicyDenial;
+        }
 
         HttpResponseData parHttpResponse;
         try
@@ -260,7 +274,7 @@ public static class AuthCodeFlowHandlers
 
         if(!parResult.IsSuccess)
         {
-            return BuildEndpointResultFromParseError(parResult.Error!);
+            return TokenEndpointClientOperations.BuildEndpointResultFromParseError(parResult.Error!);
         }
 
         ParResponse parResponse = parResult.Value;
@@ -293,6 +307,182 @@ public static class AuthCodeFlowHandlers
 
 
     /// <summary>
+    /// Starts a plain (non-PAR, non-JAR) authorization request per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>:
+    /// resolves and validates the authorization server metadata exactly as
+    /// <see cref="HandleParAsync(IReadOnlyDictionary{string, string}, Uri, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, IReadOnlyList{string}?, CancellationToken)"/>
+    /// does, refuses before building anything when the metadata requires pushed authorization
+    /// requests, mints <c>state</c> and a fresh PKCE pair through the same private helpers PAR uses,
+    /// and returns a redirect straight to the authorization endpoint carrying the request on the
+    /// front channel instead of a <c>request_uri</c>.
+    /// </summary>
+    /// <remarks>
+    /// This leg has no PAR response of its own, so — following the precedent
+    /// <see cref="HandleJarAuthorizeAsync(AuthCodeStartJarAuthorizeOptions, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
+    /// sets for the other request-object-by-value start — the persisted
+    /// <see cref="ParCompletedState"/> carries a synthesised <see cref="ParResponse"/> whose
+    /// <see cref="ParResponse.RequestUri"/> is the authorization redirect URI itself and whose
+    /// <see cref="ParResponse.ExpiresIn"/> is <paramref name="requestLifetime"/> in seconds; the rest
+    /// of the flow (callback, token) never reads <see cref="ParCompletedState.Par"/> again.
+    /// </remarks>
+    /// <param name="fields">
+    /// Inbound form fields. May include <c>scope</c>; other required values are taken from
+    /// <paramref name="registration"/>. Any field outside
+    /// <see cref="AuthorizationFlowOwnedFieldNames"/> rides onto the authorization redirect's query
+    /// verbatim, but never overrides a value this handler mints (RFC 6749 §4.1.1's
+    /// <c>response_type</c>/<c>client_id</c>/<c>redirect_uri</c>/<c>state</c>, or RFC 7636 §4.3's
+    /// <c>code_challenge</c>/<c>code_challenge_method</c>).
+    /// </param>
+    /// <param name="redirectUri">The client's redirect URI to which the authorization response is returned.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
+    /// <param name="resource">
+    /// The RFC 8707 §2 <c>resource</c> indicator(s) to request, each becoming its own repeated
+    /// occurrence on the redirect query (<see cref="TokenEndpointClientOperations.AddResourceOccurrences"/>) — the same convention
+    /// <see cref="HandleParAsync(IReadOnlyDictionary{string, string}, Uri, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, IReadOnlyList{string}?, CancellationToken)"/>
+    /// uses. <see langword="null"/> or empty omits the parameter entirely.
+    /// </param>
+    /// <param name="requestLifetime">
+    /// How long this pending authorization stays redeemable at
+    /// <see cref="HandleCallbackAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
+    /// before it expires. RFC 6749 §4.1.1 defines no lifetime for this leg — unlike RFC 9126 §2.2's
+    /// PAR <c>expires_in</c> — so the caller decides.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> on success with
+    /// <see cref="AuthCodeFlowEndpointResult.RedirectUri"/> set to the authorization endpoint URI
+    /// carrying the request parameters directly; <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/>
+    /// with <c>ErrorCode</c> <c>invalid_request</c> when the resolved metadata's
+    /// <see cref="AuthorizationServerMetadata.RequirePushedAuthorizationRequests"/> is set
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-5">RFC 9126 §5</see>).
+    /// </returns>
+    internal static async ValueTask<AuthCodeFlowEndpointResult> HandleDirectAuthorizeStartAsync(
+        IReadOnlyDictionary<string, string> fields,
+        Uri redirectUri,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
+        TimeSpan requestLifetime,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(redirectUri);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+
+        Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
+                infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
+        if(!metadataResult.IsSuccess)
+        {
+            return metadataResult.Error;
+        }
+
+        AuthorizationServerMetadata metadata = metadataResult.Value;
+
+        //RFC 9126 §5: "require_pushed_authorization_requests: Boolean parameter indicating whether
+        //the authorization server accepts authorization request data only via PAR. If omitted, the
+        //default value is 'false'." Refused before state, PKCE, or the redirect URI are built.
+        if(metadata.RequirePushedAuthorizationRequests)
+        {
+            return new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                ErrorCode = OAuthErrors.InvalidRequest,
+                ErrorDescription =
+                    "The authorization server requires Pushed Authorization Requests " +
+                    "(RFC 9126 §5 require_pushed_authorization_requests); a direct authorization " +
+                    "request is not accepted."
+            };
+        }
+
+        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
+        string state = GenerateEntropyHexString(infrastructure);
+        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
+
+        ImmutableArray<string> scopes = fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
+            ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
+            : [WellKnownScopes.OpenId];
+
+        Uri authorizationUri = BuildDirectAuthorizeRedirectUri(
+            metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, pkce, resource, fields);
+
+        ParCompletedState parCompleted = new()
+        {
+            FlowId = state,
+            ExpectedIssuer = registration.AuthorizationServerIssuer.OriginalString,
+            EnteredAt = now,
+            ExpiresAt = now.Add(requestLifetime),
+            Kind = FlowKind.AuthCodeClient,
+            Pkce = pkce,
+            RedirectUri = redirectUri,
+            Scopes = scopes,
+            Par = new ParResponse(authorizationUri, (int)requestLifetime.TotalSeconds)
+        };
+
+        await infrastructure.SaveStateAsync(parCompleted, context, cancellationToken).ConfigureAwait(false);
+
+        return new AuthCodeFlowEndpointResult
+        {
+            Outcome = AuthCodeFlowEndpointOutcome.Redirect,
+            RedirectUri = authorizationUri
+        };
+    }
+
+
+    /// <summary>
+    /// Builds the direct authorization redirect URI per RFC 6749 §4.1.1: <c>response_type=code</c>,
+    /// <c>client_id</c>, <c>redirect_uri</c>, <c>scope</c>, and <c>state</c>, plus the PKCE pair per
+    /// RFC 7636 §4.3, each <paramref name="resource"/> entry as its own repeated occurrence, and the
+    /// caller's <paramref name="additionalFields"/> that are not one of
+    /// <see cref="AuthorizationFlowOwnedFieldNames"/>.
+    /// </summary>
+    private static Uri BuildDirectAuthorizeRedirectUri(
+        Uri authorizationEndpoint,
+        string clientId,
+        Uri redirectUri,
+        ImmutableArray<string> scopes,
+        string state,
+        PkceParameters pkce,
+        IReadOnlyList<string>? resource,
+        IReadOnlyDictionary<string, string> additionalFields)
+    {
+        OutgoingFormFields query = new()
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.RedirectUri] = redirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = string.Join(' ', scopes),
+            [OAuthRequestParameterNames.State] = state,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = pkce.Method.ToString().ToUpperInvariant()
+        };
+
+        TokenEndpointClientOperations.AddResourceOccurrences(query, resource);
+        AddAdditionalAuthorizationFields(query, additionalFields);
+
+        StringBuilder builder = new();
+        _ = builder.Append(authorizationEndpoint);
+        char separator = '?';
+        foreach((string key, string value) in query)
+        {
+            _ = builder.Append(separator);
+            _ = builder.Append(Uri.EscapeDataString(key));
+            _ = builder.Append('=');
+            _ = builder.Append(Uri.EscapeDataString(value));
+
+            separator = '&';
+        }
+
+        return new Uri(builder.ToString());
+    }
+
+
+    /// <summary>
     /// Handles the authorization server callback. Loads the flow state by the
     /// <c>state</c> parameter, runs the profile-specific validation rules, and
     /// persists <see cref="AuthorizationCodeReceivedState"/> state ready for token exchange.
@@ -303,6 +493,7 @@ public static class AuthCodeFlowHandlers
     /// </param>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
     /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleCallbackAsync(
         IReadOnlyDictionary<string, string> fields,
@@ -317,7 +508,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
-            await ResolveValidatedAuthorizationServerMetadataAsync(
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
@@ -485,6 +676,19 @@ public static class AuthCodeFlowHandlers
 
 
     /// <inheritdoc cref="HandleTokenAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
+    /// <param name="fields">
+    /// Inbound form fields. Must include <c>flow_id</c> to locate the pending state.
+    /// </param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="clientAssertionOptions">
+    /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2): the <c>kid</c>,
+    /// the header/payload serialisers, and the assertion lifetime. Required when
+    /// <see cref="ClientRegistration.AuthenticationMethod"/> is
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> — the signing key itself is read from
+    /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>. Ignored for every other method.
+    /// </param>
     /// <param name="resource">
     /// The RFC 8707 §2.2 Figure 3 code-redemption <c>resource</c> indicator(s) narrowing the
     /// minted access token to a subset of what PAR/authorize granted. Each entry MUST be one
@@ -494,6 +698,7 @@ public static class AuthCodeFlowHandlers
     /// separated by spaces is a malformed indicator, not a shorthand for repetition.
     /// <see langword="null"/> or empty omits the parameter, leaving the full granted set in force.
     /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleTokenAsync(
         IReadOnlyDictionary<string, string> fields,
         OAuthClientInfrastructure infrastructure,
@@ -509,7 +714,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
-            await ResolveValidatedAuthorizationServerMetadataAsync(
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
@@ -563,20 +768,24 @@ public static class AuthCodeFlowHandlers
             codeState.Pkce,
             resource);
 
-        OutgoingHeaders authenticationHeaders = await AttachClientAuthenticationAsync(
-            tokenFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
-            infrastructure, now, context, cancellationToken).ConfigureAwait(false);
-
-        HttpResponseData tokenHttpResponse = await SendTokenRequestWithDpopRetryAsync(
-            infrastructure, metadata.TokenEndpoint!, tokenFields, authenticationHeaders, context, cancellationToken)
+        Result<HttpResponseData, AuthCodeFlowEndpointResult> tokenSendResult = await TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync(
+            infrastructure, metadata.TokenEndpoint!, tokenFields,
+            (attemptNow, ct) => TokenEndpointClientOperations.AttachClientAuthenticationAsync(
+                tokenFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
+                infrastructure, attemptNow, context, ct),
+            context, cancellationToken)
             .ConfigureAwait(false);
+        if(!tokenSendResult.IsSuccess)
+        {
+            return tokenSendResult.Error!;
+        }
 
         Result<TokenResponse, OAuthParseError> tokenResult =
-            infrastructure.ParseTokenResponseAsync(tokenHttpResponse, now);
+            infrastructure.ParseTokenResponseAsync(tokenSendResult.Value, now);
 
         if(!tokenResult.IsSuccess)
         {
-            return BuildEndpointResultFromParseError(tokenResult.Error!);
+            return TokenEndpointClientOperations.BuildEndpointResultFromParseError(tokenResult.Error!);
         }
 
         TokenResponse tokenResponse = tokenResult.Value;
@@ -639,6 +848,7 @@ public static class AuthCodeFlowHandlers
     /// </param>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
     /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleRevocationAsync(
         IReadOnlyDictionary<string, string> fields,
@@ -653,7 +863,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
-            await ResolveValidatedAuthorizationServerMetadataAsync(
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
@@ -693,6 +903,11 @@ public static class AuthCodeFlowHandlers
             revocationFields[OAuthRequestParameterNames.TokenTypeHint] = hint;
         }
 
+        if(TokenEndpointClientOperations.EvaluateOutboundPolicy(metadata.RevocationEndpoint, context, infrastructure) is AuthCodeFlowEndpointResult revocationPolicyDenial)
+        {
+            return revocationPolicyDenial;
+        }
+
         //RFC 7009 §2.2 — the revocation endpoint returns 200 with an empty body on
         //success. The response body is not parsed; transport errors are surfaced via
         //exception from the delegate.
@@ -724,9 +939,9 @@ public static class AuthCodeFlowHandlers
     /// Refreshes an access token using a refresh token. Independent of the state
     /// machine — call this when the stored access token has expired. Attaches
     /// confidential-client authentication per <see cref="ClientRegistration.AuthenticationMethod"/>
-    /// the same way the code-exchange leg does (<see cref="AttachClientAuthenticationAsync"/>,
+    /// the same way the code-exchange leg does (<see cref="TokenEndpointClientOperations.AttachClientAuthenticationAsync"/>,
     /// RFC 6749 §6, §3.2.1), and — the same way the code-exchange leg does — attaches a DPoP proof
-    /// and honours a <c>use_dpop_nonce</c> retry (<see cref="SendTokenRequestWithDpopRetryAsync"/>,
+    /// and honours a <c>use_dpop_nonce</c> retry (<see cref="TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync"/>,
     /// RFC 9449 §8.1) whenever <paramref name="infrastructure"/> is wired for DPoP, so a
     /// DPoP-sender-constrained refresh token redeems the same way a fresh access token does.
     /// </summary>
@@ -754,7 +969,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
-            await ResolveValidatedAuthorizationServerMetadataAsync(
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
@@ -766,20 +981,24 @@ public static class AuthCodeFlowHandlers
         OutgoingFormFields refreshFields = EncodeRefreshRequest(registration.ClientId.Value, request);
 
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
-        OutgoingHeaders authenticationHeaders = await AttachClientAuthenticationAsync(
-            refreshFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
-            infrastructure, now, context, cancellationToken).ConfigureAwait(false);
-
-        HttpResponseData refreshHttpResponse = await SendTokenRequestWithDpopRetryAsync(
-            infrastructure, metadata.TokenEndpoint!, refreshFields, authenticationHeaders, context, cancellationToken)
+        Result<HttpResponseData, AuthCodeFlowEndpointResult> refreshSendResult = await TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync(
+            infrastructure, metadata.TokenEndpoint!, refreshFields,
+            (attemptNow, ct) => TokenEndpointClientOperations.AttachClientAuthenticationAsync(
+                refreshFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
+                infrastructure, attemptNow, context, ct),
+            context, cancellationToken)
             .ConfigureAwait(false);
+        if(!refreshSendResult.IsSuccess)
+        {
+            return refreshSendResult.Error!;
+        }
 
         Result<TokenResponse, OAuthParseError> refreshResult =
-            infrastructure.ParseTokenResponseAsync(refreshHttpResponse, now);
+            infrastructure.ParseTokenResponseAsync(refreshSendResult.Value, now);
 
         if(!refreshResult.IsSuccess)
         {
-            return BuildEndpointResultFromParseError(refreshResult.Error!);
+            return TokenEndpointClientOperations.BuildEndpointResultFromParseError(refreshResult.Error!);
         }
 
         TokenResponse tokenResponse = refreshResult.Value;
@@ -830,7 +1049,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
-            await ResolveValidatedAuthorizationServerMetadataAsync(
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
@@ -869,6 +1088,11 @@ public static class AuthCodeFlowHandlers
             parBody[key] = value;
         }
 
+        if(TokenEndpointClientOperations.EvaluateOutboundPolicy(metadata.PushedAuthorizationRequestEndpoint!, context, infrastructure) is AuthCodeFlowEndpointResult jarParPolicyDenial)
+        {
+            return jarParPolicyDenial;
+        }
+
         HttpResponseData parHttpResponse;
         try
         {
@@ -905,7 +1129,7 @@ public static class AuthCodeFlowHandlers
 
         if(!parResult.IsSuccess)
         {
-            return BuildEndpointResultFromParseError(parResult.Error!);
+            return TokenEndpointClientOperations.BuildEndpointResultFromParseError(parResult.Error!);
         }
 
         ParResponse parResponse = parResult.Value;
@@ -959,7 +1183,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
-            await ResolveValidatedAuthorizationServerMetadataAsync(
+            await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
@@ -1120,7 +1344,7 @@ public static class AuthCodeFlowHandlers
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier
         };
 
-        AddResourceOccurrences(fields, resource);
+        TokenEndpointClientOperations.AddResourceOccurrences(fields, resource);
 
         return fields;
     }
@@ -1139,25 +1363,19 @@ public static class AuthCodeFlowHandlers
             fields[OAuthRequestParameterNames.Scope] = request.Scope;
         }
 
-        AddResourceOccurrences(fields, request.Resource);
+        TokenEndpointClientOperations.AddResourceOccurrences(fields, request.Resource);
 
         return fields;
     }
 
 
     /// <summary>
-    /// Appends each entry of <paramref name="resource"/> as its OWN <c>resource</c> occurrence
-    /// onto <paramref name="fields"/> (<see cref="OutgoingFormFields.Add"/>) — RFC 8707 §2's
-    /// genuine multi-resource wire form, never several indicators joined by a space into one
-    /// occurrence. A <see langword="null"/>, empty, or all-whitespace entry is skipped rather
-    /// than emitted as a blank occurrence.
+    /// The parameter names <c>HandleParAsync</c> and <c>HandleDirectAuthorizeStartAsync</c> compose
+    /// themselves. An additional field arriving under one of these names is dropped rather than
+    /// allowed to override what the flow minted - the caller extends the request, never the flow's
+    /// own identity, PKCE, or state.
     /// </summary>
-    /// <summary>
-    /// The parameter names <c>HandleParAsync</c> composes itself. An additional field arriving under
-    /// one of these names is dropped rather than allowed to override what the flow minted - the
-    /// caller extends the request, never the flow's own identity, PKCE, or state.
-    /// </summary>
-    private static ImmutableHashSet<string> ParFlowOwnedFieldNames { get; } = ImmutableHashSet.Create(
+    private static ImmutableHashSet<string> AuthorizationFlowOwnedFieldNames { get; } = ImmutableHashSet.Create(
         StringComparer.Ordinal,
         OAuthRequestParameterNames.ClientId,
         OAuthRequestParameterNames.ResponseType,
@@ -1169,137 +1387,23 @@ public static class AuthCodeFlowHandlers
         OAuthRequestParameterNames.Resource);
 
 
-    //Appends the caller's additional fields to the pushed request body, each under its own name,
-    //skipping the flow-owned names so the composed request stays the flow's.
-    private static void AddAdditionalParFields(OutgoingFormFields formFields, IReadOnlyDictionary<string, string> fields)
+    /// <summary>
+    /// Appends the caller's additional fields to the pushed request body or the direct authorization
+    /// redirect's query, each under its own name, skipping the flow-owned names so the composed
+    /// request stays the flow's.
+    /// </summary>
+    /// <param name="formFields">The request fields the flow has composed so far.</param>
+    /// <param name="fields">The caller's inbound fields, of which the flow-owned names are skipped.</param>
+    private static void AddAdditionalAuthorizationFields(OutgoingFormFields formFields, IReadOnlyDictionary<string, string> fields)
     {
         foreach((string key, string value) in fields)
         {
-            if(!ParFlowOwnedFieldNames.Contains(key))
+            if(!AuthorizationFlowOwnedFieldNames.Contains(key))
             {
                 formFields.Add(key, value);
             }
         }
     }
-
-
-    private static void AddResourceOccurrences(OutgoingFormFields fields, IReadOnlyList<string>? resource)
-    {
-        if(resource is null)
-        {
-            return;
-        }
-
-        foreach(string indicator in resource)
-        {
-            if(!string.IsNullOrWhiteSpace(indicator))
-            {
-                fields.Add(OAuthRequestParameterNames.Resource, indicator);
-            }
-        }
-    }
-
-
-    /// <summary>
-    /// Attaches confidential-client authentication to <paramref name="form"/> (and, for
-    /// <c>client_secret_basic</c>, to the returned <see cref="OutgoingHeaders"/>) per
-    /// <see cref="ClientRegistration.AuthenticationMethod"/>: <see cref="ClientAuthenticationMethod.None"/>
-    /// attaches nothing (the request relies on PKCE alone, RFC 7636);
-    /// <see cref="ClientAuthenticationMethod.ClientSecretPost"/> and
-    /// <see cref="ClientAuthenticationMethod.ClientSecretBasic"/> present
-    /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>'s private-key bytes as the shared
-    /// secret (RFC 6749 §2.3.1); <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> signs a
-    /// <c>client_assertion</c> from the same key material via
-    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> (RFC 7523 §2.2).
-    /// </summary>
-    private static ValueTask<OutgoingHeaders> AttachClientAuthenticationAsync(
-        OutgoingFormFields form,
-        ClientRegistration registration,
-        Uri tokenEndpoint,
-        ClientAssertionOptions? clientAssertionOptions,
-        OAuthClientInfrastructure infrastructure,
-        DateTimeOffset now,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        static ValueTask<OutgoingHeaders> AttachNone() =>
-            ValueTask.FromResult(OutgoingHeaders.Empty);
-
-        static ValueTask<OutgoingHeaders> AttachClientSecretPost(OutgoingFormFields form, ClientRegistration registration)
-        {
-            PrivateKeyMemory secret = RequireAuthenticationKey(registration);
-            _ = form.WithClientSecretPost(registration.ClientId.Value, secret.AsReadOnlySpan());
-
-            return ValueTask.FromResult(OutgoingHeaders.Empty);
-        }
-
-        static ValueTask<OutgoingHeaders> AttachClientSecretBasic(ClientRegistration registration)
-        {
-            PrivateKeyMemory secret = RequireAuthenticationKey(registration);
-            OutgoingHeaders headers = OutgoingHeaders.Empty.WithClientSecretBasic(registration.ClientId.Value, secret.AsReadOnlySpan());
-
-            return ValueTask.FromResult(headers);
-        }
-
-        static async ValueTask<OutgoingHeaders> AttachPrivateKeyJwt(
-            OutgoingFormFields form,
-            ClientRegistration registration,
-            Uri tokenEndpoint,
-            ClientAssertionOptions? clientAssertionOptions,
-            OAuthClientInfrastructure infrastructure,
-            DateTimeOffset now,
-            ExchangeContext context,
-            CancellationToken cancellationToken)
-        {
-            PrivateKeyMemory signingKey = RequireAuthenticationKey(registration);
-            if(clientAssertionOptions is null)
-            {
-                throw new InvalidOperationException(
-                    "ClientAuthenticationMethod.PrivateKeyJwt requires a ClientAssertionOptions instance to sign the client_assertion.");
-            }
-
-            await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-                form,
-                registration,
-                tokenEndpoint,
-                signingKey,
-                clientAssertionOptions.SigningKeyId,
-                clientAssertionOptions.HeaderSerializer,
-                clientAssertionOptions.PayloadSerializer,
-                clientAssertionOptions.ClientAssertionLifetime,
-                infrastructure,
-                now,
-                context,
-                cancellationToken).ConfigureAwait(false);
-
-            return OutgoingHeaders.Empty;
-        }
-
-        return registration.AuthenticationMethod.Code switch
-        {
-            var c when c == ClientAuthenticationMethod.None.Code => AttachNone(),
-            var c when c == ClientAuthenticationMethod.ClientSecretPost.Code => AttachClientSecretPost(form, registration),
-            var c when c == ClientAuthenticationMethod.ClientSecretBasic.Code => AttachClientSecretBasic(registration),
-            var c when c == ClientAuthenticationMethod.PrivateKeyJwt.Code => AttachPrivateKeyJwt(
-                form, registration, tokenEndpoint, clientAssertionOptions, infrastructure, now, context, cancellationToken),
-            _ => throw new NotSupportedException(
-                $"Client authentication method '{ClientAuthenticationMethodNames.GetName(registration.AuthenticationMethod)}' " +
-                "is not supported on the authorization-code token or refresh leg.")
-        };
-    }
-
-
-    /// <summary>
-    /// Reads the confidential-client secret or signing key from
-    /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>, non-owning per its own remarks —
-    /// the caller reads the key's bytes via <see cref="SensitiveMemory.AsReadOnlySpan"/> for the
-    /// duration of the call and does not retain or copy them.
-    /// </summary>
-    private static PrivateKeyMemory RequireAuthenticationKey(ClientRegistration registration) =>
-        registration.AuthenticationKeyMaterial?.PrivateKey
-        ?? throw new InvalidOperationException(
-            $"ClientAuthenticationMethod.{ClientAuthenticationMethodNames.GetName(registration.AuthenticationMethod)} " +
-            "requires ClientRegistration.AuthenticationKeyMaterial to carry the client secret or signing key.");
 
 
     private static Uri BuildAuthorizationRedirectUri(
@@ -1310,46 +1414,6 @@ public static class AuthCodeFlowHandlers
         string uri = $"{authorizationEndpoint}?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}" +
                      $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri.ToString())}";
         return new Uri(uri);
-    }
-
-
-    /// <summary>
-    /// Resolves the authorization server's metadata via
-    /// <see cref="OAuthClientInfrastructure.ResolveAuthorizationServerMetadataAsync"/> and
-    /// verifies its <see cref="AuthorizationServerMetadata.Issuer"/> against the pinned
-    /// <see cref="ClientRegistration.AuthorizationServerIssuer"/> via
-    /// <see cref="AuthorizationServerMetadataValidation.IsIssuerMatch"/> — RFC 8414 §3.3's
-    /// issuer-match requirement, which for a client relying on OAuth metadata is also RFC 9207
-    /// §2.4's "clients ... MUST compare the iss parameter value to the issuer value in the
-    /// server's metadata document" reduced to the metadata-consistency half (the
-    /// callback-<c>iss</c> half is <see cref="ValidationChecks.CheckCallbackIssuerMatches"/>).
-    /// Every flow handler resolves metadata through this one seam so the check applies
-    /// uniformly rather than needing to be repeated per call site.
-    /// </summary>
-    private static async ValueTask<Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult>> ResolveValidatedAuthorizationServerMetadataAsync(
-        OAuthClientInfrastructure infrastructure,
-        ClientRegistration registration,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        AuthorizationServerMetadata metadata = await infrastructure
-            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        if(!AuthorizationServerMetadataValidation.IsIssuerMatch(metadata, registration.AuthorizationServerIssuer))
-        {
-            return Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult>.Failure(
-                new AuthCodeFlowEndpointResult
-                {
-                    Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                    ErrorCode = "invalid_request",
-                    ErrorDescription =
-                        "The authorization server metadata issuer does not match this registration's " +
-                        "pinned AuthorizationServerIssuer (RFC 8414 §3.3 / RFC 9207 §2.4)."
-                });
-        }
-
-        return Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult>.Success(metadata);
     }
 
 
@@ -1416,158 +1480,6 @@ public static class AuthCodeFlowHandlers
             ErrorCode = errorCode,
             ErrorDescription = errorDescription
         };
-    }
-
-
-    //Maps an OAuthParseError to an AuthCodeFlowEndpointResult, surfacing the
-    //decision support summary as the error description so callers have actionable
-    //information without needing to pattern-match the full error hierarchy.
-    private static AuthCodeFlowEndpointResult BuildEndpointResultFromParseError(
-        OAuthParseError error)
-    {
-        return error switch
-        {
-            OAuthProtocolError pe => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                ErrorCode = pe.ErrorCode,
-                ErrorDescription = pe.ErrorDescription ?? pe.Support.Summary
-            },
-            OAuthInvalidFieldValue ifv => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                ErrorCode = "invalid_response",
-                ErrorDescription = $"{ifv.FieldName}: {ifv.Reason}"
-            },
-            OAuthMalformedResponse mr => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-                ErrorCode = "server_error",
-                ErrorDescription = mr.Support.Summary
-            },
-            _ => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-                ErrorCode = "server_error",
-                ErrorDescription = error.Support.Summary
-            }
-        };
-    }
-
-
-    /// <summary>
-    /// Builds the outgoing-headers bag for a token-endpoint request,
-    /// attaching a freshly-constructed DPoP proof when the infrastructure
-    /// is wired for DPoP.
-    /// </summary>
-    /// <remarks>
-    /// The client side performs single-shot proof attachment only — there
-    /// is no <c>use_dpop_nonce</c> retry loop and no nonce cache. A
-    /// nonce-required AS that challenges the first attempt with a 401 +
-    /// <c>DPoP-Nonce</c> response header surfaces the failure to the
-    /// caller; the application can read the response and retry at a
-    /// higher level. Cross-call nonce caching belongs with the AS-side
-    /// validation work, where the storage shape can match
-    /// the existing flow-state delegate pattern.
-    /// </remarks>
-    /// <summary>
-    /// Sends the token request with a DPoP proof attached when the
-    /// infrastructure has DPoP wired, retrying once on a
-    /// <c>use_dpop_nonce</c> challenge per RFC 9449 §8.1.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The retry path applies only when the AS responds with HTTP 400 +
-    /// <c>error=use_dpop_nonce</c> in the body and a fresh nonce in the
-    /// <c>DPoP-Nonce</c> response header. The fresh nonce is stored in the
-    /// infrastructure's nonce cache and a second proof is constructed
-    /// echoing it. There is no exponential backoff and no second retry —
-    /// applications wanting elaborate retry policies wrap this call.
-    /// </para>
-    /// <para>
-    /// When DPoP is not wired (proof construction or key absent), the
-    /// request is sent without DPoP and the response is returned
-    /// unchanged.
-    /// </para>
-    /// </remarks>
-    private static async ValueTask<HttpResponseData> SendTokenRequestWithDpopRetryAsync(
-        OAuthClientInfrastructure infrastructure,
-        Uri tokenEndpoint,
-        OutgoingFormFields tokenFields,
-        OutgoingHeaders authenticationHeaders,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        if(infrastructure.ConstructDpopProofAsync is null || infrastructure.DpopKey is null)
-        {
-            //DPoP not wired — send with only the client-authentication headers (e.g. client_secret_basic's
-            //Authorization header), or none for a method that authenticates via the form body or not at all.
-            return await infrastructure.SendFormPostAsync(
-                tokenEndpoint, tokenFields, authenticationHeaders, context, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        string authority = InMemoryDpopNonceCache.AuthorityFor(tokenEndpoint);
-
-        HttpResponseData response = await SendOnceWithDpopAsync(
-            infrastructure, tokenEndpoint, tokenFields, authenticationHeaders, authority, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        if(response.StatusCode != 400)
-        {
-            return response;
-        }
-
-        //RFC 9449 §8.1: 400 + error=use_dpop_nonce in body + DPoP-Nonce header.
-        string? freshNonce = response.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce);
-        if(freshNonce is null)
-        {
-            return response;
-        }
-        if(!response.Body.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal))
-        {
-            return response;
-        }
-
-        infrastructure.StoreDpopNonce?.Invoke(authority, freshNonce);
-
-        return await SendOnceWithDpopAsync(
-            infrastructure, tokenEndpoint, tokenFields, authenticationHeaders, authority, context, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-
-    private static async ValueTask<HttpResponseData> SendOnceWithDpopAsync(
-        OAuthClientInfrastructure infrastructure,
-        Uri tokenEndpoint,
-        OutgoingFormFields tokenFields,
-        OutgoingHeaders authenticationHeaders,
-        string authority,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        string? cachedNonce = infrastructure.LookupDpopNonce?.Invoke(authority);
-
-        string jti = await infrastructure.GenerateIdentifierAsync(
-            WellKnownIdentifierPurposes.OAuthJti, null, cancellationToken)
-            .ConfigureAwait(false);
-
-        DpopProofClaims claims = new()
-        {
-            Htm = WellKnownHttpMethods.Post,
-            Htu = tokenEndpoint.GetLeftPart(UriPartial.Path),
-            Iat = infrastructure.TimeProvider.GetUtcNow(),
-            Jti = jti,
-            Nonce = cachedNonce
-        };
-
-        string proof = await infrastructure.ConstructDpopProofAsync!(
-            claims, infrastructure.DpopKey!, cancellationToken).ConfigureAwait(false);
-
-        OutgoingHeaders headers = authenticationHeaders.WithDpop(proof);
-
-        return await infrastructure.SendFormPostAsync(
-            tokenEndpoint, tokenFields, headers, context, cancellationToken).ConfigureAwait(false);
     }
 
 

@@ -73,7 +73,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// public key; the AK quotes through <c>TPM2_Quote()</c> (TPM 2.0 Library Part 3, clause 18.4). The verifier
     /// then (a) validates the AK certificate chain to the manufacturer CA through the shared
     /// <see cref="MicrosoftX509Functions.ValidateChainAsync"/> seam and (b) verifies the quote signature using the
-    /// public key extracted from the certificate (<see cref="X509Certificate2.GetECDsaPublicKey()"/>), never from
+    /// public key extracted from the certificate (<see cref="ECDsaCertificateExtensions.GetECDsaPublicKey(X509Certificate2)"/>), never from
     /// the in-memory AK key — wire bytes and certificate only.
     /// </summary>
     [TestMethod]

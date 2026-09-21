@@ -14,8 +14,11 @@ public enum CredentialProofValidationFailureReason
     Malformed,
 
     /// <summary>
-    /// The <c>typ</c> header is missing or is not <c>openid4vci-proof+jwt</c> (§F.1 / §F.4:
-    /// "the key proof is explicitly typed using header parameters as defined for that proof type").
+    /// The <c>typ</c> header is missing or does not name the <c>openid4vci-proof+jwt</c> media type
+    /// (§F.1 / §F.4: "the key proof is explicitly typed using header parameters as defined for that
+    /// proof type"); the long form <c>application/openid4vci-proof+jwt</c> and any casing of either
+    /// spelling name that same media type per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>.
     /// </summary>
     InvalidTyp,
 

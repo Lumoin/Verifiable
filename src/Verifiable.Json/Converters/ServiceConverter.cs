@@ -211,6 +211,16 @@ public class ServiceConverter: JsonConverter<Service>
                         service.ServiceEndpoints = endpoints;
                         break;
                     }
+                    case JsonValueKind.Undefined:
+                    case JsonValueKind.Number:
+                    case JsonValueKind.True:
+                    case JsonValueKind.False:
+                    case JsonValueKind.Null:
+                    {
+                        //Not a shape serviceEndpoint's own schema admits; an explicit no-op arm preserving
+                        //this switch's original silent fall-through for every other kind.
+                        break;
+                    }
                 }
             }
             else

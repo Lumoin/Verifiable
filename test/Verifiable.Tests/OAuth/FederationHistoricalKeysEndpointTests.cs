@@ -60,44 +60,47 @@ internal sealed class FederationHistoricalKeysEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial entityKeys = RegisterEntity(app, entityId, federationKeys);
+        using VerifierKeyMaterial entityKeys = await RegisterEntityAsync(app, entityId, federationKeys).ConfigureAwait(false);
 
         bool delegateInvoked = false;
-        app.Server.OAuth().ResolveHistoricalKeysAsync =
-            (_, _, _) =>
-            {
-                delegateInvoked = true;
-
-                Dictionary<string, object> revokedBlock = new(StringComparer.Ordinal)
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveHistoricalKeysAsync =
+                (_, _, _) =>
                 {
-                    ["revoked_at"] = 1700000000L,
-                    ["reason"] = "key_compromise"
-                };
+                    delegateInvoked = true;
 
-                Dictionary<string, object> revokedKey = new(StringComparer.Ordinal)
-                {
-                    ["kid"] = "rotated-key-1",
-                    ["kty"] = "EC",
-                    ["crv"] = "P-256",
-                    ["iat"] = 1690000000L,
-                    ["exp"] = 1699999999L,
-                    ["revoked"] = revokedBlock
-                };
-
-                Dictionary<string, object> expiredKey = new(StringComparer.Ordinal)
-                {
-                    ["kid"] = "rotated-key-2",
-                    ["kty"] = "EC",
-                    ["crv"] = "P-256",
-                    ["exp"] = 1709999999L
-                };
-
-                return ValueTask.FromResult<HistoricalKeysContribution?>(
-                    new HistoricalKeysContribution
+                    Dictionary<string, object> revokedBlock = new(StringComparer.Ordinal)
                     {
-                        Keys = [revokedKey, expiredKey]
-                    });
-            };
+                        ["revoked_at"] = 1700000000L,
+                        ["reason"] = "key_compromise"
+                    };
+
+                    Dictionary<string, object> revokedKey = new(StringComparer.Ordinal)
+                    {
+                        ["kid"] = "rotated-key-1",
+                        ["kty"] = "EC",
+                        ["crv"] = "P-256",
+                        ["iat"] = 1690000000L,
+                        ["exp"] = 1699999999L,
+                        ["revoked"] = revokedBlock
+                    };
+
+                    Dictionary<string, object> expiredKey = new(StringComparer.Ordinal)
+                    {
+                        ["kid"] = "rotated-key-2",
+                        ["kty"] = "EC",
+                        ["crv"] = "P-256",
+                        ["exp"] = 1709999999L
+                    };
+
+                    return ValueTask.FromResult<HistoricalKeysContribution?>(
+                        new HistoricalKeysContribution
+                        {
+                            Keys = [revokedKey, expiredKey]
+                        });
+                };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -179,10 +182,13 @@ internal sealed class FederationHistoricalKeysEndpointTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        using VerifierKeyMaterial entityKeys = RegisterEntity(app, entityId, federationKeys);
+        using VerifierKeyMaterial entityKeys = await RegisterEntityAsync(app, entityId, federationKeys).ConfigureAwait(false);
 
-        app.Server.OAuth().ResolveHistoricalKeysAsync =
-            (_, _, _) => ValueTask.FromResult<HistoricalKeysContribution?>(null);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveHistoricalKeysAsync =
+                (_, _, _) => ValueTask.FromResult<HistoricalKeysContribution?>(null);
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -208,7 +214,7 @@ internal sealed class FederationHistoricalKeysEndpointTests
     /// <see cref="WellKnownFederationCapabilityIdentifiers.PublishHistoricalKeys"/>
     /// capability and a federation signing key.
     /// </summary>
-    private static VerifierKeyMaterial RegisterEntity(
+    private static async Task<VerifierKeyMaterial> RegisterEntityAsync(
         TestHostShell app,
         Uri entityId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys)
@@ -218,12 +224,12 @@ internal sealed class FederationHistoricalKeysEndpointTests
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownFederationCapabilityIdentifiers.PublishHistoricalKeys);
 
-        return app.RegisterFederationCapableClient(
+        return await app.RegisterFederationCapableClientAsync(
             clientId: entityId.ToString(),
             baseUri: entityId,
             federationEntityId: entityId,
             federationSigningKeyPair: federationKeys,
-            baseCapabilities: capabilities);
+            baseCapabilities: capabilities).ConfigureAwait(false);
     }
 
 

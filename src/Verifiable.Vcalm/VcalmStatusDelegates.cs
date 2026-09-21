@@ -132,14 +132,25 @@ public delegate ValueTask<string?> LoadVcalmStatusListDelegate(
 /// verifier querying the status service ("To maximize privacy, verifiers are encouraged to obtain
 /// status information from holders rather than directly querying the status service"). A deployment
 /// that follows that guidance backs this seam with the holder-supplied list rather than a fetch.
-/// Returning <see langword="null"/> means the status could not be resolved; the verifier then emits
-/// no status warning (an undeterminable status is not asserted as revoked).
+/// </para>
+/// <para>
+/// Returning <see langword="null"/> reports a §3.5 <c>STATUS_RETRIEVAL_ERROR</c> WARNING (the status
+/// list could not be retrieved) and adds no status result. Throwing reports a precise cause: a
+/// <see cref="BitstringStatusListException"/> maps its <see cref="BitstringStatusListErrorType"/> to
+/// the matching §3.5 Processing Error (or the §3.2 <c>RANGE_ERROR</c>) — throw
+/// <see cref="BitstringStatusListErrorType.StatusRetrieval"/> for a dereference or proof failure on
+/// the status list credential itself; any other exception is reported as a generic
+/// <c>STATUS_RETRIEVAL_ERROR</c>. Neither ever flips the credential's overall <c>verified</c> or
+/// leaks the exception's message, type name, or stack (§3.8: "sanitize all server errors").
 /// </para>
 /// </remarks>
 /// <param name="entry">The verified credential's status entry naming the status list, index, and purpose.</param>
 /// <param name="context">The per-request context bag, carrying the tenant identity and SSRF policy.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
-/// <returns>The resolved status list, or <see langword="null"/> when the status could not be resolved.</returns>
+/// <returns>
+/// The resolved status list, or <see langword="null"/> when the status could not be resolved (reported
+/// as a §3.5 <c>STATUS_RETRIEVAL_ERROR</c> WARNING).
+/// </returns>
 public delegate ValueTask<VcalmResolvedStatusList?> ResolveVcalmStatusListDelegate(
     BitstringStatusListEntry entry,
     ExchangeContext context,

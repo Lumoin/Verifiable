@@ -29,21 +29,21 @@ namespace Verifiable.Tpm.Extensions.Counter;
 /// only the TPM can recover:
 /// </para>
 /// <list type="bullet">
-///   <item><description><see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> and
-///   <see cref="ReadCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> compose an UNBOUND, unsalted
+///   <item><description><see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/> and
+///   <see cref="ReadCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/> compose an UNBOUND, unsalted
 ///   HMAC session (TPM 2.0 Library Part 1, clause 16.6.9's Empty Buffer session key, equation 19) and set the
 ///   Index's own authorization value as that session's authValue, so it becomes the per-command HMAC key's
 ///   authValue term (Part 1, clause 16.6.5, equation 17: <c>sessionValue = sessionKey || authValue</c>) rather
 ///   than plaintext on the bus. Part 1, clause 34.2.8.3's outright prohibition on binding a session to the
 ///   authorized Index covers PIN Pass and PIN Fail Indexes; it does not reach a Counter Index, so the unbound
 ///   form here is a channel decision rather than a spec constraint - it keeps ONE session shape across both
-///   commands <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> composes, and
+///   commands <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/> composes, and
 ///   its salted overload changes only where the key entropy comes from. See those verbs' own remarks for the
 ///   honest accounting: this default removes the on-the-wire plaintext exposure, not the offline-guessing
 ///   surface, which the salted overload removes.</description></item>
 ///   <item><description>The two owner-authorized verbs
-///   (<see cref="DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>,
-///   <see cref="UndefineCounterAsync(ReadOnlyMemory{byte}, uint, CancellationToken)"/>) default to an HMAC
+///   (<see cref="DefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>,
+///   <see cref="UndefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, CancellationToken)"/>) default to an HMAC
 ///   session BOUND to <c>TPM_RH_OWNER</c> (Part 1, clause 16.6.10, equation 20): the owner authorization value
 ///   feeds the session key's KDFa derivation, so it never crosses the bus and the session authorizing that same
 ///   bound entity omits it from the per-command HMAC key entirely (equation 22). As in <c>Extensions/Pin</c> and
@@ -52,7 +52,7 @@ namespace Verifiable.Tpm.Extensions.Counter;
 ///   the clear; the mechanism becomes real integrity protection the moment a real owner authValue is set. Each
 ///   folds the Counter Index's own real, current Name (Part 1, clause 13, Table 9) into the cpHash of every
 ///   command it composes against an ALREADY-DEFINED Index, deriving it via
-///   <see cref="Nv.TpmDeviceExtensions.NvReadPublicAsync(uint, CancellationToken)"/> rather than recomputing it
+///   <see cref="Nv.TpmDeviceExtensions.extension(TpmDevice).NvReadPublicAsync(uint, CancellationToken)"/> rather than recomputing it
 ///   blind. The composed <c>TPM2_NV_DefineSpace</c> is the exception: it is single-handle, and no Index exists yet
 ///   to have a Name, so its cpHash carries the owner handle alone.</description></item>
 ///   <item><description>Authorization failures answer identically on the HMAC and the password arm, because
@@ -69,7 +69,7 @@ namespace Verifiable.Tpm.Extensions.Counter;
 /// <b>Rollback protection.</b> A Counter Index's value cannot be rolled back by deleting and redefining the same
 /// handle: the in-house simulator retains the highest value any written Counter Index held at the moment it was
 /// deleted (the "phantom counter" mechanism, TPM 2.0 Library Part 1, clause 34.2.6.3 NOTE 2/NOTE 6), so a
-/// redefined counter's first <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>
+/// redefined counter's first <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/>
 /// always seeds strictly above the deleted counter's last value. This is the capability the group exists for, and
 /// it is a property of the counter semantics alone - which channel authorized the increment never enters it.
 /// </para>
@@ -121,7 +121,7 @@ public static class TpmDeviceExtensions
         /// session whose owner authValue is empty (unset) derives its key from the <c>TPM2_StartAuthSession</c>
         /// nonces alone, which cross the wire in the clear, so a bus observer can recompute the keystream. A
         /// non-empty owner authValue, or the salted
-        /// <see cref="DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>
+        /// <see cref="DefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>
         /// overload, makes it genuinely secret against such an observer - provision over a trusted bus, set an
         /// owner authValue, or use the salted overload. <see cref="DefineCounterWithPasswordAsync"/> sends the
         /// owner authorization value in the clear and has no encryption path for the enrollment value at all.
@@ -159,10 +159,10 @@ public static class TpmDeviceExtensions
         /// <remarks>
         /// <para>
         /// Identical in every authorization respect to
-        /// <see cref="DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/> -
+        /// <see cref="DefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/> -
         /// the same owner-bound USER-role authorization, the same attributes, the same 8-octet data area. What
         /// changes is the source of the session key's entropy: the session is bound AND salted
-        /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateBoundAndSaltedHmacSession(uint, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>),
+        /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.extension(StartAuthSessionInput).CreateBoundAndSaltedHmacSession(uint, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, Verifiable.Cryptography.FillEntropyDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>),
         /// so <c>sessionKey = KDFa(ownerAuth ‖ salt, …)</c> (Part 1, clause 16.6.12, equation 25) and the
         /// authorization of that same bound entity omits the authValue term (equation 27). The salt is
         /// RSA-OAEP-encrypted (TPM 2.0 Library Part 1, clause 16.6.13) to <paramref name="tpmKeyModulus"/>/
@@ -175,7 +175,7 @@ public static class TpmDeviceExtensions
         /// session's decrypt attribute, but the keystream is now keyed on a value no captured transcript yields -
         /// unlike the unsalted default with an empty owner authValue, where a bus observer can recompute it. The
         /// Index provisioned this way is byte-for-byte the one the unsalted default produces, so a later
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> with the right
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/> with the right
         /// authorization value succeeds either way. Use this overload whenever the bus the definition runs over is
         /// one a passive adversary might capture and a suitable loaded decrypt key (for example the Endorsement
         /// Key) is available.
@@ -216,7 +216,7 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// The explicit low-protection opt-out for
-        /// <see cref="DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>:
+        /// <see cref="DefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>:
         /// defines the Counter Index over a plaintext owner-password session rather than a bound HMAC session.
         /// </summary>
         /// <remarks>
@@ -224,7 +224,7 @@ public static class TpmDeviceExtensions
         /// <paramref name="counterAuth"/> rides the <c>auth</c> parameter with no encryption path, so a passive
         /// bus observer reads both directly. Fine for an owner hierarchy whose authorization value has not been set
         /// and for diagnostics; wrong for anything security-sensitive, where
-        /// <see cref="DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>'s
+        /// <see cref="DefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>'s
         /// bound HMAC default - or its salted overload - is the right choice.
         /// </remarks>
         /// <param name="ownerAuth">The owner hierarchy's authorization value, or empty when the owner has no auth set.</param>
@@ -257,7 +257,7 @@ public static class TpmDeviceExtensions
         /// <para>
         /// The first increment of an unwritten Counter Index always succeeds (Part 3, clause 31.8.1's explicit
         /// non-error) and never answers <c>TPM_RC_NV_UNINITIALIZED</c> - the contrast
-        /// <see cref="ReadCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> does exhibit before any
+        /// <see cref="ReadCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/> does exhibit before any
         /// increment has run. Both composed commands authorize <paramref name="nvIndex"/> at USER role by its own
         /// authorization value: the increment through <c>TPMA_NV_AUTHWRITE</c> (Part 3, clause 31.1's write-access
         /// rule) and the read-back through <c>TPMA_NV_AUTHREAD</c> (Part 1, clause 34.2.5), both of which this
@@ -275,7 +275,7 @@ public static class TpmDeviceExtensions
         /// candidate values offline with no further TPM interaction, bounded only by that value's entropy. A
         /// dictionary-attack-protected Index (this group's <c>noDa: false</c> default) throttles only ONLINE
         /// guessing against the live TPM. The salted overload,
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>,
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>,
         /// is what removes the offline surface.
         /// </para>
         /// <para>
@@ -307,13 +307,13 @@ public static class TpmDeviceExtensions
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Composes <see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>:
+        /// Composes <see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.extension(StartAuthSessionInput).CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, Verifiable.Cryptography.FillEntropyDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>:
         /// a fresh salt is RSA-OAEP-encrypted (TPM 2.0 Library Part 1, clause 16.6.13) to
         /// <paramref name="tpmKeyModulus"/>/<paramref name="tpmKeyExponent"/>, so only the TPM holding
         /// <paramref name="tpmKey"/>'s matching private key can recover it. The session key then folds that
         /// recovered salt (Part 1, clause 16.6.11, equation 23) alongside <paramref name="counterAuth"/> as the
         /// session's authValue (equation 24) - unlike the unsalted default (see
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s own remarks), an
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s own remarks), an
         /// adversary who captured the wire transcript cannot recompute this key offline without also breaking the
         /// RSA-OAEP encryption, so a captured transcript alone does not let a candidate authorization value be
         /// tested without the live TPM.
@@ -351,7 +351,7 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// The explicit low-protection opt-out for
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>: advances the counter
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/>: advances the counter
         /// with <paramref name="counterAuth"/> sent as a plaintext password rather than proven as an HMAC session
         /// authValue.
         /// </summary>
@@ -361,7 +361,7 @@ public static class TpmDeviceExtensions
         /// derive; the value itself is the wire content) and no cpHash/rpHash integrity on either composed command.
         /// The counter semantics of Part 3, clause 31.8 are otherwise identical to the HMAC default. Fine for
         /// diagnostics or an already-protected transport; wrong for anything where
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s unbound HMAC
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s unbound HMAC
         /// default (or its salted overload) is the appropriate channel.
         /// </remarks>
         /// <param name="nvIndex">The Counter Index to increment.</param>
@@ -386,18 +386,18 @@ public static class TpmDeviceExtensions
         /// <para>
         /// Rejects with <c>TPM_RC_NV_UNINITIALIZED</c> (Part 3, clause 31.13.1) when no increment has ever run
         /// against the Index - the contrast
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> never exhibits. Read
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/> never exhibits. Read
         /// authorization by the Index's own authorization value is what <c>TPMA_NV_AUTHREAD</c> permits (Part 1,
         /// clause 34.2.5), which this group's define sets.
         /// </para>
         /// <para>
         /// <b>Honest channel accounting.</b> Identical to
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s: the unbound,
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s: the unbound,
         /// unsalted session key is the Empty Buffer (Part 1, clause 16.6.9), <paramref name="counterAuth"/> is the
         /// session's authValue and therefore the whole per-command HMAC key (Part 1, clause 16.6.5, equation 17
         /// through equation 19), so the value never crosses the bus but a captured transcript still permits offline
         /// guessing. The salted overload,
-        /// <see cref="ReadCounterAsync(uint, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>,
+        /// <see cref="ReadCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>,
         /// removes that surface; <see cref="ReadCounterWithPasswordAsync"/> is the plaintext opt-out.
         /// </para>
         /// </remarks>
@@ -420,9 +420,9 @@ public static class TpmDeviceExtensions
         /// <paramref name="tpmKey"/> to remove the offline-guessing surface the unsalted default carries.
         /// </summary>
         /// <remarks>
-        /// Composes <see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>
+        /// Composes <see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.extension(StartAuthSessionInput).CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, Verifiable.Cryptography.FillEntropyDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>
         /// exactly as
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, CancellationToken)"/>
         /// does, and for the same reason: the session key folds a salt RSA-OAEP-encrypted to
         /// <paramref name="tpmKey"/> (Part 1, clause 16.6.11, equation 23) with
         /// <paramref name="counterAuth"/> layered on as the session's authValue (equation 24), so the HMAC key
@@ -457,7 +457,7 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// The explicit low-protection opt-out for
-        /// <see cref="ReadCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>: reads the count with
+        /// <see cref="ReadCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/>: reads the count with
         /// <paramref name="counterAuth"/> sent as a plaintext password rather than proven as an HMAC session
         /// authValue.
         /// </summary>
@@ -466,7 +466,7 @@ public static class TpmDeviceExtensions
         /// observer reads it directly, with no HMAC derivation step to attack offline and no cpHash/rpHash
         /// integrity on the exchange. The read semantics of Part 3, clause 31.13 are otherwise identical to the
         /// HMAC default. Fine for diagnostics or an already-protected transport; wrong for anything where
-        /// <see cref="ReadCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s unbound HMAC default (or
+        /// <see cref="ReadCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s unbound HMAC default (or
         /// its salted overload) is the appropriate channel.
         /// </remarks>
         /// <param name="nvIndex">The Counter Index to read.</param>
@@ -500,9 +500,9 @@ public static class TpmDeviceExtensions
         /// <para>
         /// The deleted counter's last value is retained as the simulator's phantom high-water mark (TPM 2.0 Library
         /// Part 1, clause 34.2.6.3 NOTE 2/NOTE 6): a subsequent
-        /// <see cref="DefineCounterAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
+        /// <see cref="DefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
         /// of the same handle seeds its first
-        /// <see cref="IncrementCounterAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/> strictly above the
+        /// <see cref="IncrementCounterAsync(TpmDevice, uint, ReadOnlyMemory{byte}, CancellationToken)"/> strictly above the
         /// deleted value, so delete-then-redefine can never roll a counter with this Name back. That is a property
         /// of the counter semantics, independent of which channel authorized the undefine.
         /// </para>
@@ -528,10 +528,10 @@ public static class TpmDeviceExtensions
         /// </summary>
         /// <remarks>
         /// Identical in every authorization respect to
-        /// <see cref="UndefineCounterAsync(ReadOnlyMemory{byte}, uint, CancellationToken)"/> - the same
+        /// <see cref="UndefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, CancellationToken)"/> - the same
         /// owner-authorized USER-role removal, the same phantom high-water retention. What changes is the source of
         /// the session key's entropy: the session is bound AND salted
-        /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateBoundAndSaltedHmacSession(uint, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>),
+        /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.extension(StartAuthSessionInput).CreateBoundAndSaltedHmacSession(uint, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, Verifiable.Cryptography.FillEntropyDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>),
         /// so <c>sessionKey = KDFa(ownerAuth ‖ salt, …)</c> (Part 1, clause 16.6.12, equation 25) with the
         /// bound-entity authorization omitting the authValue term (equation 27), and the salt is
         /// RSA-OAEP-encrypted (Part 1, clause 16.6.13) to <paramref name="tpmKeyModulus"/>/
@@ -566,14 +566,14 @@ public static class TpmDeviceExtensions
 
         /// <summary>
         /// The explicit low-protection opt-out for
-        /// <see cref="UndefineCounterAsync(ReadOnlyMemory{byte}, uint, CancellationToken)"/>: undefines the Index
+        /// <see cref="UndefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, CancellationToken)"/>: undefines the Index
         /// over a plaintext owner-password session rather than a bound HMAC session.
         /// </summary>
         /// <remarks>
         /// The owner authorization value is sent in the clear, with no cpHash/rpHash HMAC integrity. Fine for an
         /// owner hierarchy whose authorization value has not been set and for diagnostics; wrong for anything
         /// security-sensitive, where
-        /// <see cref="UndefineCounterAsync(ReadOnlyMemory{byte}, uint, CancellationToken)"/>'s bound HMAC default -
+        /// <see cref="UndefineCounterAsync(TpmDevice, ReadOnlyMemory{byte}, uint, CancellationToken)"/>'s bound HMAC default -
         /// or its salted overload - is the right choice.
         /// </remarks>
         /// <param name="ownerAuth">The owner hierarchy's authorization value, or empty when the owner has no auth set.</param>
@@ -916,13 +916,13 @@ public static class TpmDeviceExtensions
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
-        (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateSaltedHmacSession(
+        (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) = await StartAuthSessionInput.CreateSaltedHmacSession(
             tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, CounterAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken).ConfigureAwait(false);
 
         try
         {
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-                device, salted.Input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+                device, Input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!startResult.IsSuccess)
             {
@@ -938,8 +938,8 @@ public static class TpmDeviceExtensions
                 //equation 23). SetAuthValue then makes counterAuth the session's authValue term on top (equation
                 //24), so an offline transcript alone cannot reproduce the HMAC key.
                 using TpmSession session = await TpmSession.CreateBoundAsync(
-                    new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, salted.Input.NonceCaller, started.NonceTPM,
-                    CounterAuthSessionHash, device.Rng, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                    new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, Input.NonceCaller, started.NonceTPM,
+                    CounterAuthSessionHash, device.Rng, pool, salt: Salt.Memory[..SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
                 session.SetAuthValue(counterAuth.Span, pool);
 
                 return await IncrementCounterOverSessionAsync(device, pool, registry, nvIndex, session, cancellationToken).ConfigureAwait(false);
@@ -959,8 +959,8 @@ public static class TpmDeviceExtensions
         }
         finally
         {
-            salted.Salt.Memory.Span[..salted.SaltLength].Clear();
-            salted.Salt.Dispose();
+            Salt.Memory.Span[..SaltLength].Clear();
+            Salt.Dispose();
         }
     }
 
@@ -1154,13 +1154,13 @@ public static class TpmDeviceExtensions
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
-        (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateSaltedHmacSession(
+        (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) = await StartAuthSessionInput.CreateSaltedHmacSession(
             tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, CounterAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken).ConfigureAwait(false);
 
         try
         {
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-                device, salted.Input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+                device, Input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!startResult.IsSuccess)
             {
@@ -1175,8 +1175,8 @@ public static class TpmDeviceExtensions
                 //Unbound (bindAuthValue empty) but salted: sessionKey = KDFa(salt, ...) (Part 1, clause 16.6.11,
                 //equation 23), with counterAuth layered on as the session's authValue term (equation 24).
                 using TpmSession session = await TpmSession.CreateBoundAsync(
-                    new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, salted.Input.NonceCaller, started.NonceTPM,
-                    CounterAuthSessionHash, device.Rng, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                    new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, Input.NonceCaller, started.NonceTPM,
+                    CounterAuthSessionHash, device.Rng, pool, salt: Salt.Memory[..SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
                 session.SetAuthValue(counterAuth.Span, pool);
 
                 return await ReadCounterOverSessionAsync(device, pool, registry, nvIndex, session, cancellationToken).ConfigureAwait(false);
@@ -1196,8 +1196,8 @@ public static class TpmDeviceExtensions
         }
         finally
         {
-            salted.Salt.Memory.Span[..salted.SaltLength].Clear();
-            salted.Salt.Dispose();
+            Salt.Memory.Span[..SaltLength].Clear();
+            Salt.Dispose();
         }
     }
 
@@ -1595,13 +1595,13 @@ public static class TpmDeviceExtensions
         CancellationToken cancellationToken,
         TpmtSymDef? symmetric = null)
     {
-        (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateBoundAndSaltedHmacSession(
+        (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) = await StartAuthSessionInput.CreateBoundAndSaltedHmacSession(
             tpmKey, (uint)TpmRh.TPM_RH_OWNER, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, CounterAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken, symmetric).ConfigureAwait(false);
 
         try
         {
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-                device, salted.Input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+                device, Input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!startResult.IsSuccess)
             {
@@ -1617,8 +1617,8 @@ public static class TpmDeviceExtensions
                 //and the recovered salt. The session takes ownership of started's nonceTPM, so the response is
                 //never disposed independently.
                 TpmSession session = await TpmSession.CreateBoundAsync(
-                    new TpmHandle(sessionHandle), StripTrailingZeros(ownerAuth), salted.Input.NonceCaller, started.NonceTPM,
-                    CounterAuthSessionHash, device.Rng, pool, symmetric: symmetric, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                    new TpmHandle(sessionHandle), StripTrailingZeros(ownerAuth), Input.NonceCaller, started.NonceTPM,
+                    CounterAuthSessionHash, device.Rng, pool, symmetric: symmetric, salt: Salt.Memory[..SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return TpmResult<TpmSession>.Success(session);
             }
@@ -1639,8 +1639,8 @@ public static class TpmDeviceExtensions
         }
         finally
         {
-            salted.Salt.Memory.Span[..salted.SaltLength].Clear();
-            salted.Salt.Dispose();
+            Salt.Memory.Span[..SaltLength].Clear();
+            Salt.Dispose();
         }
     }
 

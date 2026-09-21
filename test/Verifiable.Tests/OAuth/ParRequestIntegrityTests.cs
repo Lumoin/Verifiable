@@ -45,8 +45,8 @@ internal sealed class ParRequestIntegrityTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string requestUri = await PushAsync(host, material, pushedFields: null).ConfigureAwait(false);
 
@@ -76,17 +76,20 @@ internal sealed class ParRequestIntegrityTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string? observedAcrValues = null;
-        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
-            (evaluation, _, _, _) =>
-            {
-                observedAcrValues = evaluation.RequestedAcrValues;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (evaluation, _, _, _) =>
+                {
+                    observedAcrValues = evaluation.RequestedAcrValues;
 
-                return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
-            };
+                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
+                };
+        }).ConfigureAwait(false);
 
         RequestFields pushed = new() { [OAuthRequestParameterNames.AcrValues] = "loa-high" };
         string requestUri = await PushAsync(host, material, pushed).ConfigureAwait(false);
@@ -115,8 +118,8 @@ internal sealed class ParRequestIntegrityTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         RequestFields pushed = new() { [OAuthRequestParameterNames.MaxAge] = "0" };
         string requestUri = await PushAsync(host, material, pushed).ConfigureAwait(false);
@@ -150,8 +153,8 @@ internal sealed class ParRequestIntegrityTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string requestUri = await PushAsync(host, material, pushedFields: null).ConfigureAwait(false);
 
@@ -163,7 +166,7 @@ internal sealed class ParRequestIntegrityTests
         };
 
         IReadOnlyList<Activity> activities = await CaptureAuthorizeActivitiesAsync(
-            material.Registration.TenantId.Value,
+            material.Registration.TenantHandle!.Value.Value,
             () => AuthorizeAsync(host, material, authorizeFields, staleAuth: false)).ConfigureAwait(false);
 
         List<string> eventNames = activities.SelectMany(a => a.Events).Select(e => e.Name).ToList();
@@ -178,8 +181,8 @@ internal sealed class ParRequestIntegrityTests
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
-        using VerifierKeyMaterial material = host.RegisterDpopClient(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string requestUri = await PushAsync(host, material, pushedFields: null).ConfigureAwait(false);
 
@@ -190,7 +193,7 @@ internal sealed class ParRequestIntegrityTests
         };
 
         IReadOnlyList<Activity> activities = await CaptureAuthorizeActivitiesAsync(
-            material.Registration.TenantId.Value,
+            material.Registration.TenantHandle!.Value.Value,
             () => AuthorizeAsync(host, material, authorizeFields, staleAuth: false)).ConfigureAwait(false);
 
         Assert.IsNotEmpty(activities,
@@ -203,12 +206,12 @@ internal sealed class ParRequestIntegrityTests
 
     /// <summary>
     /// Runs <paramref name="drive"/> under a process-wide <see cref="ActivityListener"/> on the
-    /// OAuth source and returns the stopped activities for <paramref name="tenantId"/>. The
-    /// per-tenant filter isolates this test from any running in parallel (the tenant id is a fresh
-    /// GUID slice per registration) — see the ActivityListener cross-contamination guidance.
+    /// OAuth source and returns the stopped activities for <paramref name="tenantHandle"/>. The
+    /// per-tenant filter isolates this test from any running in parallel (the handle is a fresh
+    /// value per registration) — see the ActivityListener cross-contamination guidance.
     /// </summary>
     private static async Task<IReadOnlyList<Activity>> CaptureAuthorizeActivitiesAsync(
-        string tenantId, Func<Task> drive)
+        string tenantHandle, Func<Task> drive)
     {
         List<Activity> captured = [];
         using ActivityListener listener = new()
@@ -232,7 +235,7 @@ internal sealed class ParRequestIntegrityTests
         {
             return captured
                 .Where(activity => string.Equals(
-                    activity.GetTagItem(ServerTagNames.TenantId) as string, tenantId, StringComparison.Ordinal))
+                    activity.GetTagItem(ServerTagNames.TenantHandle) as string, tenantHandle, StringComparison.Ordinal))
                 .ToList();
         }
     }
@@ -247,6 +250,7 @@ internal sealed class ParRequestIntegrityTests
 
         RequestFields parFields = new()
         {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
             [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,

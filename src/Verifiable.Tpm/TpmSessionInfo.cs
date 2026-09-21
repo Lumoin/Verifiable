@@ -6,7 +6,7 @@ namespace Verifiable.Tpm;
 /// <remarks>
 /// <para>
 /// This record captures metadata about a TPM session for diagnostic and replay purposes.
-/// It is typically created via <see cref="TpmDeviceExtensions.GetSessionInfo"/> and
+/// It is typically created via <c>TpmDevice.GetSessionInfo</c> and
 /// stored alongside recorded exchanges in a <see cref="TpmRecording"/>.
 /// </para>
 /// <para>
@@ -19,7 +19,6 @@ namespace Verifiable.Tpm;
 /// <param name="Platform">Platform on which the recording was made.</param>
 /// <param name="RecordedAt">Timestamp when recording started.</param>
 /// <seealso cref="TpmRecording"/>
-/// <seealso cref="TpmDeviceExtensions.GetSessionInfo"/>
 public sealed record TpmSessionInfo(
     string? Manufacturer,
     string? FirmwareVersion,

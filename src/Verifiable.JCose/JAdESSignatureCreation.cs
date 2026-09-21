@@ -152,13 +152,13 @@ public sealed class JAdESDetachedUnknownMechanismPayloadInput: JAdESSigningPaylo
 
 
 /// <summary>
-/// The outcome of <see cref="JAdESSignatureCreation.SignAsync"/>: the signed <see cref="JwsMessage"/> together
+/// The outcome of <see cref="JAdESSignatureCreation.SignAsync(JAdESProtectedHeaders, JAdESSigningPayloadInput, JAdESUnsignedHeaders?, EncodeJAdESProtectedHeaderDelegate, EncodeJAdESUnprotectedHeaderDelegate, EncodeDelegate, PrivateKeyMemory, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, JAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>: the signed <see cref="JwsMessage"/> together
 /// with the signed-header-set aggregate that was actually encoded — mirroring <see cref="CBAdESSignatureCreationResult"/>.
 /// </summary>
 /// <remarks>
 /// <strong>Ownership.</strong> This instance owns both <see cref="Message"/> and <see cref="Headers"/>;
 /// <see cref="Dispose"/> disposes both. The caller must dispose ONLY this result after a successful call — never
-/// the original <c>headers</c> argument passed to <see cref="JAdESSignatureCreation.SignAsync"/>, since ownership
+/// the original <c>headers</c> argument passed to <see cref="JAdESSignatureCreation.SignAsync(JAdESProtectedHeaders, JAdESSigningPayloadInput, JAdESUnsignedHeaders?, EncodeJAdESProtectedHeaderDelegate, EncodeJAdESUnprotectedHeaderDelegate, EncodeDelegate, PrivateKeyMemory, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, JAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>, since ownership
 /// of that argument transfers to this call and <see cref="Headers"/> shares owned members with it.
 /// </remarks>
 [DebuggerDisplay("JAdESSignatureCreationResult: alg={Headers.Algorithm}")]
@@ -186,7 +186,7 @@ public sealed class JAdESSignatureCreationResult: IDisposable
 
     /// <summary>
     /// Gets the signed-header-set aggregate that was actually encoded into <see cref="Message"/>'s protected
-    /// header — identical to the <c>headers</c> argument <see cref="JAdESSignatureCreation.SignAsync"/> received
+    /// header — identical to the <c>headers</c> argument <see cref="JAdESSignatureCreation.SignAsync(JAdESProtectedHeaders, JAdESSigningPayloadInput, JAdESUnsignedHeaders?, EncodeJAdESProtectedHeaderDelegate, EncodeJAdESUnprotectedHeaderDelegate, EncodeDelegate, PrivateKeyMemory, JAdESDetachedObjectDereferenceDelegate?, JAdESDetachedObjectDereferenceContext?, JAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/> received
     /// when no <c>sigD</c> completion was needed, or a new instance carrying the completed
     /// <see cref="JAdESProtectedHeaders.SigD"/> otherwise. Owned by this instance; disposed via <see cref="Dispose"/>.
     /// </summary>
@@ -226,10 +226,10 @@ public sealed class JAdESSignatureCreationResult: IDisposable
 /// <para>
 /// <strong>This orchestrator is the SOLE producer of <see cref="JAdESProtectedHeaders.SigD"/>.</strong> A
 /// caller-supplied <c>headers</c> whose <see cref="JAdESProtectedHeaders.SigD"/> is already non-null is refused —
-/// the reference set travels through <paramref name="payloadInput"/>'s <c>sigD</c>-mechanism arms instead.
+/// the reference set travels through <c>payloadInput</c>'s <c>sigD</c>-mechanism arms instead.
 /// </para>
 /// <para>
-/// <strong>Creation is conformant by construction.</strong> When <paramref name="payloadInput"/> resolves a
+/// <strong>Creation is conformant by construction.</strong> When <c>payloadInput</c> resolves a
 /// <c>sigD</c> reference set, this orchestrator auto-adds <c>"sigD"</c> to
 /// <see cref="JAdESProtectedHeaders.CriticalLabels"/> if not already present (JA-5.1.9-04/-05) — the caller never
 /// has to remember this coupling. It does NOT auto-set <see cref="JAdESProtectedHeaders.B64"/>: the

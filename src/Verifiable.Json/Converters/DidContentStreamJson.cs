@@ -6,7 +6,7 @@ using Verifiable.Core.Model.Did;
 namespace Verifiable.Json.Converters;
 
 /// <summary>
-/// Writes a dereferenced <see cref="DidDereferencingResult.ContentStream"/> resource as a JSON value. The
+/// Writes a dereferenced <see cref="Verifiable.Core.Resolvers.DidDereferencingResult.ContentStream"/> resource as a JSON value. The
 /// content stream is an open <see cref="object"/> because dereferencing yields different resource shapes, so
 /// the writer dispatches on the runtime type. Shared by <see cref="DidDereferencingResultConverter"/> (which
 /// wraps it in the dereferencing-result envelope) and the bare content-stream serializer used by the HTTP(S)

@@ -223,7 +223,7 @@ public static class AcdcCompaction
         /// <param name="parentLabel">The label in the enclosing block's block-level expanded form this block's SAID fills, or <see langword="null"/> for the section root.</param>
         public Frame(MessageFieldMap block, string? parentLabel)
         {
-            Fields = new(block);
+            Fields = [.. block];
             BlockLevelExpanded = new(StringComparer.Ordinal);
             ParentLabel = parentLabel;
         }

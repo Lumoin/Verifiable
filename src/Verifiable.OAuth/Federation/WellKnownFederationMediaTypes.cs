@@ -1,4 +1,5 @@
 using Verifiable.Cryptography.Text;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -22,6 +23,11 @@ public static class WellKnownFederationMediaTypes
     /// </summary>
     public static string EntityStatementJwt { get; } = Utf8Constants.ToInternedString(EntityStatementJwtUtf8);
 
+    /// <summary>Whether <paramref name="typ"/> is <see cref="EntityStatementJwt"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="EntityStatementJwt"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsEntityStatementJwt(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, EntityStatementJwt);
+
     /// <summary>The UTF-8 source literal of <see cref="ResolveResponseJwt"/>.</summary>
     public static ReadOnlySpan<byte> ResolveResponseJwtUtf8 => "resolve-response+jwt"u8;
 
@@ -34,6 +40,11 @@ public static class WellKnownFederationMediaTypes
     /// Statement.
     /// </summary>
     public static string ResolveResponseJwt { get; } = Utf8Constants.ToInternedString(ResolveResponseJwtUtf8);
+
+    /// <summary>Whether <paramref name="typ"/> is <see cref="ResolveResponseJwt"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="ResolveResponseJwt"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsResolveResponseJwt(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, ResolveResponseJwt);
 
     /// <summary>The UTF-8 source literal of <see cref="ExplicitRegistrationResponseJwt"/>.</summary>
     public static ReadOnlySpan<byte> ExplicitRegistrationResponseJwtUtf8 => "explicit-registration-response+jwt"u8;
@@ -48,6 +59,11 @@ public static class WellKnownFederationMediaTypes
     /// </summary>
     public static string ExplicitRegistrationResponseJwt { get; } = Utf8Constants.ToInternedString(ExplicitRegistrationResponseJwtUtf8);
 
+    /// <summary>Whether <paramref name="typ"/> is <see cref="ExplicitRegistrationResponseJwt"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="ExplicitRegistrationResponseJwt"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsExplicitRegistrationResponseJwt(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, ExplicitRegistrationResponseJwt);
+
     /// <summary>The UTF-8 source literal of <see cref="TrustMarkJwt"/>.</summary>
     public static ReadOnlySpan<byte> TrustMarkJwtUtf8 => "trust-mark+jwt"u8;
 
@@ -57,6 +73,11 @@ public static class WellKnownFederationMediaTypes
     /// </summary>
     public static string TrustMarkJwt { get; } = Utf8Constants.ToInternedString(TrustMarkJwtUtf8);
 
+    /// <summary>Whether <paramref name="typ"/> is <see cref="TrustMarkJwt"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="TrustMarkJwt"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsTrustMarkJwt(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, TrustMarkJwt);
+
     /// <summary>The UTF-8 source literal of <see cref="TrustMarkDelegationJwt"/>.</summary>
     public static ReadOnlySpan<byte> TrustMarkDelegationJwtUtf8 => "trust-mark-delegation+jwt"u8;
 
@@ -65,6 +86,11 @@ public static class WellKnownFederationMediaTypes
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-7.2">Federation §7.2</see>.
     /// </summary>
     public static string TrustMarkDelegationJwt { get; } = Utf8Constants.ToInternedString(TrustMarkDelegationJwtUtf8);
+
+    /// <summary>Whether <paramref name="typ"/> is <see cref="TrustMarkDelegationJwt"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="TrustMarkDelegationJwt"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsTrustMarkDelegationJwt(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, TrustMarkDelegationJwt);
 
     /// <summary>The UTF-8 source literal of <see cref="HistoricalKeysJwt"/>.</summary>
     public static ReadOnlySpan<byte> HistoricalKeysJwtUtf8 => "jwk-set+jwt"u8;
@@ -80,6 +106,11 @@ public static class WellKnownFederationMediaTypes
     /// </summary>
     public static string HistoricalKeysJwt { get; } = Utf8Constants.ToInternedString(HistoricalKeysJwtUtf8);
 
+    /// <summary>Whether <paramref name="typ"/> is <see cref="HistoricalKeysJwt"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="HistoricalKeysJwt"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsHistoricalKeysJwt(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, HistoricalKeysJwt);
+
     /// <summary>The UTF-8 source literal of <see cref="TrustMarkStatusResponseJwt"/>.</summary>
     public static ReadOnlySpan<byte> TrustMarkStatusResponseJwtUtf8 => "trust-mark-status-response+jwt"u8;
 
@@ -92,4 +123,9 @@ public static class WellKnownFederationMediaTypes
     /// cannot be mistaken for a Trust Mark itself.
     /// </summary>
     public static string TrustMarkStatusResponseJwt { get; } = Utf8Constants.ToInternedString(TrustMarkStatusResponseJwtUtf8);
+
+    /// <summary>Whether <paramref name="typ"/> is <see cref="TrustMarkStatusResponseJwt"/>.</summary>
+    /// <param name="typ">The JWT typ header value.</param>
+    /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="TrustMarkStatusResponseJwt"/>; otherwise, <see langword="false"/>.</returns>
+    public static bool IsTrustMarkStatusResponseJwt(string typ) => WellKnownMediaTypes.Jwt.Equals(typ, TrustMarkStatusResponseJwt);
 }

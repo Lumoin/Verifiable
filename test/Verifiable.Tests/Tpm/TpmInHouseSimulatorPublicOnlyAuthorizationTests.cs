@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -102,7 +103,8 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
         TpmResponseRegistry registry = CreateRegistry();
         using EccKeyMaterial key = EccKeyMaterial.Generate();
         TpmiDhObject handle = await LoadPublicOnlyEccAsync(tpm, registry, pool, key, NoDaSigningAttributes).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
 
         TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -121,6 +123,139 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
                 code = (await TpmCommandExecutor.ExecuteAsync<SignDigestResponse>(tpm, input, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ResponseCode;
                 break;
             }
+            case TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial:
+            case TpmCcConstants.TPM_CC_EvictControl:
+            case TpmCcConstants.TPM_CC_HierarchyControl:
+            case TpmCcConstants.TPM_CC_NV_UndefineSpace:
+            case TpmCcConstants.TPM_CC_ChangeEPS:
+            case TpmCcConstants.TPM_CC_ChangePPS:
+            case TpmCcConstants.TPM_CC_Clear:
+            case TpmCcConstants.TPM_CC_ClearControl:
+            case TpmCcConstants.TPM_CC_ClockSet:
+            case TpmCcConstants.TPM_CC_HierarchyChangeAuth:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace:
+            case TpmCcConstants.TPM_CC_PCR_Allocate:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthPolicy:
+            case TpmCcConstants.TPM_CC_PP_Commands:
+            case TpmCcConstants.TPM_CC_SetPrimaryPolicy:
+            case TpmCcConstants.TPM_CC_FieldUpgradeStart:
+            case TpmCcConstants.TPM_CC_ClockRateAdjust:
+            case TpmCcConstants.TPM_CC_CreatePrimary:
+            case TpmCcConstants.TPM_CC_NV_GlobalWriteLock:
+            case TpmCcConstants.TPM_CC_GetCommandAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Increment:
+            case TpmCcConstants.TPM_CC_NV_SetBits:
+            case TpmCcConstants.TPM_CC_NV_Extend:
+            case TpmCcConstants.TPM_CC_NV_Write:
+            case TpmCcConstants.TPM_CC_NV_WriteLock:
+            case TpmCcConstants.TPM_CC_DictionaryAttackLockReset:
+            case TpmCcConstants.TPM_CC_DictionaryAttackParameters:
+            case TpmCcConstants.TPM_CC_NV_ChangeAuth:
+            case TpmCcConstants.TPM_CC_PCR_Event:
+            case TpmCcConstants.TPM_CC_PCR_Reset:
+            case TpmCcConstants.TPM_CC_SequenceComplete:
+            case TpmCcConstants.TPM_CC_SetAlgorithmSet:
+            case TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus:
+            case TpmCcConstants.TPM_CC_FieldUpgradeData:
+            case TpmCcConstants.TPM_CC_IncrementalSelfTest:
+            case TpmCcConstants.TPM_CC_SelfTest:
+            case TpmCcConstants.TPM_CC_Startup:
+            case TpmCcConstants.TPM_CC_Shutdown:
+            case TpmCcConstants.TPM_CC_StirRandom:
+            case TpmCcConstants.TPM_CC_ActivateCredential:
+            case TpmCcConstants.TPM_CC_Certify:
+            case TpmCcConstants.TPM_CC_PolicyNV:
+            case TpmCcConstants.TPM_CC_CertifyCreation:
+            case TpmCcConstants.TPM_CC_Duplicate:
+            case TpmCcConstants.TPM_CC_GetTime:
+            case TpmCcConstants.TPM_CC_GetSessionAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Read:
+            case TpmCcConstants.TPM_CC_NV_ReadLock:
+            case TpmCcConstants.TPM_CC_ObjectChangeAuth:
+            case TpmCcConstants.TPM_CC_PolicySecret:
+            case TpmCcConstants.TPM_CC_Rewrap:
+            case TpmCcConstants.TPM_CC_Create:
+            case TpmCcConstants.TPM_CC_ECDH_ZGen:
+            case TpmCcConstants.TPM_CC_HMAC:
+            case TpmCcConstants.TPM_CC_Import:
+            case TpmCcConstants.TPM_CC_Load:
+            case TpmCcConstants.TPM_CC_Quote:
+            case TpmCcConstants.TPM_CC_RSA_Decrypt:
+            case TpmCcConstants.TPM_CC_HMAC_Start:
+            case TpmCcConstants.TPM_CC_SequenceUpdate:
+            case TpmCcConstants.TPM_CC_Unseal:
+            case TpmCcConstants.TPM_CC_PolicySigned:
+            case TpmCcConstants.TPM_CC_ContextLoad:
+            case TpmCcConstants.TPM_CC_ContextSave:
+            case TpmCcConstants.TPM_CC_ECDH_KeyGen:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt:
+            case TpmCcConstants.TPM_CC_FlushContext:
+            case TpmCcConstants.TPM_CC_LoadExternal:
+            case TpmCcConstants.TPM_CC_MakeCredential:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic:
+            case TpmCcConstants.TPM_CC_PolicyAuthorize:
+            case TpmCcConstants.TPM_CC_PolicyAuthValue:
+            case TpmCcConstants.TPM_CC_PolicyCommandCode:
+            case TpmCcConstants.TPM_CC_PolicyCounterTimer:
+            case TpmCcConstants.TPM_CC_PolicyCpHash:
+            case TpmCcConstants.TPM_CC_PolicyLocality:
+            case TpmCcConstants.TPM_CC_PolicyNameHash:
+            case TpmCcConstants.TPM_CC_PolicyOR:
+            case TpmCcConstants.TPM_CC_PolicyTicket:
+            case TpmCcConstants.TPM_CC_ReadPublic:
+            case TpmCcConstants.TPM_CC_RSA_Encrypt:
+            case TpmCcConstants.TPM_CC_StartAuthSession:
+            case TpmCcConstants.TPM_CC_VerifySignature:
+            case TpmCcConstants.TPM_CC_ECC_Parameters:
+            case TpmCcConstants.TPM_CC_FirmwareRead:
+            case TpmCcConstants.TPM_CC_GetCapability:
+            case TpmCcConstants.TPM_CC_GetRandom:
+            case TpmCcConstants.TPM_CC_GetTestResult:
+            case TpmCcConstants.TPM_CC_Hash:
+            case TpmCcConstants.TPM_CC_PCR_Read:
+            case TpmCcConstants.TPM_CC_PolicyPCR:
+            case TpmCcConstants.TPM_CC_PolicyRestart:
+            case TpmCcConstants.TPM_CC_ReadClock:
+            case TpmCcConstants.TPM_CC_PCR_Extend:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthValue:
+            case TpmCcConstants.TPM_CC_NV_Certify:
+            case TpmCcConstants.TPM_CC_EventSequenceComplete:
+            case TpmCcConstants.TPM_CC_HashSequenceStart:
+            case TpmCcConstants.TPM_CC_PolicyPhysicalPresence:
+            case TpmCcConstants.TPM_CC_PolicyDuplicationSelect:
+            case TpmCcConstants.TPM_CC_PolicyGetDigest:
+            case TpmCcConstants.TPM_CC_TestParms:
+            case TpmCcConstants.TPM_CC_Commit:
+            case TpmCcConstants.TPM_CC_PolicyPassword:
+            case TpmCcConstants.TPM_CC_ZGen_2Phase:
+            case TpmCcConstants.TPM_CC_EC_Ephemeral:
+            case TpmCcConstants.TPM_CC_PolicyNvWritten:
+            case TpmCcConstants.TPM_CC_PolicyTemplate:
+            case TpmCcConstants.TPM_CC_CreateLoaded:
+            case TpmCcConstants.TPM_CC_PolicyAuthorizeNV:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt2:
+            case TpmCcConstants.TPM_CC_AC_GetCapability:
+            case TpmCcConstants.TPM_CC_AC_Send:
+            case TpmCcConstants.TPM_CC_Policy_AC_SendSelect:
+            case TpmCcConstants.TPM_CC_CertifyX509:
+            case TpmCcConstants.TPM_CC_ACT_SetTimeout:
+            case TpmCcConstants.TPM_CC_ECC_Encrypt:
+            case TpmCcConstants.TPM_CC_ECC_Decrypt:
+            case TpmCcConstants.TPM_CC_PolicyCapability:
+            case TpmCcConstants.TPM_CC_PolicyParameters:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace2:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic2:
+            case TpmCcConstants.TPM_CC_SetCapability:
+            case TpmCcConstants.TPM_CC_ReadOnlyControl:
+            case TpmCcConstants.TPM_CC_PolicyTransportSPDM:
+            case TpmCcConstants.TPM_CC_VerifySequenceComplete:
+            case TpmCcConstants.TPM_CC_SignSequenceComplete:
+            case TpmCcConstants.TPM_CC_VerifyDigestSignature:
+            case TpmCcConstants.TPM_CC_Encapsulate:
+            case TpmCcConstants.TPM_CC_Decapsulate:
+            case TpmCcConstants.TPM_CC_VerifySequenceStart:
+            case TpmCcConstants.TPM_CC_SignSequenceStart:
+            case TpmCcConstants.CC_VEND:
             default:
             {
                 using SignSequenceStartInput input = SignSequenceStartInput.Create(handle, [], pool);
@@ -175,6 +310,137 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
                 code = (await TpmCommandExecutor.ExecuteAsync<SignResponse>(tpm, input, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ResponseCode;
                 break;
             }
+            case TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial:
+            case TpmCcConstants.TPM_CC_EvictControl:
+            case TpmCcConstants.TPM_CC_HierarchyControl:
+            case TpmCcConstants.TPM_CC_NV_UndefineSpace:
+            case TpmCcConstants.TPM_CC_ChangeEPS:
+            case TpmCcConstants.TPM_CC_ChangePPS:
+            case TpmCcConstants.TPM_CC_Clear:
+            case TpmCcConstants.TPM_CC_ClearControl:
+            case TpmCcConstants.TPM_CC_ClockSet:
+            case TpmCcConstants.TPM_CC_HierarchyChangeAuth:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace:
+            case TpmCcConstants.TPM_CC_PCR_Allocate:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthPolicy:
+            case TpmCcConstants.TPM_CC_PP_Commands:
+            case TpmCcConstants.TPM_CC_SetPrimaryPolicy:
+            case TpmCcConstants.TPM_CC_FieldUpgradeStart:
+            case TpmCcConstants.TPM_CC_ClockRateAdjust:
+            case TpmCcConstants.TPM_CC_CreatePrimary:
+            case TpmCcConstants.TPM_CC_NV_GlobalWriteLock:
+            case TpmCcConstants.TPM_CC_GetCommandAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Increment:
+            case TpmCcConstants.TPM_CC_NV_SetBits:
+            case TpmCcConstants.TPM_CC_NV_Extend:
+            case TpmCcConstants.TPM_CC_NV_Write:
+            case TpmCcConstants.TPM_CC_NV_WriteLock:
+            case TpmCcConstants.TPM_CC_DictionaryAttackLockReset:
+            case TpmCcConstants.TPM_CC_DictionaryAttackParameters:
+            case TpmCcConstants.TPM_CC_NV_ChangeAuth:
+            case TpmCcConstants.TPM_CC_PCR_Event:
+            case TpmCcConstants.TPM_CC_PCR_Reset:
+            case TpmCcConstants.TPM_CC_SequenceComplete:
+            case TpmCcConstants.TPM_CC_SetAlgorithmSet:
+            case TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus:
+            case TpmCcConstants.TPM_CC_FieldUpgradeData:
+            case TpmCcConstants.TPM_CC_IncrementalSelfTest:
+            case TpmCcConstants.TPM_CC_SelfTest:
+            case TpmCcConstants.TPM_CC_Startup:
+            case TpmCcConstants.TPM_CC_Shutdown:
+            case TpmCcConstants.TPM_CC_StirRandom:
+            case TpmCcConstants.TPM_CC_ActivateCredential:
+            case TpmCcConstants.TPM_CC_Certify:
+            case TpmCcConstants.TPM_CC_PolicyNV:
+            case TpmCcConstants.TPM_CC_CertifyCreation:
+            case TpmCcConstants.TPM_CC_Duplicate:
+            case TpmCcConstants.TPM_CC_GetTime:
+            case TpmCcConstants.TPM_CC_GetSessionAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Read:
+            case TpmCcConstants.TPM_CC_NV_ReadLock:
+            case TpmCcConstants.TPM_CC_ObjectChangeAuth:
+            case TpmCcConstants.TPM_CC_PolicySecret:
+            case TpmCcConstants.TPM_CC_Rewrap:
+            case TpmCcConstants.TPM_CC_Create:
+            case TpmCcConstants.TPM_CC_ECDH_ZGen:
+            case TpmCcConstants.TPM_CC_Import:
+            case TpmCcConstants.TPM_CC_Load:
+            case TpmCcConstants.TPM_CC_Quote:
+            case TpmCcConstants.TPM_CC_RSA_Decrypt:
+            case TpmCcConstants.TPM_CC_SequenceUpdate:
+            case TpmCcConstants.TPM_CC_PolicySigned:
+            case TpmCcConstants.TPM_CC_ContextLoad:
+            case TpmCcConstants.TPM_CC_ContextSave:
+            case TpmCcConstants.TPM_CC_ECDH_KeyGen:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt:
+            case TpmCcConstants.TPM_CC_FlushContext:
+            case TpmCcConstants.TPM_CC_LoadExternal:
+            case TpmCcConstants.TPM_CC_MakeCredential:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic:
+            case TpmCcConstants.TPM_CC_PolicyAuthorize:
+            case TpmCcConstants.TPM_CC_PolicyAuthValue:
+            case TpmCcConstants.TPM_CC_PolicyCommandCode:
+            case TpmCcConstants.TPM_CC_PolicyCounterTimer:
+            case TpmCcConstants.TPM_CC_PolicyCpHash:
+            case TpmCcConstants.TPM_CC_PolicyLocality:
+            case TpmCcConstants.TPM_CC_PolicyNameHash:
+            case TpmCcConstants.TPM_CC_PolicyOR:
+            case TpmCcConstants.TPM_CC_PolicyTicket:
+            case TpmCcConstants.TPM_CC_ReadPublic:
+            case TpmCcConstants.TPM_CC_RSA_Encrypt:
+            case TpmCcConstants.TPM_CC_StartAuthSession:
+            case TpmCcConstants.TPM_CC_VerifySignature:
+            case TpmCcConstants.TPM_CC_ECC_Parameters:
+            case TpmCcConstants.TPM_CC_FirmwareRead:
+            case TpmCcConstants.TPM_CC_GetCapability:
+            case TpmCcConstants.TPM_CC_GetRandom:
+            case TpmCcConstants.TPM_CC_GetTestResult:
+            case TpmCcConstants.TPM_CC_Hash:
+            case TpmCcConstants.TPM_CC_PCR_Read:
+            case TpmCcConstants.TPM_CC_PolicyPCR:
+            case TpmCcConstants.TPM_CC_PolicyRestart:
+            case TpmCcConstants.TPM_CC_ReadClock:
+            case TpmCcConstants.TPM_CC_PCR_Extend:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthValue:
+            case TpmCcConstants.TPM_CC_NV_Certify:
+            case TpmCcConstants.TPM_CC_EventSequenceComplete:
+            case TpmCcConstants.TPM_CC_HashSequenceStart:
+            case TpmCcConstants.TPM_CC_PolicyPhysicalPresence:
+            case TpmCcConstants.TPM_CC_PolicyDuplicationSelect:
+            case TpmCcConstants.TPM_CC_PolicyGetDigest:
+            case TpmCcConstants.TPM_CC_TestParms:
+            case TpmCcConstants.TPM_CC_Commit:
+            case TpmCcConstants.TPM_CC_PolicyPassword:
+            case TpmCcConstants.TPM_CC_ZGen_2Phase:
+            case TpmCcConstants.TPM_CC_EC_Ephemeral:
+            case TpmCcConstants.TPM_CC_PolicyNvWritten:
+            case TpmCcConstants.TPM_CC_PolicyTemplate:
+            case TpmCcConstants.TPM_CC_CreateLoaded:
+            case TpmCcConstants.TPM_CC_PolicyAuthorizeNV:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt2:
+            case TpmCcConstants.TPM_CC_AC_GetCapability:
+            case TpmCcConstants.TPM_CC_AC_Send:
+            case TpmCcConstants.TPM_CC_Policy_AC_SendSelect:
+            case TpmCcConstants.TPM_CC_CertifyX509:
+            case TpmCcConstants.TPM_CC_ACT_SetTimeout:
+            case TpmCcConstants.TPM_CC_ECC_Encrypt:
+            case TpmCcConstants.TPM_CC_ECC_Decrypt:
+            case TpmCcConstants.TPM_CC_PolicyCapability:
+            case TpmCcConstants.TPM_CC_PolicyParameters:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace2:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic2:
+            case TpmCcConstants.TPM_CC_SetCapability:
+            case TpmCcConstants.TPM_CC_ReadOnlyControl:
+            case TpmCcConstants.TPM_CC_PolicyTransportSPDM:
+            case TpmCcConstants.TPM_CC_VerifySequenceComplete:
+            case TpmCcConstants.TPM_CC_SignSequenceComplete:
+            case TpmCcConstants.TPM_CC_VerifyDigestSignature:
+            case TpmCcConstants.TPM_CC_SignDigest:
+            case TpmCcConstants.TPM_CC_Encapsulate:
+            case TpmCcConstants.TPM_CC_Decapsulate:
+            case TpmCcConstants.TPM_CC_VerifySequenceStart:
+            case TpmCcConstants.TPM_CC_SignSequenceStart:
+            case TpmCcConstants.CC_VEND:
             default:
             {
                 using TpmPasswordSession itemAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -239,6 +505,136 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
                 code = (await TpmCommandExecutor.ExecuteAsync<GetTimeResponse>(tpm, input, [otherAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ResponseCode;
                 break;
             }
+            case TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial:
+            case TpmCcConstants.TPM_CC_EvictControl:
+            case TpmCcConstants.TPM_CC_HierarchyControl:
+            case TpmCcConstants.TPM_CC_NV_UndefineSpace:
+            case TpmCcConstants.TPM_CC_ChangeEPS:
+            case TpmCcConstants.TPM_CC_ChangePPS:
+            case TpmCcConstants.TPM_CC_Clear:
+            case TpmCcConstants.TPM_CC_ClearControl:
+            case TpmCcConstants.TPM_CC_ClockSet:
+            case TpmCcConstants.TPM_CC_HierarchyChangeAuth:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace:
+            case TpmCcConstants.TPM_CC_PCR_Allocate:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthPolicy:
+            case TpmCcConstants.TPM_CC_PP_Commands:
+            case TpmCcConstants.TPM_CC_SetPrimaryPolicy:
+            case TpmCcConstants.TPM_CC_FieldUpgradeStart:
+            case TpmCcConstants.TPM_CC_ClockRateAdjust:
+            case TpmCcConstants.TPM_CC_CreatePrimary:
+            case TpmCcConstants.TPM_CC_NV_GlobalWriteLock:
+            case TpmCcConstants.TPM_CC_GetCommandAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Increment:
+            case TpmCcConstants.TPM_CC_NV_SetBits:
+            case TpmCcConstants.TPM_CC_NV_Extend:
+            case TpmCcConstants.TPM_CC_NV_Write:
+            case TpmCcConstants.TPM_CC_NV_WriteLock:
+            case TpmCcConstants.TPM_CC_DictionaryAttackLockReset:
+            case TpmCcConstants.TPM_CC_DictionaryAttackParameters:
+            case TpmCcConstants.TPM_CC_NV_ChangeAuth:
+            case TpmCcConstants.TPM_CC_PCR_Event:
+            case TpmCcConstants.TPM_CC_PCR_Reset:
+            case TpmCcConstants.TPM_CC_SequenceComplete:
+            case TpmCcConstants.TPM_CC_SetAlgorithmSet:
+            case TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus:
+            case TpmCcConstants.TPM_CC_FieldUpgradeData:
+            case TpmCcConstants.TPM_CC_IncrementalSelfTest:
+            case TpmCcConstants.TPM_CC_SelfTest:
+            case TpmCcConstants.TPM_CC_Startup:
+            case TpmCcConstants.TPM_CC_Shutdown:
+            case TpmCcConstants.TPM_CC_StirRandom:
+            case TpmCcConstants.TPM_CC_ActivateCredential:
+            case TpmCcConstants.TPM_CC_PolicyNV:
+            case TpmCcConstants.TPM_CC_Duplicate:
+            case TpmCcConstants.TPM_CC_GetSessionAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Read:
+            case TpmCcConstants.TPM_CC_NV_ReadLock:
+            case TpmCcConstants.TPM_CC_ObjectChangeAuth:
+            case TpmCcConstants.TPM_CC_PolicySecret:
+            case TpmCcConstants.TPM_CC_Rewrap:
+            case TpmCcConstants.TPM_CC_Create:
+            case TpmCcConstants.TPM_CC_ECDH_ZGen:
+            case TpmCcConstants.TPM_CC_HMAC:
+            case TpmCcConstants.TPM_CC_Import:
+            case TpmCcConstants.TPM_CC_Load:
+            case TpmCcConstants.TPM_CC_RSA_Decrypt:
+            case TpmCcConstants.TPM_CC_HMAC_Start:
+            case TpmCcConstants.TPM_CC_SequenceUpdate:
+            case TpmCcConstants.TPM_CC_Sign:
+            case TpmCcConstants.TPM_CC_Unseal:
+            case TpmCcConstants.TPM_CC_PolicySigned:
+            case TpmCcConstants.TPM_CC_ContextLoad:
+            case TpmCcConstants.TPM_CC_ContextSave:
+            case TpmCcConstants.TPM_CC_ECDH_KeyGen:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt:
+            case TpmCcConstants.TPM_CC_FlushContext:
+            case TpmCcConstants.TPM_CC_LoadExternal:
+            case TpmCcConstants.TPM_CC_MakeCredential:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic:
+            case TpmCcConstants.TPM_CC_PolicyAuthorize:
+            case TpmCcConstants.TPM_CC_PolicyAuthValue:
+            case TpmCcConstants.TPM_CC_PolicyCommandCode:
+            case TpmCcConstants.TPM_CC_PolicyCounterTimer:
+            case TpmCcConstants.TPM_CC_PolicyCpHash:
+            case TpmCcConstants.TPM_CC_PolicyLocality:
+            case TpmCcConstants.TPM_CC_PolicyNameHash:
+            case TpmCcConstants.TPM_CC_PolicyOR:
+            case TpmCcConstants.TPM_CC_PolicyTicket:
+            case TpmCcConstants.TPM_CC_ReadPublic:
+            case TpmCcConstants.TPM_CC_RSA_Encrypt:
+            case TpmCcConstants.TPM_CC_StartAuthSession:
+            case TpmCcConstants.TPM_CC_VerifySignature:
+            case TpmCcConstants.TPM_CC_ECC_Parameters:
+            case TpmCcConstants.TPM_CC_FirmwareRead:
+            case TpmCcConstants.TPM_CC_GetCapability:
+            case TpmCcConstants.TPM_CC_GetRandom:
+            case TpmCcConstants.TPM_CC_GetTestResult:
+            case TpmCcConstants.TPM_CC_Hash:
+            case TpmCcConstants.TPM_CC_PCR_Read:
+            case TpmCcConstants.TPM_CC_PolicyPCR:
+            case TpmCcConstants.TPM_CC_PolicyRestart:
+            case TpmCcConstants.TPM_CC_ReadClock:
+            case TpmCcConstants.TPM_CC_PCR_Extend:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthValue:
+            case TpmCcConstants.TPM_CC_EventSequenceComplete:
+            case TpmCcConstants.TPM_CC_HashSequenceStart:
+            case TpmCcConstants.TPM_CC_PolicyPhysicalPresence:
+            case TpmCcConstants.TPM_CC_PolicyDuplicationSelect:
+            case TpmCcConstants.TPM_CC_PolicyGetDigest:
+            case TpmCcConstants.TPM_CC_TestParms:
+            case TpmCcConstants.TPM_CC_Commit:
+            case TpmCcConstants.TPM_CC_PolicyPassword:
+            case TpmCcConstants.TPM_CC_ZGen_2Phase:
+            case TpmCcConstants.TPM_CC_EC_Ephemeral:
+            case TpmCcConstants.TPM_CC_PolicyNvWritten:
+            case TpmCcConstants.TPM_CC_PolicyTemplate:
+            case TpmCcConstants.TPM_CC_CreateLoaded:
+            case TpmCcConstants.TPM_CC_PolicyAuthorizeNV:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt2:
+            case TpmCcConstants.TPM_CC_AC_GetCapability:
+            case TpmCcConstants.TPM_CC_AC_Send:
+            case TpmCcConstants.TPM_CC_Policy_AC_SendSelect:
+            case TpmCcConstants.TPM_CC_CertifyX509:
+            case TpmCcConstants.TPM_CC_ACT_SetTimeout:
+            case TpmCcConstants.TPM_CC_ECC_Encrypt:
+            case TpmCcConstants.TPM_CC_ECC_Decrypt:
+            case TpmCcConstants.TPM_CC_PolicyCapability:
+            case TpmCcConstants.TPM_CC_PolicyParameters:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace2:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic2:
+            case TpmCcConstants.TPM_CC_SetCapability:
+            case TpmCcConstants.TPM_CC_ReadOnlyControl:
+            case TpmCcConstants.TPM_CC_PolicyTransportSPDM:
+            case TpmCcConstants.TPM_CC_VerifySequenceComplete:
+            case TpmCcConstants.TPM_CC_SignSequenceComplete:
+            case TpmCcConstants.TPM_CC_VerifyDigestSignature:
+            case TpmCcConstants.TPM_CC_SignDigest:
+            case TpmCcConstants.TPM_CC_Encapsulate:
+            case TpmCcConstants.TPM_CC_Decapsulate:
+            case TpmCcConstants.TPM_CC_VerifySequenceStart:
+            case TpmCcConstants.TPM_CC_SignSequenceStart:
+            case TpmCcConstants.CC_VEND:
             default:
             {
                 await DefineAndWriteIndexAsync(tpm, registry, pool, CertifiedIndexHandle).ConfigureAwait(false);
@@ -423,6 +819,138 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
                 code = (await TpmCommandExecutor.ExecuteAsync<LoadResponse>(tpm, input, [parentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ResponseCode;
                 break;
             }
+            case TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial:
+            case TpmCcConstants.TPM_CC_EvictControl:
+            case TpmCcConstants.TPM_CC_HierarchyControl:
+            case TpmCcConstants.TPM_CC_NV_UndefineSpace:
+            case TpmCcConstants.TPM_CC_ChangeEPS:
+            case TpmCcConstants.TPM_CC_ChangePPS:
+            case TpmCcConstants.TPM_CC_Clear:
+            case TpmCcConstants.TPM_CC_ClearControl:
+            case TpmCcConstants.TPM_CC_ClockSet:
+            case TpmCcConstants.TPM_CC_HierarchyChangeAuth:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace:
+            case TpmCcConstants.TPM_CC_PCR_Allocate:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthPolicy:
+            case TpmCcConstants.TPM_CC_PP_Commands:
+            case TpmCcConstants.TPM_CC_SetPrimaryPolicy:
+            case TpmCcConstants.TPM_CC_FieldUpgradeStart:
+            case TpmCcConstants.TPM_CC_ClockRateAdjust:
+            case TpmCcConstants.TPM_CC_CreatePrimary:
+            case TpmCcConstants.TPM_CC_NV_GlobalWriteLock:
+            case TpmCcConstants.TPM_CC_GetCommandAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Increment:
+            case TpmCcConstants.TPM_CC_NV_SetBits:
+            case TpmCcConstants.TPM_CC_NV_Extend:
+            case TpmCcConstants.TPM_CC_NV_Write:
+            case TpmCcConstants.TPM_CC_NV_WriteLock:
+            case TpmCcConstants.TPM_CC_DictionaryAttackLockReset:
+            case TpmCcConstants.TPM_CC_DictionaryAttackParameters:
+            case TpmCcConstants.TPM_CC_NV_ChangeAuth:
+            case TpmCcConstants.TPM_CC_PCR_Event:
+            case TpmCcConstants.TPM_CC_PCR_Reset:
+            case TpmCcConstants.TPM_CC_SequenceComplete:
+            case TpmCcConstants.TPM_CC_SetAlgorithmSet:
+            case TpmCcConstants.TPM_CC_SetCommandCodeAuditStatus:
+            case TpmCcConstants.TPM_CC_FieldUpgradeData:
+            case TpmCcConstants.TPM_CC_IncrementalSelfTest:
+            case TpmCcConstants.TPM_CC_SelfTest:
+            case TpmCcConstants.TPM_CC_Startup:
+            case TpmCcConstants.TPM_CC_Shutdown:
+            case TpmCcConstants.TPM_CC_StirRandom:
+            case TpmCcConstants.TPM_CC_ActivateCredential:
+            case TpmCcConstants.TPM_CC_Certify:
+            case TpmCcConstants.TPM_CC_PolicyNV:
+            case TpmCcConstants.TPM_CC_CertifyCreation:
+            case TpmCcConstants.TPM_CC_Duplicate:
+            case TpmCcConstants.TPM_CC_GetTime:
+            case TpmCcConstants.TPM_CC_GetSessionAuditDigest:
+            case TpmCcConstants.TPM_CC_NV_Read:
+            case TpmCcConstants.TPM_CC_NV_ReadLock:
+            case TpmCcConstants.TPM_CC_ObjectChangeAuth:
+            case TpmCcConstants.TPM_CC_PolicySecret:
+            case TpmCcConstants.TPM_CC_Rewrap:
+            case TpmCcConstants.TPM_CC_ECDH_ZGen:
+            case TpmCcConstants.TPM_CC_HMAC:
+            case TpmCcConstants.TPM_CC_Quote:
+            case TpmCcConstants.TPM_CC_RSA_Decrypt:
+            case TpmCcConstants.TPM_CC_HMAC_Start:
+            case TpmCcConstants.TPM_CC_SequenceUpdate:
+            case TpmCcConstants.TPM_CC_Sign:
+            case TpmCcConstants.TPM_CC_Unseal:
+            case TpmCcConstants.TPM_CC_PolicySigned:
+            case TpmCcConstants.TPM_CC_ContextLoad:
+            case TpmCcConstants.TPM_CC_ContextSave:
+            case TpmCcConstants.TPM_CC_ECDH_KeyGen:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt:
+            case TpmCcConstants.TPM_CC_FlushContext:
+            case TpmCcConstants.TPM_CC_LoadExternal:
+            case TpmCcConstants.TPM_CC_MakeCredential:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic:
+            case TpmCcConstants.TPM_CC_PolicyAuthorize:
+            case TpmCcConstants.TPM_CC_PolicyAuthValue:
+            case TpmCcConstants.TPM_CC_PolicyCommandCode:
+            case TpmCcConstants.TPM_CC_PolicyCounterTimer:
+            case TpmCcConstants.TPM_CC_PolicyCpHash:
+            case TpmCcConstants.TPM_CC_PolicyLocality:
+            case TpmCcConstants.TPM_CC_PolicyNameHash:
+            case TpmCcConstants.TPM_CC_PolicyOR:
+            case TpmCcConstants.TPM_CC_PolicyTicket:
+            case TpmCcConstants.TPM_CC_ReadPublic:
+            case TpmCcConstants.TPM_CC_RSA_Encrypt:
+            case TpmCcConstants.TPM_CC_StartAuthSession:
+            case TpmCcConstants.TPM_CC_VerifySignature:
+            case TpmCcConstants.TPM_CC_ECC_Parameters:
+            case TpmCcConstants.TPM_CC_FirmwareRead:
+            case TpmCcConstants.TPM_CC_GetCapability:
+            case TpmCcConstants.TPM_CC_GetRandom:
+            case TpmCcConstants.TPM_CC_GetTestResult:
+            case TpmCcConstants.TPM_CC_Hash:
+            case TpmCcConstants.TPM_CC_PCR_Read:
+            case TpmCcConstants.TPM_CC_PolicyPCR:
+            case TpmCcConstants.TPM_CC_PolicyRestart:
+            case TpmCcConstants.TPM_CC_ReadClock:
+            case TpmCcConstants.TPM_CC_PCR_Extend:
+            case TpmCcConstants.TPM_CC_PCR_SetAuthValue:
+            case TpmCcConstants.TPM_CC_NV_Certify:
+            case TpmCcConstants.TPM_CC_EventSequenceComplete:
+            case TpmCcConstants.TPM_CC_HashSequenceStart:
+            case TpmCcConstants.TPM_CC_PolicyPhysicalPresence:
+            case TpmCcConstants.TPM_CC_PolicyDuplicationSelect:
+            case TpmCcConstants.TPM_CC_PolicyGetDigest:
+            case TpmCcConstants.TPM_CC_TestParms:
+            case TpmCcConstants.TPM_CC_Commit:
+            case TpmCcConstants.TPM_CC_PolicyPassword:
+            case TpmCcConstants.TPM_CC_ZGen_2Phase:
+            case TpmCcConstants.TPM_CC_EC_Ephemeral:
+            case TpmCcConstants.TPM_CC_PolicyNvWritten:
+            case TpmCcConstants.TPM_CC_PolicyTemplate:
+            case TpmCcConstants.TPM_CC_CreateLoaded:
+            case TpmCcConstants.TPM_CC_PolicyAuthorizeNV:
+            case TpmCcConstants.TPM_CC_EncryptDecrypt2:
+            case TpmCcConstants.TPM_CC_AC_GetCapability:
+            case TpmCcConstants.TPM_CC_AC_Send:
+            case TpmCcConstants.TPM_CC_Policy_AC_SendSelect:
+            case TpmCcConstants.TPM_CC_CertifyX509:
+            case TpmCcConstants.TPM_CC_ACT_SetTimeout:
+            case TpmCcConstants.TPM_CC_ECC_Encrypt:
+            case TpmCcConstants.TPM_CC_ECC_Decrypt:
+            case TpmCcConstants.TPM_CC_PolicyCapability:
+            case TpmCcConstants.TPM_CC_PolicyParameters:
+            case TpmCcConstants.TPM_CC_NV_DefineSpace2:
+            case TpmCcConstants.TPM_CC_NV_ReadPublic2:
+            case TpmCcConstants.TPM_CC_SetCapability:
+            case TpmCcConstants.TPM_CC_ReadOnlyControl:
+            case TpmCcConstants.TPM_CC_PolicyTransportSPDM:
+            case TpmCcConstants.TPM_CC_VerifySequenceComplete:
+            case TpmCcConstants.TPM_CC_SignSequenceComplete:
+            case TpmCcConstants.TPM_CC_VerifyDigestSignature:
+            case TpmCcConstants.TPM_CC_SignDigest:
+            case TpmCcConstants.TPM_CC_Encapsulate:
+            case TpmCcConstants.TPM_CC_Decapsulate:
+            case TpmCcConstants.TPM_CC_VerifySequenceStart:
+            case TpmCcConstants.TPM_CC_SignSequenceStart:
+            case TpmCcConstants.CC_VEND:
             default:
             {
                 using Tpm2bPublic objectPublic = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: true, isDuplicable: true);
@@ -439,16 +967,18 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
     }
 
     /// <summary>
-    /// <c>TPM2_PolicySecret()</c> admits a permanent hierarchy alone as its <c>authHandle</c> in this model, so a
-    /// public-only object there is refused with <c>TPM_RC_HANDLE</c> before any object could resolve — the
-    /// pre-existing scope of the command's arm, pinned as it stands rather than as check 1 would answer.
-    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 23.4</see>.
+    /// <c>TPM2_PolicySecret()</c> admits a loaded object as its <c>authHandle</c>
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3,
+    /// clause 23.4.1: "authEntity ... may be any TPM entity with a handle and an associated authValue ... This
+    /// includes ... loaded objects"</see>), but a public-only one — no sensitive area, hence no authValue at all
+    /// — has no authorization available, answered bare <c>TPM_RC_AUTH_UNAVAILABLE</c> exactly as check 1 names
+    /// (Part 3, clause 5.6, check 1), ahead of the userWithAuth gate.
     /// </summary>
     [TestMethod]
-    public async Task PolicySecretWithAPublicOnlyObjectIsRefusedWithHandle()
+    public async Task PolicySecretWithAPublicOnlyObjectIsRefusedWithAuthUnavailable()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using TpmSimulator simulator = await CreateOperationalAsync(nameof(PolicySecretWithAPublicOnlyObjectIsRefusedWithHandle), pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(nameof(PolicySecretWithAPublicOnlyObjectIsRefusedWithAuthUnavailable), pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
         using EccKeyMaterial key = EccKeyMaterial.Generate();
@@ -467,7 +997,7 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
             using PolicySecretInput input = PolicySecretInput.CreateImmediate(handle.Value, policyHandle, pool);
             using TpmPasswordSession objectAuth = TpmPasswordSession.CreateEmpty(pool);
             TpmResult<PolicySecretResponse> result = await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(tpm, input, [objectAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), result.ResponseCode, "authHandle, handle 1 of Table 146, admits permanent hierarchies alone here, so an object handle is refused with handle-encoded TPM_RC_HANDLE.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, result.ResponseCode, "A public-only object has no authorization available at all (Part 3, clause 5.6, check 1).");
         }
         finally
         {
@@ -546,7 +1076,8 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
         TpmResponseRegistry registry = CreateRegistry();
         using EccKeyMaterial key = EccKeyMaterial.Generate();
         TpmiDhObject handle = await LoadPublicOnlyEccAsync(tpm, registry, pool, key, NoDaSigningAttributes).ConfigureAwait(false);
-        byte[] digest = SHA256.HashData(MessageBytes);
+        using DigestValue messageDigest = CryptographicKeyEvents.ComputeDigest(MessageBytes, 32, CryptoTags.Sha256Digest, pool);
+        byte[] digest = messageDigest.AsReadOnlySpan().ToArray();
         byte[] signature = key.Key.SignHash(digest, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
 
         using VerifyDigestSignatureInput digestInput = VerifyDigestSignatureInput.ForEcdsa(handle, digest, signature, SessionAlg, pool);

@@ -3,6 +3,7 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -79,6 +80,7 @@ internal sealed class DataIntegrityProofTests
             didDocument,
             RdfcCanonicalizer,
             ContextResolver,
+            signedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -132,6 +134,7 @@ internal sealed class DataIntegrityProofTests
             didDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            signedCredential.Context!,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -208,6 +211,7 @@ internal sealed class DataIntegrityProofTests
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -261,6 +265,7 @@ internal sealed class DataIntegrityProofTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
+            KnownContext,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -625,6 +630,10 @@ internal sealed class DataIntegrityProofTests
             didDocument,
             JcsCanonicalizer,
             contextResolver: null,
+            //Some callers (proof-chain-ordering edge cases) present a credential with no @context at
+            //all; chain-ordering failures return before context validation runs, so any non-null
+            //value satisfies the required parameter without affecting those tests' outcome.
+            credential.Context ?? Context.FromIris(Context.Credentials20),
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             SerializeProofOptions,
@@ -644,6 +653,8 @@ internal sealed class DataIntegrityProofTests
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+
+    private static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, Context.CredentialsExamples20);
 
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, CredentialSecuringMaterial.JsonOptions);

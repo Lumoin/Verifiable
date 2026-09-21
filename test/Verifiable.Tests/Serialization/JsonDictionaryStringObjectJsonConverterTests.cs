@@ -16,7 +16,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
     /// compatibility for verifiable data exchange.</remarks>
     /// <returns>A <see cref="JsonSerializerOptions"/> object initialized with default values suitable for verifiable
     /// serialization scenarios.</returns>
-    private static JsonSerializerOptions CreateOptions() => new JsonSerializerOptions().ApplyVerifiableDefaults();
+    private static JsonSerializerOptions CreateOptions() => TestSetup.DefaultSerializationOptions;
 
 
     [TestMethod]
@@ -613,6 +613,43 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
     }
 
     [TestMethod]
+    public void DeserializeTopLevelDuplicateMemberNameThrowsJsonException()
+    {
+        //RFC 8259 §4: "the behavior of software that receives such an object is unpredictable."
+        const string json = /*lang=json,strict*/ """{"name":"Alice","name":"Bob"}""";
+        var options = CreateOptions();
+
+        _ = Assert.Throws<JsonException>(() =>
+            JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options));
+    }
+
+    [TestMethod]
+    public void DeserializeNestedDuplicateMemberNameThrowsJsonException()
+    {
+        const string json = /*lang=json,strict*/ """{"outer":{"name":"Alice","name":"Bob"}}""";
+        var options = CreateOptions();
+
+        _ = Assert.Throws<JsonException>(() =>
+            JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options));
+    }
+
+    [TestMethod]
+    public void DeserializeUniqueMemberNamesStillSucceeds()
+    {
+        const string json = /*lang=json,strict*/ """{"outer":{"first":"Alice","second":"Bob"},"name":"Carol"}""";
+        var options = CreateOptions();
+
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("Carol", result["name"]);
+        var outer = result["outer"] as Dictionary<string, object>;
+        Assert.IsNotNull(outer);
+        Assert.AreEqual("Alice", outer["first"]);
+        Assert.AreEqual("Bob", outer["second"]);
+    }
+
+    [TestMethod]
     public void RoundtripPreservesNumericPrecision()
     {
         const string json = /*lang=json,strict*/ """{"integer":42,"decimal":3.14159265358979}""";
@@ -664,5 +701,43 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         Assert.IsNotNull(row2);
         Assert.AreEqual(3L, row2[0]);
         Assert.AreEqual(4L, row2[1]);
+    }
+
+
+    /// <summary>
+    /// A dictionary value writes as a JSON array of its elements whichever concrete sequence type
+    /// carries it: <see cref="string"/>[], <see cref="List{T}"/> of <see cref="string"/>, and
+    /// <see cref="IReadOnlyList{T}"/> of <see cref="string"/> backed by an array write the identical
+    /// bytes; a <see cref="List{T}"/> of <see cref="int"/> and a <see cref="List{T}"/> of
+    /// <see cref="object"/> mixing a string and a nested dictionary each write as the JSON array of
+    /// their own elements.
+    /// </summary>
+    [TestMethod]
+    public void SerializeSequenceValuesWritesIdenticalArraysRegardlessOfListShape()
+    {
+        string[] backingArray = ["a", "b"];
+        var dictionary = new Dictionary<string, object>
+        {
+            ["stringArray"] = backingArray,
+            ["stringList"] = new List<string> { "a", "b" },
+            ["stringReadOnlyList"] = Array.AsReadOnly(backingArray),
+            ["intList"] = new List<int> { 1, 2, 3 },
+            ["mixedList"] = new List<object> { "text", new Dictionary<string, object> { ["inner"] = "value" } }
+        };
+        var options = CreateOptions();
+
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        string stringArrayJson = root.GetProperty("stringArray").GetRawText();
+        string stringListJson = root.GetProperty("stringList").GetRawText();
+        string stringReadOnlyListJson = root.GetProperty("stringReadOnlyList").GetRawText();
+
+        Assert.AreEqual(/*lang=json,strict*/ """["a","b"]""", stringArrayJson);
+        Assert.AreEqual(stringArrayJson, stringListJson);
+        Assert.AreEqual(stringArrayJson, stringReadOnlyListJson);
+        Assert.AreEqual(/*lang=json,strict*/ """[1,2,3]""", root.GetProperty("intList").GetRawText());
+        Assert.AreEqual(/*lang=json,strict*/ """["text",{"inner":"value"}]""", root.GetProperty("mixedList").GetRawText());
     }
 }

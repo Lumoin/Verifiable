@@ -301,6 +301,34 @@ public readonly record struct HttpCacheFreshness
             out result);
 
 
+    /// <summary>
+    /// Clamps <see cref="FreshnessLifetime"/> to a consumer's own upper and/or lower cache-lifetime
+    /// bound, per the "MAY define its own upper and/or lower bounds on an acceptable cache lifetime"
+    /// pattern draft-ietf-oauth-client-id-metadata-document-02 §5.2 states for a Client ID Metadata
+    /// Document cache. The one clamp implementation every RFC 9111-header-driven cache in this library
+    /// shares — a Client ID Metadata Document cache and a JWKS key-set cache apply it to the same
+    /// <see cref="FreshnessLifetime"/> against their own, independent bounds.
+    /// </summary>
+    /// <param name="minimumLifetime">The lower bound, or <see langword="null"/> for none.</param>
+    /// <param name="maximumLifetime">The upper bound, or <see langword="null"/> for none.</param>
+    /// <returns>The clamped lifetime; <see cref="TimeSpan.Zero"/> in, zero or the floor out.</returns>
+    public TimeSpan Clamp(TimeSpan? minimumLifetime, TimeSpan? maximumLifetime)
+    {
+        TimeSpan lifetime = FreshnessLifetime;
+        if(minimumLifetime is TimeSpan minimum && lifetime < minimum)
+        {
+            lifetime = minimum;
+        }
+
+        if(maximumLifetime is TimeSpan maximum && lifetime > maximum)
+        {
+            lifetime = maximum;
+        }
+
+        return lifetime;
+    }
+
+
     private readonly record struct CacheControlDirectives(
         bool HasNoStore,
         bool HasNoCache,

@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Xml;
 /// <summary>
 /// Adversarial proofs that signature-wrapping shapes — a document-order-independent cloned <c>Id</c>, and an
 /// attacker's own <c>Object</c> carrying a decoy element sharing the honest reference's target <c>Id</c> —
-/// never let <see cref="XmlReferenceProcessing.TryComputeDigestInput"/> resolve to either the honest or the
+/// never let <see cref="XmlReferenceProcessing.TryComputeDigestInput(XmlNodeTable, XmlSignature, int, XmlReferenceResolver?, BaseMemoryPool, out PooledMemory?, out XmlSignatureProcessingError)"/> resolve to either the honest or the
 /// attacker's element, per the fail-closed <see cref="XmlSignatureProcessingFailure.DuplicateId"/> posture:
 /// signature wrapping via duplicate/retargeted Ids must die on it. Every refusal path is
 /// observed through <see cref="MeteredHousePool"/> accounting.

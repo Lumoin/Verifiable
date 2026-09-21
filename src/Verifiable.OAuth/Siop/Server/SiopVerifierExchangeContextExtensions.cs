@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.JCose;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server;
 
@@ -188,7 +187,7 @@ public static class SiopVerifierExchangeContextExtensions
         /// <summary>
         /// Gets the absolute §9 <c>request_uri</c> the preparation endpoint composed for the
         /// by-reference flow, or <see langword="null"/> when the deployment did not configure
-        /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>. The application reads
+        /// <see cref="Verifiable.Server.ServerIntegration.ResolveEndpointUriAsync"/>. The application reads
         /// it after dispatch to carry in a QR code or deep link.
         /// </summary>
         public Uri? SiopGeneratedRequestUri =>

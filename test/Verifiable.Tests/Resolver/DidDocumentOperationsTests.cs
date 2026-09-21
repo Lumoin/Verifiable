@@ -6,7 +6,7 @@ using Verifiable.Core.Resolvers;
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// Conformance vectors for <see cref="DidDocumentOperations.Apply"/>: the pure document algebra behind a DIF
+/// Conformance vectors for <see cref="DidDocumentOperations.Apply(DidDocument?, string, DidDocument)"/>: the pure document algebra behind a DIF
 /// DID Registration <c>update</c> — <c>setDidDocument</c> (replace), <c>addToDidDocument</c> (union by identity),
 /// and <c>removeFromDidDocument</c> (difference by identity) — plus the fail-closed guards.
 /// </summary>
@@ -171,7 +171,9 @@ internal sealed class DidDocumentOperationsTests
 
         _ = DidDocumentOperations.Apply(current, WellKnownDidRegistrationValues.AddToDidDocument, additions);
 
+        Assert.IsNotNull(current.VerificationMethod, "Apply must not mutate the current document.");
         Assert.HasCount(1, current.VerificationMethod, "Apply must not mutate the current document.");
+        Assert.IsNotNull(additions.VerificationMethod, "Apply must not mutate the payload.");
         Assert.HasCount(1, additions.VerificationMethod, "Apply must not mutate the payload.");
     }
 

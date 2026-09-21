@@ -10,9 +10,9 @@ namespace Verifiable.DidComm.DiscoverFeatures;
 /// </summary>
 /// <remarks>
 /// The type URIs and body member names follow the UTF-8-literal + <see cref="Utf8Constants.ToInternedString"/>
-/// idiom of <see cref="WellKnownProblemReportNames"/>. The <c>feature-type</c> VALUES (<c>protocol</c>,
+/// idiom of <see cref="Verifiable.DidComm.ProblemReports.WellKnownProblemReportNames"/>. The <c>feature-type</c> VALUES (<c>protocol</c>,
 /// <c>goal-code</c>, <c>header</c>) are enumerated descriptor tokens used for comparison and dispatch, not
-/// converter-matched wire keys, so — like <see cref="WellKnownProblemCodes"/> — they are plain string constants.
+/// converter-matched wire keys, so — like <see cref="Verifiable.DidComm.ProblemReports.WellKnownProblemCodes"/> — they are plain string constants.
 /// </remarks>
 public static class WellKnownDiscoverFeaturesNames
 {

@@ -24,11 +24,13 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <strong>Issuer:</strong> Creates the base proof using <see cref="CreateBaseProofAsync"/>.
 /// </description></item>
 /// <item><description>
-/// <strong>Holder:</strong> Verifies the base proof using <see cref="VerifyBaseProofAsync"/>,
+/// <strong>Holder:</strong> Verifies the base proof using
+/// <see cref="CredentialBbs2023Extensions.extension(DataIntegritySecuredCredential).VerifyBaseProofAsync(DidDocument, BbsVerifySignatureFactoryDelegate, ParseBbsBaseProofDelegate, PartitionStatementsDelegate, CanonicalizationDelegate, ContextResolverDelegate?, Context, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/>,
 /// stores the credential, and later derives a presentation using <see cref="DeriveProofAsync"/>.
 /// </description></item>
 /// <item><description>
-/// <strong>Verifier:</strong> Verifies the derived proof using <see cref="VerifyDerivedProofAsync"/>.
+/// <strong>Verifier:</strong> Verifies the derived proof using
+/// <see cref="CredentialBbs2023Extensions.extension(DataIntegritySecuredCredential).VerifyDerivedProofAsync(DidDocument, BbsProofVerifyFactoryDelegate, ParseBbsDerivedProofDelegate, CanonicalizationDelegate, ContextResolverDelegate?, Context, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/>.
 /// </description></item>
 /// </list>
 /// <para>
@@ -212,6 +214,16 @@ public static class CredentialBbs2023Extensions
             var partition = await partitionStatements(credentialJson, mandatoryPointers, canonicalize, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
             var canonicalStatements = partition.AllStatements.ToList();
 
+            //A credential that canonicalizes to no statements (for example one with no resolvable
+            //@context) would sign a header whose mandatory hash is the SHA-256 of the empty string and
+            //a BBS message vector with nothing in it; the resulting base proof would later verify
+            //trivially over content the credential does not display. Refuse to mint one rather than
+            //sign something that proves nothing.
+            if(canonicalStatements.Count == 0)
+            {
+                throw new InvalidOperationException("The credential canonicalizes to no statements; a base proof would cover nothing.");
+            }
+
             var hmacKey = generateHmacKey();
 
             ComputeHmacDelegate hmacCompute = ResolveHmacDelegate();
@@ -312,6 +324,14 @@ public static class CredentialBbs2023Extensions
         /// <param name="partitionStatements">Delegate for partitioning statements.</param>
         /// <param name="canonicalize">Canonicalization function for JSON-LD to N-Quads.</param>
         /// <param name="contextResolver">Delegate for resolving JSON-LD contexts.</param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c>: the exact ordered set of entries a document
+        /// must carry for this deployment. Checked after the proof verifies, per
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data
+        /// Integrity 1.0 §2.4.1 Validating Contexts</see> and
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+        /// Validation</see>.
+        /// </param>
         /// <param name="serialize">Delegate for serializing credentials.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="encoder">Base64URL encoder.</param>
@@ -335,6 +355,7 @@ public static class CredentialBbs2023Extensions
             PartitionStatementsDelegate partitionStatements,
             CanonicalizationDelegate canonicalize,
             ContextResolverDelegate? contextResolver,
+            Context knownContext,
             CredentialSerializeDelegate serialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
@@ -343,6 +364,8 @@ public static class CredentialBbs2023Extensions
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(knownContext);
+
             var (result, context) = await credential.VerifyBaseProofVerboseAsync(
                 bbsVerify,
                 parseBaseProof,
@@ -359,10 +382,18 @@ public static class CredentialBbs2023Extensions
 
             context?.Dispose();
 
-            return result.IsValid
-                ? CredentialVerificationResult<DataIntegritySecuredCredential>.Success(
-                    Verified<DataIntegritySecuredCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)))
-                : CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            if(!result.IsValid)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            }
+
+            if(!await ContextDeepValidation.ValidateAfterProofVerifiedAsync(credential, knownContext, cancellationToken).ConfigureAwait(false))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ContextValidationFailed);
+            }
+
+            return CredentialVerificationResult<DataIntegritySecuredCredential>.Success(
+                Verified<DataIntegritySecuredCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)));
         }
 
 
@@ -385,6 +416,14 @@ public static class CredentialBbs2023Extensions
         /// <param name="partitionStatements">Delegate for partitioning statements.</param>
         /// <param name="canonicalize">Canonicalization function for JSON-LD to N-Quads.</param>
         /// <param name="contextResolver">Delegate for resolving JSON-LD contexts.</param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c>: the exact ordered set of entries a document
+        /// must carry for this deployment. Checked after the proof verifies, per
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data
+        /// Integrity 1.0 §2.4.1 Validating Contexts</see> and
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+        /// Validation</see>.
+        /// </param>
         /// <param name="serialize">Delegate for serializing credentials.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="encoder">Base64URL encoder.</param>
@@ -403,6 +442,7 @@ public static class CredentialBbs2023Extensions
         /// <item><description>The proof's <c>verificationMethod</c> must resolve under <paramref name="issuerDidDocument"/>'s <c>assertionMethod</c> relationship, not merely the flat verification-method array.</description></item>
         /// <item><description>The BBS signature must verify under the resolved method's own key material.</description></item>
         /// <item><description>The resolved method's own <c>controller</c> must equal <see cref="VerifiableCredential.Issuer"/> (controller-RESOLUTION semantics).</description></item>
+        /// <item><description>The credential's own <c>@context</c> must deeply equal <paramref name="knownContext"/> (VC Data Integrity §2.4.1/§4.6).</description></item>
         /// </list>
         /// Only past every gate does <see cref="BoundProvenance.TryBindByControllerArtifact"/> mint a
         /// <see cref="Verified{T}"/> whose <see cref="Verified{T}.IsIdentityBound"/> is <see langword="true"/>.
@@ -415,6 +455,7 @@ public static class CredentialBbs2023Extensions
             PartitionStatementsDelegate partitionStatements,
             CanonicalizationDelegate canonicalize,
             ContextResolverDelegate? contextResolver,
+            Context knownContext,
             CredentialSerializeDelegate serialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
@@ -425,6 +466,7 @@ public static class CredentialBbs2023Extensions
         {
             ArgumentNullException.ThrowIfNull(issuerDidDocument);
             ArgumentNullException.ThrowIfNull(bbsVerifyFactory);
+            ArgumentNullException.ThrowIfNull(knownContext);
             ArgumentNullException.ThrowIfNull(memoryPool);
 
             var proof = credential.Proof?.FirstOrDefault();
@@ -461,6 +503,11 @@ public static class CredentialBbs2023Extensions
             if(!result.IsValid)
             {
                 return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            }
+
+            if(!await ContextDeepValidation.ValidateAfterProofVerifiedAsync(credential, knownContext, cancellationToken).ConfigureAwait(false))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ContextValidationFailed);
             }
 
             BoundProvenance? provenance = SelectiveDisclosureIdentityBinding.TryBindIssuer(
@@ -536,8 +583,33 @@ public static class CredentialBbs2023Extensions
             var credentialWithoutProof = CloneCredentialWithoutProof(credential);
             var credentialJson = serialize(credentialWithoutProof);
 
-            var partition = await partitionStatements(credentialJson, parsedProof.MandatoryPointers.ToList(), canonicalize, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            //The credential's own @context is untrusted caller input; a context the canonicalizer
+            //cannot load (an unresolvable remote URI, for RDFC-based cryptosuites) is a FAILED
+            //verification, per Data Integrity 1.0 §2.4.1, never an escaping exception.
+            StatementPartitionResult partition;
+            try
+            {
+                partition = await partitionStatements(credentialJson, parsedProof.MandatoryPointers.ToList(), canonicalize, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            }
+            catch(OperationCanceledException)
+            {
+                throw;
+            }
+            catch(Exception)
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
+            }
+
             var canonicalStatements = partition.AllStatements.ToList();
+
+            //A credential that canonicalizes to no statements cannot be verified: the mandatory hash
+            //and the BBS message vector would both be computed over nothing, and a proof over nothing
+            //verifies as valid regardless of what the credential displays. Refusing here closes that
+            //bypass before any cryptographic call.
+            if(canonicalStatements.Count == 0)
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
+            }
 
             ComputeHmacDelegate hmacCompute = ResolveHmacDelegate();
 
@@ -572,7 +644,20 @@ public static class CredentialBbs2023Extensions
             var proofOptions = ProofOptionsDocument.FromProof(proof, credential.Context);
             var proofOptionsJson = serializeProofOptions(proofOptions);
 
-            var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            CanonicalizationResult proofOptionsCanonicalization;
+            try
+            {
+                proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            }
+            catch(OperationCanceledException)
+            {
+                throw;
+            }
+            catch(Exception)
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
+            }
+
             using DigestValue proofHash = await CryptographicKeyEvents.ComputeDigestAsync(
                 Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
                 outputByteLength: 32,
@@ -807,6 +892,16 @@ public static class CredentialBbs2023Extensions
             //label map is rebuilt by joining through the shared original bnode identifiers:
             //reduced_c14n -> original_bnode -> full_c14n -> shuffle b-label.
             var reducedPartition = await partitionStatements(reducedCredentialJson, [], canonicalize, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+
+            //A reveal document that canonicalizes to no statements would carry a derived proof whose
+            //mandatory hash and BBS message vector are both computed over nothing, which verifies
+            //trivially. Refuse to mint such a proof rather than hand the holder a credential that
+            //verifies without proving anything about any claim it displays.
+            if(reducedPartition.AllStatements.Count == 0)
+            {
+                throw new InvalidOperationException("The disclosed reveal document canonicalizes to no statements; a derived proof would cover nothing.");
+            }
+
             var reducedLabelMap = ComputeReducedLabelMap(
                 reducedPartition.LabelMap,
                 fullPartition.LabelMap,
@@ -889,6 +984,15 @@ public static class CredentialBbs2023Extensions
         /// <param name="parseDerivedProof">Delegate to parse the derived proof value.</param>
         /// <param name="canonicalize">Canonicalization function for JSON-LD to N-Quads.</param>
         /// <param name="contextResolver">Delegate for resolving JSON-LD contexts.</param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c>: the exact ordered set of entries a document
+        /// must carry for this deployment. Checked after the proof verifies, per
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data
+        /// Integrity 1.0 §2.4.1 Validating Contexts</see> and
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+        /// Validation</see>. The derived (reveal) document carries the same <c>@context</c> the
+        /// base proof's document carried, copied verbatim by selective disclosure.
+        /// </param>
         /// <param name="serialize">Delegate for serializing credentials.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="encoder">Base64URL encoder.</param>
@@ -910,6 +1014,7 @@ public static class CredentialBbs2023Extensions
             ParseBbsDerivedProofDelegate parseDerivedProof,
             CanonicalizationDelegate canonicalize,
             ContextResolverDelegate? contextResolver,
+            Context knownContext,
             CredentialSerializeDelegate serialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
@@ -918,6 +1023,8 @@ public static class CredentialBbs2023Extensions
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(knownContext);
+
             var (result, context) = await credential.VerifyDerivedProofVerboseAsync(
                 bbsProofVerify,
                 parseDerivedProof,
@@ -933,17 +1040,25 @@ public static class CredentialBbs2023Extensions
 
             context?.Dispose();
 
-            return result.IsValid
-                ? CredentialVerificationResult<DataIntegritySecuredCredential>.Success(
-                    Verified<DataIntegritySecuredCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)))
-                : CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            if(!result.IsValid)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            }
+
+            if(!await ContextDeepValidation.ValidateAfterProofVerifiedAsync(credential, knownContext, cancellationToken).ConfigureAwait(false))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ContextValidationFailed);
+            }
+
+            return CredentialVerificationResult<DataIntegritySecuredCredential>.Success(
+                Verified<DataIntegritySecuredCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)));
         }
 
 
         /// <summary>
         /// Verifies a derived proof by RESOLVING the issuer's verification method through
         /// <paramref name="issuerDidDocument"/> — the recommended default shape. See
-        /// <see cref="VerifyBaseProofAsync(DidDocument, BbsVerifySignatureFactoryDelegate, ParseBbsBaseProofDelegate, PartitionStatementsDelegate, CanonicalizationDelegate, ContextResolverDelegate?, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/>
+        /// <see cref="CredentialBbs2023Extensions.extension(DataIntegritySecuredCredential).VerifyBaseProofAsync(DidDocument, BbsVerifySignatureFactoryDelegate, ParseBbsBaseProofDelegate, PartitionStatementsDelegate, CanonicalizationDelegate, ContextResolverDelegate?, Context, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/>
         /// for the gate sequence; a derived proof's <c>verificationMethod</c> is the same issuer
         /// method the base proof carried (<see cref="DeriveProofVerboseAsync"/> copies it through
         /// unchanged), so the same resolve-and-bind recipe applies.
@@ -953,6 +1068,15 @@ public static class CredentialBbs2023Extensions
         /// <param name="parseDerivedProof">Delegate to parse the derived proof value.</param>
         /// <param name="canonicalize">Canonicalization function for JSON-LD to N-Quads.</param>
         /// <param name="contextResolver">Delegate for resolving JSON-LD contexts.</param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c>: the exact ordered set of entries a document
+        /// must carry for this deployment. Checked after the proof verifies, per
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">VC Data
+        /// Integrity 1.0 §2.4.1 Validating Contexts</see> and
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context
+        /// Validation</see>. The derived (reveal) document carries the same <c>@context</c> the
+        /// base proof's document carried, copied verbatim by selective disclosure.
+        /// </param>
         /// <param name="serialize">Delegate for serializing credentials.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="encoder">Base64URL encoder.</param>
@@ -971,6 +1095,7 @@ public static class CredentialBbs2023Extensions
             ParseBbsDerivedProofDelegate parseDerivedProof,
             CanonicalizationDelegate canonicalize,
             ContextResolverDelegate? contextResolver,
+            Context knownContext,
             CredentialSerializeDelegate serialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
@@ -981,6 +1106,7 @@ public static class CredentialBbs2023Extensions
         {
             ArgumentNullException.ThrowIfNull(issuerDidDocument);
             ArgumentNullException.ThrowIfNull(bbsProofVerifyFactory);
+            ArgumentNullException.ThrowIfNull(knownContext);
             ArgumentNullException.ThrowIfNull(memoryPool);
 
             var proof = credential.Proof?.FirstOrDefault();
@@ -1016,6 +1142,11 @@ public static class CredentialBbs2023Extensions
             if(!result.IsValid)
             {
                 return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            }
+
+            if(!await ContextDeepValidation.ValidateAfterProofVerifiedAsync(credential, knownContext, cancellationToken).ConfigureAwait(false))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ContextValidationFailed);
             }
 
             BoundProvenance? provenance = SelectiveDisclosureIdentityBinding.TryBindIssuer(
@@ -1090,9 +1221,49 @@ public static class CredentialBbs2023Extensions
 
             //createVerifyData: canonicalize the reveal document, then apply the parsed label map, sort, and
             //split into mandatory (by parsed mandatoryIndexes) and disclosed non-mandatory through the
-            //shared preparation substrate.
-            var credentialCanonicalization = await canonicalize(credentialJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            //shared preparation substrate. The reveal document's own @context is untrusted caller
+            //input; a context the canonicalizer cannot load (an unresolvable remote URI, for
+            //RDFC-based cryptosuites) is a FAILED verification, per Data Integrity 1.0 §2.4.1, never
+            //an escaping exception.
+            CanonicalizationResult credentialCanonicalization;
+            try
+            {
+                credentialCanonicalization = await canonicalize(credentialJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            }
+            catch(OperationCanceledException)
+            {
+                throw;
+            }
+            catch(Exception)
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
+            }
+
             var canonicalStatements = SplitIntoStatements(credentialCanonicalization.CanonicalForm);
+
+            //A reveal document that canonicalizes to no statements at all (for example one whose
+            //@context was lost, so no property key resolves to an absolute IRI) cannot be verified:
+            //the mandatory hash and the disclosed (non-mandatory) BBS message vector would both be
+            //computed over nothing -- neither path carries any content -- and a BBS proof of knowledge
+            //over an empty message list verifies as valid regardless of what the credential displays.
+            //Refusing here closes that bypass before any cryptographic call. A derived proof whose
+            //disclosed set is empty but whose mandatory set is not is a different, legitimate case: the
+            //mandatory statements still bind real content into the header, so it is not refused here.
+            if(canonicalStatements.Length == 0)
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
+            }
+
+            //A canonical (_:c14nN) blank node in the reveal document with no entry in the parsed
+            //derived proof's label map means the map was not built from this same canonicalization
+            //-- for example a different conformant RDFC-1.0 implementation assigned different
+            //labels to the same graph -- so the statements that would reach the BBS message vector
+            //would not be the ones the base proof's shuffled label map actually bound. Refuse
+            //rather than verify content that was not what was signed.
+            if(BlankNodeRelabelingExtensions.HasUnmappedCanonicalBlankNode(canonicalStatements, parsedProof.LabelMap))
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
+            }
 
             var reducedPrepared = NQuadStatementPreparation.PrepareWithLabelMap(
                 canonicalStatements,
@@ -1126,7 +1297,20 @@ public static class CredentialBbs2023Extensions
             var proofOptions = ProofOptionsDocument.FromProof(proof, credential.Context);
             var proofOptionsJson = serializeProofOptions(proofOptions);
 
-            var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            CanonicalizationResult proofOptionsCanonicalization;
+            try
+            {
+                proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+            }
+            catch(OperationCanceledException)
+            {
+                throw;
+            }
+            catch(Exception)
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
+            }
+
             using DigestValue proofHash = await CryptographicKeyEvents.ComputeDigestAsync(
                 Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
                 outputByteLength: 32,

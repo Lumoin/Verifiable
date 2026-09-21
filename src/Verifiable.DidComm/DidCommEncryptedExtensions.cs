@@ -763,6 +763,9 @@ public static class DidCommEncryptedExtensions
     /// <param name="keyUnwrapDelegate">The RFC 3394 key unwrap delegate.</param>
     /// <param name="aeadDecryptDelegate">The content decryption delegate matching the message's <c>enc</c>.</param>
     /// <param name="memoryPool">Memory pool for transient buffers.</param>
+    /// <param name="fromPriorPayloadDeserializer">Deserializer for a <c>from_prior</c> JWT's claims, used when the recovered message carries a DID rotation attestation.</param>
+    /// <param name="fromPriorHeaderDeserializer">Deserializer for a <c>from_prior</c> JWT's protected header, used to recover its signing algorithm and key id ahead of claim verification.</param>
+    /// <param name="headerPolicy">The strictness applied to unrecognized or malformed protected header members while unpacking.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A fail-closed unpack result.</returns>
     public static async ValueTask<DidCommEncryptedUnpackResult> UnpackAnoncryptAsync(
@@ -962,7 +965,7 @@ public static class DidCommEncryptedExtensions
     /// <see cref="DidCommDecryptionError.DecryptionFailed"/>; a missing or malformed protected header is
     /// <see cref="DidCommDecryptionError.MalformedEnvelope"/>.
     /// </remarks>
-    /// <inheritdoc cref="UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// <inheritdoc cref="UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, JwtClaimsDeserializer?, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}?, DidCommEncryptedHeaderPolicy, CancellationToken)"/>
     public static ValueTask<DidCommEncryptedUnpackResult> UnpackAnoncryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -1068,6 +1071,9 @@ public static class DidCommEncryptedExtensions
     /// <param name="keyUnwrapDelegate">The RFC 3394 key unwrap delegate.</param>
     /// <param name="aeadDecryptDelegate">The AES_CBC_HMAC_SHA2 content decryption delegate matching the message's <c>enc</c>.</param>
     /// <param name="memoryPool">Memory pool for transient buffers.</param>
+    /// <param name="fromPriorPayloadDeserializer">Deserializer for a <c>from_prior</c> JWT's claims, used when the recovered message carries a DID rotation attestation.</param>
+    /// <param name="fromPriorHeaderDeserializer">Deserializer for a <c>from_prior</c> JWT's protected header, used to recover its signing algorithm and key id ahead of claim verification.</param>
+    /// <param name="headerPolicy">The strictness applied to unrecognized or malformed protected header members while unpacking.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A fail-closed unpack result.</returns>
     public static async ValueTask<DidCommEncryptedUnpackResult> UnpackAuthcryptAsync(
@@ -1291,7 +1297,7 @@ public static class DidCommEncryptedExtensions
     /// the AES_CBC_HMAC_SHA2 delegate authcrypt mandates (1PU §2.1), which the curve-keyed registry
     /// cannot select by curve alone.
     /// </remarks>
-    /// <inheritdoc cref="UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// <inheritdoc cref="UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, JwtClaimsDeserializer?, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}?, DidCommEncryptedHeaderPolicy, CancellationToken)"/>
     public static ValueTask<DidCommEncryptedUnpackResult> UnpackAuthcryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -1749,6 +1755,15 @@ public static class DidCommEncryptedExtensions
         using(headerOwner)
         {
             ReadOnlySpan<byte> headerJson = headerOwner.Memory.Span;
+
+            //RFC 7516 §4 / §5.2 step 4: a header repeating "alg" would otherwise steer this peek's
+            //anoncrypt/authcrypt dispatch by the first occurrence while the authoritative parse in
+            //GeneralJweParsing disagrees; refusing here keeps the two readers from ever diverging.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(headerJson))
+            {
+                return false;
+            }
+
             algorithm = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJwkMemberNames.AlgUtf8);
             encryption = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.EncUtf8);
             typ = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.TypUtf8);
@@ -2154,6 +2169,7 @@ public static class DidCommEncryptedExtensions
         DidCommRotationError.PriorDidResolutionFailed => DidCommDecryptionError.PriorDidResolutionFailed,
         DidCommRotationError.RotationSignerNotAuthorized => DidCommDecryptionError.RotationSignerNotAuthorized,
         DidCommRotationError.RotationSignatureInvalid => DidCommDecryptionError.RotationSignatureInvalid,
+        DidCommRotationError.None => DidCommDecryptionError.RotationJwtMalformed,
         _ => DidCommDecryptionError.RotationJwtMalformed
     };
 }

@@ -9,7 +9,7 @@ namespace Verifiable.Tests.OAuth;
 /// Focused tests for the per-flow clock-skew resolution in
 /// <see cref="ValidationChecks.CheckKbJwtIatNotInFuture"/>. The check reads the
 /// deployment's per-request policy
-/// (<see cref="PolicyExchangeContextExtensions.ClockSkewToleranceOverride"/>) when
+/// (<c>PolicyExchangeContextExtensions.ClockSkewToleranceOverride</c>) when
 /// set, falling back to the <see cref="ValidationContext.ClockSkew"/> field —
 /// mirroring how <see cref="ValidationChecks.CheckKbJwtIatNotTooOld"/> resolves
 /// its window. This pins the wiring so an OID4VP deployment's profile (resolved

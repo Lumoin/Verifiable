@@ -15,7 +15,7 @@ namespace Verifiable.Json;
 /// The library carries each <c>di_vp</c> array entry verbatim as its serialized JSON in
 /// <see cref="CredentialRequest.DiVpProofs"/>; this delegate parses one entry back into the
 /// embedded-secured presentation model the W3C Data Integrity verifier consumes. The
-/// <see cref="VerifiablePresentationConverter"/> upcasts a presentation carrying a <c>proof</c>
+/// <see cref="Verifiable.Json.Converters.VerifiablePresentationConverter"/> upcasts a presentation carrying a <c>proof</c>
 /// member to <see cref="DataIntegritySecuredPresentation"/>, so an entry that carries no Data
 /// Integrity proof deserializes to the open base type and yields <see langword="null"/> here —
 /// the proof is then rejected as <c>invalid_proof</c>.

@@ -279,7 +279,7 @@ internal sealed class SdJwtPathExtractionTests
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared);
 
-        Assert.HasCount(0, paths);
+        Assert.IsEmpty(paths);
     }
 
 
@@ -310,3 +310,4 @@ internal sealed class SdJwtPathExtractionTests
         return $"{headerEncoded}.{payloadEncoded}.{fakeSignature}";
     }
 }
+

@@ -5,12 +5,13 @@ using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Apdu.Eac;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.Apdu;
 
 /// <summary>
-/// Mints card-verifiable certificates (BSI TR-03110-3 §C.1) with the framework's own ECDSA — an independent
-/// signer — for the Terminal Authentication tests. The body is built tag by tag with an
+/// Mints card-verifiable certificates (BSI TR-03110-3 §C.1) for the Terminal Authentication tests. The body
+/// is built tag by tag with an
 /// <see cref="AsnWriter"/> (the CVC application-class tags map directly onto <see cref="Asn1Tag"/>), signed
 /// with the issuer key (plain ECDSA <c>r ‖ s</c> over SHA-256, the id-TA-ECDSA-SHA-256 form), assembled into
 /// the outer <c>7F21</c> certificate, and parsed back through the library — so the result is a tracked
@@ -38,9 +39,6 @@ internal static class CardVerifiableCertificateMinter
 
     /// <summary>The P-256 coordinate length in bytes.</summary>
     private const int CoordinateLength = 32;
-
-    /// <summary>The P-256 IEEE P1363 (<c>r ‖ s</c>) signature length in bytes.</summary>
-    private const int SignatureLength = 64;
 
     /// <summary>Authorization first octet for a Country Verifying Certification Authority (role bits 11).</summary>
     public const byte CvcaRole = 0xC0;
@@ -249,7 +247,7 @@ internal static class CardVerifiableCertificateMinter
         WriteBody(bodyWriter, subjectKey, certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, terminalType);
         using IMemoryOwner<byte> bodyOwner = pool.Rent(bodyWriter.GetEncodedLength());
         int bodyLength = bodyWriter.Encode(bodyOwner.Memory.Span);
-        ReadOnlySpan<byte> body = bodyOwner.Memory.Span[..bodyLength];
+        ReadOnlyMemory<byte> body = bodyOwner.Memory[..bodyLength];
 
         //Sign the body; the issuer key is independent of the library wiring under test (ECDSA r||s, or RSA
         //PKCS#1 v1.5 over SHA-256 for an id-TA-RSA-v1-5-SHA-256 issuer).
@@ -264,7 +262,7 @@ internal static class CardVerifiableCertificateMinter
         var outerWriter = new AsnWriter(AsnEncodingRules.DER);
         using(outerWriter.PushSequence(CertificateTag))
         {
-            outerWriter.WriteEncodedValue(body);
+            outerWriter.WriteEncodedValue(body.Span);
             outerWriter.WriteOctetString(signature, SignatureTag);
         }
 
@@ -276,20 +274,27 @@ internal static class CardVerifiableCertificateMinter
 
 
     /// <summary>
-    /// Signs the certificate body with the issuer key into a pooled buffer: an elliptic-curve issuer produces a
-    /// plain <c>r ‖ s</c> ECDSA signature over SHA-256 (the id-TA-ECDSA-SHA-256 form), an RSA issuer a PKCS#1
-    /// v1.5 signature over SHA-256 (the id-TA-RSA-v1-5-SHA-256 form). The issuer is independent of the library
-    /// wiring under test.
+    /// Signs the certificate body through the registered signing seam into a pooled buffer: an elliptic-curve
+    /// issuer produces a plain <c>r ‖ s</c> ECDSA signature over SHA-256 (the id-TA-ECDSA-SHA-256 form), an RSA
+    /// issuer a PKCS#1 v1.5 signature over SHA-256 (the id-TA-RSA-v1-5-SHA-256 form).
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    private static IMemoryOwner<byte> SignBody(IssuerKey issuerKey, ReadOnlySpan<byte> body, BaseMemoryPool pool, out int length)
+    private static IMemoryOwner<byte> SignBody(IssuerKey issuerKey, ReadOnlyMemory<byte> body, BaseMemoryPool pool, out int length)
     {
         if(issuerKey.Rsa is RSA rsa)
         {
-            IMemoryOwner<byte> rsaOwner = pool.Rent(rsa.KeySize / 8);
+            byte[] exportedRsaPrivateKey = rsa.ExportRSAPrivateKey();
+            using IMemoryOwner<byte> rsaPrivateKeyOwner = pool.Rent(exportedRsaPrivateKey.Length, AllocationKind.Pinned);
+            exportedRsaPrivateKey.CopyTo(rsaPrivateKeyOwner.Memory);
+            CryptographicOperations.ZeroMemory(exportedRsaPrivateKey);
+
+            SigningDelegate signRsa = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
+            using Signature rsaSignature = signRsa(rsaPrivateKeyOwner.Memory, body, pool).AsTask().GetAwaiter().GetResult().Signature;
+            IMemoryOwner<byte> rsaOwner = pool.Rent(rsaSignature.Length);
             try
             {
-                _ = rsa.TrySignData(body, rsaOwner.Memory.Span, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, out length);
+                rsaSignature.AsReadOnlySpan().CopyTo(rsaOwner.Memory.Span);
+                length = rsaSignature.Length;
 
                 return rsaOwner;
             }
@@ -301,10 +306,18 @@ internal static class CardVerifiableCertificateMinter
             }
         }
 
-        IMemoryOwner<byte> ecOwner = pool.Rent(SignatureLength);
+        byte[] exportedEcPrivateKey = issuerKey.EllipticCurve!.ExportParameters(true).D!;
+        using IMemoryOwner<byte> ecPrivateKeyOwner = pool.Rent(exportedEcPrivateKey.Length, AllocationKind.Pinned);
+        exportedEcPrivateKey.CopyTo(ecPrivateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedEcPrivateKey);
+
+        SigningDelegate signEc = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
+        using Signature ecdsaSignature = signEc(ecPrivateKeyOwner.Memory, body, pool).AsTask().GetAwaiter().GetResult().Signature;
+        IMemoryOwner<byte> ecOwner = pool.Rent(ecdsaSignature.Length);
         try
         {
-            length = issuerKey.EllipticCurve!.SignData(body, ecOwner.Memory.Span, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+            ecdsaSignature.AsReadOnlySpan().CopyTo(ecOwner.Memory.Span);
+            length = ecdsaSignature.Length;
 
             return ecOwner;
         }

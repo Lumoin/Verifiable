@@ -20,13 +20,13 @@ namespace Verifiable.Acdc;
 /// <list type="number">
 /// <item><description>
 /// <strong>Content integrity</strong> — the ACDC's top-level SAID MUST verify over its received bytes
-/// (<see cref="AcdcSaid.VerifyAsync"/>), so the decoded <paramref name="message">message</paramref> is bound to
-/// <paramref name="acdcBytes">acdcBytes</paramref>: a tampered body cannot reproduce the claimed SAID.
+/// (<see cref="AcdcSaid.VerifyAsync"/>), so the decoded <c>message</c> is bound to
+/// <c>acdcBytes</c>: a tampered body cannot reproduce the claimed SAID.
 /// </description></item>
 /// <item><description>
-/// <strong>Issuer binding</strong> — the Issuer's KEL, replayed and verified HERE from <paramref name="issuerKel">issuerKel</paramref>
+/// <strong>Issuer binding</strong> — the Issuer's KEL, replayed and verified HERE from <c>issuerKel</c>
 /// (<see cref="KeriIssuerAnchors.ReplayAsync"/>), MUST anchor a direct issuance proof digest seal of that SAID
-/// (<see cref="AcdcKeriBinding.FindDirectIssuanceSeal"/>) under exactly <paramref name="message">message</paramref>'s
+/// (<see cref="AcdcKeriBinding.FindDirectIssuanceSeal"/>) under exactly <c>message</c>'s
 /// claimed <see cref="AcdcMessage.Issuer"/> — the Issuer's nonrepudiable commitment to the ACDC that survives later
 /// key rotation (ACDC specification,
 /// <see href="https://trustoverip.github.io/kswg-acdc-specification/#binding-to-key-state-at-time-of-acdc-state-change">

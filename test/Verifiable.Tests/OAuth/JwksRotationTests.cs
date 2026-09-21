@@ -61,20 +61,20 @@ internal sealed class JwksRotationTests
     public async Task JwksIncludesIncomingKeysBeforeActivation()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(ClientId, BaseUri, VerifierCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(ClientId, BaseUri, VerifierCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
         KeyId currentKid = keys.SigningKeyId;
         KeyId incomingKid = app.AllocateSigningKey();
 
-        app.UpdateSigningKeys(segment, new Dictionary<KeyUsageContext, SigningKeySet>
+        await app.UpdateSigningKeysAsync(segment, new Dictionary<KeyUsageContext, SigningKeySet>
         {
             [KeyUsageContext.JarSigning] = new SigningKeySet
             {
                 Current = [currentKid],
                 Incoming = [incomingKid]
             }
-        });
+        }).ConfigureAwait(false);
 
         string[] kids = await FetchJwksKidsAsync(app, segment, TestContext.CancellationToken)
             .ConfigureAwait(false);
@@ -92,20 +92,20 @@ internal sealed class JwksRotationTests
     public async Task JwksIncludesRetiringKeysInGraceWindow()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(ClientId, BaseUri, VerifierCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(ClientId, BaseUri, VerifierCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
         KeyId retiringKid = keys.SigningKeyId;
         KeyId newCurrentKid = app.AllocateSigningKey();
 
-        app.UpdateSigningKeys(segment, new Dictionary<KeyUsageContext, SigningKeySet>
+        await app.UpdateSigningKeysAsync(segment, new Dictionary<KeyUsageContext, SigningKeySet>
         {
             [KeyUsageContext.JarSigning] = new SigningKeySet
             {
                 Current = [newCurrentKid],
                 Retiring = [retiringKid]
             }
-        });
+        }).ConfigureAwait(false);
 
         string[] kids = await FetchJwksKidsAsync(app, segment, TestContext.CancellationToken)
             .ConfigureAwait(false);
@@ -123,20 +123,20 @@ internal sealed class JwksRotationTests
     public async Task JwksOmitsHistoricalKeys()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(ClientId, BaseUri, VerifierCapabilities);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(ClientId, BaseUri, VerifierCapabilities).ConfigureAwait(false);
 
         string segment = keys.Registration.TenantId;
         KeyId currentKid = keys.SigningKeyId;
         KeyId historicalKid = app.AllocateSigningKey();
 
-        app.UpdateSigningKeys(segment, new Dictionary<KeyUsageContext, SigningKeySet>
+        await app.UpdateSigningKeysAsync(segment, new Dictionary<KeyUsageContext, SigningKeySet>
         {
             [KeyUsageContext.JarSigning] = new SigningKeySet
             {
                 Current = [currentKid],
                 Historical = [historicalKid]
             }
-        });
+        }).ConfigureAwait(false);
 
         string[] kids = await FetchJwksKidsAsync(app, segment, TestContext.CancellationToken)
             .ConfigureAwait(false);

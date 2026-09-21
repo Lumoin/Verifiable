@@ -93,7 +93,7 @@ public delegate VerifyProofDelegate VerifyProofMatcher(
 /// <strong>Separation of Concerns:</strong>
 /// </para>
 /// <para>
-/// Canonicalization is handled separately in the <see cref="Verifiable.Core.Serialization"/>
+/// Canonicalization is handled separately in the <c>Verifiable.Core.Serialization</c>
 /// namespace via <see cref="CanonicalizationDelegate"/>. This registry only handles
 /// the cryptographic operations on already-canonicalized bytes.
 /// </para>

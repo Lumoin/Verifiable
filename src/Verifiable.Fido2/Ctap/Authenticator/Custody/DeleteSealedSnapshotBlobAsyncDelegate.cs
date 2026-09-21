@@ -3,7 +3,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <summary>
 /// Deletes whatever TPM-sealed snapshot blob bytes are stored for <paramref name="runId"/>, so a later
 /// <see cref="TryFetchSealedSnapshotBlobAsyncDelegate"/> call observes nothing stored — the caller-supplied
-/// I/O half of <see cref="TpmSealedStateCustody"/>'s wipe step (the next
+/// I/O half of the state-custody seam bundle's wipe step (the next
 /// rehydrate-without-snapshot IS the factory image).
 /// </summary>
 /// <param name="runId">

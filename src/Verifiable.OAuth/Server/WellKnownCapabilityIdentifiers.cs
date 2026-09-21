@@ -317,4 +317,49 @@ public static class WellKnownCapabilityIdentifiers
     /// </summary>
     public static CapabilityIdentifier OAuthProtectedResourceMetadata { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:oauth:protected_resource_metadata");
+
+
+    /// <summary>The hand-kept list behind <see cref="All"/>: every identifier this class declares, in declaration order.</summary>
+    private static IReadOnlyList<CapabilityIdentifier> RegisteredIdentifiers { get; } =
+    [
+        OAuthAuthorizationCode,
+        OAuthClientCredentials,
+        OAuthRefreshToken,
+        OAuthTokenExchange,
+        OAuthJwtBearer,
+        OAuthIdJag,
+        OAuthPushedAuthorization,
+        OAuthJwtSecuredAuthorizationRequest,
+        OAuthTokenRevocation,
+        OAuthTokenIntrospection,
+        Oid4VciNonceEndpoint,
+        Oid4VciPreAuthorizedCodeGrant,
+        Oid4VciCredentialEndpoint,
+        Oid4VciCredentialIssuerMetadata,
+        Oid4VciDeferredCredentialEndpoint,
+        Oid4VciNotificationEndpoint,
+        Oid4VciCredentialOfferEndpoint,
+        OAuthGlobalTokenRevocation,
+        OidcRpInitiatedLogout,
+        OidcBackChannelLogout,
+        OAuthDeviceAuthorization,
+        OAuthDynamicClientRegistration,
+        OAuthJwksEndpoint,
+        OAuthDiscoveryEndpoint,
+        OAuthDirectAuthorization,
+        OAuthClientIdMetadataDocument,
+        OidcOpenIdConnect,
+        OidcUserInfo,
+        OidcSessionManagement,
+        FederationBase,
+        VcVerifiablePresentation,
+        SiopSelfIssuedOp,
+        VcVerifiableCredentialIssuance,
+        AuthZenAuthorizationApi,
+        SsfTransmitter,
+        OAuthProtectedResourceMetadata
+    ];
+
+    /// <summary>Gets every <see cref="CapabilityIdentifier"/> this class declares, in declaration order.</summary>
+    public static IReadOnlyList<CapabilityIdentifier> All => RegisteredIdentifiers;
 }

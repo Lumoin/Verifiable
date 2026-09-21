@@ -1,7 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
+using Verifiable.JCose;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -123,5 +126,155 @@ internal sealed class CtapGetAssertionRequestCborWriterTests
     public void ThrowsArgumentNullExceptionForNullRequest()
     {
         _ = Assert.ThrowsExactly<ArgumentNullException>(() => CtapGetAssertionRequestCborWriter.Write(null!));
+    }
+
+
+    /// <summary>
+    /// A request carrying <c>LargeBlobKey</c> and no raw <c>Extensions</c> bytes writes an
+    /// <c>extensions</c> map built from that decoded member, which the shipped reader decodes back to
+    /// the same value.
+    /// </summary>
+    [TestMethod]
+    public void WriteEncodesLargeBlobKeyFromTheDecodedMemberWhenExtensionsAreAbsent()
+    {
+        CtapGetAssertionRequest request = BuildMinimalRequest(largeBlobKey: true);
+
+        CtapGetAssertionRequest decoded = RoundTrip(request);
+        try
+        {
+            Assert.IsTrue(decoded.LargeBlobKey);
+        }
+        finally
+        {
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(decoded);
+        }
+    }
+
+
+    /// <summary>
+    /// A request carrying <c>HmacSecret</c> and no raw <c>Extensions</c> bytes writes an
+    /// <c>extensions</c> map built from that decoded compound member, which the shipped reader decodes
+    /// back to the same keyAgreement/saltEnc/saltAuth/pinUvAuthProtocol values.
+    /// </summary>
+    [TestMethod]
+    public void WriteEncodesHmacSecretFromTheDecodedMemberWhenExtensionsAreAbsent()
+    {
+        var keyAgreement = new CoseKey(
+            kty: CoseKeyTypes.Ec2, alg: WellKnownCoseAlgorithms.Es256, curve: CoseKeyCurves.P256,
+            x: new byte[32], y: new byte[32]);
+        byte[] saltEnc = [0x11, 0x22, 0x33, 0x44];
+        byte[] saltAuth = [0x55, 0x66];
+
+        CtapGetAssertionRequest request = BuildMinimalRequest(
+            hmacSecret: new CtapGetAssertionHmacSecretInput(keyAgreement, saltEnc, saltAuth, PinUvAuthProtocol: 2));
+
+        CtapGetAssertionRequest decoded = RoundTrip(request);
+        try
+        {
+            Assert.IsNotNull(decoded.HmacSecret);
+            Assert.AreEqual(CoseKeyTypes.Ec2, decoded.HmacSecret.KeyAgreement.Kty);
+            Assert.IsTrue(decoded.HmacSecret.SaltEnc.Span.SequenceEqual(saltEnc));
+            Assert.IsTrue(decoded.HmacSecret.SaltAuth.Span.SequenceEqual(saltAuth));
+            Assert.AreEqual(2, decoded.HmacSecret.PinUvAuthProtocol);
+        }
+        finally
+        {
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(decoded);
+        }
+    }
+
+
+    /// <summary>
+    /// With both <c>HmacSecret</c> and <c>LargeBlobKey</c> set and no raw <c>Extensions</c> bytes, the
+    /// built <c>extensions</c> map orders <c>"hmac-secret"</c> (11 characters) before
+    /// <c>"largeBlobKey"</c> (12 characters) — the CTAP2 canonical shorter-key-first rule.
+    /// </summary>
+    [TestMethod]
+    public void WriteOrdersHmacSecretBeforeLargeBlobKey()
+    {
+        var keyAgreement = new CoseKey(
+            kty: CoseKeyTypes.Ec2, alg: WellKnownCoseAlgorithms.Es256, curve: CoseKeyCurves.P256,
+            x: new byte[32], y: new byte[32]);
+
+        CtapGetAssertionRequest request = BuildMinimalRequest(
+            hmacSecret: new CtapGetAssertionHmacSecretInput(keyAgreement, new byte[] { 0x91 }, new byte[] { 0x92 }, PinUvAuthProtocol: null),
+            largeBlobKey: true);
+
+        CtapGetAssertionRequest decoded = RoundTrip(request);
+        try
+        {
+            ReadOnlySpan<byte> extensions = decoded.Extensions!.Value.Span;
+
+            //The 0x6B/0x6C text-string headers are each key's own length byte (11/12 characters);
+            //byte-exact key bytes computed the same way WriteOrdersMultipleDecodedExtensionMembersCanonically
+            //verifies the mc-side sibling members.
+            byte[] hmacSecretKeyBytes = Convert.FromHexString("6B" + "686D61632D736563726574");
+            byte[] largeBlobKeyKeyBytes = Convert.FromHexString("6C" + "6C61726765426C6F624B6579");
+
+            int hmacSecretIndex = extensions.IndexOf(hmacSecretKeyBytes);
+            int largeBlobKeyIndex = extensions.IndexOf(largeBlobKeyKeyBytes);
+
+            Assert.IsGreaterThanOrEqualTo(0, hmacSecretIndex, "The hmac-secret key must be present.");
+            Assert.IsGreaterThanOrEqualTo(0, largeBlobKeyIndex, "The largeBlobKey key must be present.");
+            Assert.IsLessThan(largeBlobKeyIndex, hmacSecretIndex, "hmac-secret must sort before largeBlobKey.");
+        }
+        finally
+        {
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(decoded);
+        }
+    }
+
+
+    /// <summary>
+    /// When raw <c>Extensions</c> bytes AND a decoded member (<c>LargeBlobKey</c>) are both set, the
+    /// raw bytes are written verbatim — the decoded member is never consulted to build a map of its own.
+    /// </summary>
+    [TestMethod]
+    public void WriteWritesRawExtensionsVerbatimWhenBothRawBytesAndMembersArePresent()
+    {
+        byte[] rawExtensions = [0xA0]; //the canonical empty map
+
+        CtapGetAssertionRequest request = BuildMinimalRequest(extensions: rawExtensions, largeBlobKey: true);
+
+        CtapGetAssertionRequest decoded = RoundTrip(request);
+        try
+        {
+            Assert.IsTrue(decoded.Extensions!.Value.Span.SequenceEqual(rawExtensions));
+            Assert.IsNull(decoded.LargeBlobKey);
+        }
+        finally
+        {
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(decoded);
+        }
+    }
+
+
+    /// <summary>
+    /// Builds a request carrying only the two Required members plus whatever optional values are given.
+    /// The returned request's own <c>ClientDataHash</c> is NOT disposed here — ownership passes to the
+    /// caller, which disposes it (alongside the round-tripped decode result) through
+    /// <see cref="CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest"/>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of clientDataHash transfers to the returned request, which the caller disposes.")]
+    private static CtapGetAssertionRequest BuildMinimalRequest(
+        ReadOnlyMemory<byte>? extensions = null, bool? largeBlobKey = null, CtapGetAssertionHmacSecretInput? hmacSecret = null)
+    {
+        DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
+
+        return new CtapGetAssertionRequest(
+            "rp.co", clientDataHash, Extensions: extensions, LargeBlobKey: largeBlobKey, HmacSecret: hmacSecret);
+    }
+
+    /// <summary>Writes <paramref name="request"/> and decodes the result back through the shipped reader.</summary>
+    private static CtapGetAssertionRequest RoundTrip(CtapGetAssertionRequest request)
+    {
+        TaggedMemory<byte> encoded = CtapGetAssertionRequestCborWriter.Write(request);
+
+        return CtapGetAssertionRequestCborReader.Read(encoded.Memory, BaseMemoryPool.Shared);
     }
 }

@@ -18,7 +18,7 @@ namespace Verifiable.Cbor.Ctap;
 /// Optional); mandatory-ness is a per-subcommand dispatch decision the transition layer enforces, not a
 /// decode-time rejection. <c>subCommandParams</c> (<c>0x03</c>)'s still-encoded bytes are captured as
 /// <see cref="CtapBioEnrollmentRequest.SubCommandParams"/> UNCHANGED (a slice of
-/// <paramref name="parametersCbor"/> itself, via <see cref="CborReader.ReadEncodedValue"/> — never
+/// <c>parametersCbor</c> itself, via <see cref="CborReader.ReadEncodedValue"/> — never
 /// re-encoded) and, when present, decoded a second time for <c>templateId</c>/
 /// <c>templateFriendlyName</c>/<c>timeoutMilliseconds</c>.
 /// </remarks>

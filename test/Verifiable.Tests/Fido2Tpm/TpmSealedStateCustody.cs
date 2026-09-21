@@ -10,7 +10,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 
 /// <summary>
 /// Composes a <see cref="CtapStateCustody"/> bundle whose snapshot bytes are protected by, and recovered
-/// through, an in-house simulated TPM — a thin adapter over the <see cref="TpmDeviceExtensions"/> seal
+/// through, an in-house simulated TPM — a thin adapter over the <see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions"/> seal
 /// envelope verbs (<c>SealEnvelopeAsync</c>/<c>UnsealEnvelopeAsync</c>), and their first production consumer.
 /// </summary>
 /// <remarks>
@@ -28,12 +28,12 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// 11.1.13, Table 169; clause 11.1.14, Table 170) — an authenticator snapshot never fits — so what the TPM
 /// seals is a content-encryption key and the snapshot rides under it, which is exactly what
 /// <see cref="TpmSealedEnvelope"/> carries. <b>Persist</b>: hands the snapshot to
-/// <see cref="TpmDeviceExtensions.SealEnvelopeAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
+/// <c>TpmDeviceExtensions.SealEnvelopeAsync</c>
 /// under <c>sealAuth</c> and stores the envelope's serialized form (<see cref="TpmSealedEnvelope.WriteTo"/>)
 /// through the caller's store delegate. <b>Load</b>: fetches the envelope via the caller's fetch delegate
 /// (absent ⇒ <see langword="null"/>, the "no snapshot" case), parses it
 /// (<see cref="TpmSealedEnvelope.Parse"/>), and recovers the snapshot through
-/// <see cref="TpmDeviceExtensions.UnsealEnvelopeAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, ReadOnlyMemory{byte}, CancellationToken)"/>.
+/// <c>TpmDeviceExtensions.UnsealEnvelopeAsync</c>.
 /// <b>Wipe</b>: drives the caller's delete delegate only — nothing this adapter seals is ever loaded into the
 /// TPM's own persistent object store, so there is nothing else to evict.
 /// </para>
@@ -51,7 +51,7 @@ public static class TpmSealedStateCustody
     /// </summary>
     /// <param name="tpm">The TPM device to seal to and unseal from.</param>
     /// <param name="storageParentHandle">
-    /// The handle of an already-loaded storage parent (see <see cref="TpmDeviceExtensions.SealAsync"/>'s
+    /// The handle of an already-loaded storage parent (see <see cref="Verifiable.Tpm.Extensions.Seal.TpmDeviceExtensions.SealAsync"/>'s
     /// own parent-constraint remarks) — this adapter neither creates nor loads it; the caller composes the
     /// parent and owns its lifetime.
     /// </param>

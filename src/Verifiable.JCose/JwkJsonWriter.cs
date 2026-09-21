@@ -9,7 +9,7 @@ namespace Verifiable.JCose;
 /// <remarks>
 /// <para>
 /// Used by <see cref="JwkThumbprintUtilities"/> for RFC 7638 thumbprint computation
-/// and by <see cref="EphemeralEncryptionKeyPair"/> for JWK serialisation. Both require
+/// and by <c>EphemeralEncryptionKeyPair</c> for JWK serialisation. Both require
 /// the same canonical key-value format without depending on a JSON serialisation library.
 /// </para>
 /// <para>

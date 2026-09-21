@@ -31,14 +31,21 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 public sealed record ServerRefreshTokenIssuedState: FlowState
 {
     /// <summary>
-    /// The flow whose issuance audit contains the access token minted with this refresh token.
-    /// Set to the code flow at initial issuance and to the presented refresh flow at rotation,
-    /// then copied onto the retired record so reuse reaches the paired access token under
+    /// The flow identifier naming the grant this refresh token belongs to — the code flow's own
+    /// id for a grant born from an authorization code, or this record's own <see cref="FlowState.FlowId"/>
+    /// for a grant born at the token endpoint, carried verbatim across every rotation exactly as
+    /// <see cref="OriginatingGrantType"/> is. The application indexes every
+    /// <see cref="ServerTokenIssuedState"/> and <see cref="ServerRefreshTokenIssuedState"/> it
+    /// saves by this value so <see cref="Verifiable.OAuth.Server.LoadGrantFlowStatesDelegate"/> can
+    /// return every retained record of the grant in one read — a VALID replay or reuse revokes by
+    /// that read under
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
     /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
-    /// authorization grant associated with it." Null when an imported state has no audit link.
+    /// authorization grant associated with it." <see langword="null"/> only for a state an
+    /// application imported without it; the grant key of any record is
+    /// <c>GrantFlowId ?? FlowId</c>.
     /// </summary>
-    public string? PredecessorFlowId { get; init; }
+    public string? GrantFlowId { get; init; }
 
     /// <summary>The OAuth client identifier the refresh token was issued to.</summary>
     public required string ClientId { get; init; }

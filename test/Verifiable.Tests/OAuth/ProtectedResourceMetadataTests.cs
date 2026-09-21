@@ -32,25 +32,32 @@ internal sealed class ProtectedResourceMetadataTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
 
+    /// <summary>
+    /// Checks that metadata at the path-inserted location matches the resource identifier determining that location.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 §3.3</see>.
+    /// </summary>
     [TestMethod]
     public async Task DocumentServesAtInsertedWellKnownLocationAndValidates()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial resource = RegisterProtectedResource(app);
+        using VerifierKeyMaterial resource = await RegisterProtectedResourceAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new ProtectedResourceMetadataContribution
-            {
-                AuthorizationServers = ["https://as.example.com"],
-                ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
-                BearerMethodsSupported = [BearerMethodValues.Header],
-                ResourceName = "Example Signals Transmitter",
-                LocalizedParameters = new Dictionary<string, string>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new ProtectedResourceMetadataContribution
                 {
-                    [$"{ProtectedResourceMetadataParameterNames.ResourceName}#fi"] = "Esimerkkilähetin"
-                },
-                DpopBoundAccessTokensRequired = true
-            });
+                    AuthorizationServers = ["https://as.example.com"],
+                    ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
+                    BearerMethodsSupported = [BearerMethodValues.Header],
+                    ResourceName = "Example Signals Transmitter",
+                    LocalizedParameters = new Dictionary<string, string>
+                    {
+                        [$"{ProtectedResourceMetadataParameterNames.ResourceName}#fi"] = "Esimerkkilähetin"
+                    },
+                    DpopBoundAccessTokensRequired = true
+                });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -110,27 +117,38 @@ internal sealed class ProtectedResourceMetadataTests
     }
 
 
+    /// <summary>
+    /// Checks that signed_metadata embeds the signer's output for the document claims without recursively including itself.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.2">RFC 9728 §2.2</see>.
+    /// </summary>
     [TestMethod]
     public async Task SignedMetadataEmbedsTheSignerOutputWithTheDocumentClaims()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial resource = RegisterProtectedResource(app);
+        using VerifierKeyMaterial resource = await RegisterProtectedResourceAsync(app).ConfigureAwait(false);
 
-        app.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new ProtectedResourceMetadataContribution
-            {
-                ScopesSupported = [WellKnownScopes.SsfRead]
-            });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new ProtectedResourceMetadataContribution
+                {
+                    ScopesSupported = [WellKnownScopes.SsfRead]
+                });
+        }).ConfigureAwait(false);
 
         //Capture the claim set the library hands over and return a sentinel
         //JWS — the library's contract is "assemble the correct claims, embed
         //the returned JWT"; the key and algorithm are the application's.
         JwtPayload? signedClaims = null;
-        app.Server.OAuth().SignProtectedResourceMetadataAsync = (claims, _, _, _) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            signedClaims = claims;
-            return ValueTask.FromResult<string?>("header.payload.signature");
-        };
+            candidateIntegration.SignProtectedResourceMetadataAsync = (claims, _, _, _) =>
+            {
+                signedClaims = claims;
+
+                return ValueTask.FromResult<string?>("header.payload.signature");
+            };
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -166,13 +184,13 @@ internal sealed class ProtectedResourceMetadataTests
     public async Task FailsClosedWithoutTheCapability()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial bare = app.RegisterClient(
+        using VerifierKeyMaterial bare = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -189,31 +207,42 @@ internal sealed class ProtectedResourceMetadataTests
     }
 
 
+    /// <summary>
+    /// Checks that an authorization challenge supplies a metadata URL whose fetched document identifies the resource.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 §5.1</see>.
+    /// </summary>
     [TestMethod]
     public async Task UnauthorizedResourceRequestAdvertisesMetadataAndCompletesDiscovery()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial resource = app.RegisterClient(
+        using VerifierKeyMaterial resource = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.SsfTransmitter,
                 WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
         //The SSF transmitter is the resource server: its stream endpoint
         //requires a bearer token, and its RFC 9728 document advertises the
         //SSF scopes — the CAEP interop scope-discovery story.
-        _ = app.Server.OAuth().UseDefaultSsfJsonParsing();
-        app.Server.OAuth().CreateSsfStreamAsync = static (request, registration, context, ct) =>
-            ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
-        app.Server.OAuth().AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
-            ValueTask.FromResult(SsfRequestAuthorization.Unauthorized);
-        app.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
-            ValueTask.FromResult(new ProtectedResourceMetadataContribution
-            {
-                ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage]
-            });
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultSsfJsonParsing();
+
+
+            candidateIntegration.CreateSsfStreamAsync = static (request, registration, receiver, context, ct) =>
+                ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
+
+            candidateIntegration.AuthorizeSsfRequestAsync = static (evaluation, registration, context, ct) =>
+                ValueTask.FromResult(SsfRequestDecision.Deny(SsfRequestDenialReason.AuthenticationRequired));
+
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new ProtectedResourceMetadataContribution
+                {
+                    ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage]
+                });
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -266,22 +295,32 @@ internal sealed class ProtectedResourceMetadataTests
     }
 
 
+    /// <summary>
+    /// Checks that the application omits the metadata challenge parameter when its endpoint is disabled.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#22-endpoint-chain-stage">Server design</see>.
+    /// </summary>
     [TestMethod]
     public async Task UnauthorizedRequestOmitsChallengeParameterWithoutTheMetadataCapability()
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial resource = app.RegisterClient(
+        using VerifierKeyMaterial resource = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.SsfTransmitter,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
-        _ = app.Server.OAuth().UseDefaultSsfJsonParsing();
-        app.Server.OAuth().CreateSsfStreamAsync = static (request, registration, context, ct) =>
-            ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
-        app.Server.OAuth().AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
-            ValueTask.FromResult(SsfRequestAuthorization.Unauthorized);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultSsfJsonParsing();
+
+
+            candidateIntegration.CreateSsfStreamAsync = static (request, registration, receiver, context, ct) =>
+                ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
+
+            candidateIntegration.AuthorizeSsfRequestAsync = static (evaluation, registration, context, ct) =>
+                ValueTask.FromResult(SsfRequestDecision.Deny(SsfRequestDenialReason.AuthenticationRequired));
+        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -371,15 +410,15 @@ internal sealed class ProtectedResourceMetadataTests
     /// metadata capability plus discovery and JWKS so the consumer can learn
     /// the resource identifier and the document can advertise <c>jwks_uri</c>.
     /// </summary>
-    private static VerifierKeyMaterial RegisterProtectedResource(TestHostShell app) =>
-        app.RegisterClient(
+    private static async Task<VerifierKeyMaterial> RegisterProtectedResourceAsync(TestHostShell app) =>
+        await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
 
     /// <summary>

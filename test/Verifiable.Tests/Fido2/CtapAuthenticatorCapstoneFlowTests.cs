@@ -217,7 +217,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
     /// self-attestation statement — the authenticator's own choice per CTAP 2.3 section 6.1.2 step 17's
     /// first bullet — accepted by the SHIPPED <see cref="Fido2RegistrationVerifier"/> with
     /// <see cref="RegistrationCeremonyInput.AcceptSelfAttestation"/> left at its default, the first
-    /// exercise of <see cref="PackedAttestation.VerifySelfAsync"/> against bytes that travelled over the
+    /// exercise of <c>PackedAttestation.VerifySelfAsync</c> against bytes that travelled over the
     /// real APDU transport rather than a hand-built statement.
     /// </summary>
     [TestMethod]

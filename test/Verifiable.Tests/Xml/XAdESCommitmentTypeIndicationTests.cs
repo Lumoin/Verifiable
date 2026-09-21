@@ -154,7 +154,7 @@ internal sealed class XAdESCommitmentTypeIndicationTests
         bool isRead = XAdESCommitmentTypeIndication.TryRead(table, table.DocumentElementIndex, out XAdESCommitmentTypeIndication value, out XAdESReadError error);
         Assert.IsTrue(isRead, $"Must read but was refused with {error.Failure}.");
         Assert.IsTrue(value.HasCommitmentTypeQualifiers);
-        Assert.HasCount(0, value.CommitmentTypeQualifiers);
+        Assert.IsEmpty(value.CommitmentTypeQualifiers);
     }
 
 
@@ -491,3 +491,4 @@ internal sealed class XAdESCommitmentTypeIndicationTests
         }
     }
 }
+
