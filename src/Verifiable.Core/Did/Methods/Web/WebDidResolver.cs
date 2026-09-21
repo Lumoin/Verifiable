@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Core.Did.Methods.Web;
@@ -116,7 +116,7 @@ public static class WebDidResolver
     /// <summary>
     /// Builds a <see cref="DidMethodResolverDelegate"/> that fully resolves a <c>did:web</c> to a
     /// <see cref="DidResolutionKind.Document"/> result: it computes the HTTPS URL, fetches the
-    /// <c>did.json</c> through the guarded <see cref="OutboundFetch"/> chokepoint (SSRF policy off the
+    /// <c>did.json</c> through the guarded <see cref="Outbound"/> chokepoint (SSRF policy off the
     /// <see cref="ExchangeContext"/>), and parses it with the supplied <paramref name="documentDeserializer"/>.
     /// Use this when the resolver should return the document directly; use <see cref="ResolveAsync"/> when
     /// the caller fetches the URL itself.
@@ -158,7 +158,7 @@ public static class WebDidResolver
             {
                 //Fully qualified: within Verifiable.Core.* the bare name binds to the OutboundFetch
                 //namespace, not the static class of the same leaf name.
-                fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
+                fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
             }
             catch(OperationCanceledException)
             {

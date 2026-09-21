@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -497,7 +497,7 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy.SecureDefault"/> refuses a
+    /// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy.SecureDefault"/> refuses a
     /// loopback token endpoint. <see cref="ClientCredentialsClient.RequestTokenAsync"/> evaluates the
     /// policy (<see cref="TokenEndpointClientOperations.EvaluateOutboundPolicy"/>, reached through
     /// <see cref="TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync"/>) before dialing

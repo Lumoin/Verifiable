@@ -1,11 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 
 namespace Verifiable.Json.StatusList;
 
 /// <summary>
-/// System.Text.Json converter for <see cref="Core.StatusList.StatusList"/> handling
+/// System.Text.Json converter for <see cref="Core.StatusLists.StatusList"/> handling
 /// the JSON representation defined in Section 4.2 of the specification.
 /// </summary>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace Verifiable.Json.StatusList;
 /// }
 /// </code>
 /// </remarks>
-public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.StatusList>
+public sealed class StatusListJsonConverter: JsonConverter<Core.StatusLists.StatusList>
 {
     private BaseMemoryPool Pool { get; }
 
@@ -35,7 +35,7 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.Statu
     }
 
     /// <inheritdoc/>
-    public override Core.StatusList.StatusList Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Core.StatusLists.StatusList Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if(reader.TokenType != JsonTokenType.StartObject)
         {
@@ -91,8 +91,8 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.Statu
         StatusListBitSize bitSize = (StatusListBitSize)bits.Value;
         byte[] compressedData = Base64UrlDecode(lst);
 
-        var statusList = Core.StatusList.StatusList.FromCompressed(
-            compressedData, bitSize, Pool, Core.StatusList.BitOrder.LeastSignificantFirst);
+        var statusList = Core.StatusLists.StatusList.FromCompressed(
+            compressedData, bitSize, Pool, Core.StatusLists.BitOrder.LeastSignificantFirst);
 
         if(aggregationUri is not null)
         {
@@ -112,13 +112,13 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.Statu
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="value"/> is packed <c>MostSignificantFirst</c> (the W3C Bitstring
     /// Status List's order) rather than the <c>LeastSignificantFirst</c> order Section 4.1 requires —
-    /// see <see cref="Core.StatusList.StatusList.EnsureIetfBitOrder"/>.
+    /// see <see cref="Core.StatusLists.StatusList.EnsureIetfBitOrder"/>.
     /// </exception>
-    public override void Write(Utf8JsonWriter writer, Core.StatusList.StatusList value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, Core.StatusLists.StatusList value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
-        Core.StatusList.StatusList.EnsureIetfBitOrder(value, nameof(value));
+        Core.StatusLists.StatusList.EnsureIetfBitOrder(value, nameof(value));
 
         writer.WriteStartObject();
         writer.WriteNumber(StatusListJsonConstants.Bits, (int)value.BitSize);
@@ -231,7 +231,7 @@ public sealed class StatusListReferenceJsonConverter: JsonConverter<StatusListRe
 
 /// <summary>
 /// System.Text.Json converter for <see cref="StatusClaim"/> values — the serializer-tier twin of the
-/// span reader <see cref="Verifiable.Core.StatusList.StatusClaimReader"/> and of the COSE-tier
+/// span reader <see cref="Verifiable.Core.StatusLists.StatusClaimReader"/> and of the COSE-tier
 /// Status-structure reader.
 /// </summary>
 /// <remarks>

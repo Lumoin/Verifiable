@@ -1,4 +1,4 @@
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -129,7 +129,7 @@ public sealed record StatusListTokenVerificationResult
 /// once the signature holds. Section 8.3 steps 4 through 7 — the credential's own subject/freshness/
 /// expiry/index-bounds evaluation against a <em>reference</em> — are NOT this method's job: they stay
 /// <see cref="StatusListValidation.GetStatus"/>'s, run by the format-independent
-/// <see cref="Core.StatusList.CredentialStatusGate"/> after a resolver composes this verification.
+/// <see cref="Core.StatusLists.CredentialStatusGate"/> after a resolver composes this verification.
 /// </para>
 /// <para>
 /// <strong>Ordering (RFC 7519 §7.2 steps 1-4/5; Section 8.3 steps 3.a/3.b; Section 5.1 rule 2; RFC

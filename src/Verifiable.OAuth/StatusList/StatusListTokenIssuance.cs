@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -59,7 +59,7 @@ public static class StatusListTokenIssuance
     /// Thrown when <paramref name="keyId"/> is empty or whitespace, or when <paramref name="token"/>'s
     /// Status List is packed <c>MostSignificantFirst</c> (the W3C Bitstring Status List's order)
     /// rather than the <c>LeastSignificantFirst</c> order Section 4.1 of the Token Status List
-    /// specification requires — see <see cref="Core.StatusList.StatusList.EnsureIetfBitOrder"/>, called
+    /// specification requires — see <see cref="Core.StatusLists.StatusList.EnsureIetfBitOrder"/>, called
     /// through <see cref="StatusListTokenClaims.ToPayload"/>.
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "JwsMessage is disposed via the using statement before the method returns; the returned string is independent of the message.")]

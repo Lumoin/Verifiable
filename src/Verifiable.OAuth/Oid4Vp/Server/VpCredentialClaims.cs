@@ -3,7 +3,7 @@ using System.Diagnostics;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 

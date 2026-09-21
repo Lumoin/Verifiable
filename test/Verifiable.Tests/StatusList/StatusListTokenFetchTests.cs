@@ -1,6 +1,6 @@
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestInfrastructure;

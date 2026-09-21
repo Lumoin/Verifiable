@@ -1,5 +1,5 @@
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 
 namespace Verifiable.OAuth.Server.Pipeline;
 
@@ -119,7 +119,7 @@ public sealed record JwksUriResolution
 /// <param name="jwksUri">The client's <c>jwks_uri</c> to fetch the key set from.</param>
 /// <param name="context">
 /// The per-request context; the guarded fetch reads its
-/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> from here.
+/// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> from here.
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<JwksUriResolution> ResolveJwksUriDelegate(

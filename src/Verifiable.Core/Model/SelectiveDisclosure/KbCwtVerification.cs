@@ -1,4 +1,4 @@
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 

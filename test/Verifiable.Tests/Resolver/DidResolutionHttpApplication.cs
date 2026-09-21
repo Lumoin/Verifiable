@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;

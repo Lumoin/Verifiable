@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;

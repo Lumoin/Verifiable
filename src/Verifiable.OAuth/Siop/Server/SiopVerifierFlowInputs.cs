@@ -1,5 +1,5 @@
 using Verifiable.Core.Dcql;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Server;

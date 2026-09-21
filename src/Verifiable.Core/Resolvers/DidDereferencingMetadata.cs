@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 
 namespace Verifiable.Core.Resolvers;
 

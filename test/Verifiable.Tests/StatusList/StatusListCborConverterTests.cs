@@ -2,8 +2,8 @@ using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
-using Verifiable.Core.StatusList;
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using Verifiable.Core.StatusLists;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.StatusList;
 

@@ -4,7 +4,7 @@ using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.JCose;
 using static Verifiable.Tests.TestInfrastructure.MdocTestFixtures;
 

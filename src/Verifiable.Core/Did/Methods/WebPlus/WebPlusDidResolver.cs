@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.EventLogs;
@@ -156,7 +156,7 @@ public static class WebPlusDidResolver
     /// <summary>
     /// Builds a <see cref="DidMethodResolverDelegate"/> that fully resolves a <c>did:webplus</c>: it computes the
     /// microledger URL, fetches the <c>did-documents.jsonl</c> through the guarded
-    /// <see cref="OutboundFetch"/> chokepoint, replays and verifies every document through the
+    /// <see cref="Outbound"/> chokepoint, replays and verifies every document through the
     /// <see cref="LogReplayer{TState,TOperation,TProof,TContext}"/> (self-hash, the
     /// <c>prevDIDDocumentSelfHash</c> chain, every proof, and the cross-document obligations), selects the
     /// requested version, and returns the resolved <see cref="DidDocument"/> with its metadata.
@@ -482,7 +482,7 @@ public static class WebPlusDidResolver
         OutboundFetchResult fetch;
         try
         {
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)
         {

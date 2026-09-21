@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 using Verifiable.Core.Transport;
 using Verifiable.Cryptography;
@@ -155,7 +155,7 @@ public static class WebVhDidResolver
     /// <summary>
     /// Builds a <see cref="DidMethodResolverDelegate"/> that fully resolves a <c>did:webvh</c>: it computes
     /// the DID Log URL, fetches the <c>did.jsonl</c> through the guarded
-    /// <see cref="OutboundFetch"/> chokepoint, replays and verifies every entry (entryHash chain, SCID,
+    /// <see cref="Outbound"/> chokepoint, replays and verifies every entry (entryHash chain, SCID,
     /// controller proofs, pre-rotation, versionTime), and returns the resolved <see cref="DidDocument"/>
     /// from the last entry's <c>state</c>.
     /// </summary>
@@ -718,7 +718,7 @@ public static class WebVhDidResolver
         OutboundFetchResult fetch;
         try
         {
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)
         {

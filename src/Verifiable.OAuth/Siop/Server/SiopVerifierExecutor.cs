@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;

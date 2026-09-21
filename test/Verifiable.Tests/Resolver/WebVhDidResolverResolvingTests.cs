@@ -10,7 +10,7 @@ using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
@@ -19,7 +19,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// End-to-end tests for <see cref="WebVhDidResolver.Build(Verifiable.Core.OutboundFetch.OutboundTransportDelegate, WebVhLineParser, WebVhWitnessFileParser, WebVhDocumentIdentityReader, WebVhStateDeserializer, WebVhCanonicalizer, EncodeDelegate, DecodeDelegate, BaseMemoryPool, TimeProvider)"/> — the full did:webvh resolver that fetches the
+/// End-to-end tests for <see cref="WebVhDidResolver.Build(Verifiable.Core.Outbound.OutboundTransportDelegate, WebVhLineParser, WebVhWitnessFileParser, WebVhDocumentIdentityReader, WebVhStateDeserializer, WebVhCanonicalizer, EncodeDelegate, DecodeDelegate, BaseMemoryPool, TimeProvider)"/> — the full did:webvh resolver that fetches the
 /// <c>did.jsonl</c> through the guarded <see cref="OutboundFetch"/> chokepoint, replays and verifies every
 /// entry, and returns the resolved <see cref="DidDocument"/>. Logs are minted by <see cref="WebVhTestLog"/>
 /// (executing the spec's Create/Update steps) and served by a faked transport, so genesis, updates, key

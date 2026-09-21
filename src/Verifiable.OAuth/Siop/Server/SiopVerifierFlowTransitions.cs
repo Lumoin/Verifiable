@@ -27,7 +27,7 @@ namespace Verifiable.OAuth.Siop.Server;
 ///   <item><description>
 ///     Any non-terminal state + <see cref="SiopFlowFailed"/> -> <see cref="SiopVerifierFlowFailedState"/>.
 ///     Terminal failure, carrying the wire-safe <see cref="VerifierFlowRefusal"/> and any
-///     <see cref="Core.StatusList.CredentialStatusRefusal"/> the failing input supplied.
+///     <see cref="Core.StatusLists.CredentialStatusRefusal"/> the failing input supplied.
 ///   </description></item>
 /// </list>
 /// </remarks>

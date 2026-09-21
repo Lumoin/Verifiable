@@ -1,6 +1,6 @@
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Server.Pipeline;
@@ -24,7 +24,7 @@ public static class JwksUriResolver
     /// <param name="jwksUri">The client's <c>jwks_uri</c> to fetch the key set from.</param>
     /// <param name="context">
     /// The per-request context; the guarded fetch reads its
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> from here.
+    /// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> from here.
     /// </param>
     /// <param name="transport">The application-supplied single-hop transport the guarded fetch drives.</param>
     /// <param name="options">The resolver's byte cap.</param>
@@ -58,7 +58,7 @@ public static class JwksUriResolver
         OutboundFetchResult fetch;
         try
         {
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
                 request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)

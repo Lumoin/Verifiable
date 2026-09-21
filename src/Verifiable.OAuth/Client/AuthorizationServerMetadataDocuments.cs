@@ -1,6 +1,6 @@
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Client;
@@ -31,7 +31,7 @@ public static class AuthorizationServerMetadataDocuments
     /// </param>
     /// <param name="context">
     /// The per-request context; the guarded fetch reads its
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> from here.
+    /// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> from here.
     /// </param>
     /// <param name="transport">
     /// The application-supplied single-hop transport the guarded fetch drives.
@@ -89,7 +89,7 @@ public static class AuthorizationServerMetadataDocuments
         OutboundFetchResult fetch;
         try
         {
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
                 request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)

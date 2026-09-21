@@ -39,7 +39,7 @@ public sealed record ClientIdMetadataDocumentResolverOptions
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.7">
     /// draft-ietf-oauth-client-id-metadata-document-02 Section 8.7</see> — "The recommended
     /// maximum size to read is 5 kilobytes." Enforced both as a transport hint
-    /// (<see cref="Verifiable.Core.OutboundFetch.OutboundRequest.MaxResponseBytes"/>) and as an
+    /// (<see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/>) and as an
     /// authoritative post-read check, the repo's established double-application size-limit
     /// pattern.
     /// </summary>

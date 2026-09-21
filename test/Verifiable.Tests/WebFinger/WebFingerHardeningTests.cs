@@ -1,5 +1,5 @@
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Json;
 using Verifiable.WebFinger;
 

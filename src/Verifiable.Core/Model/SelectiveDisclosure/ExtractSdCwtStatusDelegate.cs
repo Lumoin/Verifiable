@@ -1,4 +1,4 @@
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 

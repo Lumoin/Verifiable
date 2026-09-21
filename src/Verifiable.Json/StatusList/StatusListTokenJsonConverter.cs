@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.JCose;
 
 namespace Verifiable.Json.StatusList;
@@ -63,7 +63,7 @@ public sealed class StatusListTokenJsonConverter: JsonConverter<StatusListToken>
         long? issuedAt = null;
         long? expirationTime = null;
         long? timeToLive = null;
-        Core.StatusList.StatusList? statusList = null;
+        Core.StatusLists.StatusList? statusList = null;
 
         //status_list can precede a later member that turns out missing or malformed (member order in
         //JSON is arbitrary, and the required-claim checks below run only once every member has been
@@ -106,7 +106,7 @@ public sealed class StatusListTokenJsonConverter: JsonConverter<StatusListToken>
                         timeToLive = ttl;
                         break;
                     case string name when name == StatusListJsonConstants.StatusList:
-                        statusList = StatusListConverter.Read(ref reader, typeof(Core.StatusList.StatusList), options);
+                        statusList = StatusListConverter.Read(ref reader, typeof(Core.StatusLists.StatusList), options);
                         break;
                     default:
                         reader.Skip();

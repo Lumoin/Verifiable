@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;

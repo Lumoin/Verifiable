@@ -17,7 +17,7 @@ using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -435,7 +435,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </param>
     /// <param name="credentialStatusPolicy">
     /// Optional relying-party verdict over a presentation's surfaced credential-status outcomes. When
-    /// <see langword="null"/>, <see cref="Verifiable.Core.StatusList.CredentialStatusPolicies.Surface"/> is
+    /// <see langword="null"/>, <see cref="Verifiable.Core.StatusLists.CredentialStatusPolicies.Surface"/> is
     /// used (the shipped default — never refuses).
     /// </param>
     /// <param name="statusListFreshnessPolicy">
@@ -449,7 +449,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="unsupportedStatusMechanisms">
     /// What both seats do with a credential whose <c>status</c> claim names only status mechanisms the
     /// library does not evaluate. Defaults to
-    /// <see cref="Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse"/>, the shipped
+    /// <see cref="Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Refuse"/>, the shipped
     /// default.
     /// </param>
     /// <param name="vpTokenCredentialQueryId">
@@ -464,14 +464,14 @@ internal sealed class TestHostShell: IAsyncDisposable
         MdocVpVerificationSeams? mdocSeams = null,
         SdCwtVpVerificationSeams? sdCwtSeams = null,
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
+        Verifiable.Core.StatusLists.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
         Verifiable.Cryptography.Pki.ParseX5cDelegate? parseX5c = null,
         ResolveTrustedAuthorityEvidenceDelegate? resolveTrustedAuthorityEvidence = null,
-        Verifiable.Core.StatusList.CredentialStatusPolicy? credentialStatusPolicy = null,
-        Verifiable.Core.StatusList.StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
-        Verifiable.Core.StatusList.StatusListCachingBounds? statusListCachingBounds = null,
-        Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms =
-            Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse,
+        Verifiable.Core.StatusLists.CredentialStatusPolicy? credentialStatusPolicy = null,
+        Verifiable.Core.StatusLists.StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
+        Verifiable.Core.StatusLists.StatusListCachingBounds? statusListCachingBounds = null,
+        Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms =
+            Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Refuse,
         CredentialQueryId? vpTokenCredentialQueryId = null)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -544,7 +544,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>Shell-level status-list token resolver, or <see langword="null"/> when status-list resolution is not wired.</summary>
-    private Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? StatusListResolverShared { get; }
+    private Verifiable.Core.StatusLists.ResolveVerifiedStatusListTokenDelegate? StatusListResolverShared { get; }
 
 
     /// <summary>Shell-level <c>dc+sd-jwt</c> issuer JWS <c>x5c</c> header parser, or <see langword="null"/> when not wired.</summary>
@@ -557,24 +557,24 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Shell-level credential-status policy, or <see langword="null"/> when the shell uses the shipped
-    /// <see cref="Verifiable.Core.StatusList.CredentialStatusPolicies.Surface"/> default.
+    /// <see cref="Verifiable.Core.StatusLists.CredentialStatusPolicies.Surface"/> default.
     /// </summary>
-    private Verifiable.Core.StatusList.CredentialStatusPolicy? CredentialStatusPolicyShared { get; }
+    private Verifiable.Core.StatusLists.CredentialStatusPolicy? CredentialStatusPolicyShared { get; }
 
 
     /// <summary>Shell-level Section 8.3 step 4.b freshness policy, or <see langword="null"/> when the check is skipped.</summary>
-    private Verifiable.Core.StatusList.StatusListFreshnessPolicy? StatusListFreshnessPolicyShared { get; }
+    private Verifiable.Core.StatusLists.StatusListFreshnessPolicy? StatusListFreshnessPolicyShared { get; }
 
 
     /// <summary>Shell-level Section 11.5 refresh-interval bounds, or <see langword="null"/> when unclamped.</summary>
-    private Verifiable.Core.StatusList.StatusListCachingBounds? StatusListCachingBoundsShared { get; }
+    private Verifiable.Core.StatusLists.StatusListCachingBounds? StatusListCachingBoundsShared { get; }
 
 
     /// <summary>
     /// Shell-level disposition for a status claim naming only mechanisms the library does not evaluate,
     /// threaded to every host the shell builds.
     /// </summary>
-    private Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition UnsupportedStatusMechanismsShared { get; }
+    private Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition UnsupportedStatusMechanismsShared { get; }
 
 
     /// <summary>
@@ -1114,7 +1114,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <see cref="ClientMetadataResolutionCache"/> — the reference application-layer cache over
     /// <see cref="ClientIdMetadataDocuments.ResolveAsync"/> — built over a transport from
     /// <see cref="LoopbackTls.CreateSingleHopPinnedHttpClient(X509Certificate2)"/> (auto-redirect
-    /// disabled per the <see cref="Verifiable.Core.OutboundFetch.OutboundTransportDelegate"/>
+    /// disabled per the <see cref="Verifiable.Core.Outbound.OutboundTransportDelegate"/>
     /// contract) and <see cref="GuardedHttpClientTransport.BuildSingleHopTransport"/>, pinned to
     /// <paramref name="documentHostCertificate"/> — the CIMD document host's OWN certificate,
     /// distinct from this AS host's <see cref="ServerCertificate"/> when the document is served by a
@@ -1150,7 +1150,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             LoopbackTls.CreateSingleHopPinnedHttpClient(documentHostCertificate);
         TransportOwnedDisposables.Add(documentHttpClient);
 
-        Verifiable.Core.OutboundFetch.OutboundTransportDelegate transport =
+        Verifiable.Core.Outbound.OutboundTransportDelegate transport =
             GuardedHttpClientTransport.BuildSingleHopTransport(documentHttpClient);
         ClientMetadataResolutionCache cache = new(
             transport, options ?? new ClientIdMetadataDocumentResolverOptions(), new JwksUriResolverOptions(), Time,
@@ -1614,14 +1614,14 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// HTTPS listener: the secure default relaxed for loopback targets, because
     /// the test deployment's transport endpoint genuinely is a local listener.
     /// The scheme stays <c>https</c>-only — every loopback test host serves TLS —
-    /// so only <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy.BlockPrivateAndLoopback"/>
+    /// so only <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy.BlockPrivateAndLoopback"/>
     /// is relaxed, a deployment's explicit, principled per-call choice. Production
-    /// wallets keep <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy.SecureDefault"/>,
+    /// wallets keep <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy.SecureDefault"/>,
     /// under which an authorization request pointing the wallet at a private or
     /// loopback address is denied before any network contact.
     /// </summary>
-    public static Verifiable.Core.OutboundFetch.OutboundFetchPolicy LoopbackOutboundFetchPolicy { get; } =
-        Verifiable.Core.OutboundFetch.OutboundFetchPolicy.SecureDefault with
+    public static Verifiable.Core.Outbound.OutboundFetchPolicy LoopbackOutboundFetchPolicy { get; } =
+        Verifiable.Core.Outbound.OutboundFetchPolicy.SecureDefault with
         {
             BlockPrivateAndLoopback = false
         };
@@ -1637,22 +1637,22 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// ("HTTP clients MUST follow the guidance provided in Section 15.4 of [RFC9110] for handling
     /// redirects") redirect-following uses instead of the no-redirect loopback default.
     /// </summary>
-    public static Verifiable.Core.OutboundFetch.OutboundFetchPolicy LoopbackRedirectFollowingOutboundFetchPolicy { get; } =
+    public static Verifiable.Core.Outbound.OutboundFetchPolicy LoopbackRedirectFollowingOutboundFetchPolicy { get; } =
         LoopbackOutboundFetchPolicy with
         {
-            Redirects = Verifiable.Core.OutboundFetch.RedirectMode.SameOrigin,
+            Redirects = Verifiable.Core.Outbound.RedirectMode.SameOrigin,
             MaxRedirects = RedirectHopLimit
         };
 
 
     /// <summary>
     /// Builds a fresh <see cref="Verifiable.Core.ExchangeContext"/> carrying <paramref name="policy"/> —
-    /// the per-call context a guarded outbound fetch (<see cref="Verifiable.Core.OutboundFetch.OutboundFetch"/>)
+    /// the per-call context a guarded outbound fetch (<see cref="Verifiable.Core.Outbound.OutboundFetch"/>)
     /// reads its policy from.
     /// </summary>
     /// <param name="policy">The outbound-fetch policy to set on the context.</param>
     /// <returns>A new context carrying <paramref name="policy"/>.</returns>
-    public static Verifiable.Core.ExchangeContext ExchangeContextWith(Verifiable.Core.OutboundFetch.OutboundFetchPolicy policy)
+    public static Verifiable.Core.ExchangeContext ExchangeContextWith(Verifiable.Core.Outbound.OutboundFetchPolicy policy)
     {
         Verifiable.Core.ExchangeContext context = [];
         context.SetOutboundFetchPolicy(policy);

@@ -1,4 +1,4 @@
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
@@ -12,7 +12,7 @@ internal enum CredentialStatusCheckKind
     /// <summary>
     /// There is no status for this verifier to check: the credential carried no status claim, or it carried
     /// one naming only mechanisms this verifier does not evaluate and the caller chose
-    /// <see cref="Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Surface"/> for that case,
+    /// <see cref="Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Surface"/> for that case,
     /// leaving the mechanism names on the verified credential instead.
     /// </summary>
     NotReferenced,
@@ -23,7 +23,7 @@ internal enum CredentialStatusCheckKind
     /// <summary>
     /// The credential's status could not be determined (subject mismatch, expired list, out-of-range index, or
     /// a status claim naming only mechanisms this verifier does not evaluate under
-    /// <see cref="Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse"/>); the presentation
+    /// <see cref="Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Refuse"/>); the presentation
     /// fails closed with the carried refusal.
     /// </summary>
     Undeterminable

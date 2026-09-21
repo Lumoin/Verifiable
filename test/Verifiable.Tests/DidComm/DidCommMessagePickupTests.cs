@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
@@ -131,7 +131,7 @@ internal sealed class DidCommMessagePickupTests
     /// <summary>
     /// <see href="https://identity.foundation/didcomm-messaging/spec/v2.1/#https">DIDComm Messaging v2.1 §HTTPS</see>:
     /// <c>maxReplyBytes</c> on the outbound request is only a transport HINT
-    /// (<see cref="Verifiable.Core.OutboundFetch.OutboundRequest.MaxResponseBytes"/>) a hostile or
+    /// (<see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/>) a hostile or
     /// non-conforming transport may ignore, so <c>CreateExchangeDelegate</c> re-checks the read-back reply
     /// against the caller's cap as the authoritative backstop: a reply one byte over MUST be refused as a
     /// transport failure, carrying no reply, exactly as a cooperating transport's mid-read abort would.

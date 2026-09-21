@@ -2,7 +2,7 @@ using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 
 namespace Verifiable.Cbor.Mdoc;
 

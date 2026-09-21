@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Federation;
 using Verifiable.Cryptography;
@@ -28,7 +28,7 @@ public static class JwtVcIssuerMetadataDocuments
     /// <param name="issuer">The <c>iss</c> value the JWT VC Issuer Metadata URL is derived from.</param>
     /// <param name="context">
     /// The per-request context; the guarded fetch reads its
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> from here.
+    /// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> from here.
     /// </param>
     /// <param name="transport">
     /// The application-supplied single-hop transport the guarded fetch drives.
@@ -84,7 +84,7 @@ public static class JwtVcIssuerMetadataDocuments
         OutboundFetchResult fetch;
         try
         {
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
                 request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)

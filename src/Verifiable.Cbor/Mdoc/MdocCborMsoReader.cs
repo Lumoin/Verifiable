@@ -1,7 +1,7 @@
 using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor.Mdoc;

@@ -5,7 +5,7 @@ using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.DidComm;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp;
@@ -67,7 +67,7 @@ namespace Verifiable.Json;
 //JSON-LD context serialization for proof options documents.
 [JsonSerializable(typeof(Context))]
 //Status list types resolved via GetTypeInfo in status list converters.
-[JsonSerializable(typeof(Core.StatusList.StatusList))]
+[JsonSerializable(typeof(Core.StatusLists.StatusList))]
 [JsonSerializable(typeof(StatusListReference))]
 [JsonSerializable(typeof(StatusClaim))]
 [JsonSerializable(typeof(StatusListAggregation))]

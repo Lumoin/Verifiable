@@ -45,7 +45,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// ONE sanctioned <c>TestInfrastructure</c>-only wrap of <see cref="DeflateStream"/> (RFC 1951) this
 /// fixture authorizes: no span-based DEFLATE exists in the BCL, and the no-<c>Stream</c> house rule's hard scope
 /// is <c>src/**</c> — this project's own <c>GZipStream</c>-over-<see cref="MemoryStream"/> precedent
-/// (<c>Verifiable.Core.StatusList.BitstringStatusListCodec</c>) is mirrored here for DEFLATE instead of
+/// (<c>Verifiable.Core.StatusLists.BitstringStatusListCodec</c>) is mirrored here for DEFLATE instead of
 /// GZIP. <c>src/Verifiable.Fido2</c>/<c>src/Verifiable.Cbor</c> stay <see cref="DeflateStream"/>-free —
 /// the authenticator's own §6.10.2 algorithm never decompresses (line 7704's MUST NOT).
 /// </para>

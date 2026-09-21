@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 

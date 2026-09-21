@@ -1,4 +1,4 @@
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Dpop;

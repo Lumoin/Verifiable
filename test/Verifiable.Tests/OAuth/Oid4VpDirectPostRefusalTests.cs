@@ -10,7 +10,7 @@ using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
@@ -26,7 +26,7 @@ using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.OAuth;
 

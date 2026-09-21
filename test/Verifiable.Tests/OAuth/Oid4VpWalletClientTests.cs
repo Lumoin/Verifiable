@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.JCose.Eudi;

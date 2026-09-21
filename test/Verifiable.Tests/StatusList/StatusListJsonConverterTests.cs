@@ -1,9 +1,9 @@
 using System.Text.Json;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.StatusList;
 

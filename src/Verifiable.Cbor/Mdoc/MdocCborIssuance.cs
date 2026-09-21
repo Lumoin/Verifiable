@@ -2,7 +2,7 @@ using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Security.Cryptography;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 

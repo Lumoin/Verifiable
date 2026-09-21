@@ -1,4 +1,4 @@
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 
 namespace Verifiable.WebFinger;
 

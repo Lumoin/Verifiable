@@ -123,7 +123,7 @@ public static class WellKnownHttpHeaderNames
     /// Used with the <c>no-store</c> directive on token-bearing responses per
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1#section-3.2.3">OAuth 2.1 §3.2.3</see>,
     /// and read for its <c>max-age</c>/<c>s-maxage</c>/<c>no-store</c>/<c>no-cache</c>
-    /// directives by <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/>.
+    /// directives by <see cref="Verifiable.Core.Outbound.HttpCacheFreshness"/>.
     /// </summary>
     public static string CacheControl { get; } = Utf8Constants.ToInternedString(CacheControlUtf8);
 
@@ -149,7 +149,7 @@ public static class WellKnownHttpHeaderNames
     /// … For 201 (Created) responses, the Location value refers to the primary resource
     /// created by the request. For 3xx (Redirection) responses, the Location value refers
     /// to the preferred target resource for automatically redirecting the request." Read by
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundFetch"/>'s redirect loop on every hop.
+    /// <see cref="Verifiable.Core.Outbound.OutboundFetch"/>'s redirect loop on every hop.
     /// </summary>
     public static string Location { get; } = Utf8Constants.ToInternedString(LocationUtf8);
 
@@ -160,7 +160,7 @@ public static class WellKnownHttpHeaderNames
     /// The <c>Date</c> header per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-6.6.1">RFC 9110 §6.6.1</see>:
     /// "represents the date and time at which the message was originated". Read by
-    /// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/> as the reference instant
+    /// <see cref="Verifiable.Core.Outbound.HttpCacheFreshness"/> as the reference instant
     /// for the <see cref="Expires"/> fallback (RFC 9111 §4.2.1).
     /// </summary>
     public static string Date { get; } = Utf8Constants.ToInternedString(DateUtf8);
@@ -173,7 +173,7 @@ public static class WellKnownHttpHeaderNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.1">RFC 9111 §5.1</see>:
     /// "The 'Age' response header field conveys the sender's estimate of the time since the
     /// response was generated or successfully validated at the origin server." Read by
-    /// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/> to reduce a computed
+    /// <see cref="Verifiable.Core.Outbound.HttpCacheFreshness"/> to reduce a computed
     /// freshness lifetime by the time already elapsed.
     /// </summary>
     public static string Age { get; } = Utf8Constants.ToInternedString(AgeUtf8);
@@ -185,7 +185,7 @@ public static class WellKnownHttpHeaderNames
     /// The <c>Expires</c> response header per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.3">RFC 9111 §5.3</see>:
     /// "The 'Expires' response header field gives the date/time after which the response is
-    /// considered stale." Read by <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/>
+    /// considered stale." Read by <see cref="Verifiable.Core.Outbound.HttpCacheFreshness"/>
     /// as the fallback freshness signal (against <see cref="Date"/>) when no
     /// <see cref="CacheControl"/> <c>max-age</c>/<c>s-maxage</c> directive is present.
     /// </summary>

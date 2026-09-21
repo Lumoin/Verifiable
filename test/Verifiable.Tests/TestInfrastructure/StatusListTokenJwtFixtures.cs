@@ -1,5 +1,5 @@
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth.StatusList;

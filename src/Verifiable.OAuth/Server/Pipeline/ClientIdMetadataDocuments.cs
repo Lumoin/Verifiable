@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.Client;
 using Verifiable.JCose;
 
@@ -39,7 +39,7 @@ public static class ClientIdMetadataDocuments
     /// <param name="clientMetadataUri">The Client Identifier URL to fetch the document from.</param>
     /// <param name="context">
     /// The per-request context; the guarded fetch reads its
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> from here.
+    /// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> from here.
     /// </param>
     /// <param name="transport">
     /// The application-supplied single-hop transport the guarded fetch drives.
@@ -95,7 +95,7 @@ public static class ClientIdMetadataDocuments
         {
             //Fully qualified: within Verifiable.* the bare name binds to the OutboundFetch
             //namespace, not the static class of the same leaf name.
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
                 request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)
@@ -307,7 +307,7 @@ public static class ClientIdMetadataDocuments
         OutboundFetchResult fetch;
         try
         {
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
                 request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)

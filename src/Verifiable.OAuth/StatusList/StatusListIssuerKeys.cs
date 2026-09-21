@@ -44,7 +44,7 @@ public static class StatusListIssuerKeys
     /// Its limit, and why the limit is safe: an ecosystem whose Status Issuer is a separate entity, or
     /// whose lists are signed by a different key of the same issuer, fails CLOSED under this composition
     /// — the Status List Token's signature does not verify under the answered key, the resolution raises
-    /// <see cref="Verifiable.Core.StatusList.StatusListResolutionException"/>, and the seat refuses the
+    /// <see cref="Verifiable.Core.StatusLists.StatusListResolutionException"/>, and the seat refuses the
     /// presentation as an undeterminable status rather than accepting it. Such an ecosystem resolves
     /// through its own delegate instead, which is what <paramref name="whenAbsent"/> is for; the
     /// composition never widens what is accepted, only removes a resolution step where the same key

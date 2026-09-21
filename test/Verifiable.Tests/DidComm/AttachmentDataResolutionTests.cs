@@ -1,7 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
 using Verifiable.Json;

@@ -4,7 +4,7 @@ using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;

@@ -2,7 +2,7 @@ using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.TestInfrastructure;

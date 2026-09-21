@@ -3,7 +3,7 @@ using System.Buffers;
 using System.Net.Http.Headers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;

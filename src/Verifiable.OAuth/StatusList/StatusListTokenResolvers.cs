@@ -1,7 +1,7 @@
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.Outbound;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.StatusList;
 /// <summary>
 /// Builds a <see cref="ResolveVerifiedStatusListTokenDelegate"/> that composes
 /// <see cref="StatusListTokenFetch"/> and <see cref="StatusListTokenVerification"/> into the seam
-/// <see cref="Core.StatusList.CredentialStatusGate"/> calls — the JWT-format Status List Token
+/// <see cref="Core.StatusLists.CredentialStatusGate"/> calls — the JWT-format Status List Token
 /// resolver.
 /// </summary>
 /// <remarks>
@@ -55,7 +55,7 @@ public static class StatusListTokenResolvers
     /// <returns>
     /// A resolve delegate that fetches, verifies, and returns the Status List Token fresh on every call.
     /// It reads the list URI from the resolution context's
-    /// <see cref="Core.StatusList.StatusListResolutionContext.Reference"/> and threads the whole context
+    /// <see cref="Core.StatusLists.StatusListResolutionContext.Reference"/> and threads the whole context
     /// through to <paramref name="resolveIssuerKey"/>.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown when any required argument is <see langword="null"/>.</exception>

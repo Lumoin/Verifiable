@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.States;

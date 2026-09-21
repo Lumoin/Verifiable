@@ -31,7 +31,7 @@ public sealed record VerifierFlowFailedState: FlowState
     /// wire; a relying party inspects this from the failed state for its own logging or UI.
     /// <see langword="null"/> for every other refusal kind or when the failure carries no refusal at all.
     /// </summary>
-    public Verifiable.Core.StatusList.CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
+    public Verifiable.Core.StatusLists.CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
 
     /// <summary>The UTC instant at which the failure was recorded.</summary>
     public required DateTimeOffset FailedAt { get; init; }

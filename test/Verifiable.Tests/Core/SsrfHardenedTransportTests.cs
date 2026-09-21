@@ -1,5 +1,5 @@
 using System.Net;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Core;

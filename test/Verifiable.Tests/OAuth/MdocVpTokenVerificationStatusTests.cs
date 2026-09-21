@@ -6,7 +6,7 @@ using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
@@ -19,7 +19,7 @@ using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.TestInfrastructure.MdocTestFixtures;
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -52,7 +52,7 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="VpCredentialClaims.Status"/> assertion over the JOSE parser — is
 /// <see cref="Oid4VpFlowIntegrationTests.SdJwtVcStatusReferenceSurfacesAndDrivesRevocationGate"/>;
 /// what the shared status step and the deployment's
-/// <see cref="Verifiable.Core.StatusList.CredentialStatusPolicy"/> then do with the reference is
+/// <see cref="Verifiable.Core.StatusLists.CredentialStatusPolicy"/> then do with the reference is
 /// proved over the executor in <see cref="Oid4VpCredentialStatusPolicyFlowTests"/>. This class stops
 /// at the parse boundary.
 /// </para>

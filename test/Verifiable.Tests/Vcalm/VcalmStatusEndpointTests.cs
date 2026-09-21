@@ -12,14 +12,14 @@ using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Vcalm;
-using CoreStatusList = Verifiable.Core.StatusList.StatusList;
+using CoreStatusList = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.Vcalm;
 

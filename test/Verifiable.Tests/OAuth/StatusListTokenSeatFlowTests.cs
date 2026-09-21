@@ -5,8 +5,8 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Core.OutboundFetch;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.Outbound;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Json.StatusList;
@@ -20,7 +20,7 @@ using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -1395,7 +1395,7 @@ internal sealed class StatusListTokenSeatFlowTests
     /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-8.3">Token
     /// Status List, Section 8.3</see>. SHOULD, not MUST, is what lets a Relying Party that evaluates the named
     /// mechanism out of band ask for it to be surfaced instead
-    /// (<see cref="Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Surface"/>); this proves
+    /// (<see cref="Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Surface"/>); this proves
     /// that choice's behaviour — the presentation completes, no status outcome is recorded because none was
     /// read, and no Status List Token is ever fetched.
     /// </summary>
@@ -1413,7 +1413,7 @@ internal sealed class StatusListTokenSeatFlowTests
         await using TestHostShell app = new(
             TimeProvider,
             resolveVerifiedStatusListToken: countingResolver,
-            unsupportedStatusMechanisms: Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Surface);
+            unsupportedStatusMechanisms: Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Surface);
 
         var rawStatusObject = new Dictionary<string, object>
         {

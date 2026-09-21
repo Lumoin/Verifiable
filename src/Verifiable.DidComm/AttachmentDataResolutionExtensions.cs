@@ -1,7 +1,7 @@
 using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 
 namespace Verifiable.DidComm;

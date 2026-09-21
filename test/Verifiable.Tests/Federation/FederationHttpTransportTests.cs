@@ -1,5 +1,5 @@
 using System.Text;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
@@ -84,7 +84,7 @@ internal sealed class FederationHttpTransportTests
 
     /// <summary>
     /// A non-2xx response surfaces as a null fetch — no statement, and so no
-    /// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness"/> to report either, per
+    /// <see cref="Verifiable.Core.Outbound.HttpCacheFreshness"/> to report either, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see> (there is no
     /// document a cache could keep from a fetch that produced nothing).
     /// </summary>

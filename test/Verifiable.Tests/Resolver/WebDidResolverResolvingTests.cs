@@ -4,7 +4,7 @@ using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Core.Resolvers;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -243,7 +243,7 @@ internal sealed class WebDidResolverResolvingTests
     /// <summary>
     /// A <c>did.json</c> response carrying <c>Cache-Control: max-age</c> reports that many seconds of
     /// storable freshness on the resolution metadata — the RFC 9111 §5.2 computation
-    /// <see cref="Verifiable.Core.OutboundFetch.HttpCacheFreshness.Compute"/> performs over the fetched
+    /// <see cref="Verifiable.Core.Outbound.HttpCacheFreshness.Compute"/> performs over the fetched
     /// response, per <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>.
     /// </summary>
     [TestMethod]

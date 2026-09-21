@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 

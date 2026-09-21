@@ -2,7 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vci.Wallet;
 using Verifiable.OAuth.Server;

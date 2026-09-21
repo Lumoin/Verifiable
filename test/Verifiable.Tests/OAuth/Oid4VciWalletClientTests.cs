@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;

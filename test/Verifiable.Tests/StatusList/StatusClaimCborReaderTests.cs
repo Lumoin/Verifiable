@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Text;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 
 namespace Verifiable.Tests.StatusList;
 

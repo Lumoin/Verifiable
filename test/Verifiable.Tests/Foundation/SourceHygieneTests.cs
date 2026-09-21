@@ -949,8 +949,8 @@ internal sealed class SourceHygieneTests
     /// </summary>
     private static IReadOnlyList<(string FilePath, string LineText)> NakedReadonlyFieldAllowlist { get; } =
     [
-        ("src/Verifiable.Core/StatusList/CredentialStatusRefusal.cs", "private readonly IReadOnlyList<RefusedCredentialStatus> credentials = [];"),
-        ("src/Verifiable.Core/StatusList/StatusListToken.cs", "private readonly long? timeToLive;"),
+        ("src/Verifiable.Core/StatusLists/CredentialStatusRefusal.cs", "private readonly IReadOnlyList<RefusedCredentialStatus> credentials = [];"),
+        ("src/Verifiable.Core/StatusLists/StatusListToken.cs", "private readonly long? timeToLive;"),
         ("src/Verifiable.DidComm/Transport/DidCommSocketSessionOptions.cs", "private readonly long? maxReceiveBytes;"),
         ("src/Verifiable.DidComm/Transport/DidCommSocketSessionOptions.cs", "private readonly TimeSpan? exchangeTimeout;"),
         ("src/Verifiable.Tpm/Infrastructure/Commands/StartAuthSessionInput.cs", "private readonly TpmtSymDef symmetric;"),

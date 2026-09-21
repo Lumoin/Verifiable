@@ -3,7 +3,7 @@ using System.Buffers;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;

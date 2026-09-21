@@ -11,8 +11,8 @@ using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Core.StatusList;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.StatusLists;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -35,7 +35,7 @@ using Verifiable.OAuth.Validation;
 using Verifiable.Tests.Federation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -253,9 +253,9 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using System.Net.Http.HttpClient issuerHttpClient = LoopbackTls.CreateSingleHopPinnedHttpClient(issuerHost.Certificate);
         using System.Net.Http.HttpClient jwksHttpClient = LoopbackTls.CreateSingleHopPinnedHttpClient(jwksHost.Certificate);
-        Verifiable.Core.OutboundFetch.OutboundTransportDelegate issuerTransport =
+        Verifiable.Core.Outbound.OutboundTransportDelegate issuerTransport =
             GuardedHttpClientTransport.BuildSingleHopTransport(issuerHttpClient);
-        Verifiable.Core.OutboundFetch.OutboundTransportDelegate jwksTransport =
+        Verifiable.Core.Outbound.OutboundTransportDelegate jwksTransport =
             GuardedHttpClientTransport.BuildSingleHopTransport(jwksHttpClient);
 
         string issuerId = issuerHost.BaseAddress.OriginalString.TrimEnd('/');

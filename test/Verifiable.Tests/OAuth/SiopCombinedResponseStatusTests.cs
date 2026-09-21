@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using Verifiable.Core;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Json.StatusList;
 using Verifiable.OAuth;
@@ -13,7 +13,7 @@ using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.OAuth;
 

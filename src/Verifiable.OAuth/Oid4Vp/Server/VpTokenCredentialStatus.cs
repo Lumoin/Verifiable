@@ -1,5 +1,5 @@
 using Verifiable.Core.Dcql;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
@@ -94,8 +94,8 @@ internal static class VpTokenCredentialStatus
     /// </para>
     /// <para>
     /// Undeterminable (400 <see cref="VerifierFlowRefusalKind.StatusUndeterminable"/>): any
-    /// <see cref="Core.StatusList.StatusListValidationException"/> — a subject mismatch, an expired list, an
-    /// out-of-range index, or its <see cref="Core.StatusList.StatusListResolutionException"/> subtype (the
+    /// <see cref="Core.StatusLists.StatusListValidationException"/> — a subject mismatch, an expired list, an
+    /// out-of-range index, or its <see cref="Core.StatusLists.StatusListResolutionException"/> subtype (the
     /// resolver could not obtain the Status List Token at all, including a <see langword="null"/> return).
     /// Fault (500, not caught here): any other exception <paramref name="resolveVerifiedStatusListToken"/>
     /// throws is the resolver's own defect — a transport failure it chose not to classify as a resolution

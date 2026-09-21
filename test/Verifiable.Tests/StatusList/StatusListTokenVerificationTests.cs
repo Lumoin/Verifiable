@@ -1,11 +1,11 @@
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.StatusList;
 
@@ -1294,7 +1294,7 @@ rawSerializer,
     /// </summary>
     /// <param name="subject">The URI the token was fetched for.</param>
     /// <returns>The resolution context.</returns>
-    private static Verifiable.Core.StatusList.StatusListResolutionContext ContextFor(string subject) =>
+    private static Verifiable.Core.StatusLists.StatusListResolutionContext ContextFor(string subject) =>
         StatusListFixtures.ContextFor(RevokedIndex, subject);
 
 

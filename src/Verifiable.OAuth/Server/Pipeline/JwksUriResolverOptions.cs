@@ -10,7 +10,7 @@ public sealed record JwksUriResolverOptions
     /// <summary>
     /// The maximum JWK Set document size, in bytes, the resolver reads before treating the response
     /// as an error. Enforced both as a transport hint
-    /// (<see cref="Verifiable.Core.OutboundFetch.OutboundRequest.MaxResponseBytes"/>) and as an
+    /// (<see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/>) and as an
     /// authoritative post-read check, the repo's established double-application size-limit pattern.
     /// </summary>
     public long MaximumDocumentBytes { get; init; } = 5120;

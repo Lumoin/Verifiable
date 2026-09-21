@@ -4,11 +4,11 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.Json;
 using Verifiable.Json.StatusList;
 using Verifiable.Tests.TestInfrastructure;
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.StatusList;
 

@@ -20,5 +20,5 @@ public sealed record VerifierPresentationRefused(VerifierFlowRefusal Refusal, st
     /// <see cref="VerifierFlowFailedState.CredentialStatusRefusal"/> by the transition. <see langword="null"/>
     /// for every other refusal kind.
     /// </summary>
-    public Verifiable.Core.StatusList.CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
+    public Verifiable.Core.StatusLists.CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
 }

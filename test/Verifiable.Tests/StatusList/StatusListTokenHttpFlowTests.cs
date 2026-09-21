@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.Outbound;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -10,7 +10,7 @@ using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.StatusList;
 

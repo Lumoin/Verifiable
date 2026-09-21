@@ -1,6 +1,6 @@
 using System.Text;
 using Verifiable.Cbor.StatusList;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.JCose;
 using Verifiable.Json.StatusList;
 using Verifiable.OAuth;

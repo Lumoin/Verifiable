@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.StatusList;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The same declaration <see cref="Verifiable.Core.StatusList.ResolvedStatusListToken.IsTokenOwned"/>
+/// The same declaration <see cref="Verifiable.Core.StatusLists.ResolvedStatusListToken.IsTokenOwned"/>
 /// makes for the resolved token, made for the key. A resolver that mints a key per call — a
 /// <c>did:web</c> document fetched and decoded on the spot, an X.509 chain validated into a fresh leaf
 /// key — hands back an <see cref="Owned(PublicKeyMemory)"/> key: nothing else holds it, so

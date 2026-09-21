@@ -2,7 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;

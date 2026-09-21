@@ -1,4 +1,4 @@
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.Server.Pipeline;

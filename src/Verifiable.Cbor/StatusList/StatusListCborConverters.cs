@@ -1,10 +1,10 @@
 using Lumoin.Veritas.Cbor;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 
 namespace Verifiable.Cbor.StatusList;
 
 /// <summary>
-/// CBOR converter for <see cref="Core.StatusList.StatusList"/> handling the
+/// CBOR converter for <see cref="Core.StatusLists.StatusList"/> handling the
 /// CBOR map structure defined in Section 4.3 of the specification.
 /// </summary>
 /// <remarks>
@@ -19,7 +19,7 @@ namespace Verifiable.Cbor.StatusList;
 /// }
 /// </code>
 /// </remarks>
-public sealed class StatusListCborConverter: CborConverter<Core.StatusList.StatusList>
+public sealed class StatusListCborConverter: CborConverter<Core.StatusLists.StatusList>
 {
     private BaseMemoryPool Pool { get; }
 
@@ -34,7 +34,7 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
     }
 
     /// <inheritdoc/>
-    public override Core.StatusList.StatusList Read(CborReader reader)
+    public override Core.StatusLists.StatusList Read(CborReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
 
@@ -84,8 +84,8 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
         }
 
         StatusListBitSize bitSize = (StatusListBitSize)bits.Value;
-        var statusList = Core.StatusList.StatusList.FromCompressed(
-            lst, bitSize, Pool, Core.StatusList.BitOrder.LeastSignificantFirst);
+        var statusList = Core.StatusLists.StatusList.FromCompressed(
+            lst, bitSize, Pool, Core.StatusLists.BitOrder.LeastSignificantFirst);
 
         if(aggregationUri is not null)
         {
@@ -104,13 +104,13 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="value"/> is packed <c>MostSignificantFirst</c> (the W3C Bitstring
     /// Status List's order) rather than the <c>LeastSignificantFirst</c> order Section 4.1 requires —
-    /// see <see cref="Core.StatusList.StatusList.EnsureIetfBitOrder"/>.
+    /// see <see cref="Core.StatusLists.StatusList.EnsureIetfBitOrder"/>.
     /// </exception>
-    public override void Write(CborWriter writer, Core.StatusList.StatusList value)
+    public override void Write(CborWriter writer, Core.StatusLists.StatusList value)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
-        Core.StatusList.StatusList.EnsureIetfBitOrder(value, nameof(value));
+        Core.StatusLists.StatusList.EnsureIetfBitOrder(value, nameof(value));
 
         int mapSize = value.AggregationUri is not null ? 3 : 2;
         writer.WriteStartMap(mapSize);
@@ -231,7 +231,7 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
         long? issuedAt = null;
         long? expirationTime = null;
         long? timeToLive = null;
-        Core.StatusList.StatusList? statusList = null;
+        Core.StatusLists.StatusList? statusList = null;
 
         int count = mapLength ?? int.MaxValue;
         for(int i = 0; i < count; i++)

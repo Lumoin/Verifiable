@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;

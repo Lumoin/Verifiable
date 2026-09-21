@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text;
-using Verifiable.Core.OutboundFetch;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.Outbound;
+using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -9,7 +9,7 @@ using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using StatusListType = Verifiable.Core.StatusList.StatusList;
+using StatusListType = Verifiable.Core.StatusLists.StatusList;
 
 namespace Verifiable.Tests.StatusList;
 
@@ -586,7 +586,7 @@ internal sealed class StatusListTokenResolversTests
 
 
     /// <summary>
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundRequest.MaxResponseBytes"/>'s own doc: the transport MAY ignore
+    /// <see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/>'s own doc: the transport MAY ignore
     /// the hint, so a response body over the bound is re-checked once the fetch returns rather than trusted to
     /// have been enforced upstream.
     /// </summary>

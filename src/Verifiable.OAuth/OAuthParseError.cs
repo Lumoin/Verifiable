@@ -45,7 +45,7 @@ namespace Verifiable.OAuth;
 ///     <description>
 ///       <see cref="OAuthOutboundFetchPolicyDenied"/> — the metadata resolved and named an
 ///       endpoint, but that endpoint was refused by the caller's
-///       <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> before any request was sent.
+///       <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> before any request was sent.
 ///     </description>
 ///   </item>
 /// </list>
@@ -173,7 +173,7 @@ public sealed record OAuthAuthorizationServerMetadataUnresolved(
 
 /// <summary>
 /// The endpoint this exchange was about to dial was refused by the caller's
-/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> before any network contact.
+/// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> before any network contact.
 /// </summary>
 /// <remarks>
 /// Distinct from <see cref="OAuthAuthorizationServerMetadataUnresolved"/>: the metadata document

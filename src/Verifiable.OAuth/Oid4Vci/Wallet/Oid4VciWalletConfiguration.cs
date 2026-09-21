@@ -1,5 +1,5 @@
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
@@ -27,7 +27,7 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 /// mode is <c>same-origin</c>: "A request has an associated credentials mode, which is 'omit',
 /// 'same-origin', or 'include'. Unless stated otherwise, it is 'same-origin'." The library places
 /// no origin restriction on <paramref name="endpoint"/> and evaluates only <paramref name="context"/>'s
-/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/>.
+/// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/>.
 /// </remarks>
 /// <param name="endpoint">The token endpoint URL.</param>
 /// <param name="formFields">The form fields to URL-encode into the request body.</param>
@@ -67,7 +67,7 @@ public delegate ValueTask<HttpResponseData> Oid4VciFormPostDelegate(
 /// <c>same-origin</c>: "A request has an associated credentials mode, which is 'omit',
 /// 'same-origin', or 'include'. Unless stated otherwise, it is 'same-origin'." The library places
 /// no origin restriction on <paramref name="endpoint"/> and evaluates only <paramref name="context"/>'s
-/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/>.
+/// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/>.
 /// </remarks>
 /// <param name="endpoint">The endpoint URL.</param>
 /// <param name="jsonBody">The JSON request body. Empty for the §7 Nonce Request, which carries no body.</param>
@@ -140,7 +140,7 @@ public sealed record Oid4VciWalletConfiguration
 
     /// <summary>
     /// Optional §4.1.3 by-reference Credential Offer GET single-hop transport, driven through the
-    /// library's guarded <see cref="Verifiable.Core.OutboundFetch.OutboundFetch"/> chokepoint —
+    /// library's guarded <see cref="Verifiable.Core.Outbound.OutboundFetch"/> chokepoint —
     /// the same seam <see cref="Client.AuthorizationServerMetadataDocuments.ResolveAsync"/> drives —
     /// so the fetch gets that seam's redirect re-validation and per-hop policy evaluation for free.
     /// Required when the Wallet accepts a <c>credential_offer_uri</c> deep link via
@@ -159,7 +159,7 @@ public sealed record Oid4VciWalletConfiguration
 
     /// <summary>
     /// The upper bound, in bytes, the §4.1.3 Credential Offer GET accepts — threaded onto
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundRequest.MaxResponseBytes"/> as the transport
+    /// <see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/> as the transport
     /// hint and re-checked authoritatively after the read, the same two-layer shape
     /// <see cref="Client.AuthorizationServerMetadataDocuments.ResolveAsync"/> applies to its own
     /// document fetch. A Credential Offer object is a handful of parameters, so the default is

@@ -854,7 +854,7 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
     /// <param name="credentialStatusPolicy">
     /// Optional relying-party verdict over a presentation's surfaced credential-status outcomes, threaded to
     /// both <see cref="HaipOid4VpVerifierExecutor.Create"/> and <see cref="SiopVerifierExecutor.Register"/>.
-    /// <see langword="null"/> uses <see cref="Verifiable.Core.StatusList.CredentialStatusPolicies.Surface"/>
+    /// <see langword="null"/> uses <see cref="Verifiable.Core.StatusLists.CredentialStatusPolicies.Surface"/>
     /// (the shipped default).
     /// </param>
     /// <param name="statusListFreshnessPolicy">
@@ -868,7 +868,7 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
     /// <param name="unsupportedStatusMechanisms">
     /// What both seats do with a credential whose <c>status</c> claim names only status mechanisms the
     /// library does not evaluate. Defaults to
-    /// <see cref="Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse"/>, the shipped
+    /// <see cref="Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Refuse"/>, the shipped
     /// default.
     /// </param>
     /// <param name="vpTokenCredentialQueryId">
@@ -888,14 +888,14 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
         TimingPolicy? timings = null,
         Verifiable.OAuth.Siop.ResolveDidVerificationKeyDelegate? resolveDidVerificationKey = null,
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
+        Verifiable.Core.StatusLists.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
         Verifiable.Cryptography.Pki.ParseX5cDelegate? parseX5c = null,
         ResolveTrustedAuthorityEvidenceDelegate? resolveTrustedAuthorityEvidence = null,
-        Verifiable.Core.StatusList.CredentialStatusPolicy? credentialStatusPolicy = null,
-        Verifiable.Core.StatusList.StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
-        Verifiable.Core.StatusList.StatusListCachingBounds? statusListCachingBounds = null,
-        Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms =
-            Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse,
+        Verifiable.Core.StatusLists.CredentialStatusPolicy? credentialStatusPolicy = null,
+        Verifiable.Core.StatusLists.StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
+        Verifiable.Core.StatusLists.StatusListCachingBounds? statusListCachingBounds = null,
+        Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms =
+            Verifiable.Core.StatusLists.UnsupportedStatusMechanismDisposition.Refuse,
         CredentialQueryId? vpTokenCredentialQueryId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);

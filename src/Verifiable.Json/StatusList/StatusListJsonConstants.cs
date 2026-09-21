@@ -10,7 +10,7 @@ namespace Verifiable.Json.StatusList;
 /// (<see cref="StatusList"/>, <see cref="Status"/>, <see cref="TimeToLive"/>) alias
 /// <see cref="Verifiable.JCose.WellKnownJwtClaimNames"/>; the object member names
 /// (<see cref="Bits"/>, <see cref="List"/>, <see cref="AggregationUri"/>, <see cref="Index"/>,
-/// <see cref="Uri"/>) alias <see cref="Verifiable.Core.StatusList.StatusListMemberNames"/> — this leaf
+/// <see cref="Uri"/>) alias <see cref="Verifiable.Core.StatusLists.StatusListMemberNames"/> — this leaf
 /// carries no second copy of either literal.
 /// </para>
 /// </remarks>
@@ -30,27 +30,27 @@ public static class StatusListJsonConstants
     /// <summary>
     /// The <c>bits</c> member name within the Status List JSON object.
     /// </summary>
-    public const string Bits = Verifiable.Core.StatusList.StatusListMemberNames.Bits;
+    public const string Bits = Verifiable.Core.StatusLists.StatusListMemberNames.Bits;
 
     /// <summary>
     /// The <c>lst</c> member name containing the base64url-encoded compressed byte array.
     /// </summary>
-    public const string List = Verifiable.Core.StatusList.StatusListMemberNames.List;
+    public const string List = Verifiable.Core.StatusLists.StatusListMemberNames.List;
 
     /// <summary>
     /// The <c>aggregation_uri</c> member name for the optional aggregation endpoint.
     /// </summary>
-    public const string AggregationUri = Verifiable.Core.StatusList.StatusListMemberNames.AggregationUri;
+    public const string AggregationUri = Verifiable.Core.StatusLists.StatusListMemberNames.AggregationUri;
 
     /// <summary>
     /// The <c>idx</c> member name for the index in a Status List reference.
     /// </summary>
-    public const string Index = Verifiable.Core.StatusList.StatusListMemberNames.Index;
+    public const string Index = Verifiable.Core.StatusLists.StatusListMemberNames.Index;
 
     /// <summary>
     /// The <c>uri</c> member name for the URI in a Status List reference.
     /// </summary>
-    public const string Uri = Verifiable.Core.StatusList.StatusListMemberNames.Uri;
+    public const string Uri = Verifiable.Core.StatusLists.StatusListMemberNames.Uri;
 
     /// <summary>
     /// The <c>ttl</c> claim name for time to live in seconds.

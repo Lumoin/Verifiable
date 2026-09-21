@@ -1,6 +1,6 @@
 using System.Net;
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
 using Verifiable.Tests.TestInfrastructure;

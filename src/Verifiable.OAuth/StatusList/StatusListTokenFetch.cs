@@ -1,5 +1,5 @@
 using Verifiable.Core;
-using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Outbound;
 
 namespace Verifiable.OAuth.StatusList;
 
@@ -154,7 +154,7 @@ public static class StatusListTokenFetch
         {
             //Fully qualified: within Verifiable.* the bare name binds to the OutboundFetch
             //namespace, not the static class of the same leaf name.
-            fetch = await Verifiable.Core.OutboundFetch.OutboundFetch.FetchAsync(
+            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
                 request, context, transport, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)

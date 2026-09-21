@@ -49,7 +49,7 @@ public static class MdocMsoWellKnownKeys
     /// <summary>
     /// The <c>status</c> key in the MSO; the Token Status List Status CBOR
     /// structure (Section 6.3) carrying the credential's revocation
-    /// mechanism(s) — see <see cref="Verifiable.Core.StatusList.StatusMechanismNames"/>
+    /// mechanism(s) — see <see cref="Verifiable.Core.StatusLists.StatusMechanismNames"/>
     /// for the mechanism keys it carries.
     /// </summary>
     /// <remarks>

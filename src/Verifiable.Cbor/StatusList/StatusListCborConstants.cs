@@ -10,7 +10,7 @@ namespace Verifiable.Cbor.StatusList;
 /// keys from the IANA CBOR Web Token Claims registry — those have no JOSE-side
 /// counterpart and stay their own literals here. The text string map keys
 /// (<see cref="Bits"/>, <see cref="List"/>, <see cref="AggregationUri"/>, <see cref="Index"/>,
-/// <see cref="Uri"/>) alias <see cref="Verifiable.Core.StatusList.StatusListMemberNames"/>, the same
+/// <see cref="Uri"/>) alias <see cref="Verifiable.Core.StatusLists.StatusListMemberNames"/>, the same
 /// member names the JOSE side reads — this leaf carries no second copy of those literals.
 /// </para>
 /// </remarks>
@@ -50,25 +50,25 @@ public static class StatusListCborConstants
     /// <summary>
     /// CBOR text string map key for <c>bits</c> within the Status List CBOR map.
     /// </summary>
-    public const string Bits = Verifiable.Core.StatusList.StatusListMemberNames.Bits;
+    public const string Bits = Verifiable.Core.StatusLists.StatusListMemberNames.Bits;
 
     /// <summary>
     /// CBOR text string map key for <c>lst</c> within the Status List CBOR map.
     /// </summary>
-    public const string List = Verifiable.Core.StatusList.StatusListMemberNames.List;
+    public const string List = Verifiable.Core.StatusLists.StatusListMemberNames.List;
 
     /// <summary>
     /// CBOR text string map key for <c>aggregation_uri</c> within the Status List CBOR map.
     /// </summary>
-    public const string AggregationUri = Verifiable.Core.StatusList.StatusListMemberNames.AggregationUri;
+    public const string AggregationUri = Verifiable.Core.StatusLists.StatusListMemberNames.AggregationUri;
 
     /// <summary>
     /// CBOR text string map key for <c>idx</c> within the Status List reference CBOR map.
     /// </summary>
-    public const string Index = Verifiable.Core.StatusList.StatusListMemberNames.Index;
+    public const string Index = Verifiable.Core.StatusLists.StatusListMemberNames.Index;
 
     /// <summary>
     /// CBOR text string map key for <c>uri</c> within the Status List reference CBOR map.
     /// </summary>
-    public const string Uri = Verifiable.Core.StatusList.StatusListMemberNames.Uri;
+    public const string Uri = Verifiable.Core.StatusLists.StatusListMemberNames.Uri;
 }

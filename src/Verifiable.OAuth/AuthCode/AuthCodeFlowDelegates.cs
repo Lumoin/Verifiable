@@ -107,7 +107,7 @@ public delegate ValueTask<FlowState?> LoadFlowStateByRequestUriDelegate(
 /// <c>same-origin</c>: "A request has an associated credentials mode, which is 'omit',
 /// 'same-origin', or 'include'. Unless stated otherwise, it is 'same-origin'." The library places
 /// no origin restriction on <paramref name="endpoint"/> and evaluates only the caller's
-/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/>.
+/// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/>.
 /// </para>
 /// </remarks>
 /// <param name="endpoint">The URI to POST to.</param>

@@ -162,7 +162,7 @@ public delegate ValueTask<JwksDocument> BuildJwksDocumentDelegate(
 /// <param name="clientMetadataUri">The Client Identifier URL to fetch the document from.</param>
 /// <param name="context">
 /// The per-request context; the guarded fetch reads its
-/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> from here.
+/// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> from here.
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<ClientIdMetadataResolution> ResolveClientMetadataDelegate(

@@ -575,7 +575,7 @@ public sealed class VcalmIntegration: ServerIntegration
                 field = value;
             }
         }
-    } = Verifiable.Core.StatusList.BitstringStatusListCodec.MinimumEntries;
+    } = Verifiable.Core.StatusLists.BitstringStatusListCodec.MinimumEntries;
 
 
     /// <summary>
@@ -633,7 +633,7 @@ public sealed class VcalmIntegration: ServerIntegration
 
     /// <summary>
     /// Resolves the decoded W3C Bitstring Status List a verified credential's
-    /// <see cref="Core.StatusList.BitstringStatusListEntry"/> points at, so the §3.3.1 / §3.3.2
+    /// <see cref="Core.StatusLists.BitstringStatusListEntry"/> points at, so the §3.3.1 / §3.3.2
     /// verifier can read the status bit and classify a revoked / suspended status as a §3.8.1
     /// WARNING. Optional — when unwired (or when it returns <see langword="null"/>) a credential's
     /// status is left unresolved and no status warning is emitted (an undeterminable status is not

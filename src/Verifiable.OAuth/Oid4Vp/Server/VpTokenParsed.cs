@@ -40,7 +40,7 @@ public sealed record VpTokenParsed
     /// first perform the validation of the Referenced Token" and only "If the validation was successful"
     /// evaluate its status. A status check therefore runs only downstream of a verified issuer signature,
     /// which is exactly the point at which this key is known. It is what
-    /// <see cref="Verifiable.Core.StatusList.StatusListResolutionContext.ReferencedTokenIssuerKey"/> is
+    /// <see cref="Verifiable.Core.StatusLists.StatusListResolutionContext.ReferencedTokenIssuerKey"/> is
     /// filled from, making Section 11.3's same-key recommendation reachable behind the status resolver.
     /// </para>
     /// </remarks>

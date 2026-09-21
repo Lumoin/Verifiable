@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;

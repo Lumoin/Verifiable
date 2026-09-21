@@ -188,7 +188,7 @@ internal static class LoopbackTls
     /// <summary>
     /// Builds an <see cref="HttpClient"/> pinned to <paramref name="pinnedCertificate"/> with
     /// auto-redirect disabled, satisfying the single-hop contract on
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundTransportDelegate"/>: the guarded
+    /// <see cref="Verifiable.Core.Outbound.OutboundTransportDelegate"/>: the guarded
     /// <c>OutboundFetch</c> chokepoint must be the only redirect authority, so the framework must
     /// never silently follow a 3xx before the policy sees it. Use this for clients wrapped by
     /// <c>GuardedHttpClientTransport.BuildSingleHopTransport</c>.

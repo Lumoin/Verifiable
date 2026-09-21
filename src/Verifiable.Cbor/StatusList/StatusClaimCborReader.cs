@@ -1,5 +1,5 @@
 using Lumoin.Veritas.Cbor;
-using Verifiable.Core.StatusList;
+using Verifiable.Core.StatusLists;
 
 namespace Verifiable.Cbor.StatusList;
 
