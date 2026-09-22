@@ -1160,7 +1160,10 @@ public sealed class EndpointServer: IDisposable
                 ? endpoint.ExtractCorrelationKey(string.Empty, fields, context) ?? string.Empty
                 : context.CorrelationKey ?? string.Empty;
 
-            if(string.IsNullOrWhiteSpace(externalHandle))
+            //RFC 6749 §3.1: "Parameters sent without a value MUST be treated as if they were omitted from the request."
+            //Only null/empty is omitted. Any other value, including whitespace, is judged by
+            //the endpoint's own correlation resolution.
+            if(string.IsNullOrEmpty(externalHandle))
             {
 
                 return ServerHttpResponse.BadRequest(

@@ -1806,15 +1806,15 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: "the client
-    /// MUST only use a <c>request_uri</c> value once. Authorization servers SHOULD treat
-    /// <c>request_uri</c> values as one-time use but MAY allow for duplicate requests due to a
-    /// user reloading/refreshing their user agent." This library elects the SHOULD unconditionally
-    /// and does not offer the reload/refresh MAY. N concurrent authorize GETs against the identical
-    /// <c>request_uri</c> race against the same claim as the token endpoint's code redemption; the
-    /// invariants under test — never which request wins — are that exactly one response carries an
-    /// issued <c>code</c>, and that a losing claim on the request_uri is reported via the RFC 6749
-    /// §4.1.2.1 redirect rather than a bare response body.
+    /// Concurrent authorization requests for one pushed reference issue exactly one code, enforcing
+    /// the one-time-use recommendation in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
+    /// defines the single-use reference. Every losing claim receives a redirect carrying
+    /// <c>invalid_request_uri</c>, the reference-error code that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see> defines
+    /// for a reference returning an error or invalid data. All contenders load the same pending
+    /// request before a barrier releases them, ensuring the single-use claim is contested.
     /// </summary>
     [TestMethod]
     public async Task ConcurrentAuthorizeRequestsForTheSameRequestUriYieldExactlyOneIssuedCode()
@@ -1849,43 +1849,58 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri)}");
 
         const int ConcurrentRequests = 8;
-        Task<HttpResponseMessage>[] authorizeCalls = [.. Enumerable.Range(0, ConcurrentRequests)
-            .Select(_ => RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-                host, authorizeUrl, SubjectId, TestContext.CancellationToken))];
-
-        HttpResponseMessage[] responses = await Task.WhenAll(authorizeCalls).ConfigureAwait(false);
-        try
+        hosted.IsOrderingRequestsPerGrant = false;
+        await using CancellableTestBarrier authorizeBarrier = new(
+            "authorize pending request", ConcurrentRequests, TestContext.CancellationToken);
+        LoadServerFlowStateDelegate originalLoad = host.Server.OAuth().LoadFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            int issuedCodeCount = responses.Count(r =>
-                (int)r.StatusCode == 302
-                && r.Headers.Location!.Query.Contains($"{OAuthRequestParameterNames.Code}=", StringComparison.Ordinal));
-            Assert.AreEqual(1, issuedCodeCount,
-                "RFC 9126 §4: request_uri is single-use — exactly one concurrent authorize GET may consume it.");
-
-            //A losing claim on the request_uri is reported via the RFC 6749 §4.1.2.1 redirect
-            //(never a bare response body — see conformance fix at the claim site); a request whose
-            //load raced past the winner's save onto a state that is not a pending pushed request
-            //takes a separate, unrelated refusal shape. The invariant that belongs to THIS clause is
-            //narrower than "every loser is a redirect": no response — of either shape — ever
-            //carries the request_uri-already-used refusal in a bare body.
-            foreach(HttpResponseMessage response in responses)
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
             {
-                if((int)response.StatusCode == 400)
+                try
                 {
-                    string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken)
-                        .ConfigureAwait(false);
-                    Assert.DoesNotContain("already been used", body, StringComparison.Ordinal,
-                        "The request_uri-already-used refusal must ride the RFC 6749 §4.1.2.1 redirect, never a bare response body.");
+                    (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+                    if(state is ParRequestReceivedState)
+                    {
+                        await authorizeBarrier.SignalAndWaitAsync().ConfigureAwait(false);
+                    }
+
+                    return (state, stepCount);
                 }
-            }
-        }
-        finally
+                catch(Exception exception) when(!TestContext.CancellationToken.IsCancellationRequested)
+                {
+                    authorizeBarrier.ReportFault(exception);
+                    throw;
+                }
+
+            };
+        }).ConfigureAwait(false);
+
+        Task<HttpResponseMessage>[] authorizeCalls = [.. Enumerable.Range(0, ConcurrentRequests)
+            .Select(_ => authorizeBarrier.ObserveParticipantAsync(() => RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+                host, authorizeUrl, SubjectId, TestContext.CancellationToken)))];
+
+        await authorizeBarrier.WaitForReleaseAsync().ConfigureAwait(false);
+        HttpResponseMessage[] responses = await Task.WhenAll(authorizeCalls).ConfigureAwait(false);
+        List<Dictionary<string, string>> redirects = [];
+        foreach(HttpResponseMessage response in responses)
         {
-            foreach(HttpResponseMessage response in responses)
-            {
-                response.Dispose();
-            }
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(302, (int)response.StatusCode,
+                $"Every authorization outcome must redirect to the registered callback. Body: {body}");
+            Assert.IsNotNull(response.Headers.Location);
+            redirects.Add(ParseQuery(response.Headers.Location));
         }
+
+        _ = Assert.ContainsSingle(r => r.ContainsKey(OAuthRequestParameterNames.Code), redirects,
+            "RFC 9126 §4: request_uri is single-use — exactly one concurrent authorize GET may consume it.");
+        foreach(Dictionary<string, string> refusal in redirects.Where(r => !r.ContainsKey(OAuthRequestParameterNames.Code)))
+        {
+            Assert.AreEqual(OAuthErrors.InvalidRequestUri, refusal.GetValueOrDefault(OAuthRequestParameterNames.Error),
+                "RFC 9126 §4 and RFC 9101 §7 require invalid_request_uri for each refused single-use reference.");
+
+        }
+
     }
 
 
@@ -1935,32 +1950,37 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         const int ConcurrentRequests = 8;
 
-        int arrivedAtLiveState = 0;
-        TaskCompletionSource releaseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using CancellableTestBarrier redemptionBarrier = new(
+            "authorization code redemption", ConcurrentRequests, TestContext.CancellationToken);
         LoadServerFlowStateDelegate originalLoad = host.Server.OAuth().LoadFlowStateAsync!;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
             {
-                (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
-                if(state is ServerCodeIssuedState)
+                try
                 {
-                    if(Interlocked.Increment(ref arrivedAtLiveState) == ConcurrentRequests)
+                    (FlowState? state, int stepCount) = await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+                    if(state is ServerCodeIssuedState)
                     {
-                        _ = releaseGate.TrySetResult();
+                        await redemptionBarrier.SignalAndWaitAsync().ConfigureAwait(false);
                     }
 
-                    await releaseGate.Task.ConfigureAwait(false);
+                    return (state, stepCount);
+                }
+                catch(Exception exception) when(!TestContext.CancellationToken.IsCancellationRequested)
+                {
+                    redemptionBarrier.ReportFault(exception);
+                    throw;
                 }
 
-                return (state, stepCount);
             };
         }).ConfigureAwait(false);
 
         Task<(int StatusCode, string Body)>[] redemptions = [.. Enumerable.Range(0, ConcurrentRequests)
-            .Select(_ => RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
-                host, segment, tokenFields, TestContext.CancellationToken))];
+            .Select(_ => redemptionBarrier.ObserveParticipantAsync(() => RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, tokenFields, TestContext.CancellationToken)))];
 
+        await redemptionBarrier.WaitForReleaseAsync().ConfigureAwait(false);
         (int StatusCode, string Body)[] responses = await Task.WhenAll(redemptions).ConfigureAwait(false);
 
         _ = Assert.ContainsSingle(r => r.StatusCode == 200, responses,
@@ -2756,6 +2776,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// draft-16 §4.3.1</see>'s "it will revoke the active refresh token" still reaches the
     /// published successor once the retired token is presented again afterward — the race narrows
     /// the window but does not leave the successor reachable outside reuse detection.
+    /// A successful concurrent claim is observed directly so a blocked publication cannot conceal it.
     /// </summary>
     [TestMethod]
     public async Task RotationHeldBetweenClaimAndPublishRefusesAConcurrentPresentationOfTheSameToken()
@@ -2773,9 +2794,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         HostedAuthorizationServer hosted = host.Host("default");
 
-        //This test forces the claim held before publication: with the per-grant ordering gate on,
-        //the concurrent presentation below would never enter the library while the rotation's own
-        //claim is held.
+        //The first successor is held before publication so another request can contest the live token.
         hosted.IsOrderingRequestsPerGrant = false;
         string segment = material.Registration.TenantId.Value;
 
@@ -2792,9 +2811,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string refreshFlowId = hosted.RefreshTokenIndex[presentedRefreshToken];
         string grantFlowId = hosted.ResolveGrantKey(refreshFlowId);
         int revokeCalls = 0;
-        TaskCompletionSource claimedGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int successorPublications = 0;
+        int presentationClaims = 0;
+        await using CancellableTestBarrier publicationBarrier = new(
+            "refresh successor publication", 1, TestContext.CancellationToken);
         TaskCompletionSource releaseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource concurrentClaimSucceeded = new(TaskCreationOptions.RunContinuationsAsynchronously);
         ClaimServerFlowStateDelegate originalClaim = host.Server.OAuth().ClaimFlowStateAsync!;
+        SaveServerFlowStateDelegate originalSave = host.Server.OAuth().SaveFlowStateAsync!;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
@@ -2806,41 +2830,113 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
             candidateIntegration.ClaimFlowStateAsync = async (tenantId, key, expectedStepCount, ctx, ct) =>
             {
-                bool claimed = await originalClaim(tenantId, key, expectedStepCount, ctx, ct).ConfigureAwait(false);
-                if(claimed && key == refreshFlowId)
+                try
                 {
-                    _ = claimedGate.TrySetResult();
-                    await releaseGate.Task.WaitAsync(ct).ConfigureAwait(false);
+                    bool isConcurrentPresentation = key == refreshFlowId && ctx.FlowId == key
+                        && Interlocked.Increment(ref presentationClaims) > 1;
+                    bool isClaimed = await originalClaim(tenantId, key, expectedStepCount, ctx, ct).ConfigureAwait(false);
+                    if(isConcurrentPresentation && isClaimed)
+                    {
+                        _ = concurrentClaimSucceeded.TrySetResult();
+                    }
+
+                    return isClaimed;
+                }
+                catch(Exception exception) when(!TestContext.CancellationToken.IsCancellationRequested)
+                {
+                    publicationBarrier.ReportFault(exception);
+                    throw;
                 }
 
-                return claimed;
+            };
+
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                try
+                {
+                    if(state is ServerRefreshTokenIssuedState successorState
+                        && successorState.GrantFlowId == grantFlowId
+                        && Interlocked.Increment(ref successorPublications) == 1)
+                    {
+                        await publicationBarrier.SignalAndWaitAsync().ConfigureAwait(false);
+                        await releaseGate.Task.WaitAsync(ct).WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                    }
+
+                    await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
+                }
+                catch(Exception exception) when(!TestContext.CancellationToken.IsCancellationRequested)
+                {
+                    publicationBarrier.ReportFault(exception);
+                    throw;
+                }
+
             };
         }).ConfigureAwait(false);
 
         Dictionary<string, string> refreshFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(
             ClientId, presentedRefreshToken);
 
-        Task<(int StatusCode, string Body)> rotationTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
-            host, segment, refreshFields, TestContext.CancellationToken);
-        await claimedGate.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-        (int StatusCode, string Body) concurrent = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
-            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = releaseGate.TrySetResult();
-        (int StatusCode, string Body) rotation = await rotationTask.ConfigureAwait(false);
-
-        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        Task<(int StatusCode, string Body)> rotationTask = publicationBarrier.ObserveParticipantAsync(
+            () => RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, refreshFields, TestContext.CancellationToken));
+        Task<(int StatusCode, string Body)>? concurrentTask = null;
+        (int StatusCode, string Body, Exception? Failure)[] outcomes;
+        bool isConcurrentClaimSuccessful = false;
+        bool isConcurrentCompletedBeforePublication = false;
+        try
         {
-            candidateIntegration.ClaimFlowStateAsync = originalClaim;
-        }).ConfigureAwait(false);
+            await publicationBarrier.WaitForReleaseAsync().ConfigureAwait(false);
+            concurrentTask = publicationBarrier.ObserveParticipantAsync(() => RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, refreshFields, TestContext.CancellationToken));
+            _ = await Task.WhenAny(concurrentClaimSucceeded.Task, concurrentTask)
+                .WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            isConcurrentClaimSuccessful = concurrentClaimSucceeded.Task.IsCompleted;
+            isConcurrentCompletedBeforePublication = concurrentTask.IsCompleted;
+        }
+        finally
+        {
+            _ = releaseGate.TrySetResult();
+            try
+            {
+                (int StatusCode, string Body, Exception? Failure) rotationOutcome =
+                    await ObserveWireOutcomeAsync(rotationTask, TestContext.CancellationToken).ConfigureAwait(false);
+                outcomes = concurrentTask switch
+                {
+                    null => [rotationOutcome],
+                    _ =>
+                    [
+                        rotationOutcome,
+                        await ObserveWireOutcomeAsync(concurrentTask, TestContext.CancellationToken).ConfigureAwait(false)
+                    ]
+                };
+            }
+            finally
+            {
+                await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+                {
+                    candidateIntegration.SaveFlowStateAsync = originalSave;
+                    candidateIntegration.ClaimFlowStateAsync = originalClaim;
+                }).ConfigureAwait(false);
+            }
 
-        //LOST CLAIM state assertion (directly after both responses are awaited and the paused
-        //ClaimFlowStateAsync gate has been released and joined — before the LATER reuse
-        //presentation below, which this test's own doc describes on purpose): the concurrent
-        //presentation of the SAME still-live token lost its claim outright, before ever resolving
-        //to a retired record, so it must not have triggered any revocation, and the grant must
-        //still have exactly the one live successor the winner published.
+        }
+
+        string outcomeDiagnostic = string.Join(" | ", outcomes.Select((outcome, index) =>
+            $"{(index == 0 ? "Rotation" : "Concurrent")}: status={outcome.StatusCode}, body={outcome.Body}, failure={outcome.Failure}"));
+        Assert.IsFalse(isConcurrentClaimSuccessful,
+            $"The concurrent presentation must never claim the same refresh token while successor publication is held. {outcomeDiagnostic}");
+        Assert.IsTrue(isConcurrentCompletedBeforePublication,
+            $"The concurrent presentation must finish while successor publication is held. {outcomeDiagnostic}");
+        Assert.IsTrue(outcomes.All(outcome => outcome.Failure is null), outcomeDiagnostic);
+        (int StatusCode, string Body) rotation = (outcomes[0].StatusCode, outcomes[0].Body);
+        (int StatusCode, string Body) concurrent = (outcomes[1].StatusCode, outcomes[1].Body);
+        Assert.AreEqual(400, concurrent.StatusCode,
+            $"A concurrent presentation of the claimed refresh token must be refused before publication. {outcomeDiagnostic}");
+        Assert.Contains(OAuthErrors.InvalidGrant, concurrent.Body, StringComparison.Ordinal, outcomeDiagnostic);
+
+
+        //A refusal while the token is still live leaves issued tokens unrevoked and exactly one
+        //successor redeemable after publication completes.
         Assert.AreEqual(0, revokeCalls,
             "A lost claim on a still-live token must not revoke any issued token.");
         GrantStateSnapshot grantStateAfterRace = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
@@ -5116,9 +5212,30 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
+    /// Observes a wire request's response or exception under runner cancellation so racing requests
+    /// can both finish before an assertion reports their complete outcomes.
+    /// </summary>
+    private static async Task<(int StatusCode, string Body, Exception? Failure)> ObserveWireOutcomeAsync(
+        Task<(int StatusCode, string Body)> request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            (int statusCode, string body) = await request.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+            return (statusCode, body, null);
+        }
+        catch(Exception exception) when(!cancellationToken.IsCancellationRequested)
+        {
+
+            return (0, string.Empty, exception);
+        }
+
+    }
+
+
+    /// <summary>
     /// Parses a redirect URI's query string into a single-valued map, unescaping both keys and
-    /// values. Reads a plain authorization start's redirect for the individual
-    /// RFC 6749 §4.1.1 / RFC 7636 §4.3 parameters it must carry.
+    /// values so authorization request parameters and callback outcomes can be asserted individually.
     /// </summary>
     private static Dictionary<string, string> ParseQuery(Uri uri) =>
         uri.Query.TrimStart('?').Split('&')
@@ -5269,11 +5386,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// RFC 9126 §4: <c>client_id</c> is REQUIRED on the authorization request that presents a
-    /// pushed <c>request_uri</c>, and it must agree with both the ALREADY SELECTED registration
-    /// and the stored pushed request's own client — a DIFFERENT identifier and an OMITTED one are
-    /// each a direct refusal, with no code issued and the pushed request left unconsumed (it still
-    /// completes normally afterward with the right identifier).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
+    /// binds a pushed reference to its client, with validation required by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>.
+    /// A wrong client receives <c>invalid_request_uri</c> under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
+    /// An omitted client receives <c>invalid_request</c> for the missing required parameter under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
+    /// Neither direct refusal consumes the reference; its bound client can still authorize it.
     /// </summary>
     [TestMethod]
     public async Task RequestUriCompletionWithWrongOrMissingClientIdIsRefusedWithoutConsumingThePushedRequest()
@@ -5300,34 +5420,31 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         using JsonDocument parDoc = JsonDocument.Parse(ParBody);
         string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
 
-        Uri AuthorizeUrl(string? clientId)
-        {
-            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
-                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri)}";
-            if(clientId is not null)
-            {
-                query += $"&{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}";
-            }
-
-            return new Uri(hosted.HttpBaseAddress!, query);
-        }
-
         //A DIFFERENT client_id: refused directly, no code, the pushed request left unconsumed.
         using HttpResponseMessage wrongIdResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, AuthorizeUrl("not-the-registration"), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, requestUri, "not-the-registration"),
+            SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
         string wrongIdBody = await wrongIdResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)wrongIdResponse.StatusCode, wrongIdBody);
+        using JsonDocument wrongIdError = JsonDocument.Parse(wrongIdBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequestUri, wrongIdError.RootElement.GetProperty("error").GetString());
+        Assert.IsNull(wrongIdResponse.Headers.Location);
 
         //NO client_id at all: also refused directly.
         using HttpResponseMessage missingIdResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, AuthorizeUrl(null), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, requestUri, null),
+            SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
         string missingIdBody = await missingIdResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)missingIdResponse.StatusCode, missingIdBody);
+        using JsonDocument missingIdError = JsonDocument.Parse(missingIdBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, missingIdError.RootElement.GetProperty("error").GetString());
+        Assert.IsNull(missingIdResponse.Headers.Location);
 
         //The pushed request still works afterward with the RIGHT identifier — neither refusal
         //consumed it.
         using HttpResponseMessage successResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, AuthorizeUrl(ClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, requestUri, ClientId),
+            SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(302, (int)successResponse.StatusCode);
         Assert.IsNotNull(TestBrowser.ExtractQueryParam(successResponse.Headers.Location!.ToString(), OAuthRequestParameterNames.Code));
     }
@@ -5353,6 +5470,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// An UNKNOWN <c>request_uri</c> presenting the same hostile <c>client_id</c> answers the
     /// identical body too, and never touches the seeded record's own step count — proof that
     /// identification runs before any record, existing or not, is ever loaded.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
+    /// requires the reference's client binding. Either binding mismatch makes the reference invalid
+    /// for this presentation and receives <c>invalid_request_uri</c>, as defined by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
     /// </summary>
     [TestMethod]
     public async Task RequestUriCompletionOfASeededMismatchedRecordFailsEachComparisonIndependently()
@@ -5388,21 +5509,15 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         hosted.FlowStates[flowId] = (parState with { ClientId = HostileStoredClientId }, StepCount);
         int stepCountBefore = StepCount;
 
-        Uri AuthorizeUrl(string clientId)
-        {
-            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
-                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri)}" +
-                $"&{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}";
-
-            return new Uri(hosted.HttpBaseAddress!, query);
-        }
-
         //The registration's own (correctly identified) identifier: refused by the binding
         //comparison alone (it agrees with the registration but not with the stored record).
         using HttpResponseMessage boundResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, AuthorizeUrl(ClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, requestUri, ClientId),
+            SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
         string boundBody = await boundResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)boundResponse.StatusCode, boundBody);
+        using JsonDocument boundError = JsonDocument.Parse(boundBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequestUri, boundError.RootElement.GetProperty("error").GetString());
         Assert.Contains("client_id does not match the pushed authorization request.", boundBody, StringComparison.Ordinal);
         Assert.IsNull(boundResponse.Headers.Location, "A request_uri completion refusal is direct, never a redirect.");
         Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
@@ -5414,7 +5529,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         //step, before this pushed record is even loaded (it agrees with the stored record but not
         //with the registration).
         using HttpResponseMessage hostileResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, AuthorizeUrl(HostileStoredClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, requestUri, HostileStoredClientId),
+            SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
         string hostileBody = await hostileResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)hostileResponse.StatusCode, hostileBody);
         Assert.IsNull(hostileResponse.Headers.Location, "A request_uri completion refusal is direct, never a redirect.");
@@ -5430,17 +5546,9 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         //comparison runs in the step, before any record — this seeded one included — is ever
         //loaded, so an unknown handle and this existing (but mismatched) one answer byte-identically.
         string unknownRequestUri = requestUri + "-does-not-exist";
-        Uri UnknownAuthorizeUrl(string clientId)
-        {
-            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
-                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(unknownRequestUri)}" +
-                $"&{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}";
-
-            return new Uri(hosted.HttpBaseAddress!, query);
-        }
-
         using HttpResponseMessage unknownHostileResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, UnknownAuthorizeUrl(HostileStoredClientId), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, unknownRequestUri, HostileStoredClientId),
+            SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
         string unknownHostileBody = await unknownHostileResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)unknownHostileResponse.StatusCode, unknownHostileBody);
         Assert.IsNull(unknownHostileResponse.Headers.Location, "A request_uri completion refusal is direct, never a redirect.");
@@ -5453,6 +5561,133 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
+    /// A reference that is unknown, has no token or stored request, or has reached its expiry cannot authorize
+    /// a code and receives <c>invalid_request_uri</c> as defined by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
+    /// defines the reference and its lifetime, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>
+    /// requires expired references to be rejected as invalid.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>
+    /// treats parameters without a value as omitted. A whitespace-only <c>request_uri</c> has a value
+    /// and receives <c>invalid_request_uri</c> as an invalid reference, rather than the missing-parameter
+    /// <c>invalid_request</c> reserved for an empty value.
+    /// </summary>
+    /// <param name="referenceCondition">The unavailable-reference condition presented at authorization.</param>
+    [TestMethod]
+    [DataRow("unknown")]
+    [DataRow("empty token")]
+    [DataRow("blank token")]
+    [DataRow("missing record")]
+    [DataRow("expired")]
+    public async Task UnavailableRequestUriIsRefusedInvalidRequestUri(string referenceCondition)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        string requestUri = await PushRequestUriAsync(host, segment).ConfigureAwait(false);
+        string flowId = hosted.RequestUriTokenIndex[TestHostShell.ExtractRequestUriToken(new Uri(requestUri))];
+        (FlowState state, int stepCount) = hosted.FlowStates[flowId];
+        ParRequestReceivedState parState = (ParRequestReceivedState)state;
+        (string presentedReference, ParRequestReceivedState? storedRequest) = referenceCondition switch
+        {
+            "unknown" => (requestUri + "-unknown", parState),
+            "empty token" => ("urn:ietf:params:oauth:request_uri:", parState),
+            "blank token" => (" ", parState),
+            "missing record" => (requestUri, null),
+            "expired" => (requestUri, parState with { ExpiresAt = TimeProvider.GetUtcNow() }),
+            _ => throw new ArgumentOutOfRangeException(nameof(referenceCondition))
+        };
+        if(storedRequest is null)
+        {
+            Assert.IsTrue(hosted.FlowStates.TryRemove(flowId, out _));
+        }
+        else
+        {
+            hosted.FlowStates[flowId] = (storedRequest, stepCount);
+        }
+
+        Uri authorizeUrl = BuildRequestUriAuthorizationUrl(hosted, segment, presentedReference, ClientId);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidRequestUri, error.RootElement.GetProperty("error").GetString());
+        Assert.DoesNotContain(entry => entry.State is ServerCodeIssuedState, hosted.FlowStates.Values,
+            "An unavailable reference must issue no authorization code.");
+    }
+
+
+    /// <summary>
+    /// An already-authorized reference cannot issue another code after the successful state is saved.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
+    /// defines the single-use reference, and this server enforces the one-time-use recommendation in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see> with
+    /// <c>invalid_request_uri</c>, the reference-error code in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ConsumedRequestUriIsRefusedInvalidRequestUriAfterAuthorizationIsSaved()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        string requestUri = await PushRequestUriAsync(host, segment).ConfigureAwait(false);
+        Uri authorizeUrl = BuildRequestUriAuthorizationUrl(hosted, segment, requestUri, ClientId);
+        using HttpResponseMessage success = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)success.StatusCode);
+        Assert.IsNotNull(success.Headers.Location);
+        Assert.IsNotNull(TestBrowser.ExtractQueryParam(success.Headers.Location.ToString(), OAuthRequestParameterNames.Code));
+        string flowId = hosted.RequestUriTokenIndex[TestHostShell.ExtractRequestUriToken(new Uri(requestUri))];
+        (FlowState state, int stepCount) = hosted.FlowStates[flowId];
+        _ = Assert.IsInstanceOfType<ServerCodeIssuedState>(state);
+
+        using HttpResponseMessage refusal = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await refusal.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)refusal.StatusCode, body);
+        Assert.IsNull(refusal.Headers.Location);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidRequestUri, error.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual((state, stepCount), hosted.FlowStates[flowId],
+            "Reusing the reference must leave the issued authorization code unchanged.");
+    }
+
+
+    /// <summary>
+    /// An empty reference value is treated as an omitted parameter under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>,
+    /// so it receives the missing-parameter <c>invalid_request</c> error defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyRequestUriIsRefusedAsAMissingParameter()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri authorizeUrl = BuildRequestUriAuthorizationUrl(
+            host.Host("default"), material.Registration.TenantId.Value, string.Empty, ClientId);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, error.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("Missing request_uri.", error.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: "The
     /// authorization server MUST validate authorization requests arising from a pushed request as
     /// it would any other authorization request," and
@@ -5460,6 +5695,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <c>client_id</c> on it. The check runs in the endpoint's own pre-correlation step, before
     /// the pushed request is ever looked up, so a request naming no <c>client_id</c> is refused
     /// identically whether its <c>request_uri</c> names a live pushed request or nothing at all.
+    /// This missing-parameter refusal is <c>invalid_request</c> under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
     /// </summary>
     [TestMethod]
     public async Task RequestUriCompletionWithNoClientIdAnswersTheSameBodyForAnUnknownAndAnExistingRequestUriAsync()
@@ -5486,24 +5723,20 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         using JsonDocument parDoc = JsonDocument.Parse(ParBody);
         string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
 
-        Uri AuthorizeUrlWithoutClientId(string requestUriValue)
-        {
-            string query = $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
-                $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUriValue)}";
-
-            return new Uri(hosted.HttpBaseAddress!, query);
-        }
-
         using HttpResponseMessage existingResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, AuthorizeUrlWithoutClientId(requestUri), SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, requestUri, null),
+            SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
         string existingBody = await existingResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage unknownResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, AuthorizeUrlWithoutClientId("urn:ietf:params:oauth:request_uri:unknown-value"), SubjectId, TestContext.CancellationToken)
+            host, BuildRequestUriAuthorizationUrl(hosted, segment, "urn:ietf:params:oauth:request_uri:unknown-value", null),
+            SubjectId, TestContext.CancellationToken)
             .ConfigureAwait(false);
         string unknownBody = await unknownResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, (int)existingResponse.StatusCode, existingBody);
+        using JsonDocument existingError = JsonDocument.Parse(existingBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, existingError.RootElement.GetProperty("error").GetString());
         Assert.Contains("Missing client_id.", existingBody, StringComparison.Ordinal);
         Assert.AreEqual((int)unknownResponse.StatusCode, (int)existingResponse.StatusCode);
         Assert.AreEqual(unknownBody, existingBody,
@@ -5859,6 +6092,44 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             "A correct presentation must correlate the grant store exactly once.");
         _ = Assert.ContainsSingle(op => op == "load", successOps2,
             "A correct presentation must load the grant store exactly once.");
+    }
+
+
+    /// <summary>Pushes a valid PKCE request through the existing wire fixture to obtain a reference for authorization checks.</summary>
+    private async Task<string> PushRequestUriAsync(TestHostShell host, string segment)
+    {
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> fields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, statusCode, body);
+        using JsonDocument response = JsonDocument.Parse(body);
+
+        return response.RootElement.GetProperty("request_uri").GetString()!;
+    }
+
+
+    /// <summary>Builds a reference-based authorization URL so refusal tests use the same route and parameter encoding.</summary>
+    private static Uri BuildRequestUriAuthorizationUrl(
+        HostedAuthorizationServer hosted, string segment, string requestUri, string? clientId)
+    {
+        string clientQuery = clientId switch
+        {
+            null => string.Empty,
+            _ => $"&{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}"
+        };
+
+        return new Uri(hosted.HttpBaseAddress!,
+            $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
+            $"?{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri)}{clientQuery}");
     }
 
 

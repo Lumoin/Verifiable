@@ -35,9 +35,9 @@ namespace Verifiable.Tests.Foundation;
 /// (<see cref="TestMethodsHaveANonEmptyBody"/>); no line starts with a <c>#region</c> or
 /// <c>#endregion</c> directive (<see cref="SourceTreeHasNoRegionDirectives"/>); the BouncyCastle provider
 /// never constructs a platform AEAD cipher directly
-/// (<see cref="BouncyCastleProviderNeverConstructsAPlatformAeadCipher"/>); and a test is bounded by
-/// <see cref="TestContext.CancellationToken"/> alone, never a fixed wall-clock budget or a blocking wait on a
-/// task (<see cref="TestsAreBoundedByTestContextAloneNeverAFixedWallClockBudgetOrABlockingTaskWait"/>). Runs on a clean clone: the
+/// (<see cref="BouncyCastleProviderNeverConstructsAPlatformAeadCipher"/>); and test sources contain no
+/// unrecorded or increased matches for fixed wall-clock budgets or blocking task waits
+/// (<see cref="TestsAreBoundedByTestContextAloneNeverAFixedWallClockBudgetOrABlockingTaskWait"/>). Runs on a clean clone: the
 /// root is located by walking up from <see cref="AppContext.BaseDirectory"/> to the directory containing
 /// <c>Verifiable.slnx</c>, no environment variable or hardcoded path involved.
 /// </summary>
@@ -51,6 +51,7 @@ namespace Verifiable.Tests.Foundation;
 [TestClass]
 internal sealed class SourceHygieneTests
 {
+    /// <summary>Exposes MSTest's per-test context for runner integration; synchronous scans do not poll its cancellation token.</summary>
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>Every offending line in the current tree is reported by file-relative-path and line number.</summary>
@@ -185,6 +186,9 @@ internal sealed class SourceHygieneTests
         string laneScopeLine = "// beyond the " + "lane" + "'s scope" + " for this change";
         string briefStepCitationLine = "// documented " + "per" + " \"The Change\" " + "step" + " 2";
         string theBriefLine = "// see " + "the" + " brief" + " for the originating request";
+        string pairedFindingLine = "// see " + "R" + "12/" + "F" + "11 for detail";
+        string findingAssignmentLine = "// " + "finding" + "Id=" + "sample";
+        string conformanceIdentifierLine = "// see " + "lcb" + "1-conformance-" + "014 for detail";
         string[] sampleLines =
         [
             "namespace Sample;",
@@ -273,11 +277,14 @@ internal sealed class SourceHygieneTests
             laneScopeLine,
             briefStepCitationLine,
             theBriefLine,
+            pairedFindingLine,
+            findingAssignmentLine,
+            conformanceIdentifierLine,
         ];
 
         IReadOnlyList<SourceHygieneViolation> violations = SourceHygieneScanner.ScanLines("Sample.cs", sampleLines);
 
-        Assert.HasCount(83, violations);
+        Assert.HasCount(86, violations);
         Assert.IsTrue(violations.All(static v => v.FilePath == "Sample.cs"));
         Assert.Contains(static v => v.LineNumber == 3 && v.Kind == SourceHygieneViolationKind.BannerDivider, violations);
         Assert.Contains(static v => v.LineNumber == 4 && v.Kind == SourceHygieneViolationKind.PlanningVocabulary, violations);
@@ -415,6 +422,12 @@ internal sealed class SourceHygieneTests
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 85));
         Assert.Contains(static v => v.LineNumber == 86 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 86));
+        Assert.Contains(static v => v.LineNumber == 87 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 87));
+        Assert.Contains(static v => v.LineNumber == 88 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 88));
+        Assert.Contains(static v => v.LineNumber == 89 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 89));
 
         foreach(SourceHygieneViolation violation in violations)
         {
@@ -749,7 +762,11 @@ internal sealed class SourceHygieneTests
     /// </summary>
     private static Regex BlockingGetResultPattern { get; } = new(@"\.GetAwaiter\(\)\.GetResult\(\)", RegexOptions.Compiled);
 
-    /// <summary>The standing record of every <c>test/**</c> <see cref="CancelAfterWallClockPattern"/> site. Empty: no test in the tree bounds itself by the real system clock this way. This list only shrinks and must never gain an entry.</summary>
+    /// <summary>
+    /// Empty: fixed wall-clock budgets under <c>test/</c> are forbidden without exception.
+    /// Tests are bounded by their own <see cref="TestContext.CancellationToken"/> alone; additional
+    /// synchronization bounds must be driven by an observed fault, never a timer. No entry may be added.
+    /// </summary>
     private static IReadOnlyDictionary<string, int> CancelAfterWallClockAllowlist { get; } = new Dictionary<string, int>();
 
     /// <summary>The standing record of every <c>test/**</c> <see cref="SystemClockCancellationTokenSourcePattern"/> site. Empty: no test in the tree constructs a single-argument, system-clock-bound <see cref="System.Threading.CancellationTokenSource"/> this way. This list only shrinks and must never gain an entry.</summary>
@@ -803,16 +820,12 @@ internal sealed class SourceHygieneTests
     };
 
     /// <summary>
-    /// A test is bounded by <see cref="TestContext.CancellationToken"/> alone — MSTest owns the timeout — and
-    /// by nothing else: never a fixed wall-clock budget (<see cref="CancelAfterWallClockPattern"/>, a
-    /// <see cref="System.Threading.CancellationTokenSource"/> built from the real clock via
-    /// <see cref="SystemClockCancellationTokenSourcePattern"/>, or a <c>WaitAsync(TimeSpan…)</c> verdict via
-    /// <see cref="WaitAsyncTimeSpanPattern"/>), never <see cref="Task.Delay(TimeSpan)"/> or
-    /// <see cref="Thread.Sleep(TimeSpan)"/> (<see cref="TaskDelayOrThreadSleepPattern"/>), and never a blocking
-    /// wait on a task (<see cref="BlockingGetResultPattern"/>). Time-dependent production behaviour is driven
-    /// through the injected <see cref="TimeProvider"/> instead. Each allowlist above is the remaining
-    /// residue outside <see cref="Verifiable.Tests.OAuth.LiveServerAlterationTests"/>, which this gate holds at
-    /// zero; each shrinks and none may grow.
+    /// Test source has no unrecorded or increased per-file matches for the five scanned budget and wait
+    /// patterns. <see cref="CancelAfterWallClockAllowlist"/> and
+    /// <see cref="SystemClockCancellationTokenSourceAllowlist"/> are empty; the fixed-span wait, delay/sleep
+    /// and blocking-task-wait lists retain their documented exceptions and may only shrink. This source
+    /// scan checks those syntactic patterns and their recorded counts; it does not prove that each test
+    /// observes <see cref="TestContext.CancellationToken"/> or detect every possible wall-clock API shape.
     /// </summary>
     [TestMethod]
     public void TestsAreBoundedByTestContextAloneNeverAFixedWallClockBudgetOrABlockingTaskWait()
@@ -2188,10 +2201,13 @@ internal sealed class SourceHygieneTests
 /// <summary>One offending line: which file, which line, and which pattern class it tripped.</summary>
 internal sealed record SourceHygieneViolation(string FilePath, int LineNumber, SourceHygieneViolationKind Kind, string LineText)
 {
+    /// <summary>Formats the relative path, line, rule and source text so a failed gate identifies the offending site.</summary>
     public override string ToString()
     {
+
         return $"{FilePath}:{LineNumber}: [{Kind}] {LineText.Trim()}";
     }
+
 }
 
 /// <summary>The pattern classes the source-hygiene gates check for.</summary>
@@ -2272,8 +2288,10 @@ internal enum SourceHygieneViolationKind
 /// </summary>
 internal static class SourceHygieneScanner
 {
+    /// <summary>Names the production and test trees so every shared source scan covers both kinds of shipped C# source.</summary>
     private static string[] ScannedTopLevelDirectories { get; } = ["src", "test"];
 
+    /// <summary>Identifies build-output directory segments so generated C# files do not enter source-hygiene scans.</summary>
     private static string[] ExcludedDirectorySegments { get; } = ["obj", "bin"];
 
     /// <summary>
@@ -2515,6 +2533,11 @@ internal static class SourceHygieneScanner
     /// noun this class's own remarks use to describe a work packet, naming that packet directly in prose
     /// rather than stating what the code IS in spec terms.
     /// </para>
+    /// <para>
+    /// Slash-paired numbered review and finding references, a finding identifier followed by an assignment
+    /// marker, and a project-prefixed numbered conformance identifier are also indirect process citations.
+    /// Rejecting these shapes keeps comments focused on the rule a reader can verify in the code.
+    /// </para>
     /// </remarks>
     private static Regex InternalProvenancePointerPattern { get; } = new(
         @"\b" + "wave" + @"(cb|ep|pin|cm|bio|lb|nv|ext|close|xades|jades|pades|[0-9])[a-z0-9]*\b" +
@@ -2548,6 +2571,9 @@ internal static class SourceHygieneScanner
         "|" + @"^\s*//.*\bfindings?\s+#\d\b" +
         "|" + @"\bcontract R-?\d" +
         "|" + @"(?-i:\bR-\d+\b)" +
+        "|" + @"\bR\d+/F\d+\b" +
+        "|" + @"\bfindingId\s*=" +
+        "|" + @"\b[a-z][a-z0-9]*-conformance-\d+\b" +
         "|" + @"\bVBC-\d" +
         "|" + @"\bRJ-\d" +
         "|" + @"\bJD\d+\b" +
@@ -2593,6 +2619,7 @@ internal static class SourceHygieneScanner
         "|" + @"\bthe\s+" + "brief" + @"\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>Collects C# paths from both configured source trees, excluding build outputs, for repository-wide gates.</summary>
     public static IReadOnlyList<string> EnumerateSourceFiles(string repositoryRoot)
     {
         List<string> files = [];
@@ -2636,6 +2663,7 @@ internal static class SourceHygieneScanner
         return files;
     }
 
+    /// <summary>Scans each file's lines using repository-relative paths so diagnostics are portable between checkouts.</summary>
     public static IReadOnlyList<SourceHygieneViolation> ScanFiles(IReadOnlyList<string> filePaths, string repositoryRoot)
     {
         List<SourceHygieneViolation> violations = [];
@@ -2738,6 +2766,7 @@ internal static class SourceHygieneScanner
         return violations;
     }
 
+    /// <summary>Reports a joined-line match only when neither constituent line matched, preventing duplicate diagnostics.</summary>
     private static void AddJoinedLineViolationIfNotAlreadyFound(
         List<SourceHygieneViolation> violations,
         string filePath,
@@ -2759,8 +2788,10 @@ internal static class SourceHygieneScanner
         }
     }
 
+    /// <summary>Recognizes ordinary and XML line comments after indentation so code-only scans can skip documentation.</summary>
     private static bool IsCommentLine(string line)
     {
+
         return line.TrimStart().StartsWith("//", StringComparison.Ordinal);
     }
 
@@ -2856,6 +2887,7 @@ internal static class SourceHygieneScanner
         return trimmed.Length > 0 && (trimmed[^1] == '(' || trimmed[^1] == ',');
     }
 
+    /// <summary>Removes indentation and a known line-comment prefix so adjacent comment text can be scanned as one phrase.</summary>
     private static string StripCommentContinuationPrefix(string line)
     {
         string trimmed = line.TrimStart();

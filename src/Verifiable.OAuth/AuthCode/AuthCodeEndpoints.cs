@@ -600,9 +600,11 @@ public static class AuthCodeEndpoints
     /// answers <see cref="PushedRequestClientMismatchDescription"/> — the SAME constant the handler
     /// answers with when the field agrees with the registration but disagrees with the PUSHED
     /// request's own <c>client_id</c>, a comparison that needs the loaded record and stays there.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see> carries only the
-    /// separate rule that the authorization server MUST validate a pushed request "as it would any
-    /// other authorization request" — the identification this step and the handler together perform.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see> binds the
+    /// reference to the client that pushed it; <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">
+    /// RFC 9126 §4</see> requires validation at authorization. Either mismatch makes the reference
+    /// invalid for this client and answers <see cref="OAuthErrors.InvalidRequestUri"/>, defined by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
     /// </remarks>
     private static ValueTask<ServerHttpResponse?> BeforeAuthorizeCompletionCorrelationAsync(
         ServerEndpoint endpoint, RequestFields fields, ExchangeContext context, CancellationToken cancellationToken)
@@ -610,6 +612,7 @@ public static class AuthCodeEndpoints
         if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? outerClientId)
             || string.IsNullOrWhiteSpace(outerClientId))
         {
+
             return ValueTask.FromResult<ServerHttpResponse?>(ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequest, "Missing client_id."));
         }
@@ -617,13 +620,15 @@ public static class AuthCodeEndpoints
         ClientRecord? requestUriRegistration = context.ClientRegistration;
         if(requestUriRegistration is null)
         {
+
             return ValueTask.FromResult<ServerHttpResponse?>(UnidentifiedClientDirectResponse());
         }
 
         if(!IsPresentedClientIdentifierTheRegistration(requestUriRegistration, outerClientId))
         {
+
             return ValueTask.FromResult<ServerHttpResponse?>(ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidRequest,
+                OAuthErrors.InvalidRequestUri,
                 PushedRequestClientMismatchDescription));
         }
 
@@ -632,6 +637,19 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>Builds authorization of a pushed request using the admitted host seams.</summary>
+    /// <remarks>
+    /// Unknown mappings, missing records, and expired references use
+    /// <see cref="EndpointCandidate.HandleNotFoundError"/> to answer
+    /// <see cref="OAuthErrors.InvalidRequestUri"/> under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see> requires
+    /// expired references to be rejected as invalid.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see> states:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// Only a null or empty <c>request_uri</c> is omitted, answering <c>invalid_request</c> with a
+    /// description naming <c>request_uri</c>. A whitespace-only value is a present invalid reference
+    /// and must be preserved for resolution to answer <c>invalid_request_uri</c>.
+    /// </remarks>
     private static EndpointCandidate BuildAuthorize() =>
         new()
         {
@@ -642,56 +660,70 @@ public static class AuthCodeEndpoints
             Kind = FlowKind.AuthCodeServer,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.AuthorizationEndpoint,
 
-            //A present-but-blank request_uri matches (the acceptance test below only requires the
-            //field's presence) then falls through here to null — the parameter this endpoint keys
-            //its continuing flow on is known, so the refusal names it rather than falling back to
-            //the host's generic "Cannot determine correlation key."
             MissingCorrelationKeyErrorDescription = "Missing request_uri.",
+            HandleNotFoundError = OAuthErrors.InvalidRequestUri,
 
             BeforeCorrelationAsync = BeforeAuthorizeCompletionCorrelationAsync,
 
             ExtractCorrelationKey = static (path, fields, context) =>
             {
                 if(fields.TryGetValue(OAuthRequestParameterNames.RequestUri, out string? requestUri)
-                    && !string.IsNullOrWhiteSpace(requestUri))
+                    && !string.IsNullOrEmpty(requestUri))
                 {
                     const string urnPrefix = "urn:ietf:params:oauth:request_uri:";
-                    return requestUri.StartsWith(urnPrefix, StringComparison.Ordinal)
+                    string correlationKey = requestUri.StartsWith(urnPrefix, StringComparison.Ordinal)
                         ? requestUri[urnPrefix.Length..]
                         : requestUri;
+
+                    //A nonempty URN with no usable token is an invalid reference (RFC 9126
+                    //§2.2 / RFC 9101 §7), not an omitted parameter. Preserve it for resolution
+                    //so the host answers HandleNotFoundError rather than its missing-field error.
+
+                    return string.IsNullOrWhiteSpace(correlationKey) ? requestUri : correlationKey;
                 }
 
                 return null;
             },
 
-            //Acceptance test: GET to /authorize with a request_uri query
-            //parameter (PAR-completed authorize). Disjointness vs the direct
-            //PKCE matcher (no request_uri) is enforced by the request_uri
-            //presence requirement here.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
+                //GET to /authorize with request_uri selects PAR completion. The direct PKCE
+                //matcher requires request_uri to be absent, keeping the endpoints disjoint.
                 IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(req is null)
+                {
+
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
                 if(!WellKnownHttpMethods.IsGet(req.Method))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 if(!fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 //RFC 9101 §5 — request and request_uri MUST NOT both be present. The
                 //both-present case is owned by BuildAuthorizeRequestObjectConflict, which
                 //rejects it explicitly; decline here so it doesn't route through PAR-flow
                 //correlation (which would surface a misleading "flow not found").
                 if(fields.ContainsKey(OAuthRequestParameterNames.Request))
                 {
+
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
+
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
@@ -702,8 +734,12 @@ public static class AuthCodeEndpoints
 
                 if(currentState is not ParRequestReceivedState)
                 {
+                    //RFC 9126 §2.2 / §4: the single-use reference must still identify a pending
+                    //pushed request. Saved consumption or another state is invalid reference data
+                    //and answers invalid_request_uri as defined by RFC 9101 §7.
+
                     return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidRequest, "Flow not in expected state."));
+                        OAuthErrors.InvalidRequestUri, "Flow not in expected state."));
                 }
 
                 //RFC 6749 §3.1: the authorization server MUST first authenticate the resource
@@ -725,13 +761,14 @@ public static class AuthCodeEndpoints
                 //BeforeAuthorizeCompletionCorrelationAsync, the endpoint's pre-correlation step;
                 //this is the second, record-dependent comparison — agreement with the PUSHED
                 //request's own client_id — which needs parState and so stays here. Both answer the
-                //SAME body: a direct refusal, RFC 6749 §4.1.2.1, with no redirect and no
-                //consumption of the pushed request.
+                //SAME body: invalid_request_uri (RFC 9101 §7) for the reference's client-binding
+                //failure (RFC 9126 §2.2), with no redirect (RFC 6749 §4.1.2.1) and no consumption.
                 _ = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? outerClientId);
                 if(!string.Equals(outerClientId, parState.ClientId, StringComparison.Ordinal))
                 {
+
                     return (null, ServerHttpResponse.BadRequest(
-                        OAuthErrors.InvalidRequest,
+                        OAuthErrors.InvalidRequestUri,
                         PushedRequestClientMismatchDescription));
                 }
 
@@ -770,8 +807,10 @@ public static class AuthCodeEndpoints
                     cancellationToken: ct).ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
+
                     return (null, requirementFailure);
                 }
+
                 grantedScope = effectiveScope;
 
                 //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for authorization codes.
@@ -807,6 +846,7 @@ public static class AuthCodeEndpoints
                         .ConfigureAwait(false);
                 if(jarmFailure is not null)
                 {
+
                     return (null, jarmFailure);
                 }
 
@@ -828,20 +868,21 @@ public static class AuthCodeEndpoints
                 //its code only once verification has fully succeeded: a server-side failure past
                 //this point never consumes the request_uri, because nothing was actually issued to
                 //the client.
-                bool requestUriClaimed = await oauth.ClaimFlowStateAsync!(
+                bool isRequestUriClaimed = await oauth.ClaimFlowStateAsync!(
                     context.TenantId!.Value, context.FlowId!, context.FlowStepCount ?? 0, context, ct)
                     .ConfigureAwait(false);
-                if(!requestUriClaimed)
+                if(!isRequestUriClaimed)
                 {
-                    //RFC 6749 §4.1.2.1: a request that fails "for reasons other than a missing or
-                    //invalid redirection URI" is reported by adding error parameters to the
-                    //client's redirect URI, not a bare response body — parState.RedirectUri and
-                    //parState.State are already validated at this point (EvaluateAuthenticationRequirementsAsync
-                    //above), so the losing claim is reported the same way any other post-validation
-                    //authorize failure is.
+                    //RFC 9126 §4 recommends one-time use and requires rejection of expired
+                    //request_uri values as invalid. This server refuses every losing single-use
+                    //claim with invalid_request_uri: RFC 9101 §7 defines it for a request_uri
+                    //that returns an error or contains invalid data. RFC 6749 §4.1.2.1 determines
+                    //the redirect shape: parState.RedirectUri and parState.State are already
+                    //validated, so the error is carried on the client's redirect URI.
+
                     return (null, BuildAuthorizeErrorRedirect(
                         parState.RedirectUri,
-                        OAuthErrors.InvalidRequest,
+                        OAuthErrors.InvalidRequestUri,
                         "The request_uri has already been used.",
                         parState.State,
                         context));
@@ -865,6 +906,7 @@ public static class AuthCodeEndpoints
             {
                 if(state is not ServerCodeIssuedState code)
                 {
+
                     return ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Unexpected state after authorize.");
                 }
