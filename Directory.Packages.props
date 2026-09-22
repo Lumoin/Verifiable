@@ -11,10 +11,10 @@
   <ItemGroup Label="Library">
     <PackageVersion Include="Lumoin.Base" Version="0.0.14" />
     <PackageVersion Include="Lumoin.Base.Libsodium" Version="0.0.14" />
-    <PackageVersion Include="Lumoin.Veridical.Core" Version="0.0.6" />
-    <PackageVersion Include="Lumoin.Veridical.Hashing" Version="0.0.6" />
-    <PackageVersion Include="Lumoin.Veridical.Backends.Managed" Version="0.0.6" />
-    <PackageVersion Include="Lumoin.Veridical.Bbs" Version="0.0.6" />
+    <PackageVersion Include="Lumoin.Veridical.Core" Version="0.0.7" />
+    <PackageVersion Include="Lumoin.Veridical.Hashing" Version="0.0.7" />
+    <PackageVersion Include="Lumoin.Veridical.Backends.Managed" Version="0.0.7" />
+    <PackageVersion Include="Lumoin.Veridical.Bbs" Version="0.0.7" />
     <!-- Lumoin.Veritas pins point at the arc's local pre-release validation feed
          (tempdocs/roadmap/veritas/local-feed, packed from the Veritas el-grind rung dbbfd7a4);
          they swap to the published 0.0.2 at arc close. -->

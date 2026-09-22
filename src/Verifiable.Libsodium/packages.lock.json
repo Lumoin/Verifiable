@@ -32,8 +32,8 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Veridical.Backends.Managed": "[0.0.6, )",
-          "Lumoin.Veridical.Bbs": "[0.0.6, )",
+          "Lumoin.Veridical.Backends.Managed": "[0.0.7, )",
+          "Lumoin.Veridical.Bbs": "[0.0.7, )",
           "Lumoin.Veritas.JsonPointer": "[0.0.2-local.be47a9ff, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
@@ -67,42 +67,42 @@
       },
       "Lumoin.Veridical.Backends.Managed": {
         "type": "CentralTransitive",
-        "requested": "[0.0.6, )",
-        "resolved": "0.0.6",
-        "contentHash": "jo99EmfycWmiPrxqkcOS/O1pbFzG+ryNV/bxCZsxPzXJuMgsOyvNNcasNeOvy4ZIES/Wn8P2jUm7DavrXq2QCQ==",
+        "requested": "[0.0.7, )",
+        "resolved": "0.0.7",
+        "contentHash": "LjoXcoqRM5oGwAp1/HjrjPJFssnlY8Q4rV92NA92xi0JBASMEUfGBh/Fx39dR7qVKxC06Y2MixHzNloT2pXQCA==",
         "dependencies": {
-          "Lumoin.Base": "0.0.9",
-          "Lumoin.Veridical.Core": "0.0.6",
-          "Lumoin.Veridical.Hashing": "0.0.6"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veridical.Core": "0.0.7",
+          "Lumoin.Veridical.Hashing": "0.0.7"
         }
       },
       "Lumoin.Veridical.Bbs": {
         "type": "CentralTransitive",
-        "requested": "[0.0.6, )",
-        "resolved": "0.0.6",
-        "contentHash": "8DQfUslct+Rc0fr06GtlSNM9XcpC3ddBIRHa5AlSvj4nrUIU4FSWTr9P1FBH+6GauKSv8qXPUaHNG2Gc41bxEg==",
+        "requested": "[0.0.7, )",
+        "resolved": "0.0.7",
+        "contentHash": "sj02gFycTA/SqZrZwyhxGUSXvNk17eigUwHdDLB7kovN51p9fd6E/Ed/Bpo3EPCNGgM/85WXXOmfxka0sCFL9g==",
         "dependencies": {
-          "Lumoin.Base": "0.0.9",
-          "Lumoin.Veridical.Core": "0.0.6"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veridical.Core": "0.0.7"
         }
       },
       "Lumoin.Veridical.Core": {
         "type": "CentralTransitive",
-        "requested": "[0.0.6, )",
-        "resolved": "0.0.6",
-        "contentHash": "g/GHvZtXIxFQdZd7uWZzC5ARnPmKq2PF+X9ho1rI6TEcm/gTJ52aqoD7I+uNRq+wAnKRAxCTR/rkqy4jWYQP5A==",
+        "requested": "[0.0.7, )",
+        "resolved": "0.0.7",
+        "contentHash": "xr0DkNsid14A7jdbJ7Cn8qHXvGnWpGUoEMt0fFy2Yqqw8FeK9dlDJWTZTGxG0VgRfktWWPyOwkptVCTtPrkc7Q==",
         "dependencies": {
-          "Lumoin.Base": "0.0.9"
+          "Lumoin.Base": "0.0.14"
         }
       },
       "Lumoin.Veridical.Hashing": {
         "type": "CentralTransitive",
-        "requested": "[0.0.6, )",
-        "resolved": "0.0.6",
-        "contentHash": "X5O9PQ0GqX78ibcgcellxPIem5C+rESJu1zv9lu0vg4dZhluOBgYNV8Hdxg1Hym6LRvqqxGMiphs1K4gIDH6mA==",
+        "requested": "[0.0.7, )",
+        "resolved": "0.0.7",
+        "contentHash": "40zNvxn4SOamlhNPAaiy26r0r7YyIu8C7jA6R6ugLrN08kCnmRB5aLiL5YaOmSzXIsspnUM3odpmaVwnDWAafg==",
         "dependencies": {
-          "Lumoin.Base": "0.0.9",
-          "Lumoin.Veridical.Core": "0.0.6"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veridical.Core": "0.0.7"
         }
       },
       "Lumoin.Veritas.JsonPointer": {
