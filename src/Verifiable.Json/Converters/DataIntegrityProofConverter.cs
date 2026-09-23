@@ -26,6 +26,11 @@ namespace Verifiable.Json.Converters;
 /// </remarks>
 public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 {
+    /// <summary>
+    /// Resolves a proof's <c>cryptosuite</c> name to its <see cref="CryptosuiteInfo"/>; a name the factory does not
+    /// know yields an <see cref="UnknownCryptosuiteInfo"/>, so an unsupported cryptosuite is refused by verification
+    /// rather than by the reader.
+    /// </summary>
     private CryptosuiteInfoFactoryDelegate CryptosuiteFactory { get; }
 
 
@@ -62,7 +67,8 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
 
-        var proof = new DataIntegrityProof();
+        //Preserve absence: Data Integrity §4.4 reports a missing type during verification.
+        var proof = new DataIntegrityProof { Type = string.Empty };
 
         //Extract proofPurpose first since it determines the VerificationMethodReference subclass.
         string? proofPurpose = null;
@@ -79,7 +85,7 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
         if(root.TryGetProperty("type", out var typeElement))
         {
-            proof.Type = typeElement.GetString() ?? DataIntegrityProof.DataIntegrityProofType;
+            proof.Type = typeElement.GetString() ?? string.Empty;
         }
 
         if(root.TryGetProperty("cryptosuite", out var cryptosuiteElement))
@@ -173,7 +179,10 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
             writer.WriteString("id", value.Id);
         }
 
-        writer.WriteString("type", value.Type);
+        if(!string.IsNullOrEmpty(value.Type))
+        {
+            writer.WriteString("type", value.Type);
+        }
 
         if(value.Cryptosuite is not null)
         {
@@ -258,7 +267,11 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
     /// <summary>
     /// Creates the appropriate <see cref="VerificationMethodReference"/> subclass based on
     /// <c>proofPurpose</c>. For embedded verification methods, deserializes through the
-    /// source-generated <see cref="VerifiableJsonContext.Default"/> context for AOT safety.
+    /// source-generated <see cref="VerifiableJsonContext.Default"/> context for AOT safety. A purpose that names
+    /// none of the modelled verification relationships, or an absent purpose, keeps the reference as an
+    /// <see cref="UnknownPurposeMethod"/> carrying the raw purpose, so the verifier, not the reader, refuses it
+    /// (<see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>) and a written
+    /// proof keeps both members.
     /// </summary>
     private static VerificationMethodReference? CreateVerificationMethodReference(
         JsonElement element,
@@ -311,9 +324,9 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
                 ? new CapabilityDelegationMethod(referenceId)
                 : new CapabilityDelegationMethod(embedded!),
 
-            null => throw new JsonException("Missing proofPurpose property. Cannot determine verification method type."),
-
-            _ => throw new JsonException($"Unknown proofPurpose: '{proofPurpose}'. Expected one of: {AuthenticationMethod.Purpose}, {AssertionMethod.Purpose}, {KeyAgreementMethod.Purpose}, {CapabilityInvocationMethod.Purpose}, {CapabilityDelegationMethod.Purpose}.")
+            _ => referenceId is not null
+                ? new UnknownPurposeMethod(proofPurpose, referenceId)
+                : new UnknownPurposeMethod(proofPurpose, embedded!)
         };
     }
 }

@@ -566,6 +566,22 @@ public static class CredentialBbs2023Extensions
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.NoProof), null);
             }
 
+            //Data Integrity §4.4 requires type, verificationMethod and proofPurpose; any of the three
+            //missing groups under the same MissingVerificationMethod reason.
+            if(string.IsNullOrEmpty(proof.Type) || string.IsNullOrEmpty(proof.VerificationMethod?.Id) || string.IsNullOrEmpty(proof.ProofPurpose))
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.MissingVerificationMethod), null);
+            }
+
+            //Data Integrity §4.4: "If expectedProofPurpose was given, and it does not match proof.proofPurpose, an error
+            //MUST be raised." A credential proof's expected purpose is assertionMethod, compared ordinally as the resolving
+            //entry points compare it, so a proof declaring any other purpose never verifies whichever verifier the caller
+            //supplies.
+            if(!string.Equals(proof.ProofPurpose, AssertionMethod.Purpose, StringComparison.Ordinal))
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.ProofPurposeMismatch), null);
+            }
+
             if(proof.Cryptosuite?.CryptosuiteName != CredentialConstants.Cryptosuites.Bbs2023)
             {
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite), null);
@@ -595,8 +611,11 @@ public static class CredentialBbs2023Extensions
             {
                 throw;
             }
-            catch(Exception)
+            catch(Exception exception)
             {
+                //A canonicalizer or context loader that wraps the cancellation of its own fetch reports that cancellation.
+                WrappedCancellation.ThrowIfCarried(exception);
+
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
             }
 
@@ -653,8 +672,11 @@ public static class CredentialBbs2023Extensions
             {
                 throw;
             }
-            catch(Exception)
+            catch(Exception exception)
             {
+                //A canonicalizer or context loader that wraps the cancellation of its own fetch reports that cancellation.
+                WrappedCancellation.ThrowIfCarried(exception);
+
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
             }
 
@@ -1202,6 +1224,22 @@ public static class CredentialBbs2023Extensions
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.NoProof), null);
             }
 
+            //Data Integrity §4.4 requires type, verificationMethod and proofPurpose; any of the three
+            //missing groups under the same MissingVerificationMethod reason.
+            if(string.IsNullOrEmpty(proof.Type) || string.IsNullOrEmpty(proof.VerificationMethod?.Id) || string.IsNullOrEmpty(proof.ProofPurpose))
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.MissingVerificationMethod), null);
+            }
+
+            //Data Integrity §4.4: "If expectedProofPurpose was given, and it does not match proof.proofPurpose, an error
+            //MUST be raised." A derived proof carries the base proof's assertionMethod purpose, compared ordinally as the
+            //resolving entry points compare it, so a proof declaring any other purpose never verifies whichever verifier the
+            //caller supplies.
+            if(!string.Equals(proof.ProofPurpose, AssertionMethod.Purpose, StringComparison.Ordinal))
+            {
+                return (CredentialVerificationResult.Failed(VerificationFailureReason.ProofPurposeMismatch), null);
+            }
+
             if(proof.Cryptosuite?.CryptosuiteName != CredentialConstants.Cryptosuites.Bbs2023)
             {
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite), null);
@@ -1234,8 +1272,11 @@ public static class CredentialBbs2023Extensions
             {
                 throw;
             }
-            catch(Exception)
+            catch(Exception exception)
             {
+                //A canonicalizer or context loader that wraps the cancellation of its own fetch reports that cancellation.
+                WrappedCancellation.ThrowIfCarried(exception);
+
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
             }
 
@@ -1306,8 +1347,11 @@ public static class CredentialBbs2023Extensions
             {
                 throw;
             }
-            catch(Exception)
+            catch(Exception exception)
             {
+                //A canonicalizer or context loader that wraps the cancellation of its own fetch reports that cancellation.
+                WrappedCancellation.ThrowIfCarried(exception);
+
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
             }
 
@@ -1357,6 +1401,8 @@ public static class CredentialBbs2023Extensions
     }
 
 
+    /// <summary>Splits canonical N-Quads into its statements, each keeping its terminating newline.</summary>
+    /// <param name="nquads">The canonical N-Quads document.</param>
     private static string[] SplitIntoStatements(string nquads)
     {
         var lines = nquads.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -1365,6 +1411,8 @@ public static class CredentialBbs2023Extensions
     }
 
 
+    /// <summary>Copies the base <see cref="VerifiableCredential"/> members of <paramref name="credential"/> without any proof.</summary>
+    /// <param name="credential">The credential whose members are copied.</param>
     private static VerifiableCredential CloneCredentialWithoutProof(VerifiableCredential credential)
     {
         return new VerifiableCredential
@@ -1389,8 +1437,12 @@ public static class CredentialBbs2023Extensions
     }
 
 
-    //Copies the base VerifiableCredential members into a DataIntegritySecuredCredential and attaches
-    //the supplied proof chain.
+    /// <summary>
+    /// Copies the base <see cref="VerifiableCredential"/> members into a <see cref="DataIntegritySecuredCredential"/>
+    /// carrying <paramref name="proof"/>.
+    /// </summary>
+    /// <param name="source">The credential whose members are copied.</param>
+    /// <param name="proof">The proofs attached.</param>
     private static DataIntegritySecuredCredential CloneToSecured(VerifiableCredential source, List<DataIntegrityProof> proof)
     {
         return new DataIntegritySecuredCredential
@@ -1457,12 +1509,18 @@ public static class CredentialBbs2023Extensions
     }
 
 
+    /// <summary>Removes the <c>_:</c> blank node prefix from <paramref name="identifier"/> when it carries one.</summary>
+    /// <param name="identifier">A blank node identifier, prefixed or bare.</param>
     private static string StripBlankNodePrefix(string identifier) =>
         identifier.StartsWith("_:", StringComparison.Ordinal)
             ? identifier[2..]
             : identifier;
 
 
+    /// <summary>
+    /// The <see cref="ComputeHmacDelegate"/> registered with <see cref="CryptographicKeyFactory"/>; the application
+    /// registers it at startup, and its absence is a configuration error.
+    /// </summary>
     private static ComputeHmacDelegate ResolveHmacDelegate() =>
         CryptographicKeyFactory.GetFunction<ComputeHmacDelegate>(typeof(ComputeHmacDelegate))
         ?? throw new InvalidOperationException(

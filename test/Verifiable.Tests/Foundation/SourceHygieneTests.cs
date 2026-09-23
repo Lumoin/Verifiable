@@ -2196,6 +2196,135 @@ internal sealed class SourceHygieneTests
         Assert.IsTrue(failures[0].Contains("Second", StringComparison.Ordinal));
     }
 
+    /// <summary>The verification method type catalogue this repository ships, relative to its root.</summary>
+    private static string VerificationMethodTypeCatalogueFile { get; } = "src/Verifiable.Core/Model/Did/VerificationMethodTypeInfoExtensions.cs";
+
+    /// <summary>
+    /// The catalogue's stand-in for a verification method type the library does not recognise: a member the catalogue
+    /// exposes that by its meaning describes no type, so the catalogue list leaves it out.
+    /// </summary>
+    private static string VerificationMethodTypeStandIn { get; } = "UndefinedMethodTypeInfo";
+
+    /// <summary>
+    /// Matches one of the catalogue's own <c>public static &lt;Type&gt; &lt;Name&gt; =&gt; &lt;Type&gt;.Instance;</c>
+    /// member declarations, one per line, capturing the declared type.
+    /// </summary>
+    private static Regex VerificationMethodTypeMemberPattern { get; } = new(
+        @"^\s*public static (?<type>\w+) \w+ => \k<type>\.Instance;", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Matches the catalogue's hand-kept list, the <c>private static IReadOnlyList&lt;VerificationMethodTypeInfo&gt;</c>
+    /// property whose collection-expression initializer the <c>Catalogued</c> view returns, capturing everything between
+    /// its brackets however many source lines it spans.
+    /// </summary>
+    private static Regex VerificationMethodTypeCatalogueListPattern { get; } = new(
+        @"private static IReadOnlyList<VerificationMethodTypeInfo>\s+\w+\s*\{\s*get;\s*\}\s*=\s*\[(?<members>[^\]]*)\]",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Every completeness failure for the verification method type catalogue's text: a member whose type is not the
+    /// stand-in and is absent from the hand-kept list fails naming the member's own declaration line, and a list entry no
+    /// member exposes fails naming the file. A verifier asks the list whether a declared method type is one the library
+    /// describes, so a member missing from it would make a described type read as an unsupported securing mechanism.
+    /// </summary>
+    /// <param name="relativePath">The catalogue file's path, for the failure text.</param>
+    /// <param name="lines">The catalogue file's lines.</param>
+    /// <returns>The failures, empty when the list and the members agree.</returns>
+    private static List<string> FindVerificationMethodTypeCatalogueFailures(string relativePath, string[] lines)
+    {
+        List<(string Type, int LineNumber)> members = [];
+        for(int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+        {
+            Match member = VerificationMethodTypeMemberPattern.Match(lines[lineIndex]);
+            if(member.Success && !string.Equals(member.Groups["type"].Value, VerificationMethodTypeStandIn, StringComparison.Ordinal))
+            {
+                members.Add((member.Groups["type"].Value, lineIndex + 1));
+            }
+        }
+
+        Match list = VerificationMethodTypeCatalogueListPattern.Match(string.Join("\n", lines));
+        List<string> listed = list.Success
+            ? list.Groups["members"].Value
+                .Split(',')
+                .Select(static entry => entry.Trim())
+                .Where(static entry => entry.Length > 0)
+                .Select(static entry => entry.EndsWith(".Instance", StringComparison.Ordinal) ? entry[..^".Instance".Length] : entry)
+                .ToList()
+            : [];
+        HashSet<string> listedSet = [.. listed];
+        HashSet<string> memberSet = [.. members.Select(static entry => entry.Type)];
+        List<string> failures = [];
+
+        foreach((string type, int lineNumber) in members)
+        {
+            if(!listedSet.Contains(type))
+            {
+                failures.Add($"{relativePath}:{lineNumber}: {type} is exposed but missing from the catalogue's hand-kept list.");
+            }
+        }
+
+        foreach(string type in listed)
+        {
+            if(!memberSet.Contains(type))
+            {
+                failures.Add($"{relativePath}: the hand-kept list names {type}, which no catalogue member exposes.");
+            }
+        }
+
+        return failures;
+    }
+
+    /// <summary>
+    /// Every verification method type the catalogue exposes as a <c>VerificationMethodTypeInfo</c> member, the stand-in for
+    /// an unrecognised type aside, is an entry of the hand-kept list the catalogue's <c>Catalogued</c> view returns, and
+    /// the list names nothing else, so the view a verifier consults is the whole catalogue and a newly declared member
+    /// cannot be left out of it.
+    /// </summary>
+    [TestMethod]
+    public void VerificationMethodTypeCatalogueListsEveryExposedType()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        string[] lines = File.ReadAllLines(Path.Join(repositoryRoot, VerificationMethodTypeCatalogueFile));
+
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures(VerificationMethodTypeCatalogueFile, lines);
+
+        Assert.IsNotEmpty(lines.Where(static line => VerificationMethodTypeMemberPattern.IsMatch(line)).ToList(),
+            "The catalogue must expose its members in the shape this gate scans for.");
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// Proves <see cref="FindVerificationMethodTypeCatalogueFailures"/> actually fires: run over an embedded sample
+    /// catalogue (never a repository file) whose hand-kept list omits one of its two exposed types, beside the stand-in it
+    /// rightly omits, the result names that type's own declaration line and nothing else.
+    /// </summary>
+    [TestMethod]
+    public void VerificationMethodTypeCatalogueScannerReportsAnEmbeddedMissingEntry()
+    {
+        string[] sampleLines =
+        [
+            "public static class SampleVerificationMethodTypes",
+            "{",
+            "    private static IReadOnlyList<VerificationMethodTypeInfo> CataloguedTypes { get; } =",
+            "    [",
+            "        FirstTypeInfo.Instance",
+            "    ];",
+            "",
+            "    extension(VerificationMethodTypeInfo)",
+            "    {",
+            "        public static FirstTypeInfo First => FirstTypeInfo.Instance;",
+            "        public static SecondTypeInfo Second => SecondTypeInfo.Instance;",
+            "        public static UndefinedMethodTypeInfo Undefined => UndefinedMethodTypeInfo.Instance;",
+            "    }",
+            "}",
+        ];
+
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures("Sample.cs", sampleLines);
+
+        Assert.HasCount(1, failures);
+        Assert.IsTrue(failures[0].StartsWith("Sample.cs:11:", StringComparison.Ordinal));
+        Assert.IsTrue(failures[0].Contains("SecondTypeInfo", StringComparison.Ordinal));
+    }
 }
 
 /// <summary>One offending line: which file, which line, and which pattern class it tripped.</summary>

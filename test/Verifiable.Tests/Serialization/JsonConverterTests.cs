@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Model.Did;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
 
@@ -13,6 +15,11 @@ namespace Verifiable.Tests.Serialization;
 [TestClass]
 internal sealed class JsonConverterTests
 {
+    /// <summary>
+    /// A DID document <c>controller</c> given as a single string reads through
+    /// <see cref="SingleOrArrayControllerConverter"/> as one controller and writes back as that single string, not as
+    /// a one-element array.
+    /// </summary>
     [TestMethod]
     public void RoundtripControllerSingle()
     {
@@ -28,6 +35,10 @@ internal sealed class JsonConverterTests
     }
 
 
+    /// <summary>
+    /// A DID document <c>controller</c> given as an array of strings reads through
+    /// <see cref="SingleOrArrayControllerConverter"/> as that many controllers and writes back as the same array.
+    /// </summary>
     [TestMethod]
     public void RoundtripControllerArray()
     {
@@ -42,6 +53,11 @@ internal sealed class JsonConverterTests
     }
 
 
+    /// <summary>
+    /// A DID document service entry, the sample of
+    /// <see href="https://www.w3.org/TR/did-core/#services">DID Core §5.4 Services</see>, reads through
+    /// <see cref="ServiceConverter"/> and writes back byte for byte.
+    /// </summary>
     [TestMethod]
     public void RoundtripService()
     {
@@ -58,6 +74,10 @@ internal sealed class JsonConverterTests
     }
 
 
+    /// <summary>
+    /// A JSON-LD <c>@context</c> given as the single DID v1 context URL reads through
+    /// <see cref="JsonLdContextConverter"/> and writes back as that single string.
+    /// </summary>
     [TestMethod]
     public void RoundtripOneUriContext()
     {
@@ -74,6 +94,10 @@ internal sealed class JsonConverterTests
     }
 
 
+    /// <summary>
+    /// A JSON-LD <c>@context</c> given as an array of context URLs reads through
+    /// <see cref="JsonLdContextConverter"/> and writes back as the same array in the same order.
+    /// </summary>
     [TestMethod]
     public void RoundtripCollectionUriContext()
     {
@@ -89,6 +113,10 @@ internal sealed class JsonConverterTests
     }
 
 
+    /// <summary>
+    /// An inline JSON-LD context definition with expanded term definitions (<c>@id</c> and <c>@type</c>) reads through
+    /// <see cref="JsonLdContextConverter"/> and writes back byte for byte.
+    /// </summary>
     [TestMethod]
     public void RountripComplexContext1()
     {
@@ -131,6 +159,10 @@ internal sealed class JsonConverterTests
     }
 
 
+    /// <summary>
+    /// A JSON-LD <c>@context</c> array mixing a context URL with an inline definition that sets <c>@base</c> to a long
+    /// DID reads through <see cref="JsonLdContextConverter"/> and writes back byte for byte.
+    /// </summary>
     [TestMethod]
     public void RountripSidetreeIonContest1()
     {
@@ -544,6 +576,99 @@ internal sealed class JsonConverterTests
             Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
     }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>
+    /// requires <c>proof.type</c> exactly as it requires <c>proof.verificationMethod</c>: "If one or
+    /// more of proof.type, proof.verificationMethod, and proof.proofPurpose does not exist, an error
+    /// MUST be raised." <see cref="DataIntegrityProofConverter.Write"/> preserves that absence: a proof
+    /// with no <c>type</c> writes no <c>type</c> member at all, the same way it already omits
+    /// <c>verificationMethod</c> when that reference is null, instead of writing an empty string a
+    /// downstream reader could mistake for a present-but-empty value.
+    /// </summary>
+    [TestMethod]
+    public void ProofWithoutTypeOmitsTypeMember()
+    {
+        var proof = new DataIntegrityProof
+        {
+            Type = string.Empty,
+            ProofPurpose = AssertionMethod.Purpose,
+            ProofValue = "z123"
+        };
+        var converter = new DataIntegrityProofConverter();
+
+        var json = GetConverted(proof, converter);
+
+        Assert.IsFalse(json!.Contains("\"type\"", StringComparison.Ordinal),
+            "A proof whose type was never set must not round-trip as an empty-string type member.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity §2.1 Proofs</see>: "The reason the
+    /// proof was created MUST be specified as a string that maps to a URL [URL]." A proof purpose is therefore any URL,
+    /// not only a verification relationship this library models, and whether it matches the caller's expectation is
+    /// the verifier's decision (<see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity
+    /// §4.4</see>). <see cref="DataIntegrityProofConverter"/> reads such a proof without losing its
+    /// <c>verificationMethod</c>, so writing the proof back keeps both members exactly as they were read.
+    /// </summary>
+    [TestMethod]
+    public void ProofWithExtensionPurposeRoundTripsBothMembers()
+    {
+        const string ExtensionPurpose = "https://purposes.example/vouch";
+        const string VerificationMethodId = "did:example:issuer#key-1";
+        string proofJson = "{\"type\":\"DataIntegrityProof\",\"cryptosuite\":\"eddsa-jcs-2022\","
+            + "\"verificationMethod\":\"" + VerificationMethodId + "\",\"proofPurpose\":\"" + ExtensionPurpose + "\","
+            + "\"proofValue\":\"z123\"}";
+        var converter = new DataIntegrityProofConverter();
+
+        DataIntegrityProof proof = GetConverted(proofJson, converter)!;
+        string written = GetConverted(proof, converter)!;
+
+        using JsonDocument writtenProof = JsonDocument.Parse(written);
+        Assert.AreEqual(VerificationMethodId, writtenProof.RootElement.GetProperty("verificationMethod").GetString(),
+            "A proof read under an extension purpose keeps its verificationMethod when written back.");
+        Assert.AreEqual(ExtensionPurpose, writtenProof.RootElement.GetProperty("proofPurpose").GetString(),
+            "A proof read under an extension purpose keeps its proofPurpose when written back.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>: "If
+    /// expectedProofPurpose was given, and it does not match proof.proofPurpose, an error MUST be raised and SHOULD convey
+    /// an error type of PROOF_VERIFICATION_ERROR." A proof's purpose is part of what the reference to its verification
+    /// method asserts, so two proofs that name the same verification method under different extension purposes carry
+    /// unequal references, while two read under the same purpose carry equal references with equal hash codes.
+    /// </summary>
+    [TestMethod]
+    public void VerificationMethodReferencesUnderDifferentExtensionPurposesAreUnequal()
+    {
+        var converter = new DataIntegrityProofConverter();
+        DataIntegrityProof vouching = GetConverted(ProofJsonUnderPurpose("https://purposes.example/vouch"), converter)!;
+        DataIntegrityProof endorsing = GetConverted(ProofJsonUnderPurpose("https://purposes.example/endorse"), converter)!;
+        DataIntegrityProof vouchingAgain = GetConverted(ProofJsonUnderPurpose("https://purposes.example/vouch"), converter)!;
+
+        Assert.AreNotEqual(vouching.VerificationMethod, endorsing.VerificationMethod,
+            "References to one verification method under different purposes are different references.");
+        Assert.IsTrue(vouching.VerificationMethod != endorsing.VerificationMethod,
+            "The inequality operator agrees with Equals for references under different purposes.");
+        Assert.AreEqual(vouching.VerificationMethod, vouchingAgain.VerificationMethod,
+            "References to one verification method under the same purpose are the same reference.");
+        Assert.AreEqual(vouching.VerificationMethod!.GetHashCode(), vouchingAgain.VerificationMethod!.GetHashCode(),
+            "Equal references hash equally.");
+    }
+
+
+    /// <summary>
+    /// A complete eddsa-jcs-2022 proof naming <c>did:example:issuer#key-1</c> under the proof purpose
+    /// <paramref name="purpose"/>.
+    /// </summary>
+    /// <param name="purpose">The <c>proofPurpose</c> the proof declares.</param>
+    /// <returns>The proof JSON text.</returns>
+    private static string ProofJsonUnderPurpose(string purpose) =>
+        "{\"type\":\"DataIntegrityProof\",\"cryptosuite\":\"eddsa-jcs-2022\",\"verificationMethod\":\"did:example:issuer#key-1\","
+        + "\"proofPurpose\":\"" + purpose + "\",\"proofValue\":\"z123\"}";
 
 
     /// <summary>

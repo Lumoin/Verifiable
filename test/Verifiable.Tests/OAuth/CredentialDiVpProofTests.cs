@@ -42,53 +42,86 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class CredentialDiVpProofTests
 {
+    /// <summary>The MSTest context, whose cancellation token bounds every dispatch these tests make.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The host's clock, fixed at the canonical epoch.</summary>
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
+    /// <summary>The pool the did:key resolver and the verification delegates rent from.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
+    /// <summary>The wallet client identifier the credential issuer tenant is registered under.</summary>
     private const string ClientId = "https://wallet.client.test";
+
+    /// <summary>The base URI the credential issuer tenant is registered under.</summary>
     private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
+
+    /// <summary>The end-user subject the pre-authorized code grant is issued for.</summary>
     private const string OfferSubject = "urn:uuid:end-user-42";
+
+    /// <summary>The <c>credential_configuration_id</c> the credential requests name.</summary>
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
+
+    /// <summary>The <c>c_nonce</c> the server expects as the presentation proof's <c>challenge</c>.</summary>
     private const string CredentialNonce = "c-nonce-di-vp-42";
+
+    /// <summary>The opaque credential the issuance seam returns once the key proof verifies.</summary>
     private const string IssuedCredential = "issued-credential-opaque-42";
+
+    /// <summary>The domain of the did:web holder.</summary>
     private const string DidWebHolderDomain = "holder.web.test";
+
+    /// <summary>The <c>did.json</c> location the did:web method maps the did:web holder to.</summary>
     private const string DidWebHolderDocumentUrl = "https://holder.web.test/.well-known/did.json";
 
+    /// <summary>The capabilities of the credential issuer tenant: the grants and the §8 Credential Endpoint.</summary>
     private static ImmutableHashSet<CapabilityIdentifier> CredentialCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
             WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint);
 
+    /// <summary>The serializer options every JSON delegate of these tests uses.</summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
+
+    /// <summary>Builds a did:key holder document from its public key.</summary>
     private static KeyDidBuilder KeyDidBuilder { get; } = new();
+
+    /// <summary>Builds a did:web holder document from its public key and domain.</summary>
     private static WebDidBuilder WebDidBuilder { get; } = new(BaseMemoryPool.Shared);
 
-    //The library's DID-resolution seam wired for the did:key holder — the same construction
-    //Oid4VpSchemeFixtures uses for the decentralized_identifier: path. The holder did:key
-    //self-describes, so the resolver derives the holder DID document locally with no network.
+    /// <summary>
+    /// The library's DID-resolution seam wired for the did:key holder — the same construction
+    /// Oid4VpSchemeFixtures uses for the decentralized_identifier: path. The holder did:key
+    /// self-describes, so the resolver derives the holder DID document locally with no network.
+    /// </summary>
     private static DidResolver KeyDidResolverSeam { get; } = new(
         DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(Pool))));
 
-    //The same delegate sourcing DataIntegrityPresentationFlowTests uses — composed, not re-rolled.
+    /// <summary>The same delegate sourcing DataIntegrityPresentationFlowTests uses — composed, not re-rolled.</summary>
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
+    /// <summary>The context the holder signs its presentations under, outside any request.</summary>
     private static ExchangeContext EmptyContext { get; } = [];
 
+    /// <summary>Encodes the holder's proof values as base58btc.</summary>
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
+
+    /// <summary>Decodes the base58btc proof values the holder encodes.</summary>
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
 
+    /// <summary>Serializes a presentation for signing, verification and the wire.</summary>
     private static PresentationSerializeDelegate SerializePresentation { get; } = presentation =>
         JsonSerializerExtensions.Serialize(presentation, JsonOptions);
 
+    /// <summary>Reads a presentation back from its JSON.</summary>
     private static PresentationDeserializeDelegate DeserializePresentation { get; } = serialized =>
         JsonSerializerExtensions.Deserialize<VerifiablePresentation>(serialized, JsonOptions)!;
 
+    /// <summary>Serializes the proof options a Data Integrity proof hashes.</summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
@@ -663,14 +696,26 @@ internal sealed class CredentialDiVpProofTests
 
 
     /// <summary>
-    /// Installs the expected presentation-binding checks on the admitted credential-issuer wiring.
+    /// Installs the expected presentation-binding checks on the admitted credential-issuer wiring, verifying di_vp proofs
+    /// through <see cref="BuildDiVpVerification(DidResolver)"/> over <paramref name="resolver"/>.
     /// </summary>
-    private static async Task WireDiVpExpectationSeamAsync(TestHostShell host, DidResolver resolver)
+    /// <param name="host">The host shell whose credential issuer is wired.</param>
+    /// <param name="resolver">The DID resolver the holder is resolved through.</param>
+    private static Task WireDiVpExpectationSeamAsync(TestHostShell host, DidResolver resolver) =>
+        WireDiVpExpectationSeamAsync(host, BuildDiVpVerification(resolver));
+
+
+    /// <summary>
+    /// Installs the expected presentation-binding checks on the admitted credential-issuer wiring, verifying di_vp proofs
+    /// through <paramref name="verification"/>.
+    /// </summary>
+    /// <param name="host">The host shell whose credential issuer is wired.</param>
+    /// <param name="verification">The di_vp verification seams.</param>
+    private static async Task WireDiVpExpectationSeamAsync(TestHostShell host, DiVpProofVerification verification)
     {
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
-
 
             candidateIntegration.ResolveCredentialProofExpectationAsync =
                 (request, accessToken, registration, context, ct) =>
@@ -679,16 +724,18 @@ internal sealed class CredentialDiVpProofTests
                         ExpectedNonce = CredentialNonce,
                         IsNonceRequired = true,
                         IsProofRequired = true,
-                        DiVpVerification = BuildDiVpVerification(resolver)
+                        DiVpVerification = verification
                     });
         }).ConfigureAwait(false);
     }
 
 
-    //Composes the di_vp verification seams from the same library primitives the signing side uses.
-    //The holder is resolved through the library's DidResolver seam: the validator derives the holder
-    //DID from the presentation and resolves it through the supplied resolver, threading the endpoint's
-    //ExchangeContext so a remote did:web holder is fetched under the context's SSRF policy.
+    /// <summary>
+    /// Composes the di_vp verification seams from the same library primitives the signing side uses.
+    /// The holder is resolved through the library's DidResolver seam: the validator derives the holder
+    /// DID from the presentation and resolves it through the supplied resolver, threading the endpoint's
+    /// ExchangeContext so a remote did:web holder is fetched under the context's SSRF policy.
+    /// </summary>
     private static DiVpProofVerification BuildDiVpVerification(DidResolver resolver) =>
         new()
         {
@@ -727,9 +774,11 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //Builds the holder's did:key DID document for signing. The Multikey verification-method type and
-    //the suppressed default context match what KeyDidResolver.Build derives on the verify side, so the
-    //verification method id the presentation is signed under resolves through the DidResolver seam.
+    /// <summary>
+    /// Builds the holder's did:key DID document for signing. The Multikey verification-method type and
+    /// the suppressed default context match what KeyDidResolver.Build derives on the verify side, so the
+    /// verification method id the presentation is signed under resolves through the DidResolver seam.
+    /// </summary>
     private async Task<DidDocument> BuildHolderDidDocumentAsync(PublicKeyMemory holderPublic) =>
         await KeyDidBuilder.BuildAsync(
             holderPublic,
@@ -739,10 +788,12 @@ internal sealed class CredentialDiVpProofTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
 
-    //A resolver that hands back the SAME supplied document for any did:key lookup, regardless of
-    //whether it is what a real did:key derivation would produce. Used only to inject a
-    //controller-indirection document a genuine did:key resolution could never yield (did:key is
-    //self-describing) -- isolating the controller check from the resolution mechanics.
+    /// <summary>
+    /// A resolver that hands back the SAME supplied document for any did:key lookup, regardless of
+    /// whether it is what a real did:key derivation would produce. Used only to inject a
+    /// controller-indirection document a genuine did:key resolution could never yield (did:key is
+    /// self-describing) -- isolating the controller check from the resolution mechanics.
+    /// </summary>
     private static DidResolver BuildCannedKeyDidResolver(DidDocument document) =>
         new(DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
@@ -750,11 +801,13 @@ internal sealed class CredentialDiVpProofTests
                  ValueTask.FromResult(DidResolutionResult.Success(document, DidDocumentMetadata.Empty, "application/did+json")))));
 
 
-    //Builds a DidResolver whose did:web handler fetches the holder's did.json through the guarded
-    //OutboundFetch chokepoint (reading the SSRF OutboundFetchPolicy off the threaded ExchangeContext)
-    //and parses it into a DidDocument. WebDidResolver computes the URL; the fetch + parse — the work a
-    //network DID method does — lives in test/application code per the library's transport-agnostic
-    //discipline. A real deployment supplies this same shape.
+    /// <summary>
+    /// Builds a DidResolver whose did:web handler fetches the holder's did.json through the guarded
+    /// OutboundFetch chokepoint (reading the SSRF OutboundFetchPolicy off the threaded ExchangeContext)
+    /// and parses it into a DidDocument. WebDidResolver computes the URL; the fetch + parse — the work a
+    /// network DID method does — lives in test/application code per the library's transport-agnostic
+    /// discipline. A real deployment supplies this same shape.
+    /// </summary>
     private static DidResolver BuildFetchingWebDidResolver(HttpClient httpClient)
     {
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
@@ -803,8 +856,10 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //Resolves a host name to its IP addresses for the connection-time SSRF pin. 'localhost' resolves to the
-    //loopback address, which SecureDefault classifies as blocked and the explicit permit allows.
+    /// <summary>
+    /// Resolves a host name to its IP addresses for the connection-time SSRF pin. 'localhost' resolves to the
+    /// loopback address, which SecureDefault classifies as blocked and the explicit permit allows.
+    /// </summary>
     private static async ValueTask<IReadOnlyList<System.Net.IPAddress>> ResolveHostAsync(
         string host, CancellationToken cancellationToken)
     {
@@ -816,8 +871,10 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //Serves the holder did.json at /.well-known/did.json on the loopback Kestrel and 404s any other
-    //path — the route a did:web with no path component resolves to (WebDidResolver.Resolve).
+    /// <summary>
+    /// Serves the holder did.json at /.well-known/did.json on the loopback Kestrel and 404s any other
+    /// path — the route a did:web with no path component resolves to (WebDidResolver.Resolve).
+    /// </summary>
     private static MinimalHttpResponse ServeDidJson(MinimalHttpRequest request, string didJson)
     {
         if(!string.Equals(request.Path, "/.well-known/did.json", StringComparison.Ordinal))
@@ -834,15 +891,17 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //Builds a DidResolver whose did:web handler dereferences the holder did.json through the genuine
-    //OutboundFetch chokepoint over a REAL HTTPS socket. WebDidResolver.Resolve computes the canonical
-    //https://<authority>/.well-known/did.json URL; the policy on the threaded ExchangeContext gates
-    //that genuine URL (so SecureDefault's loopback block fires against the real request, not a stand-in). The single-hop transport then
-    //dials the in-process loopback Kestrel over HTTPS with the pinned handler carried on httpClient
-    //(LoopbackTls.CreatePinnedHttpClient) — the resolved did:web authority is 'localhost:{port}', which
-    //already matches the listener's own https scheme, so no scheme rewrite is needed. The fetch + parse —
-    //the work a network DID method does — lives in test/application code per the library's
-    //transport-agnostic discipline.
+    /// <summary>
+    /// Builds a DidResolver whose did:web handler dereferences the holder did.json through the genuine
+    /// OutboundFetch chokepoint over a REAL HTTPS socket. WebDidResolver.Resolve computes the canonical
+    /// https://&lt;authority&gt;/.well-known/did.json URL; the policy on the threaded ExchangeContext gates
+    /// that genuine URL (so SecureDefault's loopback block fires against the real request, not a stand-in). The
+    /// single-hop transport then dials the in-process loopback Kestrel over HTTPS with the pinned handler carried
+    /// on httpClient (LoopbackTls.CreatePinnedHttpClient) — the resolved did:web authority is 'localhost:{port}',
+    /// which already matches the listener's own https scheme, so no scheme rewrite is needed. The fetch + parse —
+    /// the work a network DID method does — lives in test/application code per the library's
+    /// transport-agnostic discipline.
+    /// </summary>
     private static DidResolver BuildLoopbackFetchingWebDidResolver(HttpClient httpClient, Uri loopbackBase)
     {
         OutboundTransportDelegate singleHop = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
@@ -909,16 +968,26 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //A canned single-hop transport that serves one did.json at one URL and refuses any other target,
-    //so the test exercises the resolve → guarded fetch → parse path with no real network.
+    /// <summary>
+    /// A canned single-hop transport that serves one did.json at one URL and refuses any other target,
+    /// so the test exercises the resolve → guarded fetch → parse path with no real network.
+    /// </summary>
     private sealed class CannedDidJsonHandler(string documentUrl, string didJson): HttpMessageHandler
     {
+        /// <summary>The one absolute URL this handler serves the canned document at.</summary>
         private string DocumentUrl { get; } = documentUrl;
+
+        /// <summary>The canned <c>did.json</c> text served at <see cref="DocumentUrl"/>.</summary>
         private string DidJson { get; } = didJson;
 
-        //Ownership of the returned HttpResponseMessage transfers to the caller
-        //through the HttpMessageHandler pipeline, the standard shape for this
-        //override — the pipeline disposes it, not this method.
+        /// <summary>Serves <see cref="DidJson"/> at <see cref="DocumentUrl"/> and a 404 for any other target.</summary>
+        /// <remarks>
+        /// Ownership of the returned <see cref="HttpResponseMessage"/> transfers to the caller through the
+        /// <see cref="HttpMessageHandler"/> pipeline, the standard shape for this override: the pipeline disposes it,
+        /// not this method.
+        /// </remarks>
+        /// <param name="request">The outgoing request.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -935,8 +1004,10 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //Mints a holder-signed presentation with the given challenge (c_nonce) and domain (issuer id),
-    //proofPurpose authentication — the exact SignAsync composition the presentation flow uses.
+    /// <summary>
+    /// Mints a holder-signed presentation with the given challenge (c_nonce) and domain (issuer id),
+    /// proofPurpose authentication — the exact SignAsync composition the presentation flow uses.
+    /// </summary>
     private async Task<DataIntegritySecuredPresentation> SignPresentationAsync(
         DidDocument holderDidDocument, PrivateKeyMemory holderPrivate, string challenge, string domain)
     {
@@ -970,8 +1041,161 @@ internal sealed class CredentialDiVpProofTests
     }
 
 
-    //Mints the access token via the Pre-Authorized Code grant and dispatches a §8.2 Credential
-    //Request carrying the di_vp presentation to the Credential Endpoint with a fresh context.
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>:
+    /// if one or more of proof.type, proof.verificationMethod, and proof.proofPurpose does not exist,
+    /// an error MUST be raised. The credential endpoint reports invalid_proof before issuance.
+    /// </summary>
+    [TestMethod]
+    [DataRow("type")]
+    [DataRow("verificationMethod")]
+    [DataRow("proofPurpose")]
+    public async Task DiVpMissingProofOptionYieldsInvalidProofOverHttp(string member)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+        DidDocument holder = await BuildHolderDidDocumentAsync(holderPublic).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
+            holder, holderPrivate, CredentialNonce, material.Registration.IssuerUri!.OriginalString).ConfigureAwait(false);
+        System.Text.Json.Nodes.JsonObject document = System.Text.Json.Nodes.JsonNode.Parse(SerializePresentation(presentation))!.AsObject();
+        System.Text.Json.Nodes.JsonObject proof = DataIntegrityContextTamperingFixture.FirstProof(document);
+        _ = proof.Remove(member);
+        bool isResolverConsulted = false;
+        DidResolver resolver = new(DidMethodSelectors.FromResolvers((WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
+            (did, options, context, cancellationToken) =>
+            {
+                isResolverConsulted = true;
+
+                return KeyDidResolverSeam.ResolveAsync(did, context, options, cancellationToken);
+            }
+        )));
+
+        await WireDiVpExpectationSeamAsync(host, resolver).ConfigureAwait(false);
+        (int statusCode, string responseBody, bool isIssuanceConsulted) = await PostDiVpCredentialRequestOverHttpAsync(
+            host, material, document.ToJsonString()).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, responseBody);
+        using JsonDocument error = JsonDocument.Parse(responseBody);
+        Assert.AreEqual("invalid_proof", error.RootElement.GetProperty("error").GetString());
+        Assert.IsFalse(isIssuanceConsulted, "An incomplete proof must never reach issuance.");
+        Assert.IsFalse(isResolverConsulted, "The JSON consumer must reject incomplete proof options before resolution.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#appendix-F.2">OID4VCI 1.0
+    /// Appendix F.2</see>: "The Credential Issuer MUST validate that the W3C Verifiable Presentation used as a proof is
+    /// actually signed with a key in the possession of the Holder." A di_vp presentation whose Data Integrity proof cannot
+    /// be verified, because the JSON-LD context load its transformation needs ended on its own budget and the loader
+    /// reported that cancellation inside an exception of its own, was not shown to be so signed: its key proof is invalid,
+    /// which <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">§8.3.1.2</see>
+    /// names <c>invalid_proof</c>, "The proofs parameter in the Credential Request is invalid: ... (2) one of the provided
+    /// key proofs is invalid". The Credential Endpoint answers that over the real wire before issuance, never letting the
+    /// cancellation escape.
+    /// </summary>
+    [TestMethod]
+    public async Task DiVpContextLoadEndingOnItsOwnBudgetYieldsInvalidProofOverHttp()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+        DidDocument holder = await BuildHolderDidDocumentAsync(holderPublic).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
+            holder, holderPrivate, CredentialNonce, material.Registration.IssuerUri!.OriginalString).ConfigureAwait(false);
+
+        bool hasLiveCallerToken = false;
+        ValueTask<string?> LoadContextOnExpiredBudgetAsync(Uri contextUri, ExchangeContext context, CancellationToken cancellationToken)
+        {
+            hasLiveCallerToken = !cancellationToken.IsCancellationRequested;
+
+            return ValueTask.FromException<string?>(
+                new IOException("private-policy-host/path", new OperationCanceledException("private-policy-host/path")));
+        }
+
+        //The RDFC canonicalizer loads the presentation's contexts through the loader, so the transformation reaches it.
+        DiVpProofVerification verification = BuildDiVpVerification(KeyDidResolverSeam) with
+        {
+            Canonicalize = CanonicalizationTestUtilities.CreateRdfcCanonicalizer(),
+            ContextResolver = LoadContextOnExpiredBudgetAsync
+        };
+        await WireDiVpExpectationSeamAsync(host, verification).ConfigureAwait(false);
+
+        (int statusCode, string responseBody, bool isIssuanceConsulted) = await PostDiVpCredentialRequestOverHttpAsync(
+            host, material, SerializePresentation(presentation)).ConfigureAwait(false);
+
+        Assert.IsTrue(hasLiveCallerToken, "The context load must end while the request is still live.");
+        Assert.AreEqual(400, statusCode, responseBody);
+        using JsonDocument error = JsonDocument.Parse(responseBody);
+        Assert.AreEqual("invalid_proof", error.RootElement.GetProperty("error").GetString());
+        Assert.IsFalse(responseBody.Contains("private-policy-host/path", StringComparison.Ordinal),
+            "The loader's cancellation reason must never leak into the response.");
+        Assert.IsFalse(isIssuanceConsulted, "A key proof that could not be verified must never reach issuance.");
+    }
+
+
+    /// <summary>
+    /// Over the real HTTPS loopback host: grants the pre-authorized code, mints an access token at the token endpoint and
+    /// posts a §8.2 Credential Request carrying <paramref name="presentationJson"/> as its one di_vp key proof, returning
+    /// the Credential Endpoint's status and body and whether the issuance seam was consulted.
+    /// </summary>
+    /// <param name="host">The host shell whose credential issuer the di_vp seams are already wired on.</param>
+    /// <param name="material">The registered wallet client the request is made for.</param>
+    /// <param name="presentationJson">The di_vp presentation JSON the request carries.</param>
+    /// <returns>The response status, the response body and whether issuance was consulted.</returns>
+    private async Task<(int StatusCode, string Body, bool IsIssuanceConsulted)> PostDiVpCredentialRequestOverHttpAsync(
+        TestHostShell host, VerifierKeyMaterial material, string presentationJson)
+    {
+        bool isIssuanceConsulted = false;
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, integration =>
+        {
+            integration.ValidatePreAuthorizedCodeAsync = (_, _, _, _, _, _) =>
+                ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
+            integration.IssueCredentialAsync = (_, _, _, _, _) =>
+            {
+                isIssuanceConsulted = true;
+
+                return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+            };
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer serving = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        using FormUrlEncodedContent tokenRequest = new(new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
+            [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
+        });
+        Uri tokenUrl = new(serving.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciPreAuthorizedToken, segment));
+        using HttpResponseMessage tokenResponse = await serving.SharedHttpClient!.PostAsync(tokenUrl, tokenRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        string tokenBody = await tokenResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)tokenResponse.StatusCode, tokenBody);
+        using JsonDocument token = JsonDocument.Parse(tokenBody);
+        string body = "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"di_vp\":[" + presentationJson + "]}}";
+        Uri credentialUrl = new(serving.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, segment));
+        using HttpRequestMessage request = new(HttpMethod.Post, credentialUrl)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString());
+        using HttpResponseMessage response = await serving.SharedHttpClient.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+        string responseBody = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, responseBody, isIssuanceConsulted);
+    }
+
+
+    /// <summary>
+    /// Mints the access token via the Pre-Authorized Code grant and dispatches a §8.2 Credential
+    /// Request carrying the di_vp presentation to the Credential Endpoint with a fresh context.
+    /// </summary>
     private async Task<ServerHttpResponse> DispatchDiVpAsync(
         TestHostShell host, VerifierKeyMaterial material, DataIntegritySecuredPresentation presentation) =>
         await DispatchDiVpAsync(host, material, presentation, []).ConfigureAwait(false);

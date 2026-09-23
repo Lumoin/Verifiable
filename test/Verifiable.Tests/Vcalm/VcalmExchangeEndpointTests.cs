@@ -42,57 +42,82 @@ namespace Verifiable.Tests.Vcalm;
 [TestClass]
 internal sealed class VcalmExchangeEndpointTests
 {
+    /// <summary>The MSTest context, whose cancellation token bounds every dispatch these tests make.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The host's clock, fixed at the canonical epoch and advanced by the expiry test.</summary>
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
+    /// <summary>The pool the did:key resolver, the verification configuration and the holder signing rent from.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
+    /// <summary>The client identifier the exchange tenant is registered under.</summary>
     private const string ClientId = "https://exchange.client.test";
+
+    /// <summary>The base URI the exchange tenant is registered under.</summary>
     private static Uri ClientBaseUri { get; } = new("https://exchange.client.test");
 
+    /// <summary>The capabilities of a tenant that runs exchanges only.</summary>
     private static ImmutableHashSet<CapabilityIdentifier> ExchangeCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmExchange);
 
-    //The §3.6.5 round-trip needs the holder presentation signing too (the holder signs the
-    //presentation the engine requested), so the registration also carries the holder capability.
+    /// <summary>
+    /// The capabilities of a tenant that runs the §3.6.5 round trip: the holder signs the presentation the engine
+    /// requested, so the registration also carries the holder capability.
+    /// </summary>
     private static ImmutableHashSet<CapabilityIdentifier> ExchangeAndHolderCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmExchange, WellKnownVcalmCapabilities.VcalmHolder);
 
+    /// <summary>The serializer options every JSON delegate of these tests uses.</summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
+
+    /// <summary>Builds the holder's did:key document from its public key.</summary>
     private static KeyDidBuilder KeyDidBuilder { get; } = new();
 
+    /// <summary>The DID resolver the engine verifies the holder's presentation with: did:key, resolved locally.</summary>
     private static DidResolver KeyDidResolverSeam { get; } = new(
         DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(Pool))));
 
+    /// <summary>The JCS canonicalizer the eddsa-jcs-2022 signing and verification share.</summary>
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
+    /// <summary>Serializes a presentation for signing, verification and the wire.</summary>
     private static PresentationSerializeDelegate SerializePresentation { get; } = presentation =>
         JsonSerializerExtensions.Serialize(presentation, JsonOptions);
 
+    /// <summary>Reads a presentation back for the holder's presentation signing.</summary>
     private static PresentationDeserializeDelegate DeserializePresentation { get; } = serialized =>
         JsonSerializerExtensions.Deserialize<VerifiablePresentation>(serialized, JsonOptions)!;
 
+    /// <summary>Serializes a credential for the engine's verification configuration.</summary>
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
+    /// <summary>Serializes the proof options a Data Integrity proof hashes.</summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
+    /// <summary>The context the holder signs its presentation under, outside any request.</summary>
     private static ExchangeContext EmptyContext { get; } = [];
 
+    /// <summary>The tenant registrations of the running test, disposed after it.</summary>
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
+
+    /// <summary>The holder private keys of the running test, disposed after it.</summary>
     private List<IDisposable> OwnedKeys { get; } = [];
 
-    //The §3.4 query the engine sends when it requests a presentation: a DID Authentication query the
-    //holder satisfies by controlling a did:key. The engine binds the challenge / domain itself.
+    /// <summary>
+    /// The §3.4 query the engine sends when it requests a presentation: a DID Authentication query the holder
+    /// satisfies by controlling a did:key. The engine binds the challenge and domain itself.
+    /// </summary>
     private const string DidAuthQueryJson =
         "[{\"type\":\"DIDAuthentication\",\"acceptedMethods\":[{\"method\":\"key\"}]}]";
 
 
+    /// <summary>Disposes the tenant registrations and holder keys the finished test created.</summary>
     [TestCleanup]
     public void DisposeRegisteredMaterials()
     {
@@ -333,7 +358,7 @@ internal sealed class VcalmExchangeEndpointTests
 
         Assert.AreEqual(400, rejected.StatusCode, rejected.Body);
         using JsonDocument problem = JsonDocument.Parse(rejected.Body);
-        Assert.AreEqual(VcalmProblemTypes.CryptographicSecurityError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR",
             problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "§3.6 / §3.8: an unverifiable presentation is a cryptographic-security ProblemDetail.");
 
@@ -371,7 +396,7 @@ internal sealed class VcalmExchangeEndpointTests
 
         Assert.AreEqual(400, refused.StatusCode, refused.Body);
         using JsonDocument problem = JsonDocument.Parse(refused.Body);
-        Assert.AreEqual(VcalmProblemTypes.CryptographicSecurityError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR",
             problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "§3.6: a presentation arriving with no bound anti-replay challenge is refused as a cryptographic-security error.");
 
@@ -467,8 +492,12 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
-    //Registers a tenant with the VcalmExchange capability and wires the exchange seams (the parsers,
-    //the exchange-id -> flow-id resolver over the host's flow store, and the step-decision logic).
+    /// <summary>
+    /// Registers a tenant with the exchange capability and wires the exchange seams: the parsers, the exchange id to
+    /// flow id resolver over the host's flow store, and the step decisions.
+    /// </summary>
+    /// <param name="app">The host the tenant is registered on.</param>
+    /// <returns>The tenant's path segment.</returns>
     private async Task<string> RegisterExchangeAsync(TestHostShell app)
     {
         VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, ExchangeCapabilities).ConfigureAwait(false);
@@ -480,6 +509,14 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
+    /// <summary>
+    /// Registers a tenant with the exchange and holder capabilities and wires the exchange seams together with the
+    /// engine's presentation verification and <paramref name="holder"/>'s presentation signing, for the §3.6.5
+    /// round trip.
+    /// </summary>
+    /// <param name="app">The host the tenant is registered on.</param>
+    /// <param name="holder">The holder whose presentation the engine verifies.</param>
+    /// <returns>The tenant's path segment.</returns>
     private async Task<string> RegisterExchangeAsync(TestHostShell app, HolderSigningContext holder)
     {
         VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, ExchangeAndHolderCapabilities).ConfigureAwait(false);
@@ -562,8 +599,12 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
-    //Scans the host's flow store for the exchange flow state carrying the given exchange id, returning
-    //its flow id (the dictionary key) or null when no such exchange exists.
+    /// <summary>
+    /// Scans the host's flow store for the exchange flow state carrying <paramref name="exchangeId"/>.
+    /// </summary>
+    /// <param name="app">The host whose flow store is scanned.</param>
+    /// <param name="exchangeId">The exchange id to look up.</param>
+    /// <returns>The flow id keying that state, or <see langword="null"/> when no such exchange exists.</returns>
     private static string? ResolveExchangeFlowId(TestHostShell app, string exchangeId)
     {
         foreach(KeyValuePair<string, (FlowState State, int StepCount)> entry in app.FlowStore)
@@ -587,8 +628,11 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
-    //Builds the holder's eddsa-jcs-2022 signing configuration under a did:key holder the KeyDidResolver
-    //resolves locally — the presentation-signing seam plus the holder DID for the round-trip.
+    /// <summary>
+    /// Builds the holder's eddsa-jcs-2022 presentation signing under a did:key the <see cref="KeyDidResolver"/>
+    /// resolves locally, with the holder DID the round trip presents under.
+    /// </summary>
+    /// <returns>The holder's signing configuration and DID.</returns>
     private async Task<HolderSigningContext> CreateHolderSigningContextAsync()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
@@ -627,8 +671,14 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
-    //Signs a minimal VC-DM 2.0 presentation binding the given challenge / domain, the holder's answer
-    //to the engine's DID Authentication request.
+    /// <summary>
+    /// Signs a minimal VC Data Model 2.0 presentation bound to <paramref name="challenge"/> and
+    /// <paramref name="domain"/>: the holder's answer to the engine's DID Authentication request.
+    /// </summary>
+    /// <param name="holder">The holder signing the presentation.</param>
+    /// <param name="challenge">The challenge the engine bound to the request.</param>
+    /// <param name="domain">The domain the engine bound to the request.</param>
+    /// <returns>The serialized signed presentation.</returns>
     private async Task<string> SignPresentationAsync(HolderSigningContext holder, string challenge, string domain)
     {
         VerifiablePresentation unproofed = new()
@@ -652,6 +702,11 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
+    /// <summary>Creates an exchange through the §3.6.3 endpoint and asserts its HTTP 201.</summary>
+    /// <param name="app">The host running the exchange tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <param name="body">The create-exchange request body.</param>
+    /// <returns>The parsed created exchange; the caller disposes it.</returns>
     private async Task<JsonDocument> CreateExchangeAsync(TestHostShell app, string segment, string body)
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -664,6 +719,11 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
+    /// <summary>Creates an exchange through <see cref="CreateExchangeAsync"/> and returns its id.</summary>
+    /// <param name="app">The host running the exchange tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <param name="body">The create-exchange request body; an empty object by default.</param>
+    /// <returns>The created exchange's id.</returns>
     private async Task<string> CreateExchangeAndGetIdAsync(TestHostShell app, string segment, string body = "{}")
     {
         using JsonDocument created = await CreateExchangeAsync(app, segment, body).ConfigureAwait(false);
@@ -672,6 +732,11 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
+    /// <summary>Reads an exchange's state through the §3.6.6 endpoint and asserts its HTTP 200.</summary>
+    /// <param name="app">The host running the exchange tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <param name="exchangeId">The exchange whose state is read.</param>
+    /// <returns>The parsed exchange state; the caller disposes it.</returns>
     private async Task<JsonDocument> GetExchangeStateAsync(TestHostShell app, string segment, string exchangeId)
     {
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
@@ -683,6 +748,8 @@ internal sealed class VcalmExchangeEndpointTests
     }
 
 
-    //The holder's presentation-signing configuration plus the holder DID for the §3.6.5 round-trip.
+    /// <summary>The holder's presentation signing and DID for the §3.6.5 round trip.</summary>
+    /// <param name="Signing">The holder's presentation-signing configuration.</param>
+    /// <param name="HolderDid">The did:key the holder presents under.</param>
     private sealed record HolderSigningContext(VcalmPresentationSigning Signing, string HolderDid);
 }

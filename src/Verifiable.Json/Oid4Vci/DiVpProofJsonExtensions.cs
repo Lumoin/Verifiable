@@ -26,8 +26,16 @@ public static class DiVpProofJsonExtensions
     /// Creates a <see cref="DeserializeDiVpPresentationDelegate"/> that parses one <c>di_vp</c>
     /// array entry into a <see cref="DataIntegritySecuredPresentation"/> with the supplied
     /// <paramref name="options"/>. Returns <see langword="null"/> when the entry does not parse as a
-    /// secured presentation (malformed JSON, or no <c>proof</c> member).
+    /// secured presentation (malformed JSON, no <c>proof</c>, or a proof missing <c>type</c>,
+    /// <c>verificationMethod</c> or <c>proofPurpose</c>, which
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires).
     /// </summary>
+    /// <remarks>
+    /// The parse is a boundary over the JSON serializer, a dependency that throws
+    /// <see cref="JsonException"/> on malformed input; that exception is contained as
+    /// <see langword="null"/>, which the credential endpoint reports as <c>invalid_proof</c>, never as an
+    /// escaping server error.
+    /// </remarks>
     /// <param name="options">The serializer options carrying the Verifiable converters.</param>
     /// <returns>The default di_vp presentation deserialize delegate.</returns>
     public static DeserializeDiVpPresentationDelegate CreateDiVpPresentationDeserializer(
@@ -42,7 +50,14 @@ public static class DiVpProofJsonExtensions
                 VerifiablePresentation? presentation =
                     JsonSerializerExtensions.Deserialize<VerifiablePresentation>(presentationJson, options);
 
-                return presentation as DataIntegritySecuredPresentation;
+                //OID4VCI Appendix F.2 requires a complete Data Integrity proof; null maps to invalid_proof at the credential endpoint.
+                bool hasRequiredProofOptions = presentation is DataIntegritySecuredPresentation { Proof.Count: > 0 } secured
+                    && secured.Proof.All(proof => proof is not null
+                        && !string.IsNullOrEmpty(proof.Type)
+                        && !string.IsNullOrEmpty(proof.VerificationMethod?.Id)
+                        && !string.IsNullOrEmpty(proof.ProofPurpose));
+
+                return hasRequiredProofOptions ? (DataIntegritySecuredPresentation)presentation! : null;
             }
             catch(JsonException)
             {

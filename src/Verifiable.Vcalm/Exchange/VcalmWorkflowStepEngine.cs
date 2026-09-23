@@ -5,6 +5,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Foundation;
 
 namespace Verifiable.Vcalm.Exchange;
@@ -163,9 +164,28 @@ public static class VcalmWorkflowStepEngine
     }
 
 
-    //§3.6 issuance-in-exchange: evaluate the step's issueRequests through the template seam, sign the
-    //produced credential through the issuance seam, and compose a verifiablePresentation carrying the
-    //issued credential(s) for the §3.6.5 server-emitted reply.
+    /// <summary>
+    /// The §3.6 issuance-in-exchange: evaluates the step's issueRequests through the template seam, signs each
+    /// produced credential through <see cref="VcalmCredentialIssuanceService"/>, and composes a
+    /// verifiablePresentation carrying the issued credential(s) for the §3.6.5 server-emitted reply.
+    /// </summary>
+    /// <remarks>
+    /// A rendered credential that carries a <c>proof</c> is a pre-proofed input exactly as a caller's own
+    /// <c>credential.proof</c> is on <c>POST /credentials/issue</c>. Whether it carries one is read from the credential
+    /// model the rendered JSON deserializes into, the reading the signing acts on, so a member name spelled with JSON
+    /// escapes is the same <c>proof</c> member. Such a credential is secured under the instance's
+    /// <see cref="VcalmCredentialIssuance.ExistingProofHandling"/>: under the default
+    /// <see cref="VcalmExistingProofHandling.Error"/> the step fails with the issuing endpoint's own refusal, and a set
+    /// or chain configuration refuses an existing proof that lacks a Data Integrity §4.4 mandatory member. The engine
+    /// never chains onto a template-rendered proof without that configuration saying so.
+    /// </remarks>
+    /// <param name="server">The host, for the time provider.</param>
+    /// <param name="vcalm">The VCALM integration carrying the template evaluators and the issuance resolver.</param>
+    /// <param name="workflow">The workflow whose credential templates the step's issue requests select.</param>
+    /// <param name="step">The issuing step.</param>
+    /// <param name="results">The §3.6.6 <c>variables.results</c> accumulated so far.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     private static async ValueTask<VcalmIssuanceStepResult> IssueForStepAsync(
         EndpointServer server,
         VcalmIntegration vcalm,
@@ -244,17 +264,21 @@ public static class VcalmWorkflowStepEngine
                     "The credential the workflow template rendered could not be read as a verifiable credential.");
             }
 
+            //A rendered proof is the template's existing proof, handled as a caller's own existing proof is. The model the
+            //credential deserialized into decides it, the same reading the signing then acts on: a member name spelled
+            //with JSON escapes names the same proof member, so its bytes alone cannot tell a rendered proof apart.
+            bool hasExistingProof = credential is DataIntegritySecuredCredential { Proof.Count: > 0 };
+
             VcalmIssuanceResult signed = await VcalmCredentialIssuanceService.IssueAsync(
                 credential,
-                hasExistingProof: false,
+                hasExistingProof,
                 issuance,
                 proofCreated,
                 context,
                 cancellationToken).ConfigureAwait(false);
             if(!signed.IsSuccess)
             {
-                return VcalmIssuanceStepResult.Failure(
-                    "The credential the workflow template rendered could not be secured.");
+                return VcalmIssuanceStepResult.Failure(signed.RefusalDetail!);
             }
 
             issuedCredentialJsons.Add(descriptor.SerializeCredential(signed.SecuredCredential!));
@@ -268,8 +292,13 @@ public static class VcalmWorkflowStepEngine
     }
 
 
-    //§3.6.1 issueRequest template selection: by credentialTemplateId (matched against the template's id)
-    //or by credentialTemplateIndex (the array position in the workflow's credentialTemplates).
+    /// <summary>
+    /// The §3.6.1 issueRequest template selection: by <c>credentialTemplateId</c> (matched against the template's
+    /// <c>id</c>) or by <c>credentialTemplateIndex</c> (the array position in the workflow's credentialTemplates).
+    /// </summary>
+    /// <param name="workflow">The workflow whose templates are searched.</param>
+    /// <param name="issueRequest">The issue request naming the template.</param>
+    /// <returns>The selected template, or <see langword="null"/> when the workflow defines none by that name or index.</returns>
     private static VcalmCredentialTemplate? SelectTemplate(
         VcalmWorkflowConfiguration workflow, VcalmIssueRequest issueRequest)
     {
@@ -422,9 +451,13 @@ public static class VcalmWorkflowStepEngine
     }
 
 
-    //§3.6.8: wrap the issued credential(s) in a minimal VC-DM 2.0 verifiable presentation the §3.6.5
-    //reply offers. The presentation is server-emitted (the issuer offering the credential), so it
-    //carries no holder proof — the credential's own Data Integrity proof is what the client verifies.
+    /// <summary>
+    /// The §3.6.8 offer: wraps the issued credential(s) in a minimal VC-DM 2.0 verifiable presentation the §3.6.5
+    /// reply carries. The presentation is server-emitted (the issuer offering the credential), so it carries no holder
+    /// proof; the credential's own Data Integrity proof is what the client verifies.
+    /// </summary>
+    /// <param name="credentialJsons">The issued credentials' JSON texts, in issue order.</param>
+    /// <returns>The presentation's JSON text.</returns>
     private static string ComposePresentationOfCredentials(List<string> credentialJsons)
     {
         StringBuilder sb = JsonAppender.Rent();
@@ -461,10 +494,15 @@ public static class VcalmWorkflowStepEngine
     }
 
 
-    //§3.6.1 / §3.6.7: fire the step's callback when it names one and the outbound-callback seam is
-    //wired. The engine mints a fresh ≥128-bit capability id is the CALLER's concern (the step already
-    //carries the admin-supplied capability URL); the engine composes the body and invokes the seam. The
-    //actual HTTP POST is the application's (the library has no System.Net.*).
+    /// <summary>
+    /// The §3.6.1 / §3.6.7 callback: fires the step's callback when it names one and the outbound-callback seam is
+    /// wired. The capability URL is the admin-supplied one the step already carries; the engine composes the body and
+    /// invokes the seam, and the actual HTTP POST is the application's (the library has no <c>System.Net.*</c>).
+    /// </summary>
+    /// <param name="vcalm">The VCALM integration carrying the outbound-callback seam.</param>
+    /// <param name="step">The step whose callback is fired.</param>
+    /// <param name="context">The per-request context carrying the exchange id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     private static async ValueTask FireCallbackIfAnyAsync(
         VcalmIntegration vcalm,
         VcalmWorkflowStep step,
@@ -618,21 +656,30 @@ public enum VcalmWorkflowAdvanceKind
 }
 
 
-//The result of a single step's issuance: the server-offered presentation JSON on success, or a failure
-//detail when the template / signing could not produce a credential.
+/// <summary>
+/// The result of a single step's issuance: the server-offered presentation JSON on success, or a failure detail when
+/// the template or the signing could not produce a credential.
+/// </summary>
 internal sealed record VcalmIssuanceStepResult
 {
+    /// <summary>Whether every issue request of the step produced a secured credential.</summary>
     public required bool IsSuccess { get; init; }
 
+    /// <summary>The server-offered presentation carrying the issued credentials, on success.</summary>
     public string? OfferedPresentationJson { get; init; }
 
+    /// <summary>The one-sentence reason the step failed, on failure.</summary>
     public string? FailureDetail { get; init; }
 
 
+    /// <summary>Creates the successful result offering <paramref name="presentationJson"/>.</summary>
+    /// <param name="presentationJson">The server-offered presentation's JSON text.</param>
     public static VcalmIssuanceStepResult Success(string presentationJson) =>
         new() { IsSuccess = true, OfferedPresentationJson = presentationJson };
 
 
+    /// <summary>Creates the failed result stating <paramref name="detail"/>.</summary>
+    /// <param name="detail">The one-sentence reason the step failed.</param>
     public static VcalmIssuanceStepResult Failure(string detail) =>
         new() { IsSuccess = false, FailureDetail = detail };
 }

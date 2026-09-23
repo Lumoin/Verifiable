@@ -36,6 +36,19 @@ public sealed class DidResolutionResult
     public required DidResolutionMetadata ResolutionMetadata { get; init; }
 
     /// <summary>
+    /// Why the resolver refused the retrieved document when <see cref="DidResolutionMetadata.Error"/> is
+    /// <see cref="DidErrorTypes.InvalidDidDocument"/>, or <see langword="null"/> when the resolver states no
+    /// reason. It refines that DID Resolution error, which stays the primary signal, and a resolver sets it on
+    /// no other result: never on a success and never on another error type. A caller running
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3 Retrieve Verification
+    /// Method</see> reads <see cref="InvalidDidDocumentReason.IdMismatch"/> as step 6 ("If controllerDocument.id
+    /// does not match the controllerDocumentUrl") and every other reason as step 5 ("If controllerDocument is not
+    /// a conforming controlled identifier document"), because the resolver refuses the document before the caller
+    /// could compare it itself.
+    /// </summary>
+    public InvalidDidDocumentReason? InvalidDocumentReason { get; init; }
+
+    /// <summary>
     /// The resolved DID document, or <see langword="null"/> if resolution did not produce
     /// a document directly.
     /// </summary>
@@ -169,4 +182,40 @@ public sealed class DidResolutionResult
             DocumentMetadata = DidDocumentMetadata.Empty
         };
     }
+}
+
+/// <summary>
+/// The reason a resolver refused a retrieved DID document with <see cref="DidErrorTypes.InvalidDidDocument"/>,
+/// carried on <see cref="DidResolutionResult.InvalidDocumentReason"/>. The DID Resolution error names one condition
+/// for all of these; the reason lets a caller of
+/// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3 Retrieve Verification
+/// Method</see> tell step 5 (the document is not a conforming controlled identifier document) from step 6 (its
+/// <c>id</c> does not match the URL it was retrieved from).
+/// </summary>
+public enum InvalidDidDocumentReason
+{
+    /// <summary>
+    /// The retrieved representation could not be read as a DID document: it did not parse, or it parsed to no
+    /// document. CID 1.0 §3.3 step 5.
+    /// </summary>
+    Malformed,
+
+    /// <summary>
+    /// The document omits a property a conforming document requires, such as the top-level <c>id</c>
+    /// (<see href="https://www.w3.org/TR/cid-1.0/#subjects">CID 1.0 §2.1.1</see>: "A controlled identifier
+    /// document MUST contain an id value in the topmost map"). CID 1.0 §3.3 step 5.
+    /// </summary>
+    MissingRequiredProperty,
+
+    /// <summary>
+    /// The document embeds a verification method, service or controller identifier that does not resolve under
+    /// the requested DID, so accepting it would bind another subject's keys to that DID. CID 1.0 §3.3 step 5.
+    /// </summary>
+    EmbeddedIdentifierOutsideDid,
+
+    /// <summary>
+    /// The document's <see cref="DidDocument.Id"/> is not the requested DID, and the resolving method gives no
+    /// guarantee that the two are equivalent. CID 1.0 §3.3 step 6.
+    /// </summary>
+    IdMismatch
 }

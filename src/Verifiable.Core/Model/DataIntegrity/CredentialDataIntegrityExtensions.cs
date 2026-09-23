@@ -473,19 +473,35 @@ public static class CredentialDataIntegrityExtensions
     }
 
 
-    //Carries a chain link's plain validity outcome alongside the BoundProvenance the link's own
-    //identity check produced on success (null on any failure, including a bind refusal).
+    /// <summary>
+    /// A chain link's plain validity outcome alongside the <see cref="BoundProvenance"/> the link's own identity
+    /// check produced on success.
+    /// </summary>
+    /// <param name="Result">The link's validity outcome.</param>
+    /// <param name="Provenance">The bound provenance on success; <see langword="null"/> on any failure, a bind refusal included.</param>
     private readonly record struct ChainLinkVerificationOutcome(CredentialVerificationResult Result, BoundProvenance? Provenance);
 
 
-    //Generates a fresh URN:UUID proof identifier so proofs can be linked into a chain
-    //via DataIntegrityProof.PreviousProof.
+    /// <summary>
+    /// Generates a fresh URN:UUID proof identifier, so proofs can be linked into a chain through
+    /// <see cref="DataIntegrityProof.PreviousProof"/>.
+    /// </summary>
     private static string GenerateProofId() => $"urn:uuid:{Guid.NewGuid()}";
 
 
-    //Verifies one Data Integrity proof against the document view that carries exactly the
-    //proofs preceding it in the chain (none for a single or root proof). This reconstructs the
-    //hashing input the signer used when that proof was created.
+    /// <summary>
+    /// Verifies one Data Integrity proof against the document view that carries exactly the proofs preceding it
+    /// in the chain (none for a single or root proof), reconstructing the hashing input the signer used when that
+    /// proof was created.
+    /// </summary>
+    /// <remarks>
+    /// The canonicalization is a boundary over <paramref name="canonicalize"/>, a dependency that throws: an
+    /// exception other than a cancellation, such as a context the canonicalizer cannot load or malformed JSON-LD,
+    /// is a failed verification reported as <see cref="VerificationFailureReason.ContextValidationFailed"/>, per
+    /// VC Data Integrity 1.0 §2.4.1, never an escaping exception. A cancellation propagates to the caller, and so
+    /// does one another exception carries in its <see cref="Exception.InnerException"/> chain
+    /// (<see cref="WrappedCancellation"/>), so the caller can tell its own cancellation from a dependency's budget.
+    /// </remarks>
     private static async ValueTask<ChainLinkVerificationOutcome> VerifyChainLinkAsync(
         VerifiableCredential credential,
         DataIntegrityProof proof,
@@ -507,7 +523,7 @@ public static class CredentialDataIntegrityExtensions
             return new(CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite), null);
         }
 
-        //Data Integrity 1.0 §4.2: when an expected proof purpose is given and does not match
+        //Data Integrity 1.0 §4.4: when an expected proof purpose is given and does not match
         //proof.proofPurpose, an error MUST be raised. A credential proof's purpose is
         //assertionMethod (VC-DM 2.0); checked BEFORE resolving anything, mirroring the
         //presentation path's ProofPurposeMismatch gate.
@@ -517,7 +533,8 @@ public static class CredentialDataIntegrityExtensions
         }
 
         var verificationMethodId = proof.VerificationMethod?.Id;
-        if(string.IsNullOrEmpty(verificationMethodId))
+        //Data Integrity §4.4 groups missing type and verificationMethod as proof-verification errors.
+        if(string.IsNullOrEmpty(proof.Type) || string.IsNullOrEmpty(verificationMethodId))
         {
             return new(CredentialVerificationResult.Failed(VerificationFailureReason.MissingVerificationMethod), null);
         }
@@ -558,8 +575,11 @@ public static class CredentialDataIntegrityExtensions
         {
             throw;
         }
-        catch(Exception)
+        catch(Exception exception)
         {
+            //A canonicalizer or context loader that wraps the cancellation of its own fetch reports that cancellation.
+            WrappedCancellation.ThrowIfCarried(exception);
+
             return new(CredentialVerificationResult.Failed(VerificationFailureReason.ContextValidationFailed), null);
         }
 
@@ -638,9 +658,16 @@ public static class CredentialDataIntegrityExtensions
     }
 
 
-    //Establishes the dependency order of a proof chain by following previousProof -> id links
-    //from the single root (the proof with no previousProof). Returns null and sets the failure
-    //reason on a cycle, a dangling/broken link, or a malformed (branching/disconnected) chain.
+    /// <summary>
+    /// Establishes the dependency order of a proof chain by following <c>previousProof</c> to <c>id</c> links from
+    /// the single root, the proof with no <c>previousProof</c>.
+    /// </summary>
+    /// <param name="proofs">The proofs of the chain, in any order.</param>
+    /// <param name="failureReason">
+    /// The cause when the chain cannot be ordered: a cycle, a dangling or broken link, or a branching or
+    /// disconnected chain; <see cref="VerificationFailureReason.None"/> otherwise.
+    /// </param>
+    /// <returns>The proofs from the root onward, or <see langword="null"/> when the chain is malformed.</returns>
     private static List<DataIntegrityProof>? OrderProofChain(List<DataIntegrityProof> proofs, out VerificationFailureReason failureReason)
     {
         failureReason = VerificationFailureReason.None;
@@ -665,6 +692,7 @@ public static class CredentialDataIntegrityExtensions
                 if(root is not null)
                 {
                     failureReason = VerificationFailureReason.BrokenProofChain;
+
                     return null;
                 }
 
@@ -675,6 +703,7 @@ public static class CredentialDataIntegrityExtensions
             if(!byId.ContainsKey(proof.PreviousProof) || successorByPreviousId.ContainsKey(proof.PreviousProof))
             {
                 failureReason = VerificationFailureReason.BrokenProofChain;
+
                 return null;
             }
 
@@ -685,6 +714,7 @@ public static class CredentialDataIntegrityExtensions
         if(root is null)
         {
             failureReason = VerificationFailureReason.ProofChainCycle;
+
             return null;
         }
 
@@ -704,6 +734,7 @@ public static class CredentialDataIntegrityExtensions
             if(!visited.Add(current.Id))
             {
                 failureReason = VerificationFailureReason.ProofChainCycle;
+
                 return null;
             }
 
@@ -714,6 +745,7 @@ public static class CredentialDataIntegrityExtensions
         if(ordered.Count != proofs.Count)
         {
             failureReason = VerificationFailureReason.BrokenProofChain;
+
             return null;
         }
 
@@ -721,9 +753,13 @@ public static class CredentialDataIntegrityExtensions
     }
 
 
-    //Copies the base VerifiableCredential members into a DataIntegritySecuredCredential and
-    //attaches the supplied proof set (null for a document view that carries no proof). Used both
-    //to produce the embedded-secured signing output and to reconstruct per-link hashing input.
+    /// <summary>
+    /// Copies the base <see cref="VerifiableCredential"/> members into a <see cref="DataIntegritySecuredCredential"/>
+    /// carrying <paramref name="proofs"/>. It produces the embedded-secured signing output and reconstructs each
+    /// chain link's hashing input.
+    /// </summary>
+    /// <param name="source">The credential whose members are copied.</param>
+    /// <param name="proofs">The proofs attached, or <see langword="null"/> for a document view that carries none.</param>
     private static DataIntegritySecuredCredential CloneWithProofs(VerifiableCredential source, List<DataIntegrityProof>? proofs)
     {
         return new DataIntegritySecuredCredential

@@ -33,8 +33,21 @@ namespace Verifiable.Core.Outbound;
 /// </remarks>
 public sealed record OutboundFetchPolicy
 {
+    /// <summary>The scheme set <see cref="AllowedSchemes"/> defaults to: <c>https</c> alone, compared case-insensitively.</summary>
     private static IReadOnlySet<string> HttpsOnly { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "https" };
+
+
+    /// <summary>
+    /// The upper bound, in bytes, on one response body a DID method resolver dereferences: a <c>did:web</c>
+    /// <c>did.json</c>, a <c>did:webvh</c> DID Log or <c>did-witness.json</c>, a <c>did:webplus</c> microledger. Each
+    /// resolver asks its transport to enforce it (<see cref="OutboundRequest.MaxResponseBytes"/>) and refuses a larger
+    /// body before parsing it, so a malicious or misconfigured host cannot exhaust resolver memory or CPU by serving an
+    /// unbounded document; the <c>did:webvh</c> method specification asks resolvers to guard retrieval against resource
+    /// exhaustion. Eight mebibytes is generous for a real DID document or log, whose entries are single JSON lines, yet
+    /// refuses an obviously hostile payload.
+    /// </summary>
+    public static int DefaultMaxResponseBytes { get; } = 8 * 1024 * 1024;
 
 
     /// <summary>
@@ -165,6 +178,9 @@ public sealed record OutboundFetchPolicy
     }
 
 
+    /// <summary>Whether <paramref name="hosts"/> names <paramref name="host"/>, compared case-insensitively as exact hosts.</summary>
+    /// <param name="hosts">The allow or deny list.</param>
+    /// <param name="host">The URL's host.</param>
     private static bool ContainsHost(IReadOnlyList<string> hosts, string host)
     {
         for(int i = 0; i < hosts.Count; ++i)
@@ -179,9 +195,14 @@ public sealed record OutboundFetchPolicy
     }
 
 
-    //Uri.Host wraps IPv6 literals in brackets; trim them before parsing. A
-    //non-literal host (a DNS name) does not parse and is left to the
-    //connection-time pinning transport to resolve and re-check.
+    /// <summary>
+    /// Parses a URL host that is an IP literal. <see cref="Uri.Host"/> wraps an IPv6 literal in brackets, which are trimmed
+    /// before parsing; a host that is a DNS name does not parse and is left to the connection-time pinning transport to
+    /// resolve and re-check.
+    /// </summary>
+    /// <param name="host">The URL's host.</param>
+    /// <param name="address">The parsed address when the host is an IP literal.</param>
+    /// <returns><see langword="true"/> when the host is an IP literal.</returns>
     private static bool TryParseHostAddress(string host, [NotNullWhen(true)] out IPAddress? address)
     {
         string candidate = host.Length > 1 && host[0] == '[' && host[^1] == ']'
@@ -191,14 +212,21 @@ public sealed record OutboundFetchPolicy
         if(IPAddress.TryParse(candidate, out IPAddress? parsed))
         {
             address = parsed;
+
             return true;
         }
 
         address = null;
+
         return false;
     }
 
 
+    /// <summary>
+    /// Whether <paramref name="address"/> lies in a loopback, private, link-local, carrier-grade NAT, unique-local or
+    /// unspecified range, after unwrapping an IPv4-mapped IPv6 address.
+    /// </summary>
+    /// <param name="address">The address to classify.</param>
     private static bool IsBlockedAddress(IPAddress address)
     {
         //Unwrap IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) so a mapped literal
@@ -218,6 +246,7 @@ public sealed record OutboundFetchPolicy
             //Each disjunct is its own IANA special-purpose or private block, named by the trailing
             //comment; a named predicate per block would only rename the citation, not simplify it.
             byte[] b = address.GetAddressBytes();
+
             return b[0] == 0                                  //0.0.0.0/8 unspecified/this-host.
                 || b[0] == 10                                 //10.0.0.0/8 private.
                 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)  //172.16.0.0/12 private.
@@ -232,7 +261,11 @@ public sealed record OutboundFetchPolicy
             bool unspecified = true;
             for(int i = 0; i < b.Length; ++i)
             {
-                if(b[i] != 0) { unspecified = false; break; }
+                if(b[i] != 0)
+                {
+                    unspecified = false;
+                    break;
+                }
             }
 
             return unspecified                       //:: unspecified.

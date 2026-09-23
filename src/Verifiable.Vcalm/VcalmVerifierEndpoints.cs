@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.JCose;
 
@@ -127,10 +128,11 @@ public static class VcalmVerifierEndpoints
                 }
 
                 //Enveloped (data: URL) credential: the JOSE/COSE/SD-JWT envelope verification is a
-                //registered-handler seam. With no envelope handler wired, the
-                //process ran but could not assert the proof — a 200 with verified:false and a
-                //cryptographic ERROR ProblemDetail (§3.8.1).
-                VcalmVerificationOutcome envelopedOutcome = BuildUnverifiableEnvelopeOutcome();
+                //registered-handler seam. The envelope and an embedded credential that could not be
+                //parsed have distinct causes.
+                VcalmVerificationOutcome envelopedOutcome = request.EnvelopedCredential is not null
+                    ? BuildUnverifiableEnvelopeOutcome()
+                    : BuildUnparseableCredentialOutcome();
                 string envelopedBody = VcalmResponseWriter.BuildCredentialVerificationResponse(
                     envelopedOutcome, request.Options, request.CredentialJson);
 
@@ -257,7 +259,9 @@ public static class VcalmVerifierEndpoints
         };
 
 
-    //§3.3.2 verification: the presentation proof (when proofed), then each contained credential.
+    /// <summary>
+    /// §3.3.2 verification: the presentation proof (when proofed), then each contained credential.
+    /// </summary>
     private static async ValueTask<ServerHttpResponse> VerifyPresentationAsync(
         EndpointServer server,
         VcalmVerifyPresentationRequest request,
@@ -279,9 +283,9 @@ public static class VcalmVerifierEndpoints
             if(!isIssued)
             {
                 presentationProblems.Add(VcalmProblemDetail.Error(
-                    VcalmProblemTypes.CryptographicSecurityError,
-                    "CRYPTOGRAPHIC_SECURITY_ERROR",
-                    "The presented options.challenge was not issued by this verifier instance."));
+                    VcalmProblemTypes.ChallengeNotIssued,
+                    "CHALLENGE_NOT_ISSUED",
+                    "The presented options.challenge was not issued by this verifier instance, or was already consumed."));
             }
         }
 
@@ -331,7 +335,7 @@ public static class VcalmVerifierEndpoints
         {
             //§3.3.2: the verifiablePresentation member is the SECURED form (a Data Integrity proof or an
             //EnvelopedVerifiablePresentation); a presentation carrying neither is not a verifiable
-            //presentation. This is a presentation-level §3.8.1 cryptographic ERROR (verified:false),
+            //presentation. Data Integrity §4.4 classifies the missing proof as PARSING_ERROR,
             //mirroring a proof-less verifiableCredential — the unproofed alternative is the separate
             //'presentation' member. The contained credentials are still verified and reported, but the
             //missing presentation-level securing flips the overall result to false regardless.
@@ -345,11 +349,9 @@ public static class VcalmVerifierEndpoints
                 ProblemDetails =
                 [
                     VcalmProblemDetail.Error(
-                        VcalmProblemTypes.CryptographicSecurityError,
-                        "CRYPTOGRAPHIC_SECURITY_ERROR",
-                        "The verifiablePresentation carries no securing mechanism (no Data Integrity proof "
-                        + "and not an EnvelopedVerifiablePresentation). Submit an unproofed presentation "
-                        + "under the 'presentation' member instead.")
+                        VcalmProblemTypes.ParsingError,
+                        "PARSING_ERROR",
+                        "The secured presentation carries no Data Integrity proof map to verify.")
                 ]
             };
 
@@ -362,7 +364,7 @@ public static class VcalmVerifierEndpoints
         else
         {
             //Enveloped presentation: envelope verification is a registered-handler seam. The process
-            //ran but could not assert the proof — verified:false with a cryptographic ERROR.
+            //ran but no securing-mechanism verifier could be dispatched.
             presentationResult = new VcalmPresentationProofResult
             {
                 Verified = false,
@@ -373,10 +375,9 @@ public static class VcalmVerifierEndpoints
                 ProblemDetails =
                 [
                     VcalmProblemDetail.Error(
-                        VcalmProblemTypes.CryptographicSecurityError,
-                        "CRYPTOGRAPHIC_SECURITY_ERROR",
-                        "Enveloped presentation verification is handled by a registered envelope handler "
-                        + "the deployment wires; none is configured.")
+                        VcalmProblemTypes.UnsupportedSecuringMechanism,
+                        "UNSUPPORTED_SECURING_MECHANISM",
+                        VcalmProblemTypes.UnsupportedSecuringMechanismDetail)
                 ]
             };
 
@@ -422,8 +423,10 @@ public static class VcalmVerifierEndpoints
     }
 
 
-    //Verifies each embedded Data Integrity credential the presentation contains (§3.3.2: "Verifying
-    //each contained verifiable credential's proof, status, and validity period(s)").
+    /// <summary>
+    /// Verifies each embedded Data Integrity credential the presentation contains (§3.3.2: "Verifying
+    /// each contained verifiable credential's proof, status, and validity period(s)").
+    /// </summary>
     private static async ValueTask VerifyContainedCredentialsAsync(
         EndpointServer server,
         IReadOnlyList<Core.Model.Credentials.VerifiableCredential>? credentials,
@@ -456,13 +459,17 @@ public static class VcalmVerifierEndpoints
             {
                 //A contained credential with no embedded proof cannot be cryptographically verified
                 //here; report it as a credential-level ERROR (§3.8.1).
-                outcomes.Add(BuildUnverifiableEnvelopeOutcome());
+                outcomes.Add(credential?.Type?.Contains(CredentialConstants.EnvelopedVerifiableCredentialType, StringComparer.Ordinal) == true
+                    ? BuildUnverifiableEnvelopeOutcome()
+                    : BuildUnparseableCredentialOutcome());
             }
         }
     }
 
 
-    //Shared matcher: POST to this endpoint's resolved path.
+    /// <summary>
+    /// Shared matcher: POST to this endpoint's resolved path.
+    /// </summary>
     private static ValueTask<MatchPayload?> MatchPost(ExchangeContext context, ServerEndpoint endpoint)
     {
         IncomingRequest? req = context.IncomingRequest;
@@ -485,9 +492,11 @@ public static class VcalmVerifierEndpoints
     }
 
 
-    //§2.4 request-boundary MUSTs for the verify endpoints: a body MUST be present, MUST be within
-    //the configured size cap (else 413), and MUST be application/json (else 400). On success
-    //requestBody carries the UTF-8-decoded body.
+    /// <summary>
+    /// §2.4 request-boundary MUSTs for the verify endpoints: a body MUST be present, MUST be within
+    /// the configured size cap (else 413), and MUST be application/json (else 400). On success
+    /// requestBody carries the UTF-8-decoded body.
+    /// </summary>
     private static ServerHttpResponse? CheckRequestBoundary(
         ExchangeContext context, EndpointServer server, out string requestBody)
     {
@@ -525,8 +534,10 @@ public static class VcalmVerifierEndpoints
     }
 
 
-    //Compares the request content type to application/json case-insensitively, ignoring any media
-    //type parameters (e.g. "; charset=utf-8") per RFC 9110 §8.3.1.
+    /// <summary>
+    /// Compares the request content type to application/json case-insensitively, ignoring any media
+    /// type parameters (e.g. "; charset=utf-8") per RFC 9110 §8.3.1.
+    /// </summary>
     private static bool IsJsonContentType(string contentType)
     {
         if(string.IsNullOrEmpty(contentType))
@@ -541,8 +552,10 @@ public static class VcalmVerifierEndpoints
     }
 
 
-    //A §3.3.1 / §3.3.2 malformed-input 400. The body is an RFC 9457 ProblemDetail naming the
-    //malformed-value error type so the response is itself a conformant ProblemDetails document.
+    /// <summary>
+    /// A §3.3.1 / §3.3.2 malformed-input 400. The body is an RFC 9457 ProblemDetail naming the
+    /// malformed-value error type so the response is itself a conformant ProblemDetails document.
+    /// </summary>
     private static ServerHttpResponse MalformedRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -555,7 +568,9 @@ public static class VcalmVerifierEndpoints
     }
 
 
-    //The §2.4 unknown-option 400, carrying the §3.8 UNKNOWN_OPTION_PROVIDED problem type.
+    /// <summary>
+    /// The §2.4 unknown-option 400, carrying the §3.8 UNKNOWN_OPTION_PROVIDED problem type.
+    /// </summary>
     private static ServerHttpResponse UnknownOptionRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -568,9 +583,26 @@ public static class VcalmVerifierEndpoints
     }
 
 
-    //The §3.8.1 outcome for a credential the verifier cannot cryptographically check (an
-    //enveloped credential with no wired envelope handler, or a contained credential with no embedded
-    //proof): verified:false with a single cryptographic ERROR ProblemDetail.
+    /// <summary>
+    /// Reports an absent or unparseable proof map as <see cref="VcalmProblemTypes.ParsingError"/>,
+    /// as required by <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>.
+    /// </summary>
+    private static VcalmVerificationOutcome BuildUnparseableCredentialOutcome() =>
+        new()
+        {
+            Verified = false,
+            ProblemDetails =
+            [
+                VcalmProblemDetail.Error(VcalmProblemTypes.ParsingError, "PARSING_ERROR",
+                    "The secured credential or its proof could not be parsed as a map.")
+            ]
+        };
+
+
+    /// <summary>
+    /// Reports an unsupported credential envelope as <see cref="VcalmProblemTypes.UnsupportedSecuringMechanism"/>,
+    /// using the library-defined type permitted by <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4">RFC 9457 §4</see>.
+    /// </summary>
     private static VcalmVerificationOutcome BuildUnverifiableEnvelopeOutcome() =>
         new()
         {
@@ -578,11 +610,9 @@ public static class VcalmVerifierEndpoints
             ProblemDetails =
             [
                 VcalmProblemDetail.Error(
-                    VcalmProblemTypes.CryptographicSecurityError,
-                    "CRYPTOGRAPHIC_SECURITY_ERROR",
-                    "The credential's securing mechanism could not be verified by this verifier "
-                    + "instance. Enveloped (JWT / SD-JWT / mdoc) verification is handled by a "
-                    + "registered envelope handler the deployment wires.")
+                    VcalmProblemTypes.UnsupportedSecuringMechanism,
+                    "UNSUPPORTED_SECURING_MECHANISM",
+                    VcalmProblemTypes.UnsupportedSecuringMechanismDetail)
             ]
         };
 }

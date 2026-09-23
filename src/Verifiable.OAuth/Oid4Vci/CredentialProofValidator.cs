@@ -37,10 +37,18 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// </remarks>
 public static class CredentialProofValidator
 {
-    //The §F.1 OPTIONAL key-reference JOSE headers whose mutual exclusivity §F.1 mandates. Only
-    //their PRESENCE is detected here (for the exactly-one rule); dereferencing kid/x5c is the
-    //deployment's job via the key-resolution delegate.
+    /// <summary>
+    /// The UTF-8 name of the §F.1 OPTIONAL <c>kid</c> key-reference JOSE header, one of the headers whose mutual
+    /// exclusivity §F.1 mandates. Only its presence is detected here, for the exactly-one rule; dereferencing it is the
+    /// deployment's job through the key-resolution delegate.
+    /// </summary>
     private static ReadOnlySpan<byte> KidHeaderUtf8 => "kid"u8;
+
+    /// <summary>
+    /// The UTF-8 name of the §F.1 OPTIONAL <c>x5c</c> key-reference JOSE header, one of the headers whose mutual
+    /// exclusivity §F.1 mandates. Only its presence is detected here, for the exactly-one rule; its chain is resolved
+    /// through <see cref="Oid4VciProofX509Verification"/>.
+    /// </summary>
     private static ReadOnlySpan<byte> X5cHeaderUtf8 => "x5c"u8;
 
     /// <summary>
@@ -271,6 +279,14 @@ public static class CredentialProofValidator
     /// success it carries the authenticated holder verification method id — the binding the issued
     /// Credential uses.
     /// </para>
+    /// <para>
+    /// The holder resolution and the proof's verification are a boundary over dependencies that throw. A dependency that
+    /// ends on its own budget while <paramref name="cancellationToken"/> is still live, its cancellation bare or carried
+    /// inside another exception (<see cref="WrappedCancellation.IsOwnBudgetCancellation"/>), leaves the presentation
+    /// unverified: it is <see cref="DiVpProofValidationFailureReason.DependencyBudgetExhausted"/>, which the endpoint
+    /// answers as <c>invalid_proof</c>, never an exception escaping the endpoint. The caller's own cancellation
+    /// propagates.
+    /// </para>
     /// </remarks>
     /// <param name="presentationJson">One <c>di_vp</c> array entry's serialized JSON.</param>
     /// <param name="expectedChallenge">The server-provided <c>c_nonce</c> the proof's <c>challenge</c> must equal.</param>
@@ -308,32 +324,43 @@ public static class CredentialProofValidator
             return DiVpProofValidationResult.Failure(DiVpProofValidationFailureReason.HolderUnresolved);
         }
 
-        //Resolve the holder DID document through the library's DID-resolution seam, threading the
-        //credential endpoint's context so a remote did:web holder is fetched under the context's
-        //OutboundFetch SSRF policy. A non-document result (resolution failure, or a method that
-        //yields a URL the caller must fetch but no document) cannot anchor the holder key.
-        DidResolutionResult resolution = await verification.Resolver.ResolveAsync(
-            holderDid, context, options: null, cancellationToken).ConfigureAwait(false);
-        if(!resolution.IsSuccessful || resolution.Document is null)
+        CredentialVerificationResult<DataIntegritySecuredPresentation> result;
+        try
         {
-            return DiVpProofValidationResult.Failure(DiVpProofValidationFailureReason.HolderUnresolved);
-        }
+            //Resolve the holder DID document through the library's DID-resolution seam, threading the
+            //credential endpoint's context so a remote did:web holder is fetched under the context's
+            //OutboundFetch SSRF policy. A non-document result (resolution failure, or a method that
+            //yields a URL the caller must fetch but no document) cannot anchor the holder key.
+            DidResolutionResult resolution = await verification.Resolver.ResolveAsync(
+                holderDid, context, options: null, cancellationToken).ConfigureAwait(false);
+            if(!resolution.IsSuccessful || resolution.Document is null)
+            {
+                return DiVpProofValidationResult.Failure(DiVpProofValidationFailureReason.HolderUnresolved);
+            }
 
-        CredentialVerificationResult<DataIntegritySecuredPresentation> result = await presentation.VerifyAsync(
-            resolution.Document,
-            expectedChallenge,
-            expectedDomain,
-            verification.Canonicalize,
-            verification.ContextResolver,
-            verification.KnownContext,
-            verification.DecodeProofValue,
-            verification.SerializePresentation,
-            verification.SerializeProofOptions,
-            verification.Decoder,
-            verification.ComputeDigest,
-            verification.MemoryPool,
-            context,
-            cancellationToken).ConfigureAwait(false);
+            result = await presentation.VerifyAsync(
+                resolution.Document,
+                expectedChallenge,
+                expectedDomain,
+                verification.Canonicalize,
+                verification.ContextResolver,
+                verification.KnownContext,
+                verification.DecodeProofValue,
+                verification.SerializePresentation,
+                verification.SerializeProofOptions,
+                verification.Decoder,
+                verification.ComputeDigest,
+                verification.MemoryPool,
+                context,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception exception) when(WrappedCancellation.IsOwnBudgetCancellation(exception, cancellationToken))
+        {
+            //A dependency of the verification, the holder resolution or a JSON-LD context load while the proof's
+            //document is transformed, ended on its own budget while the request is still live: the presentation was
+            //not shown to be signed with a key in the Holder's possession, an invalid proof.
+            return DiVpProofValidationResult.Failure(DiVpProofValidationFailureReason.DependencyBudgetExhausted);
+        }
 
         if(result.IsValid && result.Verified is Verified<DataIntegritySecuredPresentation> verified)
         {
@@ -352,10 +379,15 @@ public static class CredentialProofValidator
     }
 
 
-    //Appendix F.2: the holder DID is the presentation's holder member when present, else the base
-    //DID of the proof's verificationMethod DID URL — the DID the verificationMethod key lives under.
-    //Returns null when neither names a resolvable DID, which the caller treats as an unresolved
-    //holder (invalid_proof).
+    /// <summary>
+    /// The Appendix F.2 holder DID: the presentation's <c>holder</c> member when present, else the base DID of the
+    /// proof's <c>verificationMethod</c> DID URL, the DID the verification method's key lives under.
+    /// </summary>
+    /// <param name="presentation">The <c>di_vp</c> presentation.</param>
+    /// <returns>
+    /// The holder DID, or <see langword="null"/> when neither names a resolvable DID, which the caller treats as an
+    /// unresolved holder (<c>invalid_proof</c>).
+    /// </returns>
     private static string? DeriveHolderDid(DataIntegritySecuredPresentation presentation)
     {
         if(!string.IsNullOrEmpty(presentation.Holder))
@@ -376,9 +408,12 @@ public static class CredentialProofValidator
     }
 
 
-    //Maps the W3C Data Integrity presentation-verification failure to the closed di_vp reason set.
-    //ChallengeMismatch stays distinct so the endpoint can answer §8.3.1.2 invalid_nonce; every
-    //other Data Integrity failure is an invalid_proof condition.
+    /// <summary>
+    /// Maps the W3C Data Integrity presentation-verification failure to the closed <c>di_vp</c> reason set.
+    /// <see cref="VerificationFailureReason.ChallengeMismatch"/> stays distinct so the endpoint can answer §8.3.1.2
+    /// <c>invalid_nonce</c>; every other Data Integrity failure is an <c>invalid_proof</c> condition.
+    /// </summary>
+    /// <param name="reason">The Data Integrity failure reason.</param>
     private static DiVpProofValidationFailureReason MapDiVpFailure(VerificationFailureReason reason) =>
         reason switch
         {
@@ -404,8 +439,23 @@ public static class CredentialProofValidator
         };
 
 
-    //The single fail-closed validation path. A null verificationDelegate selects the
-    //registry-resolved verifier keyed on the reconstructed holder key's algorithm.
+    /// <summary>
+    /// The single fail-closed <c>jwt</c> proof validation path the <c>ValidateAsync</c> overloads share. A
+    /// <see langword="null"/> <paramref name="verificationDelegate"/> selects the registry-resolved verifier keyed on the
+    /// reconstructed holder key's algorithm.
+    /// </summary>
+    /// <param name="request">The proof plus the expected audience and nonce.</param>
+    /// <param name="verificationDelegate">The signature-verification function, or <see langword="null"/> for the registry's.</param>
+    /// <param name="isProofSigningAlgAcceptable">Predicate deciding whether the proof's <c>alg</c> is acceptable.</param>
+    /// <param name="resolveProofKey">Resolves the key for the <c>kid</c> reference mode, or <see langword="null"/>.</param>
+    /// <param name="x509Verification">Resolves the key for the <c>x5c</c> reference mode, or <see langword="null"/>.</param>
+    /// <param name="context">The per-request context threaded to a network-resolving <c>kid</c>.</param>
+    /// <param name="base64UrlEncoder">Base64url encoder for the thumbprint.</param>
+    /// <param name="base64UrlDecoder">Base64url decoder for the JWS segments and JWK coordinates.</param>
+    /// <param name="timeProvider">The clock the <c>iat</c> window is measured against.</param>
+    /// <param name="memoryPool">Memory pool for the transient decode/verify buffers.</param>
+    /// <param name="iatSkew">The half-width of the <c>iat</c> acceptance window.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The reconstructed/resolved PublicKeyMemory is disposed in the finally block of the verification try; the analyzer does not trace the assign-then-finally path across the reconstruction branches here.")]
     private static async ValueTask<CredentialProofValidationResult> ValidateCoreAsync(
         CredentialProofValidationRequest request,
@@ -615,7 +665,8 @@ public static class CredentialProofValidator
     }
 
 
-    //Maps the shared header-key resolver's neutral status to the §F.4 proof-validation failure reason.
+    /// <summary>Maps the shared header-key resolver's neutral status to the §F.4 proof-validation failure reason.</summary>
+    /// <param name="status">The header-key resolution status.</param>
     private static CredentialProofValidationFailureReason MapResolutionFailure(HeaderKeyResolutionStatus status) =>
         status switch
         {
@@ -628,8 +679,11 @@ public static class CredentialProofValidator
         };
 
 
-    //Projects the jwk members (string-valued in a proof header) into the string dictionary the
-    //RFC 7638 thumbprint helper consumes.
+    /// <summary>
+    /// Projects the <c>jwk</c> members, string-valued in a proof header, into the string dictionary the RFC 7638
+    /// thumbprint helper consumes.
+    /// </summary>
+    /// <param name="jwkMembers">The <c>jwk</c> header's members.</param>
     private static Dictionary<string, string> ToStringValuedJwk(Dictionary<string, object> jwkMembers)
     {
         Dictionary<string, string> stringValued = new(jwkMembers.Count, StringComparer.Ordinal);

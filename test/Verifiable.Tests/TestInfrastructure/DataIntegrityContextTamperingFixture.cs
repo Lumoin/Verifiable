@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.BouncyCastle;
@@ -11,6 +10,7 @@ using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 
@@ -53,6 +53,7 @@ internal static class DataIntegrityContextTamperingFixture
     /// <summary>The subject DID the issued credential's <c>credentialSubject.id</c> names.</summary>
     public const string HolderDid = "did:example:ebfeb1f712ebc6f1c276e12ec21";
 
+    /// <summary>The serializer options every JSON read and write of the fixture uses.</summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
 
     /// <summary>An RDFC-1.0 canonicalizer backed by the closed, three-URL test context resolver.</summary>
@@ -65,8 +66,10 @@ internal static class DataIntegrityContextTamperingFixture
     public static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
-    //Canonicalization/signing here is in-memory; a default context yields the
-    //secure-default SSRF policy and satisfies the policy-carrying parameter.
+    /// <summary>
+    /// The per-operation context the fixture's in-memory canonicalization and signing take: an empty context carries
+    /// the secure-default outbound-fetch policy, which satisfies the policy-carrying parameter without any network.
+    /// </summary>
     public static ExchangeContext EmptyContext { get; } = [];
 
     /// <summary>
@@ -187,6 +190,138 @@ internal static class DataIntegrityContextTamperingFixture
             Authentication = [new AuthenticationMethod(Ed25519VerificationMethodId)]
         };
     }
+
+    /// <summary>
+    /// The length, in bytes, of the HMAC key a selective-disclosure base proof relabels blank nodes with: the 32 bytes
+    /// the ecdsa-sd-2023 and bbs-2023 base proofs of these tests are created with.
+    /// </summary>
+    private static int SelectiveDisclosureHmacKeyByteLength => 32;
+
+
+    /// <summary>
+    /// Draws a fresh HMAC key for a selective-disclosure base proof from the project's entropy provider
+    /// (<see cref="BouncyCastleEntropyFunctionsAdapter.GenerateNonce"/>) rather than the platform CSPRNG directly. The
+    /// base proof's <see cref="HmacKeyGeneratorDelegate"/> takes the key as a byte array, so the drawn value is copied
+    /// out of its pooled buffer once, and the buffer is returned to the pool.
+    /// </summary>
+    /// <returns>The HMAC key bytes.</returns>
+    public static byte[] GenerateSelectiveDisclosureHmacKey()
+    {
+        (Nonce drawn, _) = BouncyCastleEntropyFunctionsAdapter.GenerateNonce(
+            SelectiveDisclosureHmacKeyByteLength, Tag.Create(Purpose.Nonce), BaseMemoryPool.Shared);
+        using(drawn)
+        {
+            byte[] hmacKey = new byte[SelectiveDisclosureHmacKeyByteLength];
+            drawn.AsReadOnlySpan()[..SelectiveDisclosureHmacKeyByteLength].CopyTo(hmacKey);
+
+            return hmacKey;
+        }
+    }
+
+
+    /// <summary>
+    /// Signs an eddsa-jcs-2022 presentation for the holder of <paramref name="holderDidDocument"/> with the document's
+    /// first verification method, through
+    /// <see cref="SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime)"/>.
+    /// </summary>
+    /// <param name="holderDidDocument">
+    /// The holder's DID document: its first verification method signs, and its <c>id</c> is the presentation's holder.
+    /// </param>
+    /// <param name="privateKey">The holder's Ed25519 private key.</param>
+    /// <param name="challenge">The challenge to bind into the proof, or <see langword="null"/> for none.</param>
+    /// <param name="domain">The domain to bind into the proof, or <see langword="null"/> for none.</param>
+    /// <param name="proofCreated">The instant written into the proof's <c>created</c> member.</param>
+    /// <returns>The secured presentation.</returns>
+    public static Task<DataIntegritySecuredPresentation> SignJcsPresentationAsync(
+        DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain, DateTime proofCreated) =>
+        SignJcsPresentationAsync(
+            holderDidDocument.Id!.ToString(), holderDidDocument.VerificationMethod![0].Id!, privateKey, challenge, domain, proofCreated);
+
+
+    /// <summary>
+    /// Signs an eddsa-jcs-2022 presentation claiming <paramref name="holderDid"/> with <paramref name="signerPrivateKey"/>
+    /// under <paramref name="signerVerificationMethodId"/>, whose proof carries only the binding given: a
+    /// <c>challenge</c> and a <c>domain</c> appear in the signed proof options when, and only when, a value is supplied.
+    /// The signature covers SHA-256 of the JCS form of the proof options followed by SHA-256 of the JCS form of the
+    /// presentation, the eddsa-jcs-2022 hashing a bound signer performs too, so a verifier checks the proof over whatever
+    /// binding it carries. The holder and the signer are separate inputs so a test can present a holder that does not
+    /// control the signing method.
+    /// </summary>
+    /// <param name="holderDid">The DID the presentation's <c>holder</c> member claims.</param>
+    /// <param name="signerVerificationMethodId">The verification method the proof's <c>verificationMethod</c> names.</param>
+    /// <param name="signerPrivateKey">The Ed25519 private key that signs the proof.</param>
+    /// <param name="challenge">The challenge to bind into the proof, or <see langword="null"/> for none.</param>
+    /// <param name="domain">The domain to bind into the proof, or <see langword="null"/> for none.</param>
+    /// <param name="proofCreated">The instant written into the proof's <c>created</c> member.</param>
+    /// <returns>The secured presentation.</returns>
+    public static async Task<DataIntegritySecuredPresentation> SignJcsPresentationAsync(
+        string holderDid,
+        string signerVerificationMethodId,
+        PrivateKeyMemory signerPrivateKey,
+        string? challenge,
+        string? domain,
+        DateTime proofCreated)
+    {
+        VerifiablePresentation unsigned = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            Holder = holderDid
+        };
+
+        DataIntegrityProof newProof = new()
+        {
+            Type = DataIntegrityProof.DataIntegrityProofType,
+            Cryptosuite = EddsaJcs2022CryptosuiteInfo.Instance,
+            Created = DateTimeStampFormat.Format(proofCreated),
+            VerificationMethod = new AuthenticationMethod(signerVerificationMethodId),
+            ProofPurpose = AuthenticationMethod.Purpose
+        };
+
+        if(challenge is not null)
+        {
+            newProof.Challenge = challenge;
+        }
+
+        if(domain is not null)
+        {
+            newProof.Domain = [domain];
+        }
+
+        string proofOptionsSerialized = SerializeProofOptions(ProofOptionsDocument.FromProof(newProof, null));
+        string presentationSerialized = SerializePresentation(unsigned);
+
+        using System.Buffers.IMemoryOwner<byte> hashOwner = BaseMemoryPool.Shared.Rent(64);
+        Memory<byte> hashData = hashOwner.Memory[..64];
+        HashCanonical(proofOptionsSerialized, hashData.Span[..32]);
+        HashCanonical(presentationSerialized, hashData.Span[32..]);
+
+        using Signature signature = await signerPrivateKey.SignAsync(hashData, BaseMemoryPool.Shared).ConfigureAwait(false);
+        newProof.ProofValue = ProofValueCodecs.EncodeBase58Btc(signature.AsReadOnlySpan(), TestSetup.Base58Encoder, BaseMemoryPool.Shared);
+
+        return new DataIntegritySecuredPresentation
+        {
+            Context = unsigned.Context,
+            Type = unsigned.Type,
+            Holder = unsigned.Holder,
+            Proof = [newProof]
+        };
+    }
+
+
+    /// <summary>
+    /// Writes SHA-256 of the JCS form of <paramref name="json"/> into <paramref name="destination"/>, the canonical
+    /// JSON wrapped as JSON-tagged memory rather than materialized as a naked array.
+    /// </summary>
+    /// <param name="json">The JSON text to canonicalize and hash.</param>
+    /// <param name="destination">The 32-byte span receiving the digest.</param>
+    private static void HashCanonical(string json, Span<byte> destination)
+    {
+        var canonical = new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(json), BufferTags.Json);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(canonical.Span, destination.Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+        digest.AsReadOnlySpan().CopyTo(destination);
+    }
+
 
     /// <summary>
     /// An unsigned presentation naming the fixture's holder, with a two-entry <c>@context</c> array.
@@ -356,6 +491,90 @@ internal static class DataIntegrityContextTamperingFixture
     }
 
 
+    /// <summary>
+    /// Gives <paramref name="proof"/> the proof purpose <paramref name="purpose"/>, one no verification relationship
+    /// models, exactly as the JSON proof reader reads a proof declaring it: the purpose string, and the proof's
+    /// verification method carried as an <see cref="UnknownPurposeMethod"/> under that purpose.
+    /// </summary>
+    /// <param name="proof">The proof whose declared purpose is changed in place.</param>
+    /// <param name="purpose">The unmodelled purpose the proof declares.</param>
+    public static void DeclareUnmodelledPurpose(DataIntegrityProof proof, string purpose)
+    {
+        proof.ProofPurpose = purpose;
+        proof.VerificationMethod = new UnknownPurposeMethod(purpose, proof.VerificationMethod!.Id!);
+    }
+
+
+    /// <summary>
+    /// The first proof map of a secured credential's or presentation's JSON: the member itself when <c>proof</c>
+    /// is a single map, its first element when <c>proof</c> is an array (a proof set or chain).
+    /// </summary>
+    /// <param name="securedDocument">The secured document's JSON object.</param>
+    /// <returns>The first proof map, which the caller may change in place.</returns>
+    public static JsonObject FirstProof(JsonObject securedDocument) => securedDocument["proof"] switch
+    {
+        JsonArray proofs => proofs[0]!.AsObject(),
+        JsonObject proof => proof,
+        _ => throw new AssertFailedException("The secured document must carry a proof map.")
+    };
+
+
+    /// <summary>
+    /// Applies one structural change to a secured credential's or presentation's JSON after signing, the way
+    /// an altered document travels the wire, and returns the changed JSON.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="mutation"/> is <c>delete:&lt;path&gt;</c>, <c>set:&lt;path&gt;=&lt;json&gt;</c> or
+    /// <c>setArray:&lt;path&gt;=&lt;json&gt;</c>, the last setting a one-element array that holds the value.
+    /// <c>&lt;path&gt;</c> names a top-level member, or one member of a nested map as <c>parent.member</c>:
+    /// <c>proof.member</c> addresses <see cref="FirstProof"/>, and a parent that is not a map is replaced by a
+    /// map holding only the set member. <c>&lt;json&gt;</c> is any JSON value, a string written with its quotes.
+    /// </remarks>
+    /// <param name="securedDocumentJson">The signed document's JSON text.</param>
+    /// <param name="mutation">The change to apply.</param>
+    /// <returns>The changed document's JSON text.</returns>
+    public static string MutateSecuredDocumentJson(string securedDocumentJson, string mutation)
+    {
+        JsonObject document = JsonNode.Parse(securedDocumentJson)!.AsObject();
+        int operationEnd = mutation.IndexOf(':', StringComparison.Ordinal);
+        string operation = mutation[..operationEnd];
+        string target = mutation[(operationEnd + 1)..];
+        int valueStart = target.IndexOf('=', StringComparison.Ordinal);
+        string path = valueStart < 0 ? target : target[..valueStart];
+        JsonNode? value = valueStart < 0 ? null : JsonNode.Parse(target[(valueStart + 1)..]);
+        int memberStart = path.IndexOf('.', StringComparison.Ordinal);
+        string member = memberStart < 0 ? path : path[(memberStart + 1)..];
+        JsonObject parent = memberStart < 0 ? document : NestedMap(document, path[..memberStart]);
+
+        Action apply = operation switch
+        {
+            "delete" => () => parent.Remove(member),
+            "set" => () => parent[member] = value,
+            "setArray" => () => parent[member] = new JsonArray(value),
+            _ => throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown mutation.")
+        };
+        apply();
+
+        return document.ToJsonString();
+    }
+
+
+    /// <summary>
+    /// The nested map <see cref="MutateSecuredDocumentJson"/> changes for a <c>parent.member</c> path: the first
+    /// proof for <c>proof</c>, the existing map for any other parent, or a new empty map replacing a parent that
+    /// is not a map.
+    /// </summary>
+    /// <param name="document">The document being changed.</param>
+    /// <param name="parentName">The top-level member holding the nested map.</param>
+    /// <returns>The map to change.</returns>
+    private static JsonObject NestedMap(JsonObject document, string parentName) => (parentName, document[parentName]) switch
+    {
+        ("proof", _) => FirstProof(document),
+        (_, JsonObject existing) => existing,
+        _ => (document[parentName] = new JsonObject()).AsObject()
+    };
+
+
     /// <summary>The ecdsa-sd-2023 issuer's verification method DID URL, under <see cref="IssuerControllerDid"/>.</summary>
     public const string EcdsaSdVerificationMethodId = IssuerControllerDid + "#ecdsa-sd-key-1";
 
@@ -421,7 +640,7 @@ internal static class DataIntegrityContextTamperingFixture
             EcdsaSdVerificationMethodId,
             proofCreated,
             SelectiveDisclosureMandatoryPaths,
-            () => RandomNumberGenerator.GetBytes(32),
+            GenerateSelectiveDisclosureHmacKey,
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
@@ -490,7 +709,7 @@ internal static class DataIntegrityContextTamperingFixture
             BbsVerificationMethodId,
             proofCreated,
             SelectiveDisclosureMandatoryPaths,
-            () => RandomNumberGenerator.GetBytes(32),
+            GenerateSelectiveDisclosureHmacKey,
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,

@@ -290,7 +290,7 @@ public static class PresentationDataIntegrityExtensions
                     return VerificationFailureReason.ChallengeMismatch;
                 }
 
-                //§4.2: the given domain "does not contain the same strings as proof.domain
+                //§4.4: the given domain "does not contain the same strings as proof.domain
                 //(treating a single string as a set containing just that string)" is an
                 //error — set equality against the verifier's singleton expectation.
                 if(!DataIntegrityProof.DomainSetEquals(proof.Domain, [expectedDomain]))
@@ -305,6 +305,102 @@ public static class PresentationDataIntegrityExtensions
                 presentation,
                 holderDidDocument,
                 ValidateBinding,
+                canonicalize,
+                contextResolver,
+                knownContext,
+                decodeProofValue,
+                serialize,
+                serializeProofOptions,
+                decoder,
+                computeDigest,
+                memoryPool,
+                context,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+
+        /// <summary>
+        /// Verifies the presentation's Data Integrity proof against the binding values the verifier actually gave,
+        /// running each binding check only when its value was given, as
+        /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4 Verify Proof</see>
+        /// states: "If domain was given, and it does not contain the same strings as proof.domain (treating a single
+        /// string as a set containing just that string), an error MUST be raised" and "If challenge was given, and it
+        /// does not match proof.challenge, an error MUST be raised".
+        /// </summary>
+        /// <param name="holderDidDocument">
+        /// The holder's DID document. The verification method referenced by the proof must
+        /// appear in the document's <c>authentication</c> relationship.
+        /// </param>
+        /// <param name="expectedChallenge">
+        /// The challenge the verifier gave, or <see langword="null"/> when it gave none, in which case the proof's
+        /// <c>challenge</c> is not compared with anything.
+        /// </param>
+        /// <param name="expectedDomain">
+        /// The domain the verifier gave, or <see langword="null"/> when it gave none, in which case the proof's
+        /// <c>domain</c> is not compared with anything.
+        /// </param>
+        /// <param name="canonicalize">The canonicalization function for the cryptosuite's algorithm.</param>
+        /// <param name="contextResolver">
+        /// Optional delegate for resolving JSON-LD contexts. Required for RDFC-based cryptosuites.
+        /// </param>
+        /// <param name="knownContext">
+        /// The application's known <c>@context</c> for the presentation's own <c>@context</c>, checked after the
+        /// proof verifies exactly as the challenge/domain-checked <c>VerifyAsync</c> checks it.
+        /// </param>
+        /// <param name="decodeProofValue">Delegate for decoding the proof value string to signature bytes.</param>
+        /// <param name="serialize">Delegate for serializing presentations.</param>
+        /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
+        /// <param name="decoder">The decoding delegate (e.g., Base58 decoder).</param>
+        /// <param name="computeDigest">Delegate for computing the cryptosuite's digest over the canonicalized data.</param>
+        /// <param name="memoryPool">Memory pool for signature allocation.</param>
+        /// <param name="context">The per-operation exchange context.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The verification result indicating cryptographic validity.</returns>
+        /// <remarks>
+        /// <para>
+        /// The proof purpose, the verification-method resolution through <c>authentication</c>, the cryptographic
+        /// verify and the context validation are the ones <c>VerifyAsync</c> and <c>VerifyLinkedPresentationAsync</c>
+        /// share through <see cref="VerifyCoreAsync"/>; only the binding policy differs. <c>VerifyAsync</c> requires
+        /// both values and <c>VerifyLinkedPresentationAsync</c> refuses a proof that carries either, whereas this path
+        /// serves a verifier that gave one, both or neither, checking the domain before the challenge in the order
+        /// Data Integrity §4.4 lists them. The binding fields are covered by the signature whatever the verifier gave,
+        /// so a proof whose binding was altered still fails the cryptographic verify.
+        /// </para>
+        /// <para>
+        /// A caller that gives neither value binds nothing, so this path accepts whatever <c>challenge</c> and
+        /// <c>domain</c> the proof carries: Data Integrity §4.4 checks each only "if given", and a value the verifier
+        /// never gave has nothing to be compared with. A caller that must not accept a proof whose binding goes
+        /// unchecked, such as the verifier of a statically published presentation, uses
+        /// <c>VerifyLinkedPresentationAsync</c>, the path that refuses a proof carrying either value.
+        /// </para>
+        /// </remarks>
+        public async ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyGivenBindingAsync(
+            DidDocument holderDidDocument,
+            string? expectedChallenge,
+            string? expectedDomain,
+            CanonicalizationDelegate canonicalize,
+            ContextResolverDelegate? contextResolver,
+            Context knownContext,
+            ProofValueDecoderDelegate decodeProofValue,
+            PresentationSerializeDelegate serialize,
+            ProofOptionsSerializeDelegate serializeProofOptions,
+            DecodeDelegate decoder,
+            ComputeDigestDelegate computeDigest,
+            BaseMemoryPool memoryPool,
+            ExchangeContext context,
+            CancellationToken cancellationToken = default)
+        {
+            VerificationFailureReason? ValidateGivenBinding(DataIntegrityProof proof) => (expectedDomain, expectedChallenge) switch
+            {
+                ({ } domain, _) when !DataIntegrityProof.DomainSetEquals(proof.Domain, [domain]) => VerificationFailureReason.DomainMismatch,
+                (_, { } challenge) when !string.Equals(proof.Challenge, challenge, StringComparison.Ordinal) => VerificationFailureReason.ChallengeMismatch,
+                _ => null
+            };
+
+            return await VerifyCoreAsync(
+                presentation,
+                holderDidDocument,
+                ValidateGivenBinding,
                 canonicalize,
                 contextResolver,
                 knownContext,
@@ -450,6 +546,14 @@ public static class PresentationDataIntegrityExtensions
     /// §4.6 deep-equality comparison. Neither this method nor either public verify path above
     /// takes a per-embedded-credential input, so an embedded <see cref="VerifiablePresentation.VerifiableCredential"/>
     /// entry's own <c>@context</c> is not checked here.
+    /// <para>
+    /// The canonicalization is a boundary over <paramref name="canonicalize"/>, a dependency that throws: an
+    /// exception other than a cancellation, such as a context the canonicalizer cannot load or malformed JSON-LD,
+    /// is a failed verification reported as <see cref="VerificationFailureReason.ContextValidationFailed"/>, per
+    /// VC Data Integrity 1.0 §2.4.1, never an escaping exception. A cancellation propagates to the caller, and so
+    /// does one another exception carries in its <see cref="Exception.InnerException"/> chain
+    /// (<see cref="WrappedCancellation"/>), so the caller can tell its own cancellation from a dependency's budget.
+    /// </para>
     /// </remarks>
     private static async ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyCoreAsync(
         DataIntegritySecuredPresentation presentation,
@@ -488,7 +592,7 @@ public static class PresentationDataIntegrityExtensions
             return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingCryptosuite);
         }
 
-        //Data Integrity 1.0 §4.2: when an expected proof purpose is given and does not
+        //Data Integrity 1.0 §4.4: when an expected proof purpose is given and does not
         //match proof.proofPurpose, an error MUST be raised. A presentation proof's
         //purpose is authentication (VC-DM 2.0 §4.13); a proof minted for another
         //purpose (e.g. assertionMethod) must not authenticate a presentation even when
@@ -499,7 +603,8 @@ public static class PresentationDataIntegrityExtensions
         }
 
         var verificationMethodId = proof.VerificationMethod?.Id;
-        if(string.IsNullOrEmpty(verificationMethodId))
+        //Data Integrity §4.4 groups missing type and verificationMethod as proof-verification errors.
+        if(string.IsNullOrEmpty(proof.Type) || string.IsNullOrEmpty(verificationMethodId))
         {
             return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingVerificationMethod);
         }
@@ -543,8 +648,11 @@ public static class PresentationDataIntegrityExtensions
         {
             throw;
         }
-        catch(Exception)
+        catch(Exception exception)
         {
+            //A canonicalizer or context loader that wraps the cancellation of its own fetch reports that cancellation.
+            WrappedCancellation.ThrowIfCarried(exception);
+
             return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ContextValidationFailed);
         }
 
@@ -663,9 +771,12 @@ public static class PresentationDataIntegrityExtensions
     }
 
 
-    //VC Data Integrity 1.0 §4.6 step 3's subtree condition, over the presentation's own subtrees.
-    //Embedded credentials are out of scope (see the remarks on VerifyCoreAsync): only the
-    //presentation's own AdditionalData bag and its terms-of-use entries are walked.
+    /// <summary>
+    /// VC Data Integrity 1.0 §4.6 step 3's subtree condition over the presentation's own subtrees: whether its
+    /// <see cref="VerifiablePresentation.AdditionalData"/> bag or a terms-of-use entry carries an <c>@context</c>.
+    /// Embedded credentials are outside it, as the remarks on <see cref="VerifyCoreAsync"/> explain.
+    /// </summary>
+    /// <param name="presentation">The presentation whose own subtrees are walked.</param>
     private static bool HasNestedContextProperty(VerifiablePresentation presentation)
     {
         return ContextDeepValidation.ContainsContextKey(presentation.AdditionalData)

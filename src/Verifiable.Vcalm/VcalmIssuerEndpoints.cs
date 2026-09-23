@@ -231,8 +231,17 @@ public static class VcalmIssuerEndpoints
         };
 
 
-    //§3.2.1 issuance: validate the issuer-identity match, secure the credential, persist it under its
-    //credentialId, and return the 201 IssueCredentialResponse.
+    /// <summary>
+    /// The §3.2.1 issuance: validates the credential's structure and issuer identity, secures it through
+    /// <see cref="VcalmCredentialIssuanceService"/>, persists it under its credentialId, and returns the 201
+    /// IssueCredentialResponse. A refusal the issuance service makes before signing, such as an existing proof the
+    /// configuration rejects or one lacking a Data Integrity §4.4 mandatory member, is a MALFORMED_VALUE_ERROR 400
+    /// carrying <see cref="VcalmIssuanceResult.RefusalDetail"/>.
+    /// </summary>
+    /// <param name="server">The host, for the time provider and the issuance wiring.</param>
+    /// <param name="request">The parsed issue request.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     private static async ValueTask<ServerHttpResponse> IssueAsync(
         EndpointServer server,
         VcalmIssueCredentialRequest request,
@@ -323,9 +332,9 @@ public static class VcalmIssuerEndpoints
 
         if(!result.IsSuccess)
         {
-            //§3.2.1 Error Handling: the instance is configured to only accept credentials without
-            //existing proofs and a pre-proofed credential was provided.
-            return ExistingProofRejectedRequest();
+            //The issuance service refused the input before any signing: §3.2.1 Error Handling rejected an
+            //existing proof, or an existing proof lacks a Data Integrity §4.4 mandatory member.
+            return MalformedCredentialRequest(result.RefusalDetail!);
         }
 
         string securedCredentialJson = issuance.SigningDescriptors[0].SerializeCredential(result.SecuredCredential!);
@@ -346,9 +355,15 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //§3.2.1 credentialId resolution: the explicit options.credentialId when present, else
-    //auto-populated from credential.id. Sets isConflict when both are present and differ (the
-    //ambiguous-identity case the instance cannot honour).
+    /// <summary>
+    /// The §3.2.1 credentialId resolution: the explicit <c>options.credentialId</c> when present, else auto-populated
+    /// from <c>credential.id</c>.
+    /// </summary>
+    /// <param name="request">The parsed issue request.</param>
+    /// <param name="isConflict">
+    /// <see langword="true"/> when both are present and differ, the ambiguous-identity case the instance cannot honour.
+    /// </param>
+    /// <returns>The id to store the issued credential under, or <see langword="null"/> when there is none.</returns>
     private static string? ResolveCredentialId(VcalmIssueCredentialRequest request, out bool isConflict)
     {
         isConflict = false;
@@ -371,9 +386,13 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //Reads the {id} path segment the §3.2.2 / §3.2.3 matcher extracted and carried on the match
-    //payload. A skin that did template routing (/credentials/{credentialId}) populates the same id on
-    //the request's RouteValues, which the matcher also honours.
+    /// <summary>
+    /// Reads the <c>{id}</c> path segment the §3.2.2 / §3.2.3 matcher extracted and carried on the match payload. A
+    /// skin that did template routing (<c>/credentials/{credentialId}</c>) populates the same id on the request's
+    /// route values, which the matcher also honours.
+    /// </summary>
+    /// <param name="context">The per-request context carrying the match payload.</param>
+    /// <returns>The unescaped credential id, or <see langword="null"/> when the matcher carried none.</returns>
     private static string? ExtractCredentialId(ExchangeContext context)
     {
         if(context.MatchPayload is VcalmCredentialIdMatchPayload payload && !string.IsNullOrEmpty(payload.CredentialId))
@@ -385,7 +404,10 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //Shared exact matcher: the given method to this endpoint's resolved path.
+    /// <summary>The shared exact matcher: the given method to this endpoint's resolved path.</summary>
+    /// <param name="context">The per-request context carrying the incoming request.</param>
+    /// <param name="endpoint">The endpoint whose resolved path the request must equal.</param>
+    /// <param name="method">The HTTP method the request must carry.</param>
     private static ValueTask<MatchPayload?> MatchExact(ExchangeContext context, ServerEndpoint endpoint, string method)
     {
         IncomingRequest? req = context.IncomingRequest;
@@ -408,10 +430,14 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //§3.2.2 / §3.2.3 path matcher: the given method to a path that is the issuer's resolved
-    // /credentials collection path plus a single non-empty trailing {id} segment. The resolved URI is
-    //the collection path; the request adds the id. The route-value extraction in ExtractCredentialId
-    //reads the id the skin parsed.
+    /// <summary>
+    /// The §3.2.2 / §3.2.3 path matcher: the given method to a path that is the issuer's resolved
+    /// <c>/credentials</c> collection path plus a single non-empty trailing <c>{id}</c> segment. The resolved URI is
+    /// the collection path; the request adds the id, which <see cref="ExtractCredentialId"/> reads.
+    /// </summary>
+    /// <param name="context">The per-request context carrying the incoming request.</param>
+    /// <param name="endpoint">The endpoint whose resolved path is the collection path.</param>
+    /// <param name="method">The HTTP method the request must carry.</param>
     private static ValueTask<MatchPayload?> MatchCredentialIdPath(
         ExchangeContext context, ServerEndpoint endpoint, string method)
     {
@@ -445,8 +471,14 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //Whether requestPath equals collectionPath + "/" + <single non-empty segment>. Strips the query
-    //and fragment, then checks the prefix and that exactly one non-empty trailing segment remains.
+    /// <summary>
+    /// Whether <paramref name="requestPath"/> is <paramref name="collectionPath"/> followed by a slash and a single
+    /// non-empty segment: strips the query and fragment, then checks the prefix and that exactly one non-empty
+    /// trailing segment remains.
+    /// </summary>
+    /// <param name="requestPath">The incoming request path.</param>
+    /// <param name="collectionPath">The resolved collection path.</param>
+    /// <param name="segment">The trailing segment when the path matches; otherwise the empty string.</param>
     private static bool TryExtractTrailingSegment(string requestPath, string collectionPath, out string segment)
     {
         segment = string.Empty;
@@ -493,8 +525,14 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //§2.4 request-boundary MUSTs for the §3.2.1 body, mirroring the verifier: a body MUST be present,
-    //within the configured size cap (else 413), and application/json (else 400).
+    /// <summary>
+    /// The §2.4 request-boundary MUSTs for the §3.2.1 body, mirroring the verifier: a body MUST be present, within the
+    /// configured size cap (else 413), and <c>application/json</c> (else 400).
+    /// </summary>
+    /// <param name="context">The per-request context carrying the incoming request.</param>
+    /// <param name="server">The host, for the configured size cap.</param>
+    /// <param name="requestBody">The UTF-8-decoded body when the boundary holds; otherwise the empty string.</param>
+    /// <returns>The refusal response, or <see langword="null"/> when the boundary holds.</returns>
     private static ServerHttpResponse? CheckRequestBoundary(
         ExchangeContext context, EndpointServer server, out string requestBody)
     {
@@ -529,8 +567,11 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //Compares the request content type to application/json case-insensitively, ignoring any media
-    //type parameters (e.g. "; charset=utf-8") per RFC 9110 §8.3.1.
+    /// <summary>
+    /// Compares the request content type to <c>application/json</c> case-insensitively, ignoring any media type
+    /// parameters (e.g. <c>; charset=utf-8</c>) per RFC 9110 §8.3.1.
+    /// </summary>
+    /// <param name="contentType">The request's content type.</param>
     private static bool IsJsonContentType(string contentType)
     {
         if(string.IsNullOrEmpty(contentType))
@@ -545,7 +586,7 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //A §3.2.1 malformed-input 400 (an RFC 9457 ProblemDetail naming the malformed-value type).
+    /// <summary>A §3.2.1 malformed-input 400: an RFC 9457 ProblemDetail naming the malformed-value type.</summary>
     private static ServerHttpResponse MalformedRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -656,8 +697,10 @@ public static class VcalmIssuerEndpoints
     };
 
 
-    //A §3.2.1 / §3.8 MALFORMED_VALUE_ERROR 400 carrying the specific structural reason the credential
-    //could not be issued.
+    /// <summary>
+    /// A §3.2.1 / §3.8 MALFORMED_VALUE_ERROR 400 carrying the specific reason the credential could not be issued.
+    /// </summary>
+    /// <param name="detail">The one-sentence reason, naming no internal diagnostics.</param>
     private static ServerHttpResponse MalformedCredentialRequest(string detail)
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -670,7 +713,7 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //The §2.4 unknown-option 400, carrying the §3.8 UNKNOWN_OPTION_PROVIDED type.
+    /// <summary>The §2.4 unknown-option 400, carrying the §3.8 UNKNOWN_OPTION_PROVIDED type.</summary>
     private static ServerHttpResponse UnknownOptionRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -683,8 +726,9 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //The §3.2.1 issuer-mismatch 400: "The provided value of 'issuer' does not match the expected
-    //configuration."
+    /// <summary>
+    /// The §3.2.1 issuer-mismatch 400: "The provided value of 'issuer' does not match the expected configuration."
+    /// </summary>
     private static ServerHttpResponse IssuerMismatchRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -697,8 +741,10 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //The §3.2.1 both-set credentialId-conflict 400: credentialId and credential.id are both present
-    //and differ, an ambiguous identity the instance cannot honour.
+    /// <summary>
+    /// The §3.2.1 both-set credentialId-conflict 400: <c>credentialId</c> and <c>credential.id</c> are both present and
+    /// differ, an ambiguous identity the instance cannot honour.
+    /// </summary>
     private static ServerHttpResponse CredentialIdConflictRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -712,23 +758,10 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //The §3.2.1 Error-Handling 400: the instance is configured to only accept credentials without
-    //existing proofs and a pre-proofed credential was provided.
-    private static ServerHttpResponse ExistingProofRejectedRequest()
-    {
-        VcalmProblemDetail problem = VcalmProblemDetail.Error(
-            VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
-            "The provided credential already contains a proof, and this issuer instance is configured "
-            + "to only accept credentials without existing proofs (§3.2.1 Error Handling).");
-
-        return ServerHttpResponse.Json(
-            400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
-    }
-
-
-    //The §3.2.2 410 Gone for a soft-deleted credential whose tombstone the store retained
-    //("Gone! There is no data here").
+    /// <summary>
+    /// The §3.2.2 410 Gone for a soft-deleted credential whose tombstone the store retained ("Gone! There is no data
+    /// here").
+    /// </summary>
     private static ServerHttpResponse Gone() =>
         ServerHttpResponse.Json(410, string.Empty, WellKnownMediaTypes.Application.Json);
 }

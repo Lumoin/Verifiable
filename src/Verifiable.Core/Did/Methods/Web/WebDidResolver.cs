@@ -121,6 +121,34 @@ public static class WebDidResolver
     /// Use this when the resolver should return the document directly; use <see cref="ResolveAsync"/> when
     /// the caller fetches the URL itself.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The fetch and the parse are boundaries over dependencies that throw. A transport failure is a
+    /// <see cref="DidResolutionErrors.NotFound"/>; <paramref name="documentDeserializer"/> is a caller-supplied
+    /// delegate over untrusted fetched bytes, so any exception it raises is a document that could not be read,
+    /// refused with <see cref="InvalidDidDocumentReason.Malformed"/>. A cancellation propagates from both, and so does
+    /// one the transport carries inside an exception of its own
+    /// (<see cref="Verifiable.Core.Model.DataIntegrity.WrappedCancellation"/>), so the caller can
+    /// tell its own cancellation from a fetch that ended on its own budget.
+    /// </para>
+    /// <para>
+    /// The fetch is bounded by <see cref="OutboundFetchPolicy.DefaultMaxResponseBytes"/>: the request carries it as
+    /// <see cref="OutboundRequest.MaxResponseBytes"/> for a transport that stops reading once a response exceeds it,
+    /// and a response body over it is not parsed at all but reported as not retrieved, like a transport that
+    /// abandoned the read, so a hostile or misconfigured host cannot make resolution buffer or parse an unbounded
+    /// document.
+    /// </para>
+    /// <para>
+    /// A readable document is checked for conformance before its <c>id</c> is compared with the requested DID,
+    /// the order of <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3</see>
+    /// steps 5 and 6. Conformance is judged against the document's own <c>id</c>: a document without one is refused
+    /// with <see cref="InvalidDidDocumentReason.MissingRequiredProperty"/>, and a document embedding an identifier
+    /// that does not resolve under its own <c>id</c> with <see cref="InvalidDidDocumentReason.EmbeddedIdentifierOutsideDid"/>.
+    /// Only then is that <c>id</c> compared with the requested DID, so a conforming document for another subject is
+    /// refused with <see cref="InvalidDidDocumentReason.IdMismatch"/>, step 6's "If controllerDocument.id does not
+    /// match the controllerDocumentUrl".
+    /// </para>
+    /// </remarks>
     /// <param name="transport">
     /// The application-supplied single-hop transport the guarded fetch drives. <see cref="Verifiable.Core"/>
     /// takes no <c>System.Net.Http</c> dependency, so the network primitive is injected.
@@ -151,7 +179,7 @@ public static class WebDidResolver
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
-            OutboundRequest request = new() { Target = target, Method = "GET" };
+            OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = OutboundFetchPolicy.DefaultMaxResponseBytes };
 
             OutboundFetchResult fetch;
             try
@@ -164,13 +192,23 @@ public static class WebDidResolver
             {
                 throw;
             }
-            catch
+            catch(Exception exception)
             {
-                //A transport/network failure is a not-found from the resolver's perspective.
+                //A transport/network failure is a not-found from the resolver's perspective. A cancellation the
+                //transport carries inside its own exception propagates as that cancellation, as a bare one does.
+                Verifiable.Core.Model.DataIntegrity.WrappedCancellation.ThrowIfCarried(exception);
+
                 return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
             }
 
             if(!fetch.IsFetched || fetch.Response is null || fetch.Response.StatusCode != 200)
+            {
+                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
+            }
+
+            //The authoritative size check: MaxResponseBytes on the request is a hint a transport may not honour, so a
+            //body over the bound is refused here, before the deserializer ever reads it.
+            if(fetch.Response.Body.Memory.Length > OutboundFetchPolicy.DefaultMaxResponseBytes)
             {
                 return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
             }
@@ -189,27 +227,37 @@ public static class WebDidResolver
                 //documentDeserializer is a caller-supplied delegate over untrusted fetched bytes; any failure
                 //to parse them (malformed JSON, an unexpected shape) is an invalid document from the
                 //resolver's perspective, cancellation excepted above.
-                return DidResolutionResult.Failure(DidResolutionErrors.InvalidDidDocument);
+                return InvalidDocument(InvalidDidDocumentReason.Malformed);
             }
 
             if(document is null)
             {
-                return DidResolutionResult.Failure(DidResolutionErrors.InvalidDidDocument);
+                return InvalidDocument(InvalidDidDocumentReason.Malformed);
             }
 
-            //The fetched document MUST declare the requested DID as its subject; a document served at the
-            //did:web location but claiming a different id is rejected.
-            if(!string.Equals(document.Id?.ToString(), did, StringComparison.Ordinal))
+            //Conformance checks run BEFORE the id comparison, per CID 1.0 §3.3 step 5 versus step 6, and they judge
+            //the document against its OWN id: a non-conforming document is refused at step 5 whatever id it names,
+            //and only a document that IS conforming reaches the step 6 comparison with the requested DID below. A
+            //document with no id at all lacks the property every conforming document carries.
+            if(document.Id is null)
             {
-                return DidResolutionResult.Failure(DidResolutionErrors.InvalidDidDocument);
+                return InvalidDocument(InvalidDidDocumentReason.MissingRequiredProperty);
             }
 
             //Key-confusion mitigation: every embedded id (verification methods, relationships, services) and
-            //controller in the resolved document MUST resolve under the requested DID. A verification method
+            //controller in the resolved document MUST resolve under the document's own id. A verification method
             //whose id points at a DIFFERENT DID would let the served document bind another subject's keys.
-            if(!EmbeddedIdentifiersResolveUnderDid(document, did))
+            string documentId = document.Id.ToString();
+            if(!EmbeddedIdentifiersResolveUnderDid(document, documentId))
             {
-                return DidResolutionResult.Failure(DidResolutionErrors.InvalidDidDocument);
+                return InvalidDocument(InvalidDidDocumentReason.EmbeddedIdentifierOutsideDid);
+            }
+
+            //Step 6: the fetched document MUST declare the requested DID as its subject; a conforming document
+            //served at the did:web location but claiming a different id is rejected as an id mismatch.
+            if(!string.Equals(documentId, did, StringComparison.Ordinal))
+            {
+                return InvalidDocument(InvalidDidDocumentReason.IdMismatch);
             }
 
             //did:web §Key Material and Document Handling: @context is OPTIONAL. When present the document is a
@@ -228,26 +276,51 @@ public static class WebDidResolver
     }
 
 
-    //The DID Core §6.3 media type for the JSON-LD representation of a DID document (an @context is present).
+    /// <summary>
+    /// Builds the <see cref="DidErrorTypes.InvalidDidDocument"/> failure for a retrieved <c>did.json</c> that
+    /// <see cref="BuildResolving"/> refuses, stating <paramref name="reason"/> as
+    /// <see cref="DidResolutionResult.InvalidDocumentReason"/> so a caller running
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3</see> can tell a
+    /// document whose id names another subject from a document that does not conform.
+    /// </summary>
+    /// <param name="reason">Why the retrieved document was refused.</param>
+    /// <returns>A failed result with no document and empty document metadata.</returns>
+    private static DidResolutionResult InvalidDocument(InvalidDidDocumentReason reason) => new()
+    {
+        ResolutionMetadata = new DidResolutionMetadata { Error = DidResolutionErrors.InvalidDidDocument },
+        DocumentMetadata = DidDocumentMetadata.Empty,
+        InvalidDocumentReason = reason
+    };
+
+
+    /// <summary>The DID Core §6.3 media type of the JSON-LD representation of a DID document, reported when an <c>@context</c> is present.</summary>
     private const string ContentTypeDidLdJson = "application/did+ld+json";
 
-    //The DID Core §6.2 media type for the plain-JSON representation of a DID document (no @context).
+    /// <summary>The DID Core §6.2 media type of the plain-JSON representation of a DID document, reported when no <c>@context</c> is present.</summary>
     private const string ContentTypeDidJson = "application/did+json";
 
 
-    //Reports whether the document carries any @context at its root. Presence alone selects the JSON-LD
-    //representation; the did:web spec does not require the DID v1 context to be first (only, when present, that
-    //it be contained), so this is a presence check rather than a first-element constraint.
+    /// <summary>
+    /// Reports whether the document carries any <c>@context</c> at its root. Presence alone selects the JSON-LD
+    /// representation; the did:web specification does not require the DID v1 context to be first (only, when
+    /// present, that it be contained), so this is a presence check rather than a first-element constraint.
+    /// </summary>
     private static bool HasContext(DidDocument document)
     {
         return document.Context?.Entries is { Count: > 0 };
     }
 
 
-    //Returns true when every embedded id and controller in the resolved document resolves under the requested
-    //DID: an id is acceptable when it is the DID itself, a DID-relative reference (begins with '#' or '?'), or
-    //an absolute id under the DID (begins with "<did>#" or "<did>?" or equals the DID). Any id that names a
-    //different DID is rejected.
+    /// <summary>
+    /// Returns <see langword="true"/> when every embedded id and controller in the resolved document resolves under
+    /// <paramref name="did"/>, the document's own <c>id</c>: an id is acceptable when it is that DID itself, a
+    /// DID-relative reference (beginning with <c>#</c> or <c>?</c>), or an absolute id under the DID (beginning with
+    /// <c>{did}#</c> or <c>{did}?</c>). Any id that names a different DID fails the check, which
+    /// <see cref="BuildResolving"/> reports as <see cref="InvalidDidDocumentReason.EmbeddedIdentifierOutsideDid"/>;
+    /// whether that own id is the requested DID is the separate, later step 6 comparison.
+    /// </summary>
+    /// <param name="document">The resolved document whose embedded identifiers are checked.</param>
+    /// <param name="did">The document's own <c>id</c>, the DID every embedded identifier must resolve under.</param>
     private static bool EmbeddedIdentifiersResolveUnderDid(DidDocument document, string did)
     {
         if(document.VerificationMethod is not null)
@@ -276,10 +349,12 @@ public static class WebDidResolver
     }
 
 
-    //Checks each verification relationship: an embedded verification method MUST resolve under the DID, and a
-    //reference MUST resolve under the DID. A referenced (non-embedded) id may point at another controller's
-    //DID for cross-controller delegation, so only embedded methods are constrained here; the spec's key-
-    //confusion concern is about embedded key material, which is what binds keys to this subject.
+    /// <summary>
+    /// Checks each verification relationship through <see cref="RelationshipOk"/>. A referenced (non-embedded) id
+    /// may point at another controller's DID for cross-controller delegation, so only embedded verification methods
+    /// are constrained; the key-confusion concern is about embedded key material, which is what binds keys to this
+    /// subject.
+    /// </summary>
     private static bool EmbeddedRelationshipsResolveUnderDid(DidDocument document, string did)
     {
         return RelationshipOk(document.Authentication, did)
@@ -290,6 +365,10 @@ public static class WebDidResolver
     }
 
 
+    /// <summary>
+    /// Returns <see langword="true"/> when every embedded verification method in <paramref name="relationships"/>
+    /// has an id and controller under <paramref name="did"/>; references are left to the caller's own resolution.
+    /// </summary>
     private static bool RelationshipOk(VerificationMethodReference[]? relationships, string did)
     {
         if(relationships is null)
@@ -315,14 +394,21 @@ public static class WebDidResolver
     }
 
 
+    /// <summary>
+    /// Returns <see langword="true"/> when an embedded method's controller is absent (the subject is the
+    /// controller) or equals <paramref name="did"/>, the document's own <c>id</c>, as an embedded method of that
+    /// document requires.
+    /// </summary>
     private static bool ControllerResolvesUnderDid(string? controller, string did)
     {
-        //A controller MAY be absent (the subject is the controller) or MUST equal the DID for an embedded
-        //method served at the DID's own location.
         return string.IsNullOrEmpty(controller) || string.Equals(controller, did, StringComparison.Ordinal);
     }
 
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="id"/> is absent, a DID-relative reference,
+    /// <paramref name="did"/> itself, or an absolute DID URL under it.
+    /// </summary>
     private static bool IdentifierResolvesUnderDid(string? id, string did)
     {
         if(string.IsNullOrEmpty(id))

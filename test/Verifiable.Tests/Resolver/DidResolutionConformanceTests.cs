@@ -180,14 +180,21 @@ internal sealed class DidResolutionConformanceTests
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error);
+        Assert.IsNull(result.InvalidDocumentReason, "Only an invalidDidDocument refusal states an invalid-document reason.");
     }
 
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/did-resolution/#dfn-diddocument">DID Resolution, the didDocument output</see>:
+    /// "The value of id in the resolved DID document MUST be string equal to the DID that was resolved". A method
+    /// resolver that returns a document for a different DID is refused with invalidDidDocument, and the refusal
+    /// states the identifier mismatch so a caller of
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3</see> can convey step 6:
+    /// "If controllerDocument.id does not match the controllerDocumentUrl, an error MUST be raised and SHOULD convey
+    /// an error type of INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID."
+    /// </summary>
     [TestMethod]
     public async Task ResolveRejectsDocumentWhoseIdDoesNotMatchTheResolvedDid()
     {
-        //§4.4 step 5.3 (MUST): the resolved document's id MUST be string equal to the DID that was
-        //resolved. A method resolver that returns a document for a different DID is malformed, so the
-        //generic layer fails closed with invalidDidDocument rather than surfacing the wrong document.
         var document = new DidDocument { Id = new GenericDidMethod("did:example:999") };
         var stub = new DocumentStub(document);
         var resolver = new DidResolver(DidMethodSelectors.FromResolvers((ExampleDidPrefix, stub.ResolveAsync)));
@@ -198,6 +205,7 @@ internal sealed class DidResolutionConformanceTests
         Assert.IsFalse(result.IsSuccessful);
         Assert.IsNull(result.Document);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+        Assert.AreEqual(InvalidDidDocumentReason.IdMismatch, result.InvalidDocumentReason);
     }
 
     /// <summary>
@@ -218,6 +226,7 @@ internal sealed class DidResolutionConformanceTests
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+        Assert.AreEqual(InvalidDidDocumentReason.IdMismatch, result.InvalidDocumentReason);
         Assert.Contains(ExampleDid, result.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal);
         Assert.Contains("did:example:999", result.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal);
     }
@@ -239,6 +248,7 @@ internal sealed class DidResolutionConformanceTests
 
         Assert.IsTrue(result.IsSuccessful);
         Assert.AreEqual("did:example:999", result.Document!.Id?.ToString());
+        Assert.IsNull(result.InvalidDocumentReason, "A successful resolution states no invalid-document reason.");
     }
 
     /// <summary>
@@ -259,6 +269,7 @@ internal sealed class DidResolutionConformanceTests
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+        Assert.AreEqual(InvalidDidDocumentReason.IdMismatch, result.InvalidDocumentReason);
     }
 
     /// <summary>
@@ -278,6 +289,7 @@ internal sealed class DidResolutionConformanceTests
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+        Assert.AreEqual(InvalidDidDocumentReason.IdMismatch, result.InvalidDocumentReason);
     }
 
     /// <summary>
@@ -297,6 +309,7 @@ internal sealed class DidResolutionConformanceTests
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.ResolutionMetadata.Error);
+        Assert.AreEqual(InvalidDidDocumentReason.IdMismatch, result.InvalidDocumentReason);
     }
 
     [TestMethod]

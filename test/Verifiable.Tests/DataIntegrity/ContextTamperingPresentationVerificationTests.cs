@@ -20,14 +20,19 @@ namespace Verifiable.Tests.DataIntegrity;
 [TestClass]
 internal sealed class ContextTamperingPresentationVerificationTests
 {
+    /// <summary>The MSTest context, whose cancellation token bounds every signing and verification.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The fixed <c>created</c> timestamp of every proof these tests sign.</summary>
     private static DateTime ProofCreated { get; } = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
+    /// <summary>The <c>id</c> of the presentation these tests sign and then tamper with.</summary>
     private const string PresentationId = "urn:uuid:3f9d9b2a-6b7e-4e6a-8f0a-context-tampering-vp";
 
+    /// <summary>The challenge the presentation proof binds and the verifier expects.</summary>
     private const string VerifierChallenge = "verifier-challenge-context-tampering";
 
+    /// <summary>The domain the presentation proof binds and the verifier expects.</summary>
     private const string VerifierDomain = "verifier.example";
 
     /// <summary>An unresolvable, unknown context URL appended after signing (variant a).</summary>
@@ -71,6 +76,14 @@ internal sealed class ContextTamperingPresentationVerificationTests
         """;
 
 
+    /// <summary>
+    /// Signs the fixture's presentation with eddsa-rdfc-2022 bound to <see cref="VerifierChallenge"/> and
+    /// <see cref="VerifierDomain"/>, replaces its own <c>@context</c> with <paramref name="tamperedContextJson"/>
+    /// after signing, and verifies the result against the fixture's known contexts.
+    /// </summary>
+    /// <param name="tamperedContextJson">The <c>@context</c> array substituted after signing.</param>
+    /// <param name="cancellationToken">The cancellation token of the running test.</param>
+    /// <returns>The verification result of the tampered presentation.</returns>
     private static async ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyWithTamperedContextAsync(
         string tamperedContextJson,
         CancellationToken cancellationToken)
@@ -185,4 +198,52 @@ internal sealed class ContextTamperingPresentationVerificationTests
 
         Assert.IsFalse(result.IsValid, "VC Data Integrity 1.0 §2.4.1/§4.6: a first context entry other than the VC Data Model base context is not the known order and must be refused.");
     }
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>:
+    /// "If one or more of proof.type, proof.verificationMethod, and proof.proofPurpose does not exist, an error MUST
+    /// be raised and SHOULD convey an error type of PROOF_VERIFICATION_ERROR."
+    /// </summary>
+    /// <remarks>
+    /// This drives the Core presentation verification directly rather than an endpoint, so it proves Core's own
+    /// refusal, which a caller that checks the mandatory members first would otherwise never reach.
+    /// </remarks>
+    [TestMethod]
+    public async Task PresentationProofWithoutTypeIsRejected()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        var unsigned = DataIntegrityContextTamperingFixture.CreateUnsignedPresentationJson(PresentationId);
+        var (signed, holder) = await DataIntegrityContextTamperingFixture.SignPresentationAsync(
+            unsigned,
+            EddsaRdfc2022CryptosuiteInfo.Instance,
+            DataIntegrityContextTamperingFixture.RdfcCanonicalizer,
+            DataIntegrityContextTamperingFixture.ContextResolver,
+            ProofCreated,
+            VerifierChallenge,
+            VerifierDomain,
+            cancellationToken).ConfigureAwait(false);
+
+        signed.Proof![0].Type = null!;
+
+        var result = await signed.VerifyAsync(
+            holder,
+            VerifierChallenge,
+            VerifierDomain,
+            DataIntegrityContextTamperingFixture.RdfcCanonicalizer,
+            DataIntegrityContextTamperingFixture.ContextResolver,
+            DataIntegrityContextTamperingFixture.KnownContext,
+            ProofValueCodecs.DecodeBase58Btc,
+            DataIntegrityContextTamperingFixture.SerializePresentation,
+            DataIntegrityContextTamperingFixture.SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            DataIntegrityContextTamperingFixture.EmptyContext,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "Data Integrity §4.4: a proof without type MUST be refused.");
+        Assert.AreEqual(VerificationFailureReason.MissingVerificationMethod, result.FailureReason,
+            "Missing mandatory proof options share the existing verification failure result.");
+    }
+
 }

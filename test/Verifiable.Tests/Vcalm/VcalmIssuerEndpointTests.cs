@@ -39,57 +39,79 @@ namespace Verifiable.Tests.Vcalm;
 [TestClass]
 internal sealed class VcalmIssuerEndpointTests
 {
+    /// <summary>The MSTest context of the running test; its cancellation token bounds every request in this class.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The fake clock the host and the signing helpers read, fixed at the canonical test epoch.</summary>
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
+    /// <summary>The memory pool the test-side signing and key material rent from.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
+    /// <summary>The client identifier registered with <see cref="TestHostShell"/> for issuer requests.</summary>
     private const string ClientId = "https://issuer.client.test";
+
+    /// <summary>The base URI registered with <see cref="TestHostShell"/> alongside <see cref="ClientId"/>.</summary>
     private static Uri ClientBaseUri { get; } = new("https://issuer.client.test");
 
+    /// <summary>The capabilities the issuer tenant is registered with: the VCALM issuer role only.</summary>
     private static ImmutableHashSet<CapabilityIdentifier> IssuerCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmIssuer);
 
-    //The round-trip tests need the registration to allow both the issuer and the verifier roles so an
-    //issued credential can be POSTed straight to /credentials/verify on the same tenant.
+    /// <summary>
+    /// The issuer and verifier roles on one tenant: the round-trip tests POST an issued credential straight to
+    /// <c>/credentials/verify</c>.
+    /// </summary>
     private static ImmutableHashSet<CapabilityIdentifier> IssuerAndVerifierCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmIssuer, WellKnownVcalmCapabilities.VcalmVerifier);
 
+    /// <summary>The serializer options every credential in this class is written and read with.</summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
+
+    /// <summary>Builds the did:key documents of the test issuers.</summary>
     private static KeyDidBuilder KeyDidBuilder { get; } = new();
 
+    /// <summary>The did:key resolver seam — derives the controller DID document locally with no network.</summary>
     private static DidResolver KeyDidResolverSeam { get; } = new(
         DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(Pool))));
 
+    /// <summary>The RDFC-1.0 canonicalizer the eddsa-rdfc-2022 credentials are signed and verified with.</summary>
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } =
         CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
+    /// <summary>The closed, offline JSON-LD context resolver the RDFC canonicalizer loads contexts through.</summary>
     private static ContextResolverDelegate ContextResolver { get; } =
         CanonicalizationTestUtilities.CreateTestContextResolver();
 
+    /// <summary>Serializes a credential with <see cref="JsonOptions"/>.</summary>
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
+    /// <summary>Deserializes a credential with <see cref="JsonOptions"/>.</summary>
     private static CredentialDeserializeDelegate DeserializeCredential { get; } = serialized =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
 
+    /// <summary>Serializes a proof options document with <see cref="JsonOptions"/>.</summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
+    /// <summary>The per-operation context the test-side signing takes; empty, so no network is reachable.</summary>
     private static ExchangeContext EmptyContext { get; } = [];
 
-    //The configured issuer identity the instance secures credentials as, and its signing key. The
-    //verification method id and DID are derived from the issuer key in RegisterIssuer.
+    /// <summary>
+    /// The key material the test registered: the configured issuer identity's signing keys and the host
+    /// registrations, disposed at cleanup. The verification method id and DID derive from the issuer key.
+    /// </summary>
     private List<IssuerKeyMaterial> RegisteredMaterials { get; } = [];
 
-    //The in-memory issued-credential store the §3.2.2 / §3.2.3 storage seams read and write.
+    /// <summary>The in-memory issued-credential store the §3.2.2 / §3.2.3 storage seams read and write.</summary>
     private ConcurrentDictionary<string, VcalmStoredCredential> CredentialStore { get; } =
         new(StringComparer.Ordinal);
 
 
+    /// <summary>Disposes the key material the test registered, and empties the issued-credential store.</summary>
     [TestCleanup]
     public void DisposeRegisteredMaterials()
     {
@@ -183,7 +205,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "An issuer mismatch is a §3.2.1 malformed-value 400.");
     }
@@ -211,7 +233,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             $"A structurally invalid credential ({reason}) is a §3.2.1 malformed-value 400.");
     }
@@ -278,7 +300,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             $"A credential the signer cannot canonicalize ({reason}) is a §3.8.1 malformed-value 400, not a 500.");
     }
@@ -434,7 +456,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "The Error-Handling config rejects a pre-proofed credential.");
     }
@@ -474,6 +496,70 @@ internal sealed class VcalmIssuerEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." A
+    /// Proof-Chain configuration binds the new proof to the caller's existing proof through <c>previousProof</c>, so an
+    /// existing proof missing a <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity
+    /// §4.4</see> mandatory member is refused with MALFORMED_VALUE_ERROR before any signing — never re-serialized
+    /// and chained onto.
+    /// </summary>
+    [TestMethod]
+    [DataRow("type")]
+    [DataRow("verificationMethod")]
+    [DataRow("proofPurpose")]
+    public async Task ExistingProofWithProofChainConfigRejectsIncompleteInputProof(string member)
+    {
+        await AssertIncompleteExistingProofRefusedAsync(VcalmExistingProofHandling.ProofChain, member).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." A
+    /// Proof-Set configuration places the new proof beside the caller's existing proof, so an existing proof missing a
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> mandatory member is
+    /// refused with MALFORMED_VALUE_ERROR before any signing, exactly as a Proof-Chain configuration refuses it, and
+    /// never issued inside the proof set.
+    /// </summary>
+    [TestMethod]
+    [DataRow("type")]
+    [DataRow("verificationMethod")]
+    [DataRow("proofPurpose")]
+    public async Task ExistingProofWithProofSetConfigRejectsIncompleteInputProof(string member)
+    {
+        await AssertIncompleteExistingProofRefusedAsync(VcalmExistingProofHandling.ProofSet, member).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Issues, over the real wire, a pre-proofed credential whose existing proof lacks <paramref name="member"/> to an
+    /// instance configured with <paramref name="existingProofHandling"/>, and asserts the MALFORMED_VALUE_ERROR 400
+    /// refusal and that nothing was stored under the credential's id.
+    /// </summary>
+    /// <param name="existingProofHandling">The instance's existing-proof configuration.</param>
+    /// <param name="member">The mandatory proof member removed from the existing proof.</param>
+    private async Task AssertIncompleteExistingProofRefusedAsync(VcalmExistingProofHandling existingProofHandling, string member)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app, existingProofHandling: existingProofHandling).ConfigureAwait(false);
+
+        const string CredentialId = "urn:uuid:incomplete-existing-proof";
+        DataIntegritySecuredCredential preProofed = await SignCredentialAsync(ctx, CredentialId).ConfigureAwait(false);
+        string credentialJson = DataIntegrityContextTamperingFixture.MutateSecuredDocumentJson(
+            SerializeCredential(preProofed), "delete:proof." + member);
+        string body = "{\"credential\":" + credentialJson + "}";
+
+        using JsonDocument response = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, body, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            $"An existing proof missing {member} is refused before any signing.");
+        Assert.IsFalse(CredentialStore.ContainsKey(CredentialId), "A refused credential is never issued, so never stored.");
+    }
+
+
+    /// <summary>
     /// §2.4 unknown-option MUST: an <c>options</c> member the issuer does not understand is rejected
     /// with HTTP 400 and the §3.8 <c>UNKNOWN_OPTION_PROVIDED</c> type.
     /// </summary>
@@ -488,7 +574,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.UnknownOptionProvided,
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "An unknown option yields the UNKNOWN_OPTION_PROVIDED type.");
     }
@@ -510,7 +596,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.UnknownOptionProvided,
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "mandatoryPointers on a non-SD instance is the §2.4 inapplicable-option case.");
     }
@@ -705,8 +791,11 @@ internal sealed class VcalmIssuerEndpointTests
     }
 
 
-    //Wires the Data Integrity verification seams so an issued credential can be POSTed to
-    ///credentials/verify in the round-trip tests (the registration already allows both roles).
+    /// <summary>
+    /// Wires the Data Integrity verification seams so an issued credential can be POSTed to
+    /// <c>/credentials/verify</c> in the round-trip tests; the registration already allows both roles.
+    /// </summary>
+    /// <param name="app">The host shell whose VCALM integration is altered.</param>
     private static async Task WireVerificationSeamAsync(TestHostShell app)
     {
         await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
@@ -729,6 +818,9 @@ internal sealed class VcalmIssuerEndpointTests
     }
 
 
+    /// <summary>Builds an eddsa-rdfc-2022 proof descriptor signing with <paramref name="privateKey"/>.</summary>
+    /// <param name="privateKey">The issuer's signing key.</param>
+    /// <param name="verificationMethodId">The verification method id the produced proofs name.</param>
     private static VcalmProofDescriptor BuildDescriptor(PrivateKeyMemory privateKey, string verificationMethodId) =>
         new()
         {
@@ -746,6 +838,7 @@ internal sealed class VcalmIssuerEndpointTests
         };
 
 
+    /// <summary>Creates the issuer's Ed25519 signing key material from the cached test key pair.</summary>
     private static IssuerKeyMaterial CreateIssuerKeyMaterial()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
@@ -755,8 +848,12 @@ internal sealed class VcalmIssuerEndpointTests
     }
 
 
-    //Signs the standard test credential through the Core SignAsync surface so the issue request can
-    //carry a caller-supplied existing proof (the §3.2.1 existing-proof config cases).
+    /// <summary>
+    /// Signs the standard test credential through the Core signing surface, so an issue request can carry a
+    /// caller-supplied existing proof for the §3.2.1 existing-proof configuration cases.
+    /// </summary>
+    /// <param name="ctx">The issuer wiring whose key and verification method sign.</param>
+    /// <param name="credentialId">The credential's <c>id</c>.</param>
     private async Task<DataIntegritySecuredCredential> SignCredentialAsync(IssuerContext ctx, string credentialId)
     {
         VerifiableCredential credential = VcalmWireFixtures.BuildCredential(ctx.IssuerDid, credentialId);
@@ -781,10 +878,21 @@ internal sealed class VcalmIssuerEndpointTests
     }
 
 
+    /// <summary>Serializes the shared test credential for <paramref name="issuerDid"/>.</summary>
+    /// <param name="issuerDid">The credential's issuer.</param>
+    /// <param name="credentialId">The credential's <c>id</c>, or <see langword="null"/> to omit it.</param>
     private static string BuildCredentialJson(string issuerDid, string? credentialId) =>
         SerializeCredential(VcalmWireFixtures.BuildCredential(issuerDid, credentialId));
 
 
+    /// <summary>
+    /// Dispatches a §3.2.1 issue request in process through the host's dispatcher and returns the parsed body after
+    /// checking its status.
+    /// </summary>
+    /// <param name="app">The host shell whose dispatcher serves the request.</param>
+    /// <param name="segment">The issuer tenant segment.</param>
+    /// <param name="body">The issue request body JSON text.</param>
+    /// <param name="expectedStatus">The HTTP status the response must carry.</param>
     private async Task<JsonDocument> PostIssueAsync(
         TestHostShell app, string segment, string body, int expectedStatus)
     {
@@ -803,18 +911,33 @@ internal sealed class VcalmIssuerEndpointTests
     }
 
 
-    //The per-test issuer wiring: the tenant segment, the configured issuer DID, the verification
-    //method id the descriptors sign with, and the key material backing them.
+    /// <summary>
+    /// The per-test issuer wiring: the tenant segment, the configured issuer DID, the verification method id the
+    /// descriptors sign with, and the key material backing them.
+    /// </summary>
+    /// <param name="Segment">The issuer tenant segment.</param>
+    /// <param name="IssuerDid">The configured issuer DID.</param>
+    /// <param name="VerificationMethodId">The verification method id the descriptors sign with.</param>
+    /// <param name="Material">The key material backing the descriptors.</param>
     private sealed record IssuerContext(string Segment, string IssuerDid, string VerificationMethodId, IssuerKeyMaterial Material);
 
 
-    //Owns the issuer's Ed25519 signing key for the test's lifetime; disposed at cleanup. The
-    //host-material wrapper lets the cleanup loop dispose the RegisterClient material uniformly.
+    /// <summary>
+    /// Owns the issuer's Ed25519 signing key for the test's lifetime, disposed at cleanup; the host-material wrapper
+    /// lets the cleanup loop dispose the host registration's material uniformly.
+    /// </summary>
     private sealed class IssuerKeyMaterial: IDisposable
     {
+        /// <summary>The host registration this instance wraps, or <see langword="null"/> for the issuer's own keys.</summary>
         private VerifierKeyMaterial? HostMaterial { get; }
+
+        /// <summary>Whether <see cref="Dispose"/> already ran.</summary>
         private bool isDisposed;
 
+        /// <summary>Creates key material owning <paramref name="signingPublicKey"/> and <paramref name="signingPrivateKey"/>.</summary>
+        /// <param name="signingPublicKey">The public half of the signing key.</param>
+        /// <param name="signingPrivateKey">The private half of the signing key.</param>
+        /// <param name="hostMaterial">The host registration this instance wraps, or <see langword="null"/>.</param>
         public IssuerKeyMaterial(PublicKeyMemory signingPublicKey, PrivateKeyMemory signingPrivateKey, VerifierKeyMaterial? hostMaterial)
         {
             SigningPublicKey = signingPublicKey;
@@ -822,13 +945,18 @@ internal sealed class VcalmIssuerEndpointTests
             this.HostMaterial = hostMaterial;
         }
 
+        /// <summary>The public half of the signing key.</summary>
         public PublicKeyMemory SigningPublicKey { get; }
 
+        /// <summary>The private half of the signing key.</summary>
         public PrivateKeyMemory SigningPrivateKey { get; }
 
+        /// <summary>Wraps a host registration's key material so the cleanup loop disposes it with the others.</summary>
+        /// <param name="hostMaterial">The host registration's key material.</param>
         public static IssuerKeyMaterial Wrapping(VerifierKeyMaterial hostMaterial) =>
             new(hostMaterial.SigningPublicKey, hostMaterial.SigningPrivateKey, hostMaterial);
 
+        /// <summary>Disposes the wrapped host registration, or the owned key halves, once.</summary>
         public void Dispose()
         {
             if(isDisposed)

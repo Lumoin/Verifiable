@@ -23,11 +23,20 @@ public static class VcalmHolderService
     /// The §3.5.1 <c>options.selectivePointers</c> JSON pointers map to the derive surface's requested
     /// <see cref="CredentialPath"/> set.
     /// </summary>
+    /// <remarks>
+    /// The derived proof is built from the base proof's own members, so every base proof must carry the
+    /// <c>type</c>, <c>verificationMethod</c> and <c>proofPurpose</c>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of every
+    /// proof (<see cref="HasCompleteBaseProofs"/>). The §3.5.1 endpoint refuses an input that does not with a 400 through
+    /// that same predicate before it calls this method; any other caller that passes one breaks this method's precondition
+    /// and is refused before any derivation, so no derived credential ever carries a defective proof forward.
+    /// </remarks>
     /// <param name="baseCredential">The base-proofed ecdsa-sd-2023 credential to derive from.</param>
     /// <param name="selectivePointers">The §3.5.1 JSON pointers naming the information to disclose.</param>
     /// <param name="derivation">The application-supplied selective-disclosure derive seams.</param>
     /// <param name="context">The per-request context threaded to the canonicalizer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentException">A proof of <paramref name="baseCredential"/> lacks a Data Integrity §4.4 mandatory member.</exception>
     public static async ValueTask<DataIntegritySecuredCredential> DeriveAsync(
         DataIntegritySecuredCredential baseCredential,
         ImmutableArray<string> selectivePointers,
@@ -38,6 +47,11 @@ public static class VcalmHolderService
         ArgumentNullException.ThrowIfNull(baseCredential);
         ArgumentNullException.ThrowIfNull(derivation);
         ArgumentNullException.ThrowIfNull(context);
+
+        if(!HasCompleteBaseProofs(baseCredential))
+        {
+            throw new ArgumentException(VcalmVerificationService.IncompleteInputProofDetail, nameof(baseCredential));
+        }
 
         //§3.5.1: "selectivePointers [array] An array of JSON pointers specifying the selectively
         //disclosed information." Each pointer becomes a requested CredentialPath; the derive surface
@@ -87,6 +101,15 @@ public static class VcalmHolderService
     /// <param name="signing">The application-supplied presentation-signing seams.</param>
     /// <param name="context">The per-request context threaded to the canonicalizer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <remarks>
+    /// The presentation proof covers the presentation's existing proofs and every contained credential's proofs, so each
+    /// must carry the <c>type</c>, <c>verificationMethod</c> and <c>proofPurpose</c>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of every
+    /// proof (<see cref="HasCompleteInputProofs"/>). The §3.5.2 endpoint refuses an input that does not with a 400 through
+    /// that same predicate before it calls this method; any other caller that passes one breaks this method's precondition
+    /// and is refused before any signing, so no presentation proof ever signs over a defective input proof.
+    /// </remarks>
+    /// <exception cref="ArgumentException">An input proof of <paramref name="presentation"/> lacks a Data Integrity §4.4 mandatory member.</exception>
     public static async ValueTask<DataIntegritySecuredPresentation> CreatePresentationAsync(
         VerifiablePresentation presentation,
         string challenge,
@@ -100,6 +123,11 @@ public static class VcalmHolderService
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(signing);
         ArgumentNullException.ThrowIfNull(context);
+
+        if(!HasCompleteInputProofs(presentation))
+        {
+            throw new ArgumentException(VcalmVerificationService.IncompleteInputProofDetail, nameof(presentation));
+        }
 
         return await presentation.SignAsync(
             signing.PrivateKey,
@@ -120,4 +148,29 @@ public static class VcalmHolderService
             context,
             cancellationToken).ConfigureAwait(false);
     }
+
+
+    /// <summary>
+    /// Whether every proof of a §3.5.1 base credential has the members
+    /// <see cref="VcalmVerificationService.HasMandatoryProofOptions"/> checks, so a derivation never carries a defective
+    /// base proof into the derived credential. The derive endpoint and <see cref="DeriveAsync"/> share this one check.
+    /// </summary>
+    /// <param name="baseCredential">The base credential the derivation starts from.</param>
+    internal static bool HasCompleteBaseProofs(DataIntegritySecuredCredential baseCredential) =>
+        baseCredential.Proof is not { } proofs || proofs.All(VcalmVerificationService.HasMandatoryProofOptions);
+
+
+    /// <summary>
+    /// Whether every proof the §3.5.2 input carries — the presentation's own existing proofs and each contained
+    /// credential's proofs — has the members <see cref="VcalmVerificationService.HasMandatoryProofOptions"/> checks,
+    /// so the presentation proof never signs over a defective input proof. The create-presentation endpoint and
+    /// <see cref="CreatePresentationAsync"/> share this one check.
+    /// </summary>
+    /// <param name="presentation">The presentation the holder is asked to secure.</param>
+    internal static bool HasCompleteInputProofs(VerifiablePresentation presentation) =>
+        (presentation is not DataIntegritySecuredPresentation { Proof: { } presentationProofs }
+            || presentationProofs.All(VcalmVerificationService.HasMandatoryProofOptions))
+        && (presentation.VerifiableCredential is not { } credentials
+            || credentials.All(credential => credential is not DataIntegritySecuredCredential { Proof: { } credentialProofs }
+                || credentialProofs.All(VcalmVerificationService.HasMandatoryProofOptions)));
 }

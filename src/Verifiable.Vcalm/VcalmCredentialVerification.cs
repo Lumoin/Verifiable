@@ -9,7 +9,7 @@ namespace Verifiable.Vcalm;
 /// The application-supplied seams that the VCALM 1.0 §3.3.1 / §3.3.2 verifier composes over the
 /// library's tested Data Integrity verify surface
 /// (<see cref="CredentialDataIntegrityExtensions.VerifyAsync"/> and
-/// <see cref="PresentationDataIntegrityExtensions.VerifyAsync"/>, W3C VC Data Integrity §4.3 Verify
+/// <see cref="PresentationDataIntegrityExtensions.VerifyAsync"/>, W3C VC Data Integrity §4.4 Verify
 /// Proof). Carried on <see cref="VcalmIntegration.VcalmCredentialVerification"/> so the deployment
 /// wires the cryptographic primitives the verifier surface uses.
 /// </summary>
@@ -18,7 +18,7 @@ namespace Verifiable.Vcalm;
 /// The library does not re-roll Data Integrity verification and does not hardcode the
 /// cryptosuite / canonicalization choice (RDFC-1.0 for eddsa-rdfc-2022 / ecdsa-sd-2023, JCS for
 /// eddsa-jcs-2022): the deployment supplies the canonicalizer, the proof-value codec, the
-/// serializers, and the digest function, and the verifier maps the §4.3 verdict onto the §3.8.1
+/// serializers, and the digest function, and the verifier maps the §4.4 verdict onto the §3.8.1
 /// error/warning model. When this whole record is unwired, the verifier reports each embedded-proof
 /// step as unverifiable (fail-closed) rather than asserting a pass.
 /// </para>
@@ -82,8 +82,11 @@ public sealed record VcalmCredentialVerification
 
     /// <summary>
     /// Resolves the schema document a <c>credentialSchema.id</c> URL identifies, or
-    /// <see langword="null"/> to leave schema evaluation unwired. An entry whose schema does not
-    /// resolve evaluates as Indeterminate rather than asserting either conformance outcome.
+    /// <see langword="null"/> to leave schema evaluation unwired. An entry whose schema document the resolver does not
+    /// return evaluates as Indeterminate rather than asserting either conformance outcome; an entry whose fetch ends on
+    /// its own budget, so that the declared schema is never checked, is a MALFORMED_VALUE_ERROR under
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>, an unrecoverable
+    /// data-model condition.
     /// </summary>
     public ResolveVcalmSchemaDocumentDelegate? ResolveSchemaDocument { get; init; }
 
@@ -94,28 +97,49 @@ public sealed record VcalmCredentialVerification
     public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>
+    /// The default of <see cref="MaxProofsPerDocument"/>: eight proofs. A proof set or chain carries one proof per
+    /// signing party, and the Data Integrity examples of both show two or three, so eight admits every such document
+    /// with room to spare while bounding what one document can cost: each proof is a controller document resolution,
+    /// a canonicalization of the document view it covers, and a signature check, and the views a chain's links cover
+    /// grow with the chain.
+    /// </summary>
+    public static int DefaultMaxProofsPerDocument { get; } = 8;
+
+    /// <summary>
+    /// The most proofs one credential or presentation may carry. A document carrying more is refused before any of
+    /// its proofs is resolved, transformed or checked, with the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// <see cref="VcalmProblemTypes.RangeError"/>, "A provided value is outside of the expected range of an associated
+    /// value". Defaults to <see cref="DefaultMaxProofsPerDocument"/>.
+    /// </summary>
+    public int MaxProofsPerDocument { get; init; } = DefaultMaxProofsPerDocument;
+
+    /// <summary>
     /// Parses an ecdsa-sd-2023 DERIVED proof value (a <c>u</c>-prefixed base64url multibase wrapping a
     /// CBOR <c>0xd9 0x5d 0x01</c>-tagged <c>[baseSignature, ephemeralPublicKey, signatures, labelMap,
     /// mandatoryIndexes]</c>) into its components — the parser
     /// <c>DataIntegritySecuredCredential.VerifyDerivedProofAsync</c> consumes
-    /// (W3C VC-DI-ECDSA §3.4.7 <c>parseDerivedProofValue</c>). When unset, an ecdsa-sd-2023 derived
-    /// credential cannot be selectively-disclosure-verified and falls through to the generic Data
-    /// Integrity path (which reports it unverifiable) — non-SD deployments are unaffected.
+    /// (<see href="https://www.w3.org/TR/vc-di-ecdsa/#parsederivedproofvalue">W3C VC-DI-ECDSA §3.5.8
+    /// parseDerivedProofValue</see>). When unset, an ecdsa-sd-2023 derived
+    /// credential reports <see cref="VcalmProblemTypes.UnsupportedSecuringMechanism"/> because the
+    /// selective-disclosure verifier is unavailable.
     /// </summary>
     public ParseDerivedProofDelegate? ParseDerivedProof { get; init; }
 
     /// <summary>
     /// The ECDSA verification function the ecdsa-sd-2023 derived-proof verifier
     /// (<c>DataIntegritySecuredCredential.VerifyDerivedProofAsync</c>) calls to check the
-    /// issuer's base signature and each disclosed-statement signature (W3C VC-DI-ECDSA §3.4.8
-    /// <c>verifyDerivedProof</c>). Required alongside <see cref="ParseDerivedProof"/> for SD
+    /// issuer's base signature and each disclosed-statement signature
+    /// (<see href="https://www.w3.org/TR/vc-di-ecdsa/#verify-derived-proof-ecdsa-sd-2023">W3C VC-DI-ECDSA §3.6.7
+    /// Verify Derived Proof</see>). Required alongside <see cref="ParseDerivedProof"/> for SD
     /// verification; <see langword="null"/> on a non-SD deployment.
     /// </summary>
     public VerificationDelegate? VerifyDerivedSignature { get; init; }
 
     /// <summary>
     /// The base64url byte encoder the ecdsa-sd-2023 derived-proof parser composes to reconstruct the
-    /// label map's string values from the CBOR-stored raw bytes (W3C VC-DI-ECDSA §3.4.7). Required
+    /// label map's string values from the CBOR-stored raw bytes (W3C VC-DI-ECDSA §3.5.8, through §3.5.6
+    /// decompressLabelMap). Required
     /// alongside <see cref="ParseDerivedProof"/> for SD verification; <see langword="null"/> on a
     /// non-SD deployment.
     /// </summary>
@@ -123,7 +147,7 @@ public sealed record VcalmCredentialVerification
 
     /// <summary>
     /// The base64url byte decoder the ecdsa-sd-2023 derived-proof parser composes to decode the
-    /// <c>u</c>-prefixed multibase proof value into its CBOR bytes (W3C VC-DI-ECDSA §3.4.7). This is a
+    /// <c>u</c>-prefixed multibase proof value into its CBOR bytes (W3C VC-DI-ECDSA §3.5.8). This is a
     /// base64url decoder, distinct from <see cref="Decoder"/> (the base58 decoder the base/simple
     /// proof-value codec composes). Required alongside <see cref="ParseDerivedProof"/> for SD
     /// verification; <see langword="null"/> on a non-SD deployment.

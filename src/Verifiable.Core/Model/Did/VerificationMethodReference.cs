@@ -150,7 +150,19 @@ public abstract class VerificationMethodReference: IEquatable<VerificationMethod
     }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Whether <paramref name="other"/> is the same reference: the same purpose type, the same <see cref="PurposeName"/>
+    /// compared ordinally, and the same referenced or embedded verification method.
+    /// </summary>
+    /// <remarks>
+    /// The purpose type alone fixes the purpose of every relationship subtype, but <see cref="UnknownPurposeMethod"/>
+    /// carries whatever purpose the proof declared, so two references naming one method under different purposes are
+    /// different references: <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>
+    /// compares <c>proof.proofPurpose</c> with the expected purpose, which makes the purpose part of what the reference
+    /// asserts.
+    /// </remarks>
+    /// <param name="other">The reference to compare with.</param>
+    /// <returns><see langword="true"/> when both references are the same reference.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(VerificationMethodReference? other)
     {
@@ -170,7 +182,8 @@ public abstract class VerificationMethodReference: IEquatable<VerificationMethod
             return false;
         }
 
-        return string.Equals(VerificationReferenceId, other.VerificationReferenceId, StringComparison.Ordinal)
+        return string.Equals(PurposeName, other.PurposeName, StringComparison.Ordinal)
+            && string.Equals(VerificationReferenceId, other.VerificationReferenceId, StringComparison.Ordinal)
             && Equals(EmbeddedVerification, other.EmbeddedVerification);
     }
 
@@ -187,6 +200,7 @@ public abstract class VerificationMethodReference: IEquatable<VerificationMethod
     {
         var hash = new HashCode();
         hash.Add(GetType());
+        hash.Add(PurposeName, StringComparer.Ordinal);
         hash.Add(VerificationReferenceId, StringComparer.Ordinal);
         hash.Add(EmbeddedVerification);
 

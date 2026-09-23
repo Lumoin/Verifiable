@@ -40,22 +40,6 @@ namespace Verifiable.Core.Did.Methods.WebVh;
 public static class WebVhDidResolver
 {
     /// <summary>
-    /// An upper bound on the fetched <c>did.jsonl</c> size, so a malicious or misconfigured host cannot exhaust
-    /// resolver memory by serving an unbounded DID Log (did:webvh v1.0: resolvers SHOULD guard against
-    /// resource-exhaustion during retrieval). The bound is generous relative to a real DID Log (each entry is a
-    /// single JSON line) yet rejects an obviously hostile payload.
-    /// </summary>
-    private const int MaxDidLogBytes = 8 * 1024 * 1024;
-
-    /// <summary>
-    /// An upper bound on the fetched <c>did-witness.json</c> size, mirroring <see cref="MaxDidLogBytes"/> so a
-    /// malicious or MITM'd witness host cannot exhaust resolver memory/CPU by serving an unbounded witness file
-    /// (verifying every entry × proof is JCS-canonicalize + 2×SHA-256 + Ed25519). The size cap bounds the proof
-    /// count too, since each proof costs bytes. Enforced before the body is copied into a pooled buffer.
-    /// </summary>
-    private const int MaxWitnessFileBytes = 8 * 1024 * 1024;
-
-    /// <summary>
     /// Computes the HTTPS <c>did.jsonl</c> DID Log location for a <c>did:webvh</c> identifier.
     /// </summary>
     /// <param name="didWebVhIdentifier">A valid <c>did:webvh</c> identifier string.</param>
@@ -356,7 +340,7 @@ public static class WebVhDidResolver
             //Bound the fetched DID Log so an oversized payload is rejected before it is parsed, rather than
             //driving unbounded allocation through the entry parser (did:webvh v1.0: guard retrieval against
             //resource exhaustion).
-            if(logResponse.Body.Memory.Length > MaxDidLogBytes)
+            if(logResponse.Body.Memory.Length > OutboundFetchPolicy.DefaultMaxResponseBytes)
             {
                 return DidResolutionResult.Failure(InvalidDid("The did:webvh DID Log exceeds the maximum permitted size."));
             }
@@ -678,7 +662,7 @@ public static class WebVhDidResolver
 
 
     /// <summary>
-    /// Drives one guarded fetch for the DID Log, bounded by <see cref="MaxDidLogBytes"/>.
+    /// Drives one guarded fetch for the DID Log, bounded by <see cref="OutboundFetchPolicy.DefaultMaxResponseBytes"/>.
     /// </summary>
     /// <param name="target">The DID Log URL to fetch.</param>
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
@@ -690,7 +674,7 @@ public static class WebVhDidResolver
         OutboundTransportDelegate transport,
         ExchangeContext context,
         CancellationToken cancellationToken)
-        => TryFetchAsync(target, MaxDidLogBytes, transport, context, cancellationToken);
+        => TryFetchAsync(target, OutboundFetchPolicy.DefaultMaxResponseBytes, transport, context, cancellationToken);
 
 
     /// <summary>
@@ -814,7 +798,7 @@ public static class WebVhDidResolver
         //Witnesses are active, so an absent or unsuccessful did-witness.json fails resolution closed: the
         //entries requiring witnessing cannot be confirmed without it. The three ways the fetch can fail are
         //told apart in the Detail exactly as the primary DID Log fetch tells them apart.
-        WebVhFetchOutcome witnessFetch = await TryFetchAsync(witnessTarget, MaxWitnessFileBytes, transport, context, cancellationToken).ConfigureAwait(false);
+        WebVhFetchOutcome witnessFetch = await TryFetchAsync(witnessTarget, OutboundFetchPolicy.DefaultMaxResponseBytes, transport, context, cancellationToken).ConfigureAwait(false);
         if(witnessFetch.Response is not { } fetchedWitnessResponse)
         {
             return InvalidDid(DescribeWitnessFetchFailure(witnessFetch.Cause!.Value, witnessFetch.StatusCode));
@@ -832,9 +816,11 @@ public static class WebVhDidResolver
         ReadOnlyMemory<byte> body = fetchedWitnessResponse.Body.Memory;
         int length = body.Length;
 
-        //Bound the witness file like the DID Log (MaxWitnessFileBytes) before any allocation or verification,
-        //so an oversized did-witness.json is rejected rather than driving unbounded memory/CPU.
-        if(length > MaxWitnessFileBytes)
+        //Bound the witness file like the DID Log before any allocation or verification, so an oversized or MITM'd
+        //did-witness.json is rejected rather than driving unbounded memory and CPU: verifying every entry and proof is
+        //a JCS canonicalization, two SHA-256 digests and an Ed25519 check, and the size bound caps the proof count too,
+        //since each proof costs bytes.
+        if(length > OutboundFetchPolicy.DefaultMaxResponseBytes)
         {
             return InvalidDid("The did:webvh did-witness.json exceeds the maximum permitted size.");
         }

@@ -137,6 +137,16 @@ public static class VcalmHolderEndpoints
                     return (null, NonDerivableRequest());
                 }
 
+                //§2.4: "Implementations MUST throw an error if an endpoint receives data ... that it does not
+                //understand or know how to process." The derived proof is built from the base proof's own
+                //members, so a base proof lacking a Data Integrity §4.4 mandatory member is refused before
+                //any signing instead of being carried into the derived credential, through the same check the
+                //holder service itself enforces.
+                if(!VcalmHolderService.HasCompleteBaseProofs(request.Credential))
+                {
+                    return (null, IncompleteInputProofRequest());
+                }
+
                 return (null, await DeriveAsync(server, request, context, ct).ConfigureAwait(false));
             },
 
@@ -187,6 +197,16 @@ public static class VcalmHolderEndpoints
                 if(request.Presentation is null)
                 {
                     return (null, MalformedRequest());
+                }
+
+                //§2.4: "Implementations MUST throw an error if an endpoint receives data ... that it does not
+                //understand or know how to process." The presentation proof covers the presentation's existing
+                //proofs and every contained credential's proofs, so an input proof lacking a Data Integrity §4.4
+                //mandatory member is refused before any signing instead of being re-serialized and signed over,
+                //through the same check the holder service itself enforces.
+                if(!VcalmHolderService.HasCompleteInputProofs(request.Presentation))
+                {
+                    return (null, IncompleteInputProofRequest());
                 }
 
                 //§3.5.2: a presentation proof binds an anti-replay challenge and a domain (VC-DM 2.0
@@ -352,9 +372,15 @@ public static class VcalmHolderEndpoints
         };
 
 
-    //§3.5.1 derive: compose the selective-disclosure derive surface and return the 201 derived
-    //credential. The §3.5.1 201 body is the derived credential object itself (the spec's response form
-    //is "@context...id...type...issuer...proof"), not a wrapping {verifiableCredential} envelope.
+    /// <summary>
+    /// The §3.5.1 derive: composes the selective-disclosure derive surface and returns the 201 derived credential.
+    /// The §3.5.1 201 body is the derived credential object itself (the specification's response form is
+    /// "@context...id...type...issuer...proof"), not a wrapping <c>{verifiableCredential}</c> envelope.
+    /// </summary>
+    /// <param name="server">The host, for the derivation wiring.</param>
+    /// <param name="request">The parsed derive request.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     private static async ValueTask<ServerHttpResponse> DeriveAsync(
         EndpointServer server,
         VcalmDeriveCredentialRequest request,
@@ -406,9 +432,15 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //§3.5.2 create-presentation: bind the request's challenge / domain / verificationMethod / created
-    //(falling back to instance defaults), sign the presentation, persist it under its id, and return
-    //the 201 {verifiablePresentation} body.
+    /// <summary>
+    /// The §3.5.2 create-presentation: binds the request's challenge, domain, verificationMethod and created (falling
+    /// back to instance defaults), signs the presentation, persists it under its id, and returns the 201
+    /// <c>{verifiablePresentation}</c> body.
+    /// </summary>
+    /// <param name="server">The host, for the time provider, the identifier seam and the signing wiring.</param>
+    /// <param name="request">The parsed create-presentation request.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     private static async ValueTask<ServerHttpResponse> CreatePresentationAsync(
         EndpointServer server,
         VcalmCreatePresentationRequest request,
@@ -474,8 +506,12 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //§3.5.2 created parsing: an ISO 8601 timestamp the request supplied. A value that does not parse
-    //falls back to the instance clock (the §3.5.2 default).
+    /// <summary>
+    /// The §3.5.2 <c>created</c> parsing: an ISO 8601 timestamp the request supplied. A value that does not parse
+    /// falls back to the instance clock (the §3.5.2 default).
+    /// </summary>
+    /// <param name="created">The request's <c>options.created</c>, or <see langword="null"/>.</param>
+    /// <param name="parsed">The UTC instant when parsing succeeds.</param>
     private static bool TryParseCreated(string? created, out DateTime parsed)
     {
         parsed = default;
@@ -499,9 +535,13 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //Reads the {id} path segment the §3.5.4 / §3.5.5 matcher extracted and carried on the match
-    //payload. A skin that did template routing (/presentations/{presentationId}) populates the same id
-    //on the request's RouteValues, which the matcher also honours.
+    /// <summary>
+    /// Reads the <c>{id}</c> path segment the §3.5.4 / §3.5.5 matcher extracted and carried on the match payload. A
+    /// skin that did template routing (<c>/presentations/{presentationId}</c>) populates the same id on the request's
+    /// route values, which the matcher also honours.
+    /// </summary>
+    /// <param name="context">The per-request context carrying the match payload.</param>
+    /// <returns>The unescaped presentation id, or <see langword="null"/> when the matcher carried none.</returns>
     private static string? ExtractPresentationId(ExchangeContext context)
     {
         if(context.MatchPayload is VcalmPresentationIdMatchPayload payload && !string.IsNullOrEmpty(payload.PresentationId))
@@ -513,7 +553,10 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //Shared exact matcher: the given method to this endpoint's resolved path.
+    /// <summary>The shared exact matcher: the given method to this endpoint's resolved path.</summary>
+    /// <param name="context">The per-request context carrying the incoming request.</param>
+    /// <param name="endpoint">The endpoint whose resolved path the request must equal.</param>
+    /// <param name="method">The HTTP method the request must carry.</param>
     private static ValueTask<MatchPayload?> MatchExact(ExchangeContext context, ServerEndpoint endpoint, string method)
     {
         IncomingRequest? req = context.IncomingRequest;
@@ -536,10 +579,15 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //§3.5.4 / §3.5.5 path matcher: the given method to a path that is the holder's resolved
-    // /presentations collection path plus a single non-empty trailing {id} segment. The resolved URI
-    //is the collection path; the request adds the id. A skin that did template routing populates the
-    //id on RouteValues; honour it first.
+    /// <summary>
+    /// The §3.5.4 / §3.5.5 path matcher: the given method to a path that is the holder's resolved
+    /// <c>/presentations</c> collection path plus a single non-empty trailing <c>{id}</c> segment. The resolved URI is
+    /// the collection path; the request adds the id. A skin that did template routing populates the id on the route
+    /// values, which are honoured first.
+    /// </summary>
+    /// <param name="context">The per-request context carrying the incoming request.</param>
+    /// <param name="endpoint">The endpoint whose resolved path is the collection path.</param>
+    /// <param name="method">The HTTP method the request must carry.</param>
     private static ValueTask<MatchPayload?> MatchPresentationIdPath(
         ExchangeContext context, ServerEndpoint endpoint, string method)
     {
@@ -570,8 +618,14 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //Whether requestPath equals collectionPath + "/" + <single non-empty segment>. Strips the query
-    //and fragment, then checks the prefix and that exactly one non-empty trailing segment remains.
+    /// <summary>
+    /// Whether <paramref name="requestPath"/> is <paramref name="collectionPath"/> followed by a slash and a single
+    /// non-empty segment: strips the query and fragment, then checks the prefix and that exactly one non-empty
+    /// trailing segment remains.
+    /// </summary>
+    /// <param name="requestPath">The incoming request path.</param>
+    /// <param name="collectionPath">The resolved collection path.</param>
+    /// <param name="segment">The trailing segment when the path matches; otherwise the empty string.</param>
     private static bool TryExtractTrailingSegment(string requestPath, string collectionPath, out string segment)
     {
         segment = string.Empty;
@@ -618,8 +672,14 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //§2.4 request-boundary MUSTs for the §3.5.1 / §3.5.2 body, mirroring the issuer / verifier: a body
-    //MUST be present, within the configured size cap (else 413), and application/json (else 400).
+    /// <summary>
+    /// The §2.4 request-boundary MUSTs for the §3.5.1 / §3.5.2 body, mirroring the issuer and the verifier: a body
+    /// MUST be present, within the configured size cap (else 413), and <c>application/json</c> (else 400).
+    /// </summary>
+    /// <param name="context">The per-request context carrying the incoming request.</param>
+    /// <param name="server">The host, for the configured size cap.</param>
+    /// <param name="requestBody">The UTF-8-decoded body when the boundary holds; otherwise the empty string.</param>
+    /// <returns>The refusal response, or <see langword="null"/> when the boundary holds.</returns>
     private static ServerHttpResponse? CheckRequestBoundary(
         ExchangeContext context, EndpointServer server, out string requestBody)
     {
@@ -654,8 +714,11 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //Compares the request content type to application/json case-insensitively, ignoring any media
-    //type parameters (e.g. "; charset=utf-8") per RFC 9110 §8.3.1.
+    /// <summary>
+    /// Compares the request content type to <c>application/json</c> case-insensitively, ignoring any media type
+    /// parameters (e.g. <c>; charset=utf-8</c>) per RFC 9110 §8.3.1.
+    /// </summary>
+    /// <param name="contentType">The request's content type.</param>
     private static bool IsJsonContentType(string contentType)
     {
         if(string.IsNullOrEmpty(contentType))
@@ -670,7 +733,7 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //A §3.5.1 / §3.5.2 malformed-input 400 (an RFC 9457 ProblemDetail naming the malformed-value type).
+    /// <summary>A §3.5.1 / §3.5.2 malformed-input 400: an RFC 9457 ProblemDetail naming the malformed-value type.</summary>
     private static ServerHttpResponse MalformedRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -683,7 +746,7 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //The §2.4 unknown-option 400, carrying the §3.8 UNKNOWN_OPTION_PROVIDED type.
+    /// <summary>The §2.4 unknown-option 400, carrying the §3.8 UNKNOWN_OPTION_PROVIDED type.</summary>
     private static ServerHttpResponse UnknownOptionRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -696,8 +759,10 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //The §3.5.1 non-derivable-credential 400: the supplied credential carries no ecdsa-sd-2023 base
-    //proof to derive from.
+    /// <summary>
+    /// The §3.5.1 non-derivable-credential 400: the supplied credential carries no ecdsa-sd-2023 base proof to derive
+    /// from.
+    /// </summary>
     private static ServerHttpResponse NonDerivableRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -711,8 +776,28 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //The §3.5.2 missing-challenge-or-domain 400: a presentation proof binds an anti-replay challenge
-    //and a domain (VC-DM 2.0 §4.13); a request omitting either cannot produce a valid proof.
+    /// <summary>
+    /// The §3.5.1 / §3.5.2 incomplete-input-proof 400: an input proof lacks a member
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of
+    /// every proof, refused before any signing under the §2.4 rule that an endpoint MUST throw an error on data
+    /// it does not understand or know how to process.
+    /// </summary>
+    private static ServerHttpResponse IncompleteInputProofRequest()
+    {
+        VcalmProblemDetail problem = VcalmProblemDetail.Error(
+            VcalmProblemTypes.MalformedValueError,
+            "MALFORMED_VALUE_ERROR",
+            VcalmVerificationService.IncompleteInputProofDetail);
+
+        return ServerHttpResponse.Json(
+            400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
+    }
+
+
+    /// <summary>
+    /// The §3.5.2 missing-challenge-or-domain 400: a presentation proof binds an anti-replay challenge and a domain
+    /// (VC Data Model 2.0 §4.13), so a request omitting either cannot produce a valid proof.
+    /// </summary>
     private static ServerHttpResponse MissingChallengeOrDomainRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -726,11 +811,13 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //The §3.4.3.2 channel-domain-mismatch 400: the request asked the holder to bind a verifier domain
-    //that does not match the current communication channel the deployment staged on the context. That
-    //is a relayed / replayed presentation request, so the holder refuses to sign — the anti-replay MUST
-    //("the holder MUST check that the domain value matches the domain of the verifier it is
-    //communicating with"). Carried as the §3.8 MALFORMED_VALUE_ERROR request-refusal family.
+    /// <summary>
+    /// The §3.4.3.2 channel-domain-mismatch 400: the request asked the holder to bind a verifier domain that does not
+    /// match the current communication channel the deployment staged on the context. That is a relayed or replayed
+    /// presentation request, so the holder refuses to sign, the anti-replay MUST ("the holder MUST check that the
+    /// domain value matches the domain of the verifier it is communicating with"), carried as the §3.8
+    /// MALFORMED_VALUE_ERROR request-refusal family.
+    /// </summary>
     private static ServerHttpResponse ChannelDomainMismatchRequest()
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
@@ -745,8 +832,10 @@ public static class VcalmHolderEndpoints
     }
 
 
-    //The §3.5.4 410 Gone for a soft-deleted presentation whose tombstone the store retained ("Gone!
-    //There is no data here").
+    /// <summary>
+    /// The §3.5.4 410 Gone for a soft-deleted presentation whose tombstone the store retained ("Gone! There is no data
+    /// here").
+    /// </summary>
     private static ServerHttpResponse Gone() =>
         ServerHttpResponse.Json(410, string.Empty, WellKnownMediaTypes.Application.Json);
 }

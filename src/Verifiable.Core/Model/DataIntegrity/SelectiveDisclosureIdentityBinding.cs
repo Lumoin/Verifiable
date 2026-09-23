@@ -16,7 +16,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <remarks>
 /// The two steps below are fail-closed short-circuits BEFORE any cryptographic check runs:
 /// <list type="number">
-/// <item><description>The proof's declared <c>proofPurpose</c> must be <c>assertionMethod</c> (Data Integrity 1.0 §4.2 — checked before resolving anything).</description></item>
+/// <item><description>The proof's declared <c>proofPurpose</c> must be <c>assertionMethod</c> (Data Integrity 1.0 §4.4 — checked before resolving anything).</description></item>
 /// <item><description>The proof's <c>verificationMethod</c> must resolve under the issuer document's <c>assertionMethod</c> relationship, not merely the flat verification-method array.</description></item>
 /// </list>
 /// Only after the caller has run the cryptographic check against the resolved method's own key

@@ -43,65 +43,89 @@ namespace Verifiable.Tests.Vcalm;
 [TestClass]
 internal sealed class VcalmStatusEndpointTests
 {
+    /// <summary>The MSTest context, whose cancellation token bounds every dispatch these tests make.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The host's clock, fixed at the canonical epoch.</summary>
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
+    /// <summary>The pool the did:key resolver, the signing and the status lists rent from.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
+    /// <summary>The client identifier the status tenant is registered under.</summary>
     private const string ClientId = "https://status.client.test";
+
+    /// <summary>The base URI the status tenant is registered under.</summary>
     private static Uri ClientBaseUri { get; } = new("https://status.client.test");
 
-    //The §C.3 update + status checking exercise all three roles on the same tenant: issuer (mint the
-    //credential and the status list), status (set the bit), verifier (read the warning).
+    /// <summary>
+    /// The §C.3 update + status checking exercise all three roles on the same tenant: issuer (mint the
+    /// credential and the status list), status (set the bit), verifier (read the warning).
+    /// </summary>
     private static ImmutableHashSet<CapabilityIdentifier> AllRoleCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmIssuer,
             WellKnownVcalmCapabilities.VcalmVerifier,
             WellKnownVcalmCapabilities.VcalmStatus);
 
+    /// <summary>The serializer options every JSON delegate of these tests uses.</summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
+
+    /// <summary>Builds the issuer's did:key document from its public key.</summary>
     private static KeyDidBuilder KeyDidBuilder { get; } = new();
 
+    /// <summary>The DID resolver the verifier resolves the issuer with: did:key, resolved locally.</summary>
     private static DidResolver KeyDidResolverSeam { get; } = new(
         DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(Pool))));
 
+    /// <summary>The RDFC-1.0 canonicalizer the eddsa-rdfc-2022 signing and verification share.</summary>
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } =
         CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
+    /// <summary>The closed test context resolver the canonicalizer loads JSON-LD contexts through.</summary>
     private static ContextResolverDelegate ContextResolver { get; } =
         CanonicalizationTestUtilities.CreateTestContextResolver();
 
+    /// <summary>Serializes a credential for issuance, verification and the wire.</summary>
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
+    /// <summary>Reads a credential back from its JSON.</summary>
     private static CredentialDeserializeDelegate DeserializeCredential { get; } = serialized =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
 
+    /// <summary>Serializes the proof options a Data Integrity proof hashes.</summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
+    /// <summary>The standard status-list-credential url every credentialStatus in these tests references.</summary>
     private const string StatusListId = "https://status.example/status-lists/1";
 
-    //The standard status-list-credential url every credentialStatus in these tests references.
+    /// <summary>The standard <c>statusPurpose</c> value every credentialStatus in these tests declares.</summary>
     private const string RevocationPurpose = "revocation";
 
+    /// <summary>The tenant registrations and signing keys of the running test, disposed after it.</summary>
     private List<StatusKeyMaterial> RegisteredMaterials { get; } = [];
 
-    //The in-memory status-list store the §C.1 / §C.2 seams read and write (id → secured VC JSON).
+    /// <summary>The in-memory status-list store the §C.1 / §C.2 seams read and write (id → secured VC JSON).</summary>
     private ConcurrentDictionary<string, string> StatusListStore { get; } = new(StringComparer.Ordinal);
 
-    //The live decoded status lists the §C.3 update seam mutates and the resolver seam reads. Keyed by
-    //statusListCredential url. The §C.3 seam sets / clears the bit here; the resolver hands the
-    //verifier a fresh copy it owns and disposes.
+    /// <summary>
+    /// The live decoded status lists the §C.3 update seam mutates and the resolver seam reads. Keyed by
+    /// statusListCredential url. The §C.3 seam sets / clears the bit here; the resolver hands the
+    /// verifier a fresh copy it owns and disposes.
+    /// </summary>
     private ConcurrentDictionary<string, CoreStatusList> LiveStatusLists { get; } = new(StringComparer.Ordinal);
 
-    //The credentialId → statusListCredential url map the §C.3 404 key is checked against (the status
-    //service holds a record for a credential only after it has been issued against a known list).
+    /// <summary>
+    /// The credentialId → statusListCredential url map the §C.3 404 key is checked against (the status
+    /// service holds a record for a credential only after it has been issued against a known list).
+    /// </summary>
     private ConcurrentDictionary<string, string> KnownCredentials { get; } = new(StringComparer.Ordinal);
 
 
+    /// <summary>Disposes the finished test's registrations, keys and live status lists and clears the stores.</summary>
     [TestCleanup]
     public void DisposeRegisteredMaterials()
     {
@@ -322,7 +346,7 @@ internal sealed class VcalmStatusEndpointTests
             .ConfigureAwait(false);
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
-        Assert.AreEqual(VcalmProblemTypes.UnknownOptionProvided,
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
             doc.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "An unknown credentialStatus member yields the UNKNOWN_OPTION_PROVIDED type.");
     }
@@ -367,41 +391,41 @@ internal sealed class VcalmStatusEndpointTests
             .ConfigureAwait(false);
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             doc.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             $"A §C.3 malformed update ({reason}) yields the MALFORMED_VALUE_ERROR type.");
     }
 
 
     /// <summary>
-    /// §C.3 / §3.8.1 non-mapping does not mask a revocation: a credential carrying a NON-MAPPING
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "Warnings are
+    /// ProblemDetails relating to status and validity periods". A credential carrying a NON-MAPPING
     /// credentialStatus entry FIRST (an unparseable <c>statusListIndex</c>, skipped by TryMapStatusEntry)
     /// FOLLOWED by a well-formed revocation entry whose bit is set still surfaces the STATUS_WARNING — the
-    /// per-entry loop CONTINUES past the non-mapping entry rather than breaking. A regression to
-    /// break/return on the first non-mapping entry would silently mask the real revocation.
+    /// per-entry loop CONTINUES past the non-mapping entry rather than breaking, so the first entry cannot mask
+    /// the real revocation.
     /// </summary>
     [TestMethod]
     public async Task NonMappingStatusEntryDoesNotMaskValidRevokedEntry()
     {
         await using TestHostShell app = new(TimeProvider);
         StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
-        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+        await CreateStatusListWireAsync(app, ctx.Segment).ConfigureAwait(false);
 
         const int ValidIndex = 23;
         const string CredentialId = "urn:uuid:two-entry-status";
         KnownCredentials[CredentialId] = StatusListId;
 
         string issueBody = BuildIssueRequestBodyWithTwoStatusEntries(ctx.IssuerDid, CredentialId, ValidIndex);
-        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        using JsonDocument issued = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, issueBody, 201, TestContext.CancellationToken).ConfigureAwait(false);
         string securedCredentialJson = issued.RootElement
             .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
 
         //Set the WELL-FORMED entry revoked; the non-mapping entry is FIRST in the credentialStatus array.
-        ServerHttpResponse setRevoked = await PostUpdateStatusAsync(
-            app, ctx.Segment, BuildUpdateStatusBody(CredentialId, ValidIndex, status: true)).ConfigureAwait(false);
-        Assert.AreEqual(200, setRevoked.StatusCode, setRevoked.Body);
+        await UpdateStatusWireAsync(app, ctx.Segment, BuildUpdateStatusBody(CredentialId, ValidIndex, status: true)).ConfigureAwait(false);
 
-        using JsonDocument after = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+        using JsonDocument after = await VerifyWireAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
         Assert.IsTrue(after.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "§3.8.1: status is a WARNING — the credential still verifies true.");
         Assert.IsTrue(HasStatusWarning(after),
@@ -443,19 +467,18 @@ internal sealed class VcalmStatusEndpointTests
 
 
     /// <summary>
-    /// The money-shot round-trip: issue a credential carrying a <c>credentialStatus</c> (V-2 issue
-    /// endpoint), set it revoked via §C.3, then verify it (V-1 verify endpoint) returns HTTP 200,
-    /// <c>verified:true</c>, with a STATUS WARNING in <c>problemDetails</c> — §3.8.1: "Warnings are
-    /// ProblemDetails relating to status and validity periods", and "if no errors are included, [the
-    /// verified property] MUST be set to true". A non-revoked credential verifies with NO status
-    /// warning.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "Warnings are
+    /// ProblemDetails relating to status and validity periods", and "if no errors are included, it MUST be set to
+    /// true". The round-trip issues a credential carrying a <c>credentialStatus</c> through the issue endpoint, sets it
+    /// revoked through §C.3, then verifies it: HTTP 200, <c>verified:true</c>, with a STATUS WARNING in
+    /// <c>problemDetails</c>. A non-revoked credential verifies with NO status warning.
     /// </summary>
     [TestMethod]
     public async Task IssueThenRevokeThenVerifyEmitsStatusWarningButStaysVerified()
     {
         await using TestHostShell app = new(TimeProvider);
         StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
-        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+        await CreateStatusListWireAsync(app, ctx.Segment).ConfigureAwait(false);
 
         const int Index = 17;
         const string CredentialId = "urn:uuid:roundtrip-status";
@@ -463,12 +486,13 @@ internal sealed class VcalmStatusEndpointTests
 
         //Issue a credential carrying a credentialStatus pointing at the status list (V-2 issue).
         string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index);
-        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        using JsonDocument issued = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, issueBody, 201, TestContext.CancellationToken).ConfigureAwait(false);
         string securedCredentialJson = issued.RootElement
             .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
 
         //Before revocation: the credential verifies TRUE with NO status warning.
-        using(JsonDocument before = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false))
+        using(JsonDocument before = await VerifyWireAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false))
         {
             Assert.IsTrue(before.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
                 "A non-revoked credential verifies true.");
@@ -477,13 +501,11 @@ internal sealed class VcalmStatusEndpointTests
         }
 
         //Set the credential revoked via §C.3.
-        ServerHttpResponse setRevoked = await PostUpdateStatusAsync(
-            app, ctx.Segment, BuildUpdateStatusBody(CredentialId, Index, status: true)).ConfigureAwait(false);
-        Assert.AreEqual(200, setRevoked.StatusCode, setRevoked.Body);
+        await UpdateStatusWireAsync(app, ctx.Segment, BuildUpdateStatusBody(CredentialId, Index, status: true)).ConfigureAwait(false);
 
         //After revocation: the credential STILL verifies true (status is a §3.8.1 WARNING, not an
         //error), but a status warning is now present in problemDetails.
-        using JsonDocument after = await VerifyAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
+        using JsonDocument after = await VerifyWireAsync(app, ctx.Segment, securedCredentialJson).ConfigureAwait(false);
         Assert.IsTrue(after.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "§3.8.1: status is a WARNING, not an error — a revoked credential still verifies true.");
         Assert.IsTrue(HasStatusWarning(after),
@@ -491,13 +513,37 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
-    //Literal type URLs for the Bitstring Status List 1.0 §3.5 processing-error / §3.2 RANGE_ERROR
-    //catalog rows, written as literals so these tests do not depend on the VcalmProblemTypes rows
-    //they exercise.
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-bitstring-status-list/#processing-errors">Bitstring Status List 1.0
+    /// §3.5</see> STATUS_RETRIEVAL_ERROR, "Retrieval of the status list failed.", written as a literal so these
+    /// tests do not take the expected value from <see cref="VcalmProblemTypes"/>, the catalog they exercise.
+    /// </summary>
     private const string StatusRetrievalErrorType = "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR";
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-bitstring-status-list/#processing-errors">Bitstring Status List 1.0
+    /// §3.5</see> STATUS_VERIFICATION_ERROR, "Validation of the status entry failed.", written as a literal so these
+    /// tests do not take the expected value from <see cref="VcalmProblemTypes"/>, the catalog they exercise.
+    /// </summary>
     private const string StatusVerificationErrorType = "https://www.w3.org/ns/credentials/status-list#STATUS_VERIFICATION_ERROR";
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-bitstring-status-list/#processing-errors">Bitstring Status List 1.0
+    /// §3.5</see> STATUS_LIST_LENGTH_ERROR, "The status list length does not satisfy the minimum length required for
+    /// herd privacy.", written as a literal so these tests do not take the expected value from
+    /// <see cref="VcalmProblemTypes"/>, the catalog they exercise.
+    /// </summary>
     private const string StatusListLengthErrorType = "https://www.w3.org/ns/credentials/status-list#STATUS_LIST_LENGTH_ERROR";
-    private const string RangeErrorType = "https://www.w3.org/TR/vc-data-model-2.0#RANGE_ERROR";
+
+    /// <summary>
+    /// The RANGE_ERROR that <see href="https://www.w3.org/TR/vc-bitstring-status-list/#validate-algorithm">Bitstring
+    /// Status List 1.0 §3.2</see> raises when "the credentialIndex multiplied by the size is a value outside of the
+    /// range of the bitstring". That specification does not list the code among its own §3.5 errors, so the type URL
+    /// is the one <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// defines: "A provided value is outside of the expected range of an associated value". It is written as a literal
+    /// so these tests do not take the expected value from <see cref="VcalmProblemTypes.RangeError"/>.
+    /// </summary>
+    private const string RangeErrorType = "https://www.w3.org/TR/vc-data-model#RANGE_ERROR";
 
 
     /// <summary>
@@ -527,7 +573,7 @@ internal sealed class VcalmStatusEndpointTests
 
         Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "§3.8.1: an unresolvable status list is a WARNING, not an ERROR — verified stays true.");
-        Assert.IsTrue(HasProblemOfType(verified, StatusRetrievalErrorType),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(verified, StatusRetrievalErrorType),
             "An unresolvable status list surfaces the Bitstring Status List 1.0 §3.5 STATUS_RETRIEVAL_ERROR.");
 
         JsonElement statusResults = verified.RootElement
@@ -571,7 +617,7 @@ internal sealed class VcalmStatusEndpointTests
 
         Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "§3.8.1: a status-verification failure is a WARNING — verified stays true.");
-        Assert.IsTrue(HasProblemOfType(verified, StatusVerificationErrorType),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(verified, StatusVerificationErrorType),
             "A BitstringStatusListException of kind StatusVerification surfaces STATUS_VERIFICATION_ERROR.");
     }
 
@@ -615,7 +661,7 @@ internal sealed class VcalmStatusEndpointTests
 
         Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "§3.8.1: an under-minimum status list is a WARNING — verified stays true.");
-        Assert.IsTrue(HasProblemOfType(verified, StatusListLengthErrorType),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(verified, StatusListLengthErrorType),
             "A status list under the §3.2 herd-privacy minimum surfaces STATUS_LIST_LENGTH_ERROR.");
     }
 
@@ -659,7 +705,7 @@ internal sealed class VcalmStatusEndpointTests
 
         Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "§3.8.1: an out-of-range index is a WARNING — verified stays true.");
-        Assert.IsTrue(HasProblemOfType(verified, RangeErrorType),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(verified, RangeErrorType),
             "A statusListIndex outside the bitstring surfaces the VC Data Model 2.0 RANGE_ERROR.");
     }
 
@@ -704,7 +750,7 @@ internal sealed class VcalmStatusEndpointTests
 
         using JsonDocument verified = JsonDocument.Parse(response.Body);
         Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
-        Assert.IsTrue(HasProblemOfType(verified, StatusRetrievalErrorType),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(verified, StatusRetrievalErrorType),
             "An arbitrary resolver exception surfaces the generic STATUS_RETRIEVAL_ERROR.");
     }
 
@@ -733,7 +779,7 @@ internal sealed class VcalmStatusEndpointTests
 
         Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "§3.8.1: a malformed status entry is a WARNING — verified stays true.");
-        Assert.IsTrue(HasProblemOfType(verified, StatusVerificationErrorType),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(verified, StatusVerificationErrorType),
             "A BitstringStatusListEntry with a missing statusListIndex surfaces STATUS_VERIFICATION_ERROR.");
     }
 
@@ -808,7 +854,7 @@ internal sealed class VcalmStatusEndpointTests
             "A foreign credentialStatus type must be turned away by TryMapStatusEntry before the resolver.");
         Assert.IsTrue(verified.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
         Assert.IsFalse(HasStatusWarning(verified));
-        Assert.IsFalse(HasProblemOfType(verified, StatusVerificationErrorType),
+        Assert.IsFalse(VcalmWireFixtures.HasProblemOfType(verified, StatusVerificationErrorType),
             "A foreign type establishes no status: this verifier implements no algorithm for it and reports nothing.");
     }
 
@@ -870,63 +916,100 @@ internal sealed class VcalmStatusEndpointTests
 
 
     /// <summary>
-    /// §3.8.1 process-safety: cancellation is not a verification outcome and is never turned
-    /// into a status WARNING. When the resolver observes cancellation, the verify call itself
-    /// cancels rather than returning HTTP 200 with a fabricated status result.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "Warnings are
+    /// ProblemDetails relating to status and validity periods" — a status warning describes the credential's status,
+    /// and only a dependency fetch that ends on its OWN budget while the caller still waits takes that shape. A caller
+    /// that abandons its request while the status list is being fetched ends the verification itself, and the resolver
+    /// honouring that cancellation must not turn it into a status warning: the server produces no response for the
+    /// abandoned request at all.
     /// </summary>
     [TestMethod]
     public async Task ResolverObservingCancellationPropagatesRatherThanBecomingWarning()
     {
         await using TestHostShell app = new(TimeProvider);
         StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
-        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+        await CreateStatusListWireAsync(app, ctx.Segment).ConfigureAwait(false);
 
         const int Index = 65;
         const string CredentialId = "urn:uuid:status-cancellation";
 
-        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ResolveVcalmStatusListAsync = (entry, exchangeContext, cancellationToken) =>
-                throw new OperationCanceledException("The status resolver observed cancellation.");
-        }).ConfigureAwait(false);
-
         string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index);
-        using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody).ConfigureAwait(false);
+        using JsonDocument issued = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, issueBody, 201, TestContext.CancellationToken).ConfigureAwait(false);
         string securedCredentialJson = issued.RootElement
             .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
+
+        TaskCompletionSource hasEnteredFetch = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource hasObservedCancellation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = async (entry, exchangeContext, cancellationToken) =>
+            {
+                await VcalmWireFixtures.HangUntilCancelledAsync(hasEnteredFetch, hasObservedCancellation, cancellationToken).ConfigureAwait(false);
+
+                return null;
+            };
+        }).ConfigureAwait(false);
 
         string verifyBody = "{\"verifiableCredential\":" + securedCredentialJson
             + ",\"options\":{\"returnProblemDetails\":true}}";
 
-        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
-            await app.DispatchAtEndpointAsync(
-                ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
-                new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        await VcalmWireFixtures.AssertAbandonedRequestProducesNoResponseAsync(
+            app, ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, verifyBody, hasEnteredFetch.Task,
+            hasObservedCancellation.Task, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
-    private static bool HasStatusWarning(JsonDocument response) =>
-        HasProblemOfType(response, VcalmProblemTypes.StatusWarning);
-
-
-    private static bool HasProblemOfType(JsonDocument response, string type)
+    /// <summary>
+    /// Creates this class's status list through the §C.1 <c>POST /status-lists</c> endpoint over the real wire.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="segment">The status service tenant segment.</param>
+    private async Task CreateStatusListWireAsync(TestHostShell app, string segment)
     {
-        if(!response.RootElement.TryGetProperty(VcalmParameterNames.ProblemDetails, out JsonElement problems))
-        {
-            return false;
-        }
-
-        foreach(JsonElement problem in problems.EnumerateArray())
-        {
-            if(problem.TryGetProperty(VcalmParameterNames.ProblemType, out JsonElement problemType)
-                && string.Equals(problemType.GetString(), type, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        using JsonDocument _ = await VcalmWireFixtures.PostEndpointWireAsync(
+            app, segment, WellKnownVcalmEndpointNames.VcalmCreateStatusList,
+            $"{{\"statusPurpose\":\"{RevocationPurpose}\",\"id\":\"{StatusListId}\"}}", 201, TestContext.CancellationToken).ConfigureAwait(false);
     }
+
+
+    /// <summary>
+    /// Sets or clears a credential's status through the §C.3 <c>POST /credentials/status</c> endpoint over the real
+    /// wire, whose success answer carries no body.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="segment">The status service tenant segment.</param>
+    /// <param name="body">The update-status request body JSON text.</param>
+    private async Task UpdateStatusWireAsync(TestHostShell app, string segment, string body)
+    {
+        _ = await VcalmWireFixtures.PostWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsStatus, segment),
+            body, 200, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Verifies <paramref name="securedCredentialJson"/> through the §3.3.1 <c>POST /credentials/verify</c> endpoint
+    /// over the real wire, asking for the problem details and the per-step results.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="segment">The verifier tenant segment.</param>
+    /// <param name="securedCredentialJson">The secured credential JSON text to verify.</param>
+    /// <returns>The parsed verification response; the caller disposes it.</returns>
+    private Task<JsonDocument> VerifyWireAsync(TestHostShell app, string segment, string securedCredentialJson) =>
+        VcalmWireFixtures.PostCredentialWireAsync(
+            app, segment,
+            "{\"verifiableCredential\":" + securedCredentialJson + ",\"options\":{\"returnProblemDetails\":true,\"returnResults\":true}}",
+            200, TestContext.CancellationToken);
+
+
+    /// <summary>
+    /// Whether <paramref name="response"/> carries the library's STATUS_WARNING, the §3.8.1 status warning for a
+    /// credential whose status is set, compared as the literal type URL.
+    /// </summary>
+    /// <param name="response">The parsed verification response.</param>
+    private static bool HasStatusWarning(JsonDocument response) =>
+        VcalmWireFixtures.HasProblemOfType(response, "https://verifiable.lumoin.com/problems#STATUS_WARNING");
 
 
     /// <summary>
@@ -1069,7 +1152,7 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
-    //Decodes the encodedList of a freshly-secured status-list credential JSON into a live StatusList.
+    /// <summary>Decodes the encodedList of a freshly-secured status-list credential JSON into a live StatusList.</summary>
     private static CoreStatusList DecodeStatusList(string securedStatusListJson)
     {
         using JsonDocument doc = JsonDocument.Parse(securedStatusListJson);
@@ -1084,6 +1167,12 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>
+    /// Creates the revocation status list <see cref="StatusListId"/> through the §C.1 endpoint and asserts its
+    /// HTTP 201.
+    /// </summary>
+    /// <param name="app">The host running the status tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
     private async Task CreateStatusListAsync(TestHostShell app, string segment)
     {
         using JsonDocument _ = await PostCreateStatusListAsync(
@@ -1092,6 +1181,12 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>Posts a §C.1 create-status-list request and asserts its HTTP status.</summary>
+    /// <param name="app">The host running the status tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <param name="body">The create-status-list request body.</param>
+    /// <param name="expectedStatus">The HTTP status the endpoint must answer with.</param>
+    /// <returns>The parsed response body; the caller disposes it.</returns>
     private async Task<JsonDocument> PostCreateStatusListAsync(
         TestHostShell app, string segment, string body, int expectedStatus)
     {
@@ -1105,6 +1200,12 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>Posts a §C.3 update-status request, asserting its HTTP status when one is expected.</summary>
+    /// <param name="app">The host running the status tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <param name="body">The update-status request body.</param>
+    /// <param name="expectedStatus">The HTTP status the endpoint must answer with, or 0 to assert none.</param>
+    /// <returns>The endpoint's response.</returns>
     private async Task<ServerHttpResponse> PostUpdateStatusAsync(
         TestHostShell app, string segment, string body, int expectedStatus = 0)
     {
@@ -1121,6 +1222,11 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>Posts a §3.2.1 issue request and asserts its HTTP 201.</summary>
+    /// <param name="app">The host running the issuer tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <param name="body">The issue request body.</param>
+    /// <returns>The parsed response body; the caller disposes it.</returns>
     private async Task<JsonDocument> PostIssueAsync(TestHostShell app, string segment, string body)
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -1133,6 +1239,14 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>
+    /// Posts a §3.3.1 verify request for <paramref name="securedCredentialJson"/> asking for the problem details and
+    /// the results, and asserts its HTTP 200.
+    /// </summary>
+    /// <param name="app">The host running the verifier tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <param name="securedCredentialJson">The secured credential to verify.</param>
+    /// <returns>The parsed verification response; the caller disposes it.</returns>
     private async Task<JsonDocument> VerifyAsync(TestHostShell app, string segment, string securedCredentialJson)
     {
         string verifyBody = "{\"verifiableCredential\":" + securedCredentialJson
@@ -1148,12 +1262,28 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>
+    /// Builds a §C.3 update-status body setting or clearing the revocation bit at <paramref name="index"/> of
+    /// <see cref="StatusListId"/> for <paramref name="credentialId"/>.
+    /// </summary>
+    /// <param name="credentialId">The credential whose status changes.</param>
+    /// <param name="index">The credential's index in the status list.</param>
+    /// <param name="status">Whether the bit is set.</param>
     private static string BuildUpdateStatusBody(string credentialId, int index, bool status) =>
         $"{{\"credentialId\":\"{credentialId}\",\"credentialStatus\":{{\"type\":\"BitstringStatusListEntry\","
         + $"\"statusPurpose\":\"{RevocationPurpose}\",\"statusListIndex\":\"{index.ToString(CultureInfo.InvariantCulture)}\","
         + $"\"statusListCredential\":\"{StatusListId}\"}},\"status\":{(status ? "true" : "false")}}}";
 
 
+    /// <summary>
+    /// Builds a §3.2.1 issue body for an alumni credential carrying one <c>BitstringStatusListEntry</c> at
+    /// <paramref name="index"/>.
+    /// </summary>
+    /// <param name="issuerDid">The credential's issuer.</param>
+    /// <param name="credentialId">The credential's <c>id</c>.</param>
+    /// <param name="index">The entry's <c>statusListIndex</c>.</param>
+    /// <param name="statusPurpose">The entry's <c>statusPurpose</c>; revocation by default.</param>
+    /// <param name="statusListCredential">The entry's status list; <see cref="StatusListId"/> by default.</param>
     private static string BuildIssueRequestBodyWithStatus(
         string issuerDid, string credentialId, int index, string statusPurpose = RevocationPurpose,
         string? statusListCredential = null)
@@ -1197,9 +1327,11 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
-    //A §C.3 issue body carrying a credentialStatus entry whose type IS BitstringStatusListEntry (the
-    //specification's shape) but whose statusListIndex is missing — distinct from a foreign type,
-    //which TryMapStatusEntry turns away silently.
+    /// <summary>
+    /// A §C.3 issue body carrying a credentialStatus entry whose type IS BitstringStatusListEntry (the
+    /// specification's shape) but whose statusListIndex is missing — distinct from a foreign type,
+    /// which TryMapStatusEntry turns away silently.
+    /// </summary>
     private static string BuildIssueRequestBodyWithMalformedStatusEntry(string issuerDid, string credentialId)
     {
         VerifiableCredential credential = new()
@@ -1238,10 +1370,12 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
-    //A §C.3 issue body carrying TWO credentialStatus entries: a NON-MAPPING entry FIRST (an unparseable
-    //statusListIndex, which TryMapStatusEntry turns away) followed by a well-formed revocation entry.
-    //Used to prove a non-mapping entry does not mask (does not break the per-entry loop over) a later
-    //well-formed entry.
+    /// <summary>
+    /// A §C.3 issue body carrying TWO credentialStatus entries: a NON-MAPPING entry FIRST (an unparseable
+    /// statusListIndex, which TryMapStatusEntry turns away) followed by a well-formed revocation entry.
+    /// Used to prove a non-mapping entry does not mask (does not break the per-entry loop over) a later
+    /// well-formed entry.
+    /// </summary>
     private static string BuildIssueRequestBodyWithTwoStatusEntries(
         string issuerDid, string credentialId, int validIndex)
     {
@@ -1289,6 +1423,9 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>Builds the issuer's eddsa-rdfc-2022 signing descriptor over <paramref name="privateKey"/>.</summary>
+    /// <param name="privateKey">The issuer's Ed25519 private key.</param>
+    /// <param name="verificationMethodId">The verification method the proofs name.</param>
     private static VcalmProofDescriptor BuildDescriptor(PrivateKeyMemory privateKey, string verificationMethodId) =>
         new()
         {
@@ -1306,6 +1443,7 @@ internal sealed class VcalmStatusEndpointTests
         };
 
 
+    /// <summary>Creates a status signing key over the fixed Ed25519 test key, owned by no host registration.</summary>
     private static StatusKeyMaterial CreateKeyMaterial()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
@@ -1315,16 +1453,30 @@ internal sealed class VcalmStatusEndpointTests
     }
 
 
+    /// <summary>A registered status tenant and the issuer identity it signs under.</summary>
+    /// <param name="Segment">The tenant's path segment.</param>
+    /// <param name="IssuerDid">The issuer DID the tenant's credentials and status lists name.</param>
+    /// <param name="VerificationMethodId">The verification method the tenant's proofs name.</param>
+    /// <param name="Material">The tenant's signing key.</param>
     private sealed record StatusContext(string Segment, string IssuerDid, string VerificationMethodId, StatusKeyMaterial Material);
 
 
-    //Owns the status service's Ed25519 signing key for the test's lifetime; disposed at cleanup. The
-    //host-material wrapper lets the cleanup loop dispose the RegisterClient material uniformly.
+    /// <summary>
+    /// Owns the status service's Ed25519 signing key for the test's lifetime; disposed at cleanup. The
+    /// host-material wrapper lets the cleanup loop dispose the RegisterClient material uniformly.
+    /// </summary>
     private sealed class StatusKeyMaterial: IDisposable
     {
+        /// <summary>The host registration owning the keys, or <see langword="null"/> when this instance owns them.</summary>
         private VerifierKeyMaterial? HostMaterial { get; }
+
+        /// <summary>Whether <see cref="Dispose"/> already ran, so a second call is a no-op.</summary>
         private bool isDisposed;
 
+        /// <summary>Takes the signing key pair, owned by <paramref name="hostMaterial"/> when one is given.</summary>
+        /// <param name="signingPublicKey">The Ed25519 public key.</param>
+        /// <param name="signingPrivateKey">The Ed25519 private key.</param>
+        /// <param name="hostMaterial">The host registration owning the keys, or <see langword="null"/>.</param>
         public StatusKeyMaterial(PublicKeyMemory signingPublicKey, PrivateKeyMemory signingPrivateKey, VerifierKeyMaterial? hostMaterial)
         {
             SigningPublicKey = signingPublicKey;
@@ -1332,13 +1484,18 @@ internal sealed class VcalmStatusEndpointTests
             this.HostMaterial = hostMaterial;
         }
 
+        /// <summary>The Ed25519 public key the status service's proofs verify under.</summary>
         public PublicKeyMemory SigningPublicKey { get; }
 
+        /// <summary>The Ed25519 private key the status service signs with.</summary>
         public PrivateKeyMemory SigningPrivateKey { get; }
 
+        /// <summary>Wraps a host registration's signing keys, disposing the registration at cleanup.</summary>
+        /// <param name="hostMaterial">The registration whose keys the status service signs with.</param>
         public static StatusKeyMaterial Wrapping(VerifierKeyMaterial hostMaterial) =>
             new(hostMaterial.SigningPublicKey, hostMaterial.SigningPrivateKey, hostMaterial);
 
+        /// <summary>Disposes the host registration when one owns the keys, otherwise the keys themselves.</summary>
         public void Dispose()
         {
             if(isDisposed)

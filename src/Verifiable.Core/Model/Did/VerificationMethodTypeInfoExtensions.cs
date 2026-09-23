@@ -46,8 +46,34 @@ namespace Verifiable.Core.Model.Did
     [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Analyzer is not yet up to date with new extension syntax.")]
     public static class VerificationMethodTypeInfoExtensions
     {
+        /// <summary>
+        /// Every verification method type this catalogue describes, in the order its members are declared below, without
+        /// the <see cref="UndefinedMethodTypeInfo"/> stand-in for a type the catalogue does not describe.
+        /// </summary>
+        private static IReadOnlyList<VerificationMethodTypeInfo> CataloguedTypes { get; } =
+        [
+            JsonWebKey2020VerificationMethodTypeInfo.Instance,
+            Ed25519VerificationKey2020VerificationMethodTypeInfo.Instance,
+            Secp256k1VerificationKey2018MethodTypeInfo.Instance,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            X25519KeyAgreementKey2020VerificationMethodTypeInfo.Instance,
+            X25519KeyAgreementKey2019VerificationMethodTypeInfo.Instance,
+            RsaVerificationKey2018VerificationMethodTypeInfo.Instance,
+            JwsVerificationKey2020VerificationMethodTypeInfo.Instance,
+            Ed25519VerificationKey2018VerificationMethodTypeInfo.Instance,
+            Bls12381G2VerificationMethodVerificationMethodTypeInfo.Instance
+        ];
+
+
         extension(VerificationMethodTypeInfo)
         {
+            /// <summary>
+            /// Gets every verification method type this catalogue describes, without the <see cref="UndefinedMethodTypeInfo"/>
+            /// stand-in, so a consumer that must know whether a type name is catalogued asks the catalogue instead of keeping
+            /// its own copy of the list.
+            /// </summary>
+            public static IReadOnlyList<VerificationMethodTypeInfo> Catalogued => CataloguedTypes;
+
             /// <summary>Gets the <see cref="JsonWebKey2020VerificationMethodTypeInfo"/> singleton describing the <c>JsonWebKey2020</c> verification method type.</summary>
             public static JsonWebKey2020VerificationMethodTypeInfo JsonWebKey2020 => JsonWebKey2020VerificationMethodTypeInfo.Instance;
 

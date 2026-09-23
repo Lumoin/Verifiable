@@ -40,14 +40,6 @@ namespace Verifiable.Core.Did.Methods.WebPlus;
 public static class WebPlusDidResolver
 {
     /// <summary>
-    /// An upper bound on the fetched <c>did-documents.jsonl</c> size, so a malicious or misconfigured VDR cannot
-    /// exhaust resolver memory/CPU by serving an unbounded microledger (verifying every document is
-    /// JCS-canonicalize + hash + per-proof signature). The bound is generous relative to a real microledger (each
-    /// document is one JSON line) yet rejects an obviously hostile payload. Enforced before the body is parsed.
-    /// </summary>
-    private const int MaxMicroledgerBytes = 8 * 1024 * 1024;
-
-    /// <summary>
     /// The canonical media type of a resolved did:webplus DID document. did:webplus has a single canonical form
     /// (the JCS-serialized DID document), so the resolver always returns that representation regardless of the
     /// resolution <c>accept</c> option (WP-RO-1).
@@ -266,8 +258,9 @@ public static class WebPlusDidResolver
             }
 
             //Bound the fetched microledger so an oversized payload is rejected before it is parsed, rather than
-            //driving unbounded allocation through the entry parser.
-            if(microledgerResponse.Body.Memory.Length > MaxMicroledgerBytes)
+            //driving unbounded allocation and CPU through the entry parser: verifying every document is a JCS
+            //canonicalization, a hash and a signature check per proof.
+            if(microledgerResponse.Body.Memory.Length > OutboundFetchPolicy.DefaultMaxResponseBytes)
             {
                 return DidResolutionResult.Failure(InvalidDid("The did:webplus microledger exceeds the maximum permitted size."));
             }
@@ -477,7 +470,7 @@ public static class WebPlusDidResolver
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = MaxMicroledgerBytes };
+        OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = OutboundFetchPolicy.DefaultMaxResponseBytes };
 
         OutboundFetchResult fetch;
         try

@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods.Key;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -24,31 +23,44 @@ namespace Verifiable.Tests.DataIntegrity;
 [TestClass]
 internal sealed class PresentationLinkedVerifyTests
 {
+    /// <summary>The MSTest context, whose cancellation token bounds every signing and verification.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>A challenge a binding-bearing proof carries, which the linked verification refuses.</summary>
     private const string VerifierChallenge = "verifier-challenge-abc123";
+
+    /// <summary>A domain a binding-bearing proof carries, which the linked verification refuses.</summary>
     private const string VerifierDomain = "verifier.example";
 
+    /// <summary>The serializer options every JSON delegate of these tests uses.</summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
+
+    /// <summary>Builds the holder's did:key document from its public key.</summary>
     private static KeyDidBuilder KeyDidBuilder { get; } = new KeyDidBuilder();
 
+    /// <summary>The clock whose instant every signed proof records as its <c>created</c> time.</summary>
     private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
 
+    /// <summary>The JCS canonicalizer the eddsa-jcs-2022 signing and verification share.</summary>
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
+    /// <summary>The context every signing and verification runs under, outside any request.</summary>
     private static ExchangeContext EmptyContext { get; } = [];
 
-    private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
+    /// <summary>Decodes the base58btc proof values the signing encodes.</summary>
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
 
+    /// <summary>Serializes a presentation for signing and verification.</summary>
     private static PresentationSerializeDelegate SerializePresentation { get; } = presentation =>
         JsonSerializerExtensions.Serialize(presentation, JsonOptions);
 
+    /// <summary>Reads a presentation back from its JSON.</summary>
     private static PresentationDeserializeDelegate DeserializePresentation { get; } = serialized =>
         JsonSerializerExtensions.Deserialize<VerifiablePresentation>(serialized, JsonOptions)!;
 
+    /// <summary>Serializes the proof options a Data Integrity proof hashes.</summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
@@ -291,7 +303,7 @@ internal sealed class PresentationLinkedVerifyTests
     }
 
 
-    //Verifies a static linked presentation with the standard eddsa-jcs-2022 delegate wiring.
+    /// <summary>Verifies a static linked presentation with the standard eddsa-jcs-2022 delegate wiring.</summary>
     private ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyStaticAsync(
         DataIntegritySecuredPresentation presentation, DidDocument holderDidDocument)
     {
@@ -311,71 +323,60 @@ internal sealed class PresentationLinkedVerifyTests
     }
 
 
-    private static void HashCanonical(string json, Span<byte> destination)
+    /// <summary>
+    /// Signs a holder-only presentation, optionally with a challenge and/or domain, through the shared
+    /// <see cref="DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(DidDocument, PrivateKeyMemory, string?, string?, DateTime)"/>: the unbound form carries no binding
+    /// fields and the bound forms the ones given, so the proof covers whatever binding is present, exactly as a wire
+    /// whois.vp would.
+    /// </summary>
+    private static Task<DataIntegritySecuredPresentation> SignStaticPresentationAsync(
+        DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain) =>
+        DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(
+            holderDidDocument, privateKey, challenge, domain, TimeProvider.GetUtcNow().UtcDateTime);
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>:
+    /// "If one or more of proof.type, proof.verificationMethod, and proof.proofPurpose does not exist, an error MUST
+    /// be raised and SHOULD convey an error type of PROOF_VERIFICATION_ERROR."
+    /// </summary>
+    /// <remarks>
+    /// This drives the Core linked-presentation verification directly rather than an endpoint, so it proves Core's own
+    /// refusal, which a caller that checks the mandatory members first would otherwise never reach.
+    /// </remarks>
+    [TestMethod]
+    [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
+    public async Task LinkedPresentationProofWithoutTypeIsRejected(DidWebTestData testData)
     {
-        var canonical = new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(json), BufferTags.Json);
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(canonical.Span, destination.Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
-        digest.AsReadOnlySpan().CopyTo(destination);
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var holderDidDocument = await KeyDidBuilder.BuildAsync(
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
+            holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
+
+        signed.Proof![0].Type = null!;
+
+        var result = await signed.VerifyLinkedPresentationAsync(
+            holderDidDocument,
+            JcsCanonicalizer,
+            contextResolver: null,
+            signed.Context!,
+            ProofValueDecoder,
+            SerializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "Data Integrity §4.4: a proof without type MUST be refused.");
+        Assert.AreEqual(VerificationFailureReason.MissingVerificationMethod, result.FailureReason,
+            "Missing mandatory proof options share the existing verification failure result.");
     }
 
-
-    //Signs a holder-only presentation, optionally with a challenge and/or domain. The unbound form mirrors the
-    //production bound SignAsync minus the binding fields; the bound forms re-use the same hashing so the proof
-    //covers whatever binding is present, exactly as a wire whois.vp would.
-    private static async Task<DataIntegritySecuredPresentation> SignStaticPresentationAsync(
-        DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain)
-    {
-        var holderVerificationMethodId = holderDidDocument.VerificationMethod![0].Id!;
-        var holderDid = holderDidDocument.Id!.ToString();
-        var proofCreated = TimeProvider.GetUtcNow().UtcDateTime;
-
-        VerifiablePresentation unsigned = new()
-        {
-            Context = Context.FromIris(Context.Credentials20),
-            Type = ["VerifiablePresentation"],
-            Holder = holderDid
-        };
-
-        DataIntegrityProof newProof = new()
-        {
-            Type = DataIntegrityProof.DataIntegrityProofType,
-            Cryptosuite = EddsaJcs2022CryptosuiteInfo.Instance,
-            Created = DateTimeStampFormat.Format(proofCreated),
-            VerificationMethod = new AuthenticationMethod(holderVerificationMethodId),
-            ProofPurpose = AuthenticationMethod.Purpose
-        };
-
-        if(challenge is not null)
-        {
-            newProof.Challenge = challenge;
-        }
-
-        if(domain is not null)
-        {
-            newProof.Domain = [domain];
-        }
-
-        ProofOptionsDocument proofOptions = ProofOptionsDocument.FromProof(newProof, null);
-        string proofOptionsSerialized = SerializeProofOptions(proofOptions);
-        string presentationSerialized = SerializePresentation(unsigned);
-
-        using System.Buffers.IMemoryOwner<byte> hashOwner = BaseMemoryPool.Shared.Rent(64);
-        Memory<byte> hashData = hashOwner.Memory[..64];
-
-        //eddsa-jcs-2022 signs SHA-256(JCS(proofOptions)) concatenated with SHA-256(JCS(presentation)); the JCS
-        //canonicalization output is wrapped as JSON-tagged memory rather than materialized as a naked array.
-        HashCanonical(proofOptionsSerialized, hashData.Span[..32]);
-        HashCanonical(presentationSerialized, hashData.Span[32..]);
-
-        using Signature signature = await privateKey.SignAsync(hashData, BaseMemoryPool.Shared).ConfigureAwait(false);
-        newProof.ProofValue = ProofValueEncoder(signature.AsReadOnlySpan(), TestSetup.Base58Encoder, BaseMemoryPool.Shared);
-
-        return new DataIntegritySecuredPresentation
-        {
-            Context = unsigned.Context,
-            Type = unsigned.Type,
-            Holder = unsigned.Holder,
-            Proof = [newProof]
-        };
-    }
 }

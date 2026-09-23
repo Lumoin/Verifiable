@@ -36,10 +36,13 @@ namespace Verifiable.Tests.DataIntegrity;
 [TestClass]
 internal sealed class ContextTamperingCredentialVerificationTests
 {
+    /// <summary>The MSTest context, whose cancellation token bounds every signing and verification.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The fixed <c>created</c> timestamp of every proof these tests sign.</summary>
     private static DateTime ProofCreated { get; } = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
+    /// <summary>The <c>id</c> of the credential these tests sign and then tamper with.</summary>
     private const string CredentialId = "urn:uuid:9d3f9b2a-6b7e-4e6a-8f0a-context-tampering";
 
     /// <summary>An unresolvable, unknown context URL appended after signing (variant a).</summary>
@@ -83,6 +86,17 @@ internal sealed class ContextTamperingCredentialVerificationTests
         """;
 
 
+    /// <summary>
+    /// Signs the fixture's credential under <paramref name="cryptosuite"/>, replaces its <c>@context</c> with
+    /// <paramref name="tamperedContextJson"/> after signing, and verifies the result against the fixture's known
+    /// contexts.
+    /// </summary>
+    /// <param name="cryptosuite">The cryptosuite the credential is signed and verified under.</param>
+    /// <param name="canonicalize">The canonicalizer of that cryptosuite.</param>
+    /// <param name="contextResolver">The context resolver the canonicalizer uses, if any.</param>
+    /// <param name="tamperedContextJson">The <c>@context</c> array substituted after signing.</param>
+    /// <param name="cancellationToken">The cancellation token of the running test.</param>
+    /// <returns>The verification result of the tampered credential.</returns>
     private static async ValueTask<CredentialVerificationResult<DataIntegritySecuredCredential>> VerifyWithTamperedContextAsync(
         CryptosuiteInfo cryptosuite,
         CanonicalizationDelegate canonicalize,
@@ -411,4 +425,44 @@ internal sealed class ContextTamperingCredentialVerificationTests
 
         Assert.IsTrue(result.IsValid, $"VC Data Integrity 1.0 §4.6: an untampered @context deeply equal to the known list, including an inline context object entry, must verify VALID; got {result.FailureReason}.");
     }
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>:
+    /// "If one or more of proof.type, proof.verificationMethod, and proof.proofPurpose does not exist, an error MUST
+    /// be raised and SHOULD convey an error type of PROOF_VERIFICATION_ERROR."
+    /// </summary>
+    /// <remarks>
+    /// This drives the Core credential verification directly rather than an endpoint, so it proves Core's own
+    /// refusal, which a caller that checks the mandatory members first would otherwise never reach.
+    /// </remarks>
+    [TestMethod]
+    public async Task CredentialProofWithoutTypeIsRejected()
+    {
+        var cancellationToken = TestContext.CancellationToken;
+        var unsigned = DataIntegrityContextTamperingFixture.CreateUnsignedCredentialJson(CredentialId);
+        var (signed, issuer) = await DataIntegrityContextTamperingFixture.SignCredentialAsync(
+            unsigned, EddsaRdfc2022CryptosuiteInfo.Instance,
+            DataIntegrityContextTamperingFixture.RdfcCanonicalizer, DataIntegrityContextTamperingFixture.ContextResolver, ProofCreated, cancellationToken).ConfigureAwait(false);
+
+        signed.Proof![0].Type = null!;
+
+        var result = await signed.VerifyAsync(
+            issuer,
+            DataIntegrityContextTamperingFixture.RdfcCanonicalizer,
+            DataIntegrityContextTamperingFixture.ContextResolver,
+            DataIntegrityContextTamperingFixture.KnownContext,
+            ProofValueCodecs.DecodeBase58Btc,
+            DataIntegrityContextTamperingFixture.SerializeCredential,
+            DataIntegrityContextTamperingFixture.SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            DataIntegrityContextTamperingFixture.EmptyContext,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "Data Integrity §4.4: a proof without type MUST be refused.");
+        Assert.AreEqual(VerificationFailureReason.MissingVerificationMethod, result.FailureReason,
+            "Missing mandatory proof options share the existing verification failure result.");
+    }
+
 }

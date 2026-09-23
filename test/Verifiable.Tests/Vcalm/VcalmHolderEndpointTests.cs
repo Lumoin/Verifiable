@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
@@ -58,74 +57,103 @@ namespace Verifiable.Tests.Vcalm;
 [TestClass]
 internal sealed class VcalmHolderEndpointTests
 {
+    /// <summary>The MSTest context of the running test; its cancellation token bounds every request in this class.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The fake clock the host and the signing helpers read, fixed at the canonical test epoch.</summary>
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
+    /// <summary>The memory pool the test-side signing and key material rent from.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
+    /// <summary>The client identifier registered with <see cref="TestHostShell"/> for holder requests.</summary>
     private const string ClientId = "https://holder.client.test";
+
+    /// <summary>The base URI registered with <see cref="TestHostShell"/> alongside <see cref="ClientId"/>.</summary>
     private static Uri ClientBaseUri { get; } = new("https://holder.client.test");
 
+    /// <summary>The verification method id the ecdsa-sd-2023 base proofs of this class are issued under.</summary>
     private const string SdIssuerVerificationMethodId = "did:example:issuer#key-1";
 
+    /// <summary>The capabilities the holder tenant is registered with: the VCALM holder role only.</summary>
     private static ImmutableHashSet<CapabilityIdentifier> HolderCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmHolder);
 
-    //The §3.5.2 round-trip needs both the holder and the verifier roles on the same tenant so a
-    //created presentation can be POSTed straight to /presentations/verify.
+    /// <summary>
+    /// The holder and verifier roles on one tenant: the §3.5.2 round-trip POSTs a created presentation straight to
+    /// <c>/presentations/verify</c>.
+    /// </summary>
     private static ImmutableHashSet<CapabilityIdentifier> HolderAndVerifierCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmHolder, WellKnownVcalmCapabilities.VcalmVerifier);
 
+    /// <summary>The serializer options every credential and presentation in this class is written and read with.</summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
+
+    /// <summary>Builds the did:key documents of the test issuers and holders.</summary>
     private static KeyDidBuilder KeyDidBuilder { get; } = new();
 
+    /// <summary>The did:key resolver seam — derives the controller DID document locally with no network.</summary>
     private static DidResolver KeyDidResolverSeam { get; } = new(
         DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(Pool))));
 
+    /// <summary>The RDFC-1.0 canonicalizer the selective-disclosure proofs are signed and derived with.</summary>
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } =
         CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
+    /// <summary>The closed, offline JSON-LD context resolver the RDFC canonicalizer loads contexts through.</summary>
     private static ContextResolverDelegate ContextResolver { get; } =
         CanonicalizationTestUtilities.CreateTestContextResolver();
 
+    /// <summary>The known <c>@context</c> the derived credentials of this class are checked against.</summary>
     private static Context KnownContext { get; } = Context.FromIris(Context.Credentials20, Context.CredentialsExamples20);
 
-    //JCS is context-free and produces a non-empty canonical form for a minimal presentation; the
-    //§3.5.2 presentation tests sign with eddsa-jcs-2022.
+    /// <summary>
+    /// The JCS canonicalizer the §3.5.2 presentations are signed with (eddsa-jcs-2022): JCS is context-free and
+    /// produces a non-empty canonical form for a minimal presentation.
+    /// </summary>
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
+    /// <summary>Serializes a credential with <see cref="JsonOptions"/>.</summary>
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
+    /// <summary>Deserializes a credential with <see cref="JsonOptions"/>.</summary>
     private static CredentialDeserializeDelegate DeserializeCredential { get; } = serialized =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
 
+    /// <summary>Serializes a presentation with <see cref="JsonOptions"/>.</summary>
     private static PresentationSerializeDelegate SerializePresentation { get; } = presentation =>
         JsonSerializerExtensions.Serialize(presentation, JsonOptions);
 
+    /// <summary>Deserializes a presentation with <see cref="JsonOptions"/>.</summary>
     private static PresentationDeserializeDelegate DeserializePresentation { get; } = serialized =>
         JsonSerializerExtensions.Deserialize<VerifiablePresentation>(serialized, JsonOptions)!;
 
+    /// <summary>Serializes a proof options document with <see cref="JsonOptions"/>.</summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
+    /// <summary>The per-operation context the test-side signing takes; empty, so no network is reachable.</summary>
     private static ExchangeContext EmptyContext { get; } = [];
 
+    /// <summary>The host registrations the test made, disposed at cleanup.</summary>
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
 
-    //Key material the holder / SD-issuer signing configs retain for the host's lifetime — disposed at
-    //cleanup, after the host (which holds the registration / seams) is torn down.
+    /// <summary>
+    /// Key material the holder and SD-issuer signing configurations retain for the host's lifetime, disposed at
+    /// cleanup after the host, which holds the registration and seams, is torn down.
+    /// </summary>
     private List<IDisposable> OwnedKeys { get; } = [];
 
-    //The in-memory presentation store the §3.5.3 / §3.5.4 / §3.5.5 storage seams read and write.
+    /// <summary>The in-memory presentation store the §3.5.3 / §3.5.4 / §3.5.5 storage seams read and write.</summary>
     private ConcurrentDictionary<string, VcalmStoredPresentation> PresentationStore { get; } =
         new(StringComparer.Ordinal);
 
 
+    /// <summary>Disposes the registrations and key material the test created, and empties the presentation store.</summary>
     [TestCleanup]
     public void DisposeRegisteredMaterials()
     {
@@ -298,9 +326,42 @@ internal sealed class VcalmHolderEndpointTests
 
         using JsonDocument response = await PostDeriveAsync(app, segment, deriveBody, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "A non-SD credential is a §3.5.1 malformed-value 400.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
+    /// derived proof is built from the base proof's own members, so a base proof missing a
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>
+    /// mandatory member is refused with MALFORMED_VALUE_ERROR before any signing, never carried into
+    /// the derived credential.
+    /// </summary>
+    [TestMethod]
+    [DataRow("type")]
+    [DataRow("verificationMethod")]
+    [DataRow("proofPurpose")]
+    public async Task DeriveWithIncompleteBaseProofYields400(string member)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterHolderAsync(app).ConfigureAwait(false);
+
+        SdIssuerContext sd = CreateSdIssuerKeys();
+        DataIntegritySecuredCredential baseCredential = await CreateBaseProofedCredentialAsync(sd).ConfigureAwait(false);
+        string mutatedCredentialJson = DataIntegrityContextTamperingFixture.MutateSecuredDocumentJson(
+            SerializeCredential(baseCredential), "delete:proof." + member);
+        string deriveBody = "{\"verifiableCredential\":" + mutatedCredentialJson
+            + ",\"options\":{\"selectivePointers\":[\"/credentialSubject/degree/name\"]}}";
+
+        using JsonDocument response = await VcalmWireFixtures.PostDeriveWireAsync(
+            app, segment, deriveBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            $"A base proof missing {member} is refused before any signing.");
     }
 
 
@@ -364,7 +425,7 @@ internal sealed class VcalmHolderEndpointTests
 
         using JsonDocument response = await PostCreatePresentationAsync(app, segment, createBody, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "A missing challenge is a §3.5.2 malformed-value 400.");
     }
@@ -398,7 +459,7 @@ internal sealed class VcalmHolderEndpointTests
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
         using JsonDocument doc = JsonDocument.Parse(response.Body);
-        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             doc.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "A §3.4.3.2 channel-domain mismatch is an anti-replay refusal (malformed-value 400).");
     }
@@ -430,6 +491,99 @@ internal sealed class VcalmHolderEndpointTests
             new RequestFields(), createBody, context, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
+    /// presentation proof covers every contained credential's existing proof, so a contained credential whose proof is
+    /// missing a <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>
+    /// mandatory member is refused with MALFORMED_VALUE_ERROR before any signing, never signed over.
+    /// </summary>
+    [TestMethod]
+    [DataRow("type")]
+    [DataRow("verificationMethod")]
+    [DataRow("proofPurpose")]
+    public async Task CreatePresentationWithIncompleteContainedCredentialProofYields400(string member)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential contained = await SignOrdinaryCredentialAsync().ConfigureAwait(false);
+        string mutatedCredentialJson = DataIntegrityContextTamperingFixture.MutateSecuredDocumentJson(
+            SerializeCredential(contained), "delete:proof." + member);
+
+        string presentationJson = "{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],"
+            + "\"type\":[\"VerifiablePresentation\"],\"holder\":\"" + holder.HolderDid + "\","
+            + "\"verifiableCredential\":[" + mutatedCredentialJson + "]}";
+        string createBody = "{\"presentation\":" + presentationJson
+            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\"}}";
+
+        using JsonDocument response = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            $"A contained credential's proof missing {member} is refused before any signing.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
+    /// holder service builds a derived proof from the base proof's own members, so its derivation refuses a base proof
+    /// missing its <c>proofPurpose</c>, a member <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data
+    /// Integrity §4.4</see> requires of every proof, whoever calls it and before any derivation.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderServiceDerivationRefusesAnIncompleteBaseProof()
+    {
+        SdIssuerContext sd = CreateSdIssuerKeys();
+        DataIntegritySecuredCredential baseCredential = await CreateBaseProofedCredentialAsync(sd).ConfigureAwait(false);
+        baseCredential.Proof![0].ProofPurpose = null;
+
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await VcalmHolderService.DeriveAsync(
+            baseCredential,
+            ["/credentialSubject/degree/name"],
+            BuildDerivationConfig(),
+            EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
+    /// presentation proof the holder service creates covers every contained credential's existing proof, so the service
+    /// refuses a contained credential whose proof is missing its <c>proofPurpose</c>, a member
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of every
+    /// proof, whoever calls it and before any signing.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderServicePresentationRefusesAnIncompleteContainedProof()
+    {
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        DataIntegritySecuredCredential contained = await SignOrdinaryCredentialAsync().ConfigureAwait(false);
+        contained.Proof![0].ProofPurpose = null;
+        VerifiablePresentation presentation = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            Holder = holder.HolderDid,
+            VerifiableCredential = [contained]
+        };
+
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await VcalmHolderService.CreatePresentationAsync(
+            presentation,
+            "challenge-service-guard",
+            "verifier.example",
+            holder.Signing.DefaultVerificationMethodId,
+            TimeProvider.GetUtcNow().UtcDateTime,
+            holder.Signing,
+            EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -516,7 +670,7 @@ internal sealed class VcalmHolderEndpointTests
 
         using JsonDocument response = await PostCreatePresentationAsync(app, segment, createBody, expectedStatus: 400).ConfigureAwait(false);
 
-        Assert.AreEqual(VcalmProblemTypes.UnknownOptionProvided,
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "An unknown option yields the UNKNOWN_OPTION_PROVIDED type.");
     }
@@ -543,8 +697,12 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
-    //Registers a tenant with the VcalmHolder capability and wires the parse seams plus the holder's
-    //selective-disclosure derive and presentation-signing configurations and the presentation store.
+    /// <summary>
+    /// Registers a tenant with the VCALM holder capability and wires the parse seams, the holder's selective-disclosure
+    /// derive configuration and the presentation store, with no presentation signing.
+    /// </summary>
+    /// <param name="app">The host shell the tenant is registered with.</param>
+    /// <returns>The tenant segment.</returns>
     private async Task<string> RegisterHolderAsync(TestHostShell app)
     {
         VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, HolderCapabilities).ConfigureAwait(false);
@@ -688,8 +846,10 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
-    //Creates a fresh P-256 issuer + ephemeral key pair for ecdsa-sd-2023 base proofs, tracked for
-    //disposal at cleanup.
+    /// <summary>
+    /// Creates a fresh P-256 issuer and ephemeral key pair for ecdsa-sd-2023 base proofs, tracked for disposal at
+    /// cleanup.
+    /// </summary>
     private SdIssuerContext CreateSdIssuerKeys()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuer =
@@ -706,15 +866,20 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
-    //Issuer base-signs the standard test credential with ecdsa-sd-2023 so the holder has a derivable
-    //base credential (the realistic §3.5.1 input — what the issuer delivered to the holder).
+    /// <summary>
+    /// Base-signs the standard test credential with ecdsa-sd-2023 under <see cref="SdIssuerVerificationMethodId"/>, so
+    /// the holder has a derivable base credential: the realistic §3.5.1 input, what the issuer delivered to the holder.
+    /// </summary>
+    /// <param name="sd">The issuer and ephemeral key material.</param>
     private Task<DataIntegritySecuredCredential> CreateBaseProofedCredentialAsync(SdIssuerContext sd) =>
         CreateBaseProofedCredentialAsync(sd, SdIssuerVerificationMethodId);
 
 
-    //The ecdsa-sd-2023 derive configuration (selective-disclosure seams over the RDFC canonicalizer);
-    //it carries no signing key — derive re-discloses the base proof. A multi-tenant test wires one per
-    //tenant to exercise the per-tenant ResolveVcalmCredentialDerivationAsync resolution path.
+    /// <summary>
+    /// The ecdsa-sd-2023 derive configuration: the selective-disclosure seams over the RDFC canonicalizer. It carries no
+    /// signing key, since derive re-discloses the base proof; a multi-tenant test wires one per tenant to exercise the
+    /// per-tenant derivation resolution path.
+    /// </summary>
     private static VcalmCredentialDerivation BuildDerivationConfig() => new()
     {
         Canonicalize = RdfcCanonicalizer,
@@ -731,15 +896,21 @@ internal sealed class VcalmHolderEndpointTests
     };
 
 
-    //The §3.5.1 derive request body for a base credential, disclosing the degree name (plus the
-    //mandatory /issuer and /type).
+    /// <summary>
+    /// The §3.5.1 derive request body for a base credential, disclosing the degree name besides the mandatory
+    /// <c>/issuer</c> and <c>/type</c>.
+    /// </summary>
+    /// <param name="baseCredential">The base-proofed credential to derive from.</param>
     private static string DeriveBody(DataIntegritySecuredCredential baseCredential) =>
         "{\"verifiableCredential\":" + SerializeCredential(baseCredential)
             + ",\"options\":{\"selectivePointers\":[\"/credentialSubject/degree/name\"]}}";
 
 
-    //The verification method the derived credential's proof carries — for §3.5.1 derive this is the base
-    //credential's issuer verification method, threaded through the derivation.
+    /// <summary>
+    /// The verification method the derived credential's proof carries: for §3.5.1 derive, the base credential's issuer
+    /// verification method, threaded through the derivation.
+    /// </summary>
+    /// <param name="derivedCredential">The parsed derived credential.</param>
     private static string ProofVerificationMethod(JsonDocument derivedCredential)
     {
         JsonElement proof = derivedCredential.RootElement.GetProperty(VcalmParameterNames.Proof);
@@ -749,17 +920,24 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
-    //The dispatcher-stamped tenant segment on the request context — the key the per-tenant derive
-    //resolver scopes itself by.
+    /// <summary>
+    /// The dispatcher-stamped tenant segment on the request context, the key the per-tenant derive resolver scopes
+    /// itself by.
+    /// </summary>
+    /// <param name="context">The per-request context the dispatcher stamped.</param>
     private static string DeriveTenantSegment(ExchangeContext context) =>
         context.TenantId is { } tenant
             ? tenant.Value
             : throw new InvalidOperationException("The dispatcher did not stamp a tenant on the request context.");
 
 
-    //Base-signs the standard test credential with an ecdsa-sd-2023 proof under the given verification
-    //method id, so a multi-tenant test can give each tenant a base credential with a DISTINCT issuer
-    //verification method (the derived proof carries it through).
+    /// <summary>
+    /// Base-signs the standard test credential with an ecdsa-sd-2023 proof under <paramref name="verificationMethodId"/>,
+    /// so a multi-tenant test can give each tenant a base credential with a DISTINCT issuer verification method, which
+    /// the derived proof carries through.
+    /// </summary>
+    /// <param name="sd">The issuer and ephemeral key material.</param>
+    /// <param name="verificationMethodId">The verification method id the base proof names.</param>
     private async Task<DataIntegritySecuredCredential> CreateBaseProofedCredentialAsync(
         SdIssuerContext sd, string verificationMethodId)
     {
@@ -778,7 +956,7 @@ internal sealed class VcalmHolderEndpointTests
             verificationMethodId,
             TimeProvider.GetUtcNow().UtcDateTime,
             mandatoryPaths,
-            () => RandomNumberGenerator.GetBytes(32),
+            DataIntegrityContextTamperingFixture.GenerateSelectiveDisclosureHmacKey,
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
             ContextResolver,
@@ -793,8 +971,10 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
-    //Signs the standard test credential with an ordinary eddsa-rdfc-2022 proof (not an SD base proof)
-    //under a did:key issuer — used to prove the §3.5.1 endpoint rejects a non-derivable credential.
+    /// <summary>
+    /// Signs the standard test credential with an ordinary eddsa-rdfc-2022 proof, not a selective-disclosure base
+    /// proof, under a did:key issuer: the §3.5.1 endpoint rejects such a credential as non-derivable.
+    /// </summary>
     private async Task<DataIntegritySecuredCredential> SignOrdinaryCredentialAsync()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
@@ -841,8 +1021,10 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
-    //Builds the holder's eddsa-jcs-2022 signing configuration under a did:key holder the KeyDidResolver
-    //resolves locally — the §3.5.2 presentation-signing seam plus the holder DID for the round-trip.
+    /// <summary>
+    /// Builds the holder's eddsa-jcs-2022 signing configuration under a did:key holder the did:key resolver resolves
+    /// locally: the §3.5.2 presentation-signing seam plus the holder DID for the round-trip.
+    /// </summary>
     private async Task<HolderSigningContext> CreateHolderSigningContextAsync()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
@@ -883,6 +1065,14 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
+    /// <summary>
+    /// Dispatches a §3.5.1 derive request in process through the host's dispatcher and returns the parsed body after
+    /// checking its status.
+    /// </summary>
+    /// <param name="app">The host shell whose dispatcher serves the request.</param>
+    /// <param name="segment">The holder tenant segment.</param>
+    /// <param name="body">The derive request body JSON text.</param>
+    /// <param name="expectedStatus">The HTTP status the response must carry.</param>
     private async Task<JsonDocument> PostDeriveAsync(
         TestHostShell app, string segment, string body, int expectedStatus)
     {
@@ -896,6 +1086,14 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
+    /// <summary>
+    /// Dispatches a §3.5.2 create-presentation request in process through the host's dispatcher and returns the
+    /// parsed body after checking its status.
+    /// </summary>
+    /// <param name="app">The host shell whose dispatcher serves the request.</param>
+    /// <param name="segment">The holder tenant segment.</param>
+    /// <param name="body">The create-presentation request body JSON text.</param>
+    /// <param name="expectedStatus">The HTTP status the response must carry.</param>
     private async Task<JsonDocument> PostCreatePresentationAsync(
         TestHostShell app, string segment, string body, int expectedStatus)
     {
@@ -909,13 +1107,18 @@ internal sealed class VcalmHolderEndpointTests
     }
 
 
-    //The ecdsa-sd-2023 issuer key material for the §3.5.1 derive money-shot.
+    /// <summary>The ecdsa-sd-2023 issuer key material the §3.5.1 derive cases base-sign with.</summary>
+    /// <param name="IssuerPublicKey">The issuer's public key.</param>
+    /// <param name="IssuerPrivateKey">The issuer key that signs the base proof.</param>
+    /// <param name="EphemeralKeyPair">The per-proof key pair that signs the disclosed statements.</param>
     private sealed record SdIssuerContext(
         PublicKeyMemory IssuerPublicKey,
         PrivateKeyMemory IssuerPrivateKey,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> EphemeralKeyPair);
 
 
-    //The holder's §3.5.2 presentation-signing configuration plus the holder DID for the round-trip.
+    /// <summary>The holder's §3.5.2 presentation-signing configuration plus the holder DID for the round-trip.</summary>
+    /// <param name="Signing">The presentation-signing configuration.</param>
+    /// <param name="HolderDid">The holder DID the presentations claim.</param>
     private sealed record HolderSigningContext(VcalmPresentationSigning Signing, string HolderDid);
 }

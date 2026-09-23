@@ -98,7 +98,7 @@ public static class VcalmResponseWriter
 
             if(options.ReturnResults)
             {
-                AppendPresentationResults(sb, presentationResult, credentialOutcomes, ref first);
+                AppendPresentationResults(sb, presentationResult, credentialOutcomes, presentationLevelProblems, ref first);
             }
 
             _ = sb.Append('}');
@@ -252,7 +252,10 @@ public static class VcalmResponseWriter
     }
 
 
-    //§3.3.1 results: validFrom, validUntil, credentialSchema, credentialStatus, proof.
+    /// <summary>
+    /// Writes the §3.3.1 <c>results</c> member of a credential VerificationResponse: the validFrom, validUntil,
+    /// credentialSchema, credentialStatus and proof sub-results <see cref="AppendCredentialResultsObject"/> writes.
+    /// </summary>
     private static void AppendCredentialResults(
         StringBuilder sb, VcalmVerificationOutcome outcome, ref bool first)
     {
@@ -270,7 +273,10 @@ public static class VcalmResponseWriter
     }
 
 
-    //The §3.3.1 results object value, reused for each per-credential result in §3.3.2.
+    /// <summary>
+    /// Writes the §3.3.1 <c>results</c> object value, reused by <see cref="AppendPresentationResults"/> for each
+    /// per-credential result of a §3.3.2 response.
+    /// </summary>
     private static void AppendCredentialResultsObject(StringBuilder sb, VcalmVerificationOutcome outcome)
     {
         _ = sb.Append('{');
@@ -297,11 +303,28 @@ public static class VcalmResponseWriter
     }
 
 
-    //§3.3.2 results: presentation { challenge, domain, holder, proof[] } + credentials[].
+    /// <summary>
+    /// Writes the §3.3.2 <c>results</c> object: <c>presentation</c> with its <c>challenge</c>, <c>domain</c>,
+    /// <c>holder</c> and <c>proof[]</c> sub-results, and <c>credentials[]</c> with one §3.3.1-shaped result per
+    /// contained credential.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM §3.3.2</see> defines
+    /// <c>challenge.verified</c> as the "Result of verifying the security challenge across all proofs provided" and
+    /// <c>domain.verified</c> as the "Result of verifying the security domain across all proofs provided". Each is
+    /// false whenever the presentation proof failed or its own check produced an error among the presentation-level
+    /// problems, a challenge the verifier never issued included, so a sub-result never reads true beside its error.
+    /// </remarks>
+    /// <param name="sb">The builder receiving the JSON.</param>
+    /// <param name="presentationResult">The presentation proof's outcome and bound inputs.</param>
+    /// <param name="credentialOutcomes">The contained credentials' outcomes, in presentation order.</param>
+    /// <param name="presentationLevelProblems">Every presentation-level ProblemDetail, the endpoint's own checks included.</param>
+    /// <param name="first">Whether the receiving object has no earlier member.</param>
     private static void AppendPresentationResults(
         StringBuilder sb,
         VcalmPresentationProofResult presentationResult,
         IReadOnlyList<VcalmVerificationOutcome> credentialOutcomes,
+        ImmutableArray<VcalmProblemDetail> presentationLevelProblems,
         ref bool first)
     {
         if(!first)
@@ -328,19 +351,24 @@ public static class VcalmResponseWriter
         bool presentationFirst = true;
         if(presentationResult.Challenge is not null)
         {
+            bool isChallengeVerified = presentationResult.Verified
+                && !HasProblemOfType(presentationLevelProblems, VcalmProblemTypes.InvalidChallengeError)
+                && !HasProblemOfType(presentationLevelProblems, VcalmProblemTypes.ChallengeNotIssued);
             AppendInputResultField(
                 sb,
                 VcalmParameterNames.Challenge,
-                new VcalmInputResult { Verified = presentationResult.Verified, Input = presentationResult.Challenge },
+                new VcalmInputResult { Verified = isChallengeVerified, Input = presentationResult.Challenge },
                 ref presentationFirst);
         }
 
         if(presentationResult.Domain is not null)
         {
+            bool isDomainVerified = presentationResult.Verified
+                && !HasProblemOfType(presentationLevelProblems, VcalmProblemTypes.InvalidDomainError);
             AppendInputResultField(
                 sb,
                 VcalmParameterNames.Domain,
-                new VcalmInputResult { Verified = presentationResult.Verified, Input = presentationResult.Domain },
+                new VcalmInputResult { Verified = isDomainVerified, Input = presentationResult.Domain },
                 ref presentationFirst);
         }
 
@@ -405,7 +433,29 @@ public static class VcalmResponseWriter
     }
 
 
-    //A §3.3.1 per-step sub-result object: { verified, input }.
+    /// <summary>
+    /// Whether <paramref name="problems"/> carries a ProblemDetail of exactly <paramref name="type"/>, so a
+    /// §3.3.2 per-check sub-result written by <see cref="AppendPresentationResults"/> is false beside its own
+    /// check's error.
+    /// </summary>
+    /// <param name="problems">The presentation-level §3.8 ProblemDetails.</param>
+    /// <param name="type">The problem type identifying the specific check.</param>
+    /// <returns><see langword="true"/> when a ProblemDetail of <paramref name="type"/> is present.</returns>
+    private static bool HasProblemOfType(ImmutableArray<VcalmProblemDetail> problems, string type)
+    {
+        foreach(VcalmProblemDetail problem in problems)
+        {
+            if(string.Equals(problem.Type, type, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /// <summary>Writes one §3.3.1 per-step sub-result member, an object of the form <c>{ verified, input }</c>.</summary>
     private static void AppendInputResultField(
         StringBuilder sb, string key, VcalmInputResult result, ref bool first)
     {
@@ -427,7 +477,7 @@ public static class VcalmResponseWriter
     }
 
 
-    //A §3.3.1 array of per-step sub-results, e.g. results.proof[].
+    /// <summary>Writes a §3.3.1 array member of per-step sub-results, such as <c>results.proof[]</c>.</summary>
     private static void AppendInputResultArrayField(
         StringBuilder sb, string key, IReadOnlyList<VcalmInputResult> results, ref bool first)
     {
@@ -459,7 +509,6 @@ public static class VcalmResponseWriter
     }
 
 
-    //A §3.3.1 results.credentialStatus[] array: { value, verified, input }.
     /// <summary>
     /// Appends the §3.3.1 <c>results.credentialSchema[]</c> array: each item is
     /// <c>{verified, input}</c> where <c>input</c> is the examined <c>credentialSchema</c> object's
@@ -508,6 +557,7 @@ public static class VcalmResponseWriter
     }
 
 
+    /// <summary>Writes the §3.3.1 <c>results.credentialStatus[]</c> array: each item is <c>{ value, verified, input }</c>.</summary>
     private static void AppendStatusResultsField(
         StringBuilder sb, string key, IReadOnlyList<VcalmStatusResult> results, ref bool first)
     {

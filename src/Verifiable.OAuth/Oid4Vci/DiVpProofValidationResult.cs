@@ -70,6 +70,14 @@ public enum DiVpProofValidationFailureReason
     /// authenticated.
     /// </summary>
     HolderNotBound,
+
+    /// <summary>
+    /// A dependency the verification needed — the holder DID resolution, or a JSON-LD context load while the
+    /// presentation's proof is transformed — ended on its own budget while the request was still live, its cancellation
+    /// bare or carried inside another exception, so the presentation was not shown to be "actually signed with a key in
+    /// the possession of the Holder" (Appendix F.2): an <c>invalid_proof</c>.
+    /// </summary>
+    DependencyBudgetExhausted,
 }
 
 

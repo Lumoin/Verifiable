@@ -26,7 +26,16 @@ namespace Verifiable.Core.Resolvers;
 /// </remarks>
 public sealed class DidResolver
 {
+    /// <summary>
+    /// Selects the method-specific resolution handler for a DID method name; supplied at construction and
+    /// consulted by <see cref="ResolveAsync"/> for every DID it resolves.
+    /// </summary>
     private SelectMethodResolverDelegate ResolverSelector { get; }
+
+    /// <summary>
+    /// Selects the method-specific dereferencer <see cref="DereferenceAsync"/> uses for a DID URL path, or
+    /// <see cref="DidMethodSelectors.None"/> when every dereference falls back to resolution and fragment matching.
+    /// </summary>
     private SelectMethodDereferencerDelegate DereferencerSelector { get; }
 
     /// <summary>
@@ -83,7 +92,10 @@ public sealed class DidResolver
     /// <c>EquivalentId</c> takes on the guarantee the specification requires of it. Every other differing
     /// <c>id</c> — no <c>EquivalentId</c> at all, an <c>EquivalentId</c> of another method, or one that simply
     /// does not name the requested DID — is refused as <see cref="DidResolutionErrors.InvalidDidDocument"/>,
-    /// with a <see cref="DidProblemDetails.Detail"/> naming both identifiers so the caller can see what
+    /// with <see cref="DidResolutionResult.InvalidDocumentReason"/> set to
+    /// <see cref="InvalidDidDocumentReason.IdMismatch"/> for
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID §3.3 step 6</see>,
+    /// and a <see cref="DidProblemDetails.Detail"/> naming both identifiers so the caller can see what
     /// mismatched without raising an exception. <c>alsoKnownAs</c> plays no part in this check anywhere: it is
     /// the DID controller's own unverified claim, never a method's verified statement.
     /// </para>
@@ -125,11 +137,15 @@ public sealed class DidResolver
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             //methodResolver is a caller-registered, per-method delegate; a fault it raises is an internal
             //error from this dispatcher's perspective rather than a signal to propagate uncaught, cancellation
-            //excepted above.
+            //excepted above. A cancellation the fault carries, as an inner exception or among an aggregate's
+            //inner exceptions, propagates as that cancellation, so the caller can tell its own cancellation
+            //from a dependency's own budget.
+            Verifiable.Core.Model.DataIntegrity.WrappedCancellation.ThrowIfCarried(exception);
+
             return DidResolutionResult.Failure(DidResolutionErrors.InternalError);
         }
 
@@ -169,11 +185,19 @@ public sealed class DidResolver
 
             if(!isGuaranteedEquivalent)
             {
-                return DidResolutionResult.Failure(new DidProblemDetails(
-                    DidErrorTypes.InvalidDidDocument,
-                    Title: "Invalid DID document",
-                    Detail: $"The resolved document's id '{resolvedDocumentId}' is not the requested DID '{did}', "
-                        + $"and the method's metadata does not list '{did}' as an equivalent identifier of the same method."));
+                return new DidResolutionResult
+                {
+                    ResolutionMetadata = new DidResolutionMetadata
+                    {
+                        Error = new DidProblemDetails(
+                            DidErrorTypes.InvalidDidDocument,
+                            Title: "Invalid DID document",
+                            Detail: $"The resolved document's id '{resolvedDocumentId}' is not the requested DID '{did}', "
+                                + $"and the method's metadata does not list '{did}' as an equivalent identifier of the same method.")
+                    },
+                    DocumentMetadata = DidDocumentMetadata.Empty,
+                    InvalidDocumentReason = InvalidDidDocumentReason.IdMismatch
+                };
             }
         }
 
@@ -190,6 +214,7 @@ public sealed class DidResolver
             //named in the December 2025 Working Draft: services, verification methods, and
             //verification relationships.
             var expanded = ExpandRelativeUrls(result.Document, did);
+
             return DidResolutionResult.Success(expanded, result.DocumentMetadata, result.ResolutionMetadata.ContentType);
         }
 
