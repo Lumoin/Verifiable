@@ -114,9 +114,9 @@ public static class VcalmExchangeFlowTransitions
                             "VcalmExchangeActive"),
 
                     //VcalmExchangeActive + VcalmExchangeAdvancedToPresentation -> VcalmExchangeActive.
-                    //The multi-step advance V-5b lacked: the prior step's presentation verified, its
-                    //result was recorded, and the workflow's NEXT step requests another presentation —
-                    //bound to a FRESH challenge / domain so the fail-closed property holds per step.
+                    //The multi-step advance: the prior step's presentation verified, its result was
+                    //recorded, and the workflow's NEXT step requests another presentation — bound to a
+                    //FRESH challenge / domain so the fail-closed property holds per step.
                     (VcalmExchangeActiveState priorActive, VcalmExchangeAdvancedToPresentation advanced) =>
                         Transition(
                             new VcalmExchangeActiveState

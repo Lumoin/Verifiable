@@ -128,7 +128,7 @@ public static class WebDidResolver
     /// delegate over untrusted fetched bytes, so any exception it raises is a document that could not be read,
     /// refused with <see cref="InvalidDidDocumentReason.Malformed"/>. A cancellation propagates from both, and so does
     /// one the transport carries inside an exception of its own
-    /// (<see cref="Verifiable.Core.Model.DataIntegrity.WrappedCancellation"/>), so the caller can
+    /// (<see cref="WrappedCancellation"/>), so the caller can
     /// tell its own cancellation from a fetch that ended on its own budget.
     /// </para>
     /// <para>
@@ -196,7 +196,7 @@ public static class WebDidResolver
             {
                 //A transport/network failure is a not-found from the resolver's perspective. A cancellation the
                 //transport carries inside its own exception propagates as that cancellation, as a bare one does.
-                Verifiable.Core.Model.DataIntegrity.WrappedCancellation.ThrowIfCarried(exception);
+                WrappedCancellation.ThrowIfCarried(exception);
 
                 return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
             }

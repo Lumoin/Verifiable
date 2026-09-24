@@ -210,6 +210,77 @@ public static class VcalmJsonParsing
 
 
     /// <summary>
+    /// Builds the <see cref="FindVcalmJsonMemberDelegate"/> the §3.6 workflow engine reads decoded member names through:
+    /// a <see cref="Utf8JsonReader"/> pass over the whole object that reads each top-level member name as the string its
+    /// escapes decode to and skips every value it passes over without materializing it.
+    /// </summary>
+    /// <returns>The member lookup.</returns>
+    public static FindVcalmJsonMemberDelegate CreateMemberFinder() => FindTopLevelMember;
+
+
+    /// <summary>
+    /// Answers whether <paramref name="jsonObject"/> carries a top-level member whose decoded name is
+    /// <paramref name="memberName"/>, the lookup <see cref="CreateMemberFinder"/> returns. The object is read to its end
+    /// before it is answered for. Every top-level member name is read with <see cref="Utf8JsonReader.GetString"/>, which
+    /// throws <see cref="InvalidOperationException"/> for a name whose escapes spell no Unicode string, such as an
+    /// unpaired surrogate, or whose bytes are not UTF-8, so such a name makes the object
+    /// <see cref="VcalmJsonMemberLookup.Unreadable"/> whichever name it would have been read as elsewhere; so does input that
+    /// is not one well-formed JSON object and a second top-level member of the looked-up name. A found value is located
+    /// from its first byte to the byte after its last, so an object or array value spans its closing bracket.
+    /// </summary>
+    /// <param name="jsonObject">The UTF-8 JSON text of one object.</param>
+    /// <param name="memberName">The member name looked for.</param>
+    /// <param name="valueRange">The byte range of the member's value when it is found; the default range otherwise.</param>
+    /// <returns>Whether the object carries the member, lacks it, or cannot be read as one object whose members it could name.</returns>
+    private static VcalmJsonMemberLookup FindTopLevelMember(ReadOnlySpan<byte> jsonObject, string memberName, out Range valueRange)
+    {
+        valueRange = default;
+        Utf8JsonReader reader = new(jsonObject);
+        try
+        {
+            if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+            {
+                return VcalmJsonMemberLookup.Unreadable;
+            }
+
+            bool isFound = false;
+            Range foundRange = default;
+
+            //The reader is over the whole input, so it throws where the input ends inside the object rather than
+            //reporting the end: every read here lands on a token of the object or throws.
+            while(reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                bool isMatch = string.Equals(reader.GetString(), memberName, StringComparison.Ordinal);
+                _ = reader.Read();
+                int valueStart = checked((int)reader.TokenStartIndex);
+                reader.Skip();
+                if(isMatch)
+                {
+                    if(isFound)
+                    {
+                        return VcalmJsonMemberLookup.Unreadable;
+                    }
+
+                    isFound = true;
+                    foundRange = new Range(valueStart, checked((int)reader.BytesConsumed));
+                }
+            }
+
+            //The loop ends on the object's closing brace. Reading past it finds the end of the input, and makes the
+            //reader throw when anything but whitespace follows the object.
+            _ = reader.Read();
+            valueRange = foundRange;
+
+            return isFound ? VcalmJsonMemberLookup.Found : VcalmJsonMemberLookup.Absent;
+        }
+        catch(Exception exception) when(exception is JsonException or InvalidOperationException)
+        {
+            return VcalmJsonMemberLookup.Unreadable;
+        }
+    }
+
+
+    /// <summary>
     /// Builds a <see cref="ParseVcalmInviteRequestDelegate"/> for the §3.7.5 inviteRequest body. The
     /// body is the small fixed-shape <c>{url, purpose, referenceId?}</c> object read with
     /// <see cref="JsonDocument"/>.

@@ -1,12 +1,12 @@
 using System.Runtime.ExceptionServices;
 
-namespace Verifiable.Core.Model.DataIntegrity;
+namespace Verifiable.Core;
 
 /// <summary>
-/// Classifies an exception that a verification dependency raised — a canonicalizer or the context loader it drives, a
-/// DID resolver, a status list or schema resolver, a digest or signature function — by the cancellation it carries: an
-/// <see cref="OperationCanceledException"/> the exception is, or carries among its inner exceptions, is that cancellation,
-/// not a failure of the dependency's own kind.
+/// Classifies an exception that a dependency raised — a canonicalizer or the context loader it drives, a transport, a
+/// DID resolver or method dereferencer, a status list or schema resolver, a schema validator, a digest or signature
+/// function — by the cancellation it carries: an <see cref="OperationCanceledException"/> the exception is, or carries
+/// among its inner exceptions, is that cancellation, not a failure of the dependency's own kind.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,10 +17,12 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// abandoned or a dependency ended on its own budget.
 /// </para>
 /// <para>
-/// Every verification boundary classifies through this one type: Core's canonicalization sites rethrow a carried
-/// cancellation with <see cref="ThrowIfCarried"/>, and a boundary that turns a dependency's own-budget cancellation into a
-/// verification result asks <see cref="IsOwnBudgetCancellation"/>, so a bare and a wrapped cancellation are one case
-/// wherever they surface.
+/// Every boundary over such a dependency classifies through this one type, in the <see cref="Verifiable.Core"/> root
+/// namespace so the DID resolvers, the Data Integrity verifiers and the protocol layers above them reach it alike: a
+/// boundary that folds a dependency's failure into a result of its own rethrows a carried cancellation with
+/// <see cref="ThrowIfCarried"/>, and a boundary that turns a dependency's own-budget cancellation into a verification
+/// result asks <see cref="IsOwnBudgetCancellation"/>, so a bare and a wrapped cancellation are one case wherever they
+/// surface.
 /// </para>
 /// </remarks>
 public static class WrappedCancellation

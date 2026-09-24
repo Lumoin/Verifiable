@@ -7,9 +7,9 @@ namespace Verifiable.Vcalm;
 /// The W3C VCALM 1.0 §3.6.1 credential-template evaluation seam: a registry that selects a
 /// <see cref="VcalmTemplateEvaluator"/> by the template's
 /// <see cref="VcalmCredentialTemplate.TemplateType"/> and evaluates the template against the exchange
-/// variables. This is the integration point a §3.6 workflow surface (V-5c) consumes to turn an issue
-/// request's template + variables into a credential body; V-5c itself is out of scope here — this is
-/// the seam plus the one evaluator that needs no engine.
+/// variables. The §3.6 workflow engine (<see cref="Exchange.VcalmWorkflowStepEngine"/>) evaluates an issue request's
+/// template through this seam to turn the template and the exchange variables into a credential body; the registry
+/// holds the seam and the one evaluator that needs no engine.
 /// </summary>
 /// <remarks>
 /// <para>

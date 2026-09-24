@@ -400,21 +400,10 @@ internal sealed class WebDidResolverResolvingTests
     [DataRow("aggregated")]
     public async Task TransportCancellationCarriedInsideItsOwnExceptionPropagates(string cancellationShape)
     {
-        ValueTask<OutboundResponse> StallingTransportAsync(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
-        {
-            OperationCanceledException ownBudget = new("private-policy-host/path");
-            Exception carrier = cancellationShape switch
-            {
-                "wrapped" => new IOException("private-policy-host/path", ownBudget),
-                _ => new AggregateException(new IOException("private-policy-host/path"), ownBudget)
-            };
-
-            return ValueTask.FromException<OutboundResponse>(carrier);
-        }
-
         ExchangeContext resolutionContext = [];
         resolutionContext.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
-        DidMethodResolverDelegate resolver = WebDidResolver.BuildResolving(StallingTransportAsync, DeserializeDocument);
+        DidMethodResolverDelegate resolver = WebDidResolver.BuildResolving(
+            CarriedCancellationFixtures.CreateTransport(cancellationShape, caller: null), DeserializeDocument);
 
         _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () => await resolver(
             AliceDid, DidResolutionOptions.Empty, resolutionContext, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);

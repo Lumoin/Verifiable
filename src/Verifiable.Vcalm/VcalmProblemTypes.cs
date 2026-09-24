@@ -45,9 +45,20 @@ public static class VcalmProblemTypes
         "https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR";
 
     /// <summary>
-    /// The value associated with a particular property is malformed, per
-    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VCDM §7.2</see>.
-    /// A data-model error makes <see cref="VcalmVerificationOutcome.Verified"/> false.
+    /// The VC Data Model 2.0 <c>MALFORMED_VALUE_ERROR</c>, "The value associated with a particular property is
+    /// malformed", per <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VCDM §7.2</see>. The verifier
+    /// reports it as an ERROR of the data-model phase, which makes <see cref="VcalmVerificationOutcome.Verified"/> false:
+    /// a <c>credentialSchema</c> entry without its <c>type</c> or <c>id</c>, a credential that does not conform to its
+    /// declared schema, and a declared schema left unchecked, whatever the cause. The endpoints answer with it as a
+    /// refusal too: HTTP 400 for a request body they cannot read and HTTP 413, titled <c>PAYLOAD_TOO_LARGE</c>, for a body
+    /// over the configured payload cap; the issuing endpoint's HTTP 400 for a credential it will not issue, such as one
+    /// carrying an existing proof its configuration refuses, an <c>issuer</c> that does not match the instance, or a
+    /// conflicting <c>credentialId</c>; and the exchange endpoint's HTTP 400 for a workflow step it cannot run and for a
+    /// presented presentation its step's <c>presentationSchema</c> refuses or could not check. The status phase reports
+    /// its problems as warnings under the Bitstring Status List types (<see cref="StatusRetrievalError"/>,
+    /// <see cref="StatusVerificationError"/>, <see cref="StatusListLengthError"/>) and uses this type only where the
+    /// Bitstring Status List validation itself raises a malformed value, then as a warning, since VCALM §3.8.1 makes every
+    /// status problem one.
     /// </summary>
     public static string MalformedValueError { get; } =
         "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR";
@@ -105,7 +116,9 @@ public static class VcalmProblemTypes
     /// Status List 1.0 Validate Algorithm raises it when a <c>statusListIndex</c> lies outside the bitstring, which
     /// <see cref="BitstringStatusListValidation.GetStatus"/> checks and which is reported as a §3.8.1 status WARNING.
     /// A credential or presentation carrying more proofs than
-    /// <see cref="VcalmCredentialVerification.MaxProofsPerDocument"/> admits reports it as an ERROR.
+    /// <see cref="VcalmCredentialVerification.MaxProofsPerDocument"/> admits reports it as an ERROR, and so does a
+    /// presentation containing more credentials than <see cref="VcalmCredentialVerification.MaxContainedCredentials"/>
+    /// admits.
     /// </summary>
     /// <remarks>
     /// <see href="https://www.w3.org/TR/vc-bitstring-status-list/#validate-algorithm">Bitstring

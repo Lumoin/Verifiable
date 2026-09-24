@@ -1,4 +1,5 @@
 using System.Text;
+using Verifiable.Json;
 using Verifiable.Vcalm;
 
 namespace Verifiable.Tests.Vcalm;
@@ -13,6 +14,7 @@ namespace Verifiable.Tests.Vcalm;
 [TestClass]
 internal sealed class VcalmTemplateEvaluatorTests
 {
+    /// <summary>The pool every evaluation of these tests renders into.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
@@ -291,43 +293,153 @@ internal sealed class VcalmJsonShapeTests
     }
 
 
+}
+
+
+/// <summary>
+/// Tests for the JSON leaf's top-level member lookup (<see cref="VcalmJsonParsing.CreateMemberFinder"/>), the reading
+/// the §3.6 workflow engine decides the <c>credential</c> wrapper of a rendered template and the reserved
+/// <c>results</c> variable from: a member is found by its decoded name among the object's own top-level members only,
+/// and input the lookup cannot read as one object whose members it could name is answered
+/// <see cref="VcalmJsonMemberLookup.Unreadable"/>.
+/// </summary>
+/// <remarks>
+/// Each test proves the JSON leaf directly, in-process; the issuing step's answers over the real wire are the
+/// <see cref="VcalmMultiStepExchangeTests"/> issuance tests.
+/// </remarks>
+[TestClass]
+internal sealed class VcalmJsonMemberFinderTests
+{
+    /// <summary>The lookup under test, the one the default JSON wiring sets on the integration.</summary>
+    private static FindVcalmJsonMemberDelegate FindMember { get; } = VcalmJsonParsing.CreateMemberFinder();
+
     /// <summary>
-    /// <see href="https://www.w3.org/TR/vcalm-1.0/#example-a-basic-workflow">VCALM 1.0 Example 13</see>
-    /// ("A Basic Workflow") wraps the credential under a <c>credential</c> member alongside other
-    /// siblings; the member is located regardless of position, and its value's own nested strings
-    /// (containing structural characters) and nested objects/arrays are skipped as a whole rather than
-    /// stopping at their first inner delimiter.
+    /// The value of the <c>credential</c> member the sibling case locates: nested strings holding structural
+    /// characters and escaped quotes, and nested objects and arrays, so a lookup that stopped at an inner delimiter
+    /// would locate less than the whole value.
     /// </summary>
+    private const string NestedCredentialValue =
+        "{\"id\":\"urn:1\",\"note\":\"a \\\"quoted}\\\" text\",\"nested\":{\"deep\":[1,2,{\"z\":true}]}}";
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#get-workflow-configuration">VCALM 1.0 §3.6.2</see>: "The template
+    /// string should render to an object containing a credential field, which holds the credential template". The field
+    /// is found among its siblings wherever it stands, under its plain spelling and under one written with an escape
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 §7</see>: "Any character may be escaped"),
+    /// and its value is located whole.
+    /// </summary>
+    /// <param name="spelledName">The member name as the object writes it, JSON escapes included.</param>
     [TestMethod]
-    public void TopLevelMemberIsLocatedAmongSiblingsWithNestedStructure()
+    [DataRow("credential")]
+    [DataRow("cred\\u0065ntial")]
+    public void MemberAmongSiblingsIsFoundWithItsWholeValue(string spelledName)
     {
-        const string json =
-            "{\"before\":[\"a}b\",{\"x\":1}],\"credential\":{\"id\":\"urn:1\",\"note\":\"a \\\"quoted}\\\" text\"," +
-            "\"nested\":{\"deep\":[1,2,{\"z\":true}]}},\"after\":42}";
-        byte[] jsonUtf8 = Encoding.UTF8.GetBytes(json);
+        byte[] json = Encoding.UTF8.GetBytes(
+            "{\"before\":[\"a}b\",{\"x\":1}],\"" + spelledName + "\":" + NestedCredentialValue + ",\"after\":42}");
 
-        bool found = VcalmJsonShape.TryGetTopLevelMemberValue(jsonUtf8, "credential"u8, out Range valueRange);
+        VcalmJsonMemberLookup lookup = FindMember(json, "credential", out Range valueRange);
 
-        Assert.IsTrue(found);
-        string value = Encoding.UTF8.GetString(jsonUtf8.AsSpan()[valueRange]);
-        Assert.AreEqual(
-            "{\"id\":\"urn:1\",\"note\":\"a \\\"quoted}\\\" text\",\"nested\":{\"deep\":[1,2,{\"z\":true}]}}", value);
+        Assert.AreEqual(VcalmJsonMemberLookup.Found, lookup);
+        Assert.AreEqual(NestedCredentialValue, Encoding.UTF8.GetString(json.AsSpan()[valueRange]));
     }
 
 
     /// <summary>
-    /// <see href="https://www.w3.org/TR/vcalm-1.0/#example-minimal-credential-template">VCALM 1.0
-    /// Appendix D.1 Example 29</see> renders the bare credential directly, with no <c>credential</c>
-    /// wrapper member — the lookup reports absence rather than a false match, so the engine signs the
-    /// rendered object as-is.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#get-workflow-configuration">VCALM 1.0 §3.6.2</see>: "The template
+    /// string should render to an object containing a credential field". A template may render the bare credential
+    /// instead, an object read to its end that carries no such field, and the lookup answers that the field is absent,
+    /// never a false match, so the engine signs the object as rendered.
     /// </summary>
     [TestMethod]
-    public void AbsentTopLevelMemberIsNotFound()
+    public void MemberTheObjectDoesNotCarryIsAbsent()
     {
-        const string json = "{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],\"type\":[\"VerifiableCredential\"]}";
+        byte[] json = Encoding.UTF8.GetBytes("{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],\"type\":[\"VerifiableCredential\"]}");
 
-        bool found = VcalmJsonShape.TryGetTopLevelMemberValue(Encoding.UTF8.GetBytes(json), "credential"u8, out _);
+        VcalmJsonMemberLookup lookup = FindMember(json, "credential", out Range valueRange);
 
-        Assert.IsFalse(found);
+        Assert.AreEqual(VcalmJsonMemberLookup.Absent, lookup);
+        Assert.AreEqual(default, valueRange, "An absent member locates no value.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#get-workflow-configuration">VCALM 1.0 §3.6.2</see>: "The template
+    /// string should render to an object containing a credential field", a field of the rendered object itself. The name
+    /// met below the top level, as a member of a nested object, as a member of an object inside an array, or as a string
+    /// value, is not that field, so the lookup answers that the object's own field is absent.
+    /// </summary>
+    /// <param name="json">An object carrying the name only below its top level.</param>
+    [TestMethod]
+    [DataRow("{\"outer\":{\"credential\":{\"id\":\"urn:1\"}}}")]
+    [DataRow("{\"list\":[\"credential\",{\"credential\":{\"id\":\"urn:1\"}}]}")]
+    [DataRow("{\"note\":\"credential\"}")]
+    public void NameBelowTheTopLevelIsAbsent(string json)
+    {
+        VcalmJsonMemberLookup lookup = FindMember(Encoding.UTF8.GetBytes(json), "credential", out _);
+
+        Assert.AreEqual(VcalmJsonMemberLookup.Absent, lookup);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>: "When the names within an object
+    /// are not unique, the behavior of software that receives such an object is unpredictable. Many implementations report
+    /// the last name/value pair only. Other implementations report an error or fail to parse the object, and some
+    /// implementations report all of the name/value pairs, including duplicates." An object carrying the looked-up member
+    /// twice, under one spelling or under two spellings of the same decoded name, is unreadable: the lookup answers with
+    /// neither the first nor the last value, since which of them a later parser of the same text reads is unpredictable.
+    /// </summary>
+    /// <param name="json">An object carrying the member twice.</param>
+    [TestMethod]
+    [DataRow("{\"credential\":{\"id\":\"urn:1\"},\"credential\":{\"id\":\"urn:2\"}}")]
+    [DataRow("{\"credential\":{\"id\":\"urn:1\"},\"cred\\u0065ntial\":{\"id\":\"urn:2\"}}")]
+    public void MemberCarriedTwiceIsUnreadable(string json)
+    {
+        VcalmJsonMemberLookup lookup = FindMember(Encoding.UTF8.GetBytes(json), "credential", out Range valueRange);
+
+        Assert.AreEqual(VcalmJsonMemberLookup.Unreadable, lookup);
+        Assert.AreEqual(default, valueRange, "An unreadable object locates no value.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>: "However, the ABNF in this
+    /// specification allows member names and string values to contain bit sequences that cannot encode Unicode
+    /// characters; for example, "\uDEAD" (a single unpaired UTF-16 surrogate)." and "The behavior of software that
+    /// receives JSON texts containing such values is unpredictable". A top-level member name whose escapes spell an
+    /// unpaired surrogate is unreadable, whether it could read as the looked-up name or as another one, so the lookup
+    /// answers neither found nor absent for the object that carries it.
+    /// </summary>
+    /// <param name="json">An object carrying a top-level member name that spells no Unicode string.</param>
+    [TestMethod]
+    [DataRow("{\"r\\udc00esults\":true}")]
+    [DataRow("{\"x\\ud800\":true}")]
+    [DataRow("{\"a\":1,\"\\udc00\":2}")]
+    public void NameThatSpellsNoUnicodeStringIsUnreadable(string json)
+    {
+        VcalmJsonMemberLookup lookup = FindMember(Encoding.UTF8.GetBytes(json), "results", out _);
+
+        Assert.AreEqual(VcalmJsonMemberLookup.Unreadable, lookup);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 §2</see>: "A JSON text is a serialized
+    /// value." The lookup reads the object to its end before it answers, so input that is not one well-formed object, an
+    /// array, a truncated object, an object followed by more text, or two objects, is unreadable rather than read as
+    /// carrying or lacking the member.
+    /// </summary>
+    /// <param name="json">Input that is not one well-formed JSON object.</param>
+    [TestMethod]
+    [DataRow("[{\"credential\":{}}]")]
+    [DataRow("{\"credential\":{}")]
+    [DataRow("{\"credential\":{}} trailing")]
+    [DataRow("{\"credential\":{}}{\"credential\":{}}")]
+    public void InputThatIsNotOneObjectIsUnreadable(string json)
+    {
+        VcalmJsonMemberLookup lookup = FindMember(Encoding.UTF8.GetBytes(json), "credential", out _);
+
+        Assert.AreEqual(VcalmJsonMemberLookup.Unreadable, lookup);
     }
 }

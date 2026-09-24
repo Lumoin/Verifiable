@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Vcalm;
 
 /// <summary>
 /// The <c>Microsoft.AspNetCore.Builder.WebApplication</c> host skin for the W3C VCALM 1.0
-/// conformance bridge (chunk V-6a), mounted directly as its HTTPS pipeline's <c>RequestDelegate</c>
+/// conformance bridge, mounted directly as its HTTPS pipeline's <c>RequestDelegate</c>
 /// (<c>app.Run(application.ProcessRequestAsync)</c>). It is the analogue of
 /// <see cref="Verifiable.Tests.OAuth.AuthorizationServerHttpApplication"/>, specialised for the
 /// external W3C <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c> JS suites: it

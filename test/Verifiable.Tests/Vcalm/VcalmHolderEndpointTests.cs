@@ -47,10 +47,10 @@ namespace Verifiable.Tests.Vcalm;
 /// The §3.5.1 derive money-shot verifies the derived credential through the Core
 /// <see cref="CredentialEcdsaSd2023Extensions.VerifyDerivedProofAsync(DataIntegritySecuredCredential, PublicKeyMemory, VerificationDelegate, ParseDerivedProofDelegate, CanonicalizationDelegate, ContextResolverDelegate?, Context, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/> surface (the correct verifier
 /// for an ecdsa-sd-2023 DERIVED proof, whose base/derived signature reconstruction the generic Data
-/// Integrity verifier the V-1 <c>/credentials/verify</c> endpoint composes does not implement). The
-/// §3.5.2 create-presentation money-shot drives the produced presentation straight into the V-1
+/// Integrity verifier the §3.3.1 <c>/credentials/verify</c> endpoint composes does not implement). The
+/// §3.5.2 create-presentation money-shot drives the produced presentation straight into the §3.3.2
 /// <c>/presentations/verify</c> endpoint (<see cref="VcalmVerifierEndpoints"/>), a true cross-endpoint
-/// round-trip — the presentation signer and the V-1 presentation verifier share the generic Data
+/// round-trip — the presentation signer and the §3.3.2 presentation verifier share the generic Data
 /// Integrity surface.
 /// </para>
 /// </remarks>
@@ -197,7 +197,7 @@ internal sealed class VcalmHolderEndpointTests
         Assert.IsTrue(derivedRoot.TryGetProperty(VcalmParameterNames.Proof, out _),
             "The derived credential carries a derived ecdsa-sd-2023 proof.");
 
-        //The derived VC verifies through the correct ecdsa-sd-2023 derived-proof verifier (the V-1
+        //The derived VC verifies through the correct ecdsa-sd-2023 derived-proof verifier (the §3.3.1
         //credentials/verify endpoint composes the generic Data Integrity verifier, which does not
         //reconstruct an SD derived proof — the SD verifier is the conformant verifier here).
         DataIntegritySecuredCredential received = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(

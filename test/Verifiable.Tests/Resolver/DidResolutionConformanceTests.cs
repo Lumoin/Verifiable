@@ -2,6 +2,7 @@ using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -27,8 +28,13 @@ internal sealed class DidResolutionConformanceTests
     /// <summary>A default context; this layer does no network I/O.</summary>
     private static ExchangeContext Context { get; } = [];
 
+    /// <summary>The MSTest context, whose cancellation token bounds every resolution these tests run.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>
+    /// With <c>expandRelativeUrls</c> enabled, a relative verification method <c>id</c> is expanded to an absolute DID URL
+    /// against the resolved DID (DID Resolution §4.4 step 6).
+    /// </summary>
     [TestMethod]
     public async Task ExpandRelativeUrlsRewritesRelativeVerificationMethodId()
     {
@@ -49,6 +55,7 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual($"{ExampleDid}#key-1", result.Document!.VerificationMethod![0].Id);
     }
 
+    /// <summary>With <c>expandRelativeUrls</c> enabled, a relative service <c>id</c> is expanded against the resolved DID.</summary>
     [TestMethod]
     public async Task ExpandRelativeUrlsRewritesRelativeServiceId()
     {
@@ -67,6 +74,10 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual($"{ExampleDid}#svc-1", result.Document!.Service![0].Id!.ToString());
     }
 
+    /// <summary>
+    /// With <c>expandRelativeUrls</c> enabled, a by-reference relative fragment in a verification relationship array is
+    /// expanded too, as the step names relationships alongside services and verification methods.
+    /// </summary>
     [TestMethod]
     public async Task ExpandRelativeUrlsRewritesRelativeRelationshipReferences()
     {
@@ -90,6 +101,7 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual($"{ExampleDid}#key-1", result.Document!.AssertionMethod![0].Id);
     }
 
+    /// <summary>With <c>expandRelativeUrls</c> enabled, identifiers that are already absolute are left as they are.</summary>
     [TestMethod]
     public async Task ExpandRelativeUrlsLeavesAbsoluteIdsUnchanged()
     {
@@ -111,6 +123,7 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual(absoluteVmId, result.Document!.Authentication![0].Id);
     }
 
+    /// <summary>Without the <c>expandRelativeUrls</c> option the resolved document is returned verbatim, relative identifiers included.</summary>
     [TestMethod]
     public async Task WithoutExpandOptionRelativeIdsAreLeftUnchanged()
     {
@@ -136,6 +149,7 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual("#key-1", result.Document!.Authentication![0].Id);
     }
 
+    /// <summary>A failed resolution returns a null document and empty document metadata beside its error (DID Resolution §4.4).</summary>
     [TestMethod]
     public async Task ResolveFailureReturnsNullDocumentAndEmptyDocumentMetadata()
     {
@@ -152,6 +166,7 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error);
     }
 
+    /// <summary>A failed dereference returns a null content stream and no content metadata beside its error (DID Resolution §5.4).</summary>
     [TestMethod]
     public async Task DereferenceFailureReturnsNullContentStreamAndMetadata()
     {
@@ -168,6 +183,7 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.NotFound, result.DereferencingMetadata.Error);
     }
 
+    /// <summary>A NOT_FOUND the method's Read operation returns surfaces unchanged, with no invalid-document reason.</summary>
     [TestMethod]
     public async Task ResolveSurfacesMethodResolverNotFound()
     {
@@ -312,6 +328,10 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual(InvalidDidDocumentReason.IdMismatch, result.InvalidDocumentReason);
     }
 
+    /// <summary>
+    /// A selected service endpoint URL that already carries a fragment is an error rather than a URL given a second
+    /// fragment from the DID URL (DID Resolution §5.4.2).
+    /// </summary>
     [TestMethod]
     public async Task DereferenceRejectsServiceEndpointThatAlreadyContainsFragment()
     {
@@ -336,7 +356,45 @@ internal sealed class DidResolutionConformanceTests
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidDocument, result.DereferencingMetadata.Error);
     }
 
-    //Helper methods at end of test class.
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/did-resolution/#errors">DID Resolution §11 Errors</see>: INTERNAL_ERROR, "An
+    /// unexpected error occured during DID Resolution or DID URL dereferencing." A method dereferencer whose work was
+    /// cancelled has met no unexpected error. When it reports that cancellation inside an exception of its own, as the
+    /// inner exception of its own fault or among an aggregate's inner exceptions, the DID URL dereferencer lets it
+    /// propagate as the cancellation it is instead of answering INTERNAL_ERROR, both when the caller abandoned the
+    /// dereference and when the method's work ended on its own budget while the caller still waits, so the caller tells
+    /// the two apart by its own token.
+    /// </summary>
+    /// <param name="cancellationShape">How the dereferencer carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
+    /// <param name="isCallerCancelled">Whether the caller abandons the dereference while the method dereferencer runs.</param>
+    [TestMethod]
+    [DataRow("wrapped", false)]
+    [DataRow("wrapped", true)]
+    [DataRow("aggregated", false)]
+    [DataRow("aggregated", true)]
+    public async Task DereferenceCancellationCarriedInsideTheMethodDereferencerFaultPropagates(string cancellationShape, bool isCallerCancelled)
+    {
+        using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        async ValueTask<DidDereferencingResult> CancelledDereferenceAsync(
+            string baseDid, string? path, string? query, DidDereferencingOptions options, ExchangeContext context, CancellationToken cancellationToken)
+        {
+            if(isCallerCancelled)
+            {
+                await caller.CancelAsync().ConfigureAwait(false);
+            }
+
+            throw CarriedCancellationFixtures.Create(cancellationShape);
+        }
+
+        var resolver = new DidResolver(
+            DidMethodSelectors.FromResolvers((ExampleDidPrefix, ResolveReturnsNotFoundAsync)),
+            DidMethodSelectors.FromDereferencers((ExampleDidPrefix, CancelledDereferenceAsync)));
+
+        await CarriedCancellationFixtures.AssertPropagatesAsTheCancellationAsync(
+            async () => await resolver.DereferenceAsync($"{ExampleDid}/files/resource", Context, cancellationToken: caller.Token).ConfigureAwait(false),
+            isCallerCancelled,
+            caller.Token).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Resolves <paramref name="document"/> with the <c>expandRelativeUrls</c> option enabled,
@@ -369,10 +427,14 @@ internal sealed class DidResolutionConformanceTests
     /// The document is injected at construction and flows to <see cref="ResolveAsync"/> through the
     /// instance rather than a captured variable.
     /// </summary>
+    /// <param name="document">The document every resolution returns.</param>
+    /// <param name="metadata">The document metadata every resolution returns, or <see langword="null"/> for none.</param>
     private sealed class DocumentStub(DidDocument document, DidDocumentMetadata? metadata = null)
     {
+        /// <summary>The document every resolution returns.</summary>
         private DidDocument Document { get; } = document;
 
+        /// <summary>The document metadata every resolution returns.</summary>
         private DidDocumentMetadata Metadata { get; } = metadata ?? DidDocumentMetadata.Empty;
 
         /// <summary>Resolves any DID to the fixed document (and metadata) supplied at construction.</summary>

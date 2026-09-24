@@ -189,7 +189,7 @@ public static class CredentialDataIntegrityExtensions
             //Build the COMPLETE proof skeleton before signing — everything except
             //proofValue, including the proof id and the chain link. The proof options
             //derive from the skeleton, so every member the wire proof will carry is
-            //covered by the signature, matching the §4.2 verify-side reconstruction
+            //covered by the signature, matching the §4.4 verify-side reconstruction
             //(proof with proofValue removed). An id or previousProof attached after
             //signing would be unsigned — a chain that does not cryptographically chain.
             var existingProofs = (credential as DataIntegritySecuredCredential)?.Proof;
@@ -329,7 +329,7 @@ public static class CredentialDataIntegrityExtensions
         /// </para>
         /// <para>
         /// See <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">
-        /// VC Data Integrity §4.3 Verify Proof</see>.
+        /// VC Data Integrity §4.4 Verify Proof</see>.
         /// </para>
         /// <para>
         /// After the proof verifies, <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">

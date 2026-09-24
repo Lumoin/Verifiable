@@ -273,11 +273,11 @@ internal sealed class VcalmExchangeEndpointTests
 
 
     /// <summary>
-    /// §3.6.5 active re-poll (V-5b single-step regression): after the engine issues a presentation
-    /// request, a non-presentation re-poll RE-SENDS the SAME request — the EXISTING bound challenge,
-    /// never a freshly minted one — and a presentation the holder binds to the re-polled challenge still
-    /// verifies and completes. Re-minting a fresh challenge on a re-poll desynced the binding the holder
-    /// was already answering (the single-step path formerly re-consulted the step seam here).
+    /// §3.6.5 active re-poll on an exchange the explicit step-decision seam decides: after the engine issues a
+    /// presentation request, a non-presentation re-poll RE-SENDS the SAME request — the EXISTING bound challenge,
+    /// never a freshly minted one — and a presentation the holder binds to the re-polled challenge still verifies and
+    /// completes. A challenge minted afresh on a re-poll would desync the binding the holder is already answering, so
+    /// an active exchange never consults the step seam again for a re-poll.
     /// </summary>
     [TestMethod]
     public async Task ParticipateActiveRepollResendsSameChallengeAndStillVerifies()
@@ -305,7 +305,7 @@ internal sealed class VcalmExchangeEndpointTests
         string repollChallenge = repollVpr.GetProperty(VcalmParameterNames.Challenge).GetString()!;
 
         Assert.AreEqual(firstChallenge, repollChallenge,
-            "§3.6.5 re-poll must re-send the EXISTING bound challenge, never mint a fresh one (the V-5b desync).");
+            "§3.6.5 re-poll must re-send the EXISTING bound challenge, never mint a fresh one that desyncs the binding.");
 
         //The exchange is still active after the re-poll (no state change, no re-bind).
         using JsonDocument midState = await GetExchangeStateAsync(app, segment, exchangeId).ConfigureAwait(false);

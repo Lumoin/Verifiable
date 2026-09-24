@@ -334,6 +334,38 @@ internal sealed class VcalmMultiStepExchangeTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#get-workflow-configuration">VCALM 1.0 §3.6.2</see>: "The template
+    /// string should render to an object containing a credential field, which holds the credential template, and
+    /// (optionally) an options field, which holds important credential issuing parameters (this is the format of the
+    /// request body that is sent to POST /credentials/issue)." The issuing step signs the credential that field holds,
+    /// never the object around it. A template that spells the field's name with a JSON escape
+    /// (<c>"cred\u0065ntial"</c>) renders the same field,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 §7</see>: "Any character may be escaped", so
+    /// over the real wire the exchange offers back the credential the field holds, signed, exactly as it does for the
+    /// plain spelling.
+    /// </summary>
+    [TestMethod]
+    public async Task TemplateRenderedEscapedCredentialWrapperIsUnwrappedBeforeSigning()
+    {
+        using JsonDocument offered = await RunPresentThenIssueExchangeOverWireAsync(
+            issuerDid => PresentThenIssueWorkflow(issuerDid, "cred\\u0065ntial"),
+            VcalmExistingProofHandling.Error,
+            200).ConfigureAwait(false);
+
+        Assert.IsTrue(offered.RootElement.TryGetProperty(VcalmParameterNames.VerifiablePresentation, out JsonElement vp),
+            "The issue step offers the minted credential back as a verifiablePresentation.");
+        JsonElement credentials = vp.GetProperty("verifiableCredential");
+        Assert.AreEqual(1, credentials.GetArrayLength(), "The offered presentation carries one issued credential.");
+        JsonElement issuedCredential = credentials[0];
+        Assert.IsFalse(issuedCredential.TryGetProperty("credential", out _),
+            "The escaped credential field is unwrapped before signing, never signed as a member of the issued credential.");
+        Assert.AreEqual("Example Holder", issuedCredential.GetProperty("credentialSubject").GetProperty("name").GetString(),
+            "The issued credential is the one the credential field holds.");
+        Assert.IsTrue(issuedCredential.TryGetProperty("proof", out _), "The credential the field holds is the one signed.");
+    }
+
+
+    /// <summary>
     /// §3.6.1 reserves <c>results</c> for the accumulated <c>variables.results</c> object (see
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see>: "a
     /// workflow will also reference the reserved <c>results</c> variable"): an issueRequest whose OWN
@@ -348,7 +380,7 @@ internal sealed class VcalmMultiStepExchangeTests
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         IssuerSigningContext issuer = await CreateIssuerSigningContextAsync().ConfigureAwait(false);
         string segment = await RegisterMultiStepAsync(
-            app, holder, PresentThenIssueWorkflowWithReservedVariablesCollision(issuer.IssuerDid), issuer).ConfigureAwait(false);
+            app, holder, PresentThenIssueWorkflowWithReservedVariablesCollision(issuer.IssuerDid, "results"), issuer).ConfigureAwait(false);
 
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
         (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
@@ -362,6 +394,103 @@ internal sealed class VcalmMultiStepExchangeTests
         Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "An issueRequest redefining the reserved 'results' member is a MALFORMED_VALUE_ERROR refusal.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see>: "In some cases, a workflow will
+    /// also reference the reserved results variable at different points in its configuration (typically in credential
+    /// templates). This variable holds data that the workflow service receives from clients throughout the course of an
+    /// exchange." An issueRequest whose own variables spell <c>results</c> with a JSON escape (<c>"r\u0065sults"</c>)
+    /// names that same reserved variable, <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 §7</see>:
+    /// "Any character may be escaped", so over the real wire the issuing step refuses it with a
+    /// <c>MALFORMED_VALUE_ERROR</c>, exactly as it refuses the plain spelling, rather than evaluating the template over
+    /// variables that redefine the exchange's results.
+    /// </summary>
+    [TestMethod]
+    public async Task IssueRequestVariablesRedefiningReservedResultsUnderAnEscapedNameIsRefused()
+    {
+        using JsonDocument refused = await RunPresentThenIssueExchangeOverWireAsync(
+            issuerDid => PresentThenIssueWorkflowWithReservedVariablesCollision(issuerDid, "r\\u0065sults"),
+            VcalmExistingProofHandling.Error,
+            400).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        Assert.Contains("reserved 'results' member", refused.RootElement.GetProperty("detail").GetString()!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>: "However, the ABNF in this
+    /// specification allows member names and string values to contain bit sequences that cannot encode Unicode
+    /// characters; for example, "\uDEAD" (a single unpaired UTF-16 surrogate)." and "The behavior of software that
+    /// receives JSON texts containing such values is unpredictable".
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if an
+    /// endpoint receives data, options, or option values that it does not understand or know how to process." A credential
+    /// template that renders its wrapper field under a name whose escapes put an unpaired surrogate inside
+    /// <c>credential</c> renders an object the issuing step cannot read as carrying or lacking that field, so over the
+    /// real wire the step refuses it with a <c>MALFORMED_VALUE_ERROR</c> rather than signing either reading.
+    /// </summary>
+    [TestMethod]
+    public async Task TemplateRenderedWrapperNameThatSpellsNoUnicodeStringIsRefused()
+    {
+        using JsonDocument refused = await RunPresentThenIssueExchangeOverWireAsync(
+            issuerDid => PresentThenIssueWorkflow(issuerDid, "cred\\udc00ential"),
+            VcalmExistingProofHandling.Error,
+            400).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        Assert.Contains("member names can all be read", refused.RootElement.GetProperty("detail").GetString()!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see>: "In some cases, a workflow will
+    /// also reference the reserved results variable at different points in its configuration (typically in credential
+    /// templates)." <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>: "The behavior of
+    /// software that receives JSON texts containing such values is unpredictable", of a member name that carries "a
+    /// single unpaired UTF-16 surrogate". <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>:
+    /// "Implementations MUST throw an error if an endpoint receives data, options, or option values that it does not
+    /// understand or know how to process." An issueRequest whose own variables carry a member whose escapes put an
+    /// unpaired surrogate inside <c>results</c> cannot be read as redefining that reserved variable or as leaving it be, so
+    /// over the real wire the issuing step refuses it with a <c>MALFORMED_VALUE_ERROR</c> rather than evaluating the
+    /// template over variables a later parser could read as another results.
+    /// </summary>
+    [TestMethod]
+    public async Task IssueRequestVariablesNameThatSpellsNoUnicodeStringIsRefused()
+    {
+        using JsonDocument refused = await RunPresentThenIssueExchangeOverWireAsync(
+            issuerDid => PresentThenIssueWorkflowWithReservedVariablesCollision(issuerDid, "r\\udc00esults"),
+            VcalmExistingProofHandling.Error,
+            400).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        Assert.Contains("member names can all be read", refused.RootElement.GetProperty("detail").GetString()!, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if an
+    /// endpoint receives data, options, or option values that it does not understand or know how to process." An instance
+    /// wired without a reader of JSON member names cannot tell whether a rendered template wraps its credential or whether
+    /// an issue request's variables redefine the reserved results variable, so over the real wire the issuing step fails
+    /// closed with a <c>MALFORMED_VALUE_ERROR</c> rather than signing what it cannot read.
+    /// </summary>
+    [TestMethod]
+    public async Task IssuingStepWithoutAJsonMemberReaderIsRefused()
+    {
+        using JsonDocument refused = await RunPresentThenIssueExchangeOverWireAsync(
+            issuerDid => PresentThenIssueWorkflow(issuerDid),
+            VcalmExistingProofHandling.Error,
+            400,
+            static candidateIntegration => candidateIntegration.FindVcalmJsonMember = null).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        Assert.Contains("no JSON member reader is wired", refused.RootElement.GetProperty("detail").GetString()!, StringComparison.Ordinal);
     }
 
 
@@ -423,7 +552,7 @@ internal sealed class VcalmMultiStepExchangeTests
     /// already contains one or more proofs, the behavior is determined by the configuration of the issuer instance",
     /// one configuration being "Error Handling: Return an error if credential values that contain existing proof values
     /// are provided, when the instance is configured to only accept credentials without existing proofs." A template that
-    /// spells the <c>proof</c> member name with a JSON escape (<c>"proof"</c>) renders the same member,
+    /// spells the <c>proof</c> member name with a JSON escape (<c>"pr\u006fof"</c>) renders the same member,
     /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 §7</see>: "Any character may be escaped", so
     /// the credential it renders already contains a proof, and under that default configuration the issue step fails
     /// with the issuing refusal, a MALFORMED_VALUE_ERROR, rather than the instance's proof being chained onto it.
@@ -476,23 +605,66 @@ internal sealed class VcalmMultiStepExchangeTests
     /// <summary>
     /// Runs a present-then-issue exchange over the real wire whose credential template renders
     /// <paramref name="renderedProofJson"/> as the credential's proof under the member name
-    /// <paramref name="proofMemberName"/>: creates the exchange, initiates it, presents a DID-authentication
-    /// presentation, and returns the refusal the issuing step answers with.
+    /// <paramref name="proofMemberName"/>, through <see cref="RunPresentThenIssueExchangeOverWireAsync"/>, and returns
+    /// the refusal the issuing step answers with.
     /// </summary>
     /// <param name="proofMemberName">The member name as the template writes it, JSON escapes included.</param>
     /// <param name="renderedProofJson">The proof member value the template renders.</param>
     /// <param name="existingProofHandling">How the exchange issuance treats that rendered proof.</param>
     /// <returns>The parsed 400 problem body; the caller disposes it.</returns>
-    private async Task<JsonDocument> RunIssueExchangeWithTemplateProofOverWireAsync(
-        string proofMemberName, string renderedProofJson, VcalmExistingProofHandling existingProofHandling)
+    private Task<JsonDocument> RunIssueExchangeWithTemplateProofOverWireAsync(
+        string proofMemberName, string renderedProofJson, VcalmExistingProofHandling existingProofHandling) =>
+        RunPresentThenIssueExchangeOverWireAsync(
+            issuerDid => PresentThenIssueWorkflowWithTemplateProof(issuerDid, proofMemberName, renderedProofJson),
+            existingProofHandling,
+            400);
+
+
+    /// <summary>
+    /// Runs a present-then-issue exchange over the real wire on the workflow <paramref name="workflowForIssuer"/> builds
+    /// for the issuer the exchange signs with: creates the exchange, initiates it, presents a DID-authentication
+    /// presentation, and returns the issuing step's answer after checking its status.
+    /// </summary>
+    /// <param name="workflowForIssuer">Builds the workflow from the DID of the issuer the exchange's issuance signs as.</param>
+    /// <param name="existingProofHandling">How the exchange issuance treats a proof its template renders.</param>
+    /// <param name="expectedStatus">The HTTP status the issuing step's answer must carry.</param>
+    /// <param name="alterIntegration">
+    /// An alteration applied to the registered integration before the exchange runs, or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>The parsed answer; the caller disposes it.</returns>
+    private async Task<JsonDocument> RunPresentThenIssueExchangeOverWireAsync(
+        Func<string, VcalmWorkflowConfiguration> workflowForIssuer,
+        VcalmExistingProofHandling existingProofHandling,
+        int expectedStatus,
+        Action<VcalmIntegration>? alterIntegration = null)
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         IssuerSigningContext issuer = await CreateIssuerSigningContextAsync().ConfigureAwait(false);
         string segment = await RegisterMultiStepAsync(
-            app, holder, PresentThenIssueWorkflowWithTemplateProof(issuer.IssuerDid, proofMemberName, renderedProofJson), issuer,
-            existingProofHandling).ConfigureAwait(false);
+            app, holder, workflowForIssuer(issuer.IssuerDid), issuer, existingProofHandling).ConfigureAwait(false);
+        if(alterIntegration is not null)
+        {
+            await TestHostShell.AlterVcalmAsync(app.Server, alterIntegration).ConfigureAwait(false);
+        }
 
+        (string exchangeId, string challenge, string domain) = await StartExchangeOverWireAsync(app, segment).ConfigureAwait(false);
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+
+        return await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, exchangeId, present, expectedStatus, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Creates an exchange of the tenant <paramref name="segment"/> and initiates it over the real wire, returning the
+    /// exchange's id and the challenge and domain the engine bound to the first step's presentation request.
+    /// </summary>
+    /// <param name="app">The host running the tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <returns>The exchange id and the bound challenge and domain.</returns>
+    private async Task<(string ExchangeId, string Challenge, string Domain)> StartExchangeOverWireAsync(TestHostShell app, string segment)
+    {
         string exchangeId;
         using(JsonDocument created = await VcalmWireFixtures.PostEndpointWireAsync(
             app, segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "{}", 201, TestContext.CancellationToken).ConfigureAwait(false))
@@ -500,20 +672,11 @@ internal sealed class VcalmMultiStepExchangeTests
             exchangeId = created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
         }
 
-        string challenge;
-        string domain;
-        using(JsonDocument request = await VcalmWireFixtures.PostExchangeWireAsync(
-            app, segment, exchangeId, "{}", 200, TestContext.CancellationToken).ConfigureAwait(false))
-        {
-            JsonElement vpr = request.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentationRequest);
-            challenge = vpr.GetProperty(VcalmParameterNames.Challenge).GetString()!;
-            domain = vpr.GetProperty(VcalmParameterNames.Domain).GetString()!;
-        }
+        using JsonDocument request = await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, exchangeId, "{}", 200, TestContext.CancellationToken).ConfigureAwait(false);
+        JsonElement vpr = request.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentationRequest);
 
-        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
-
-        return await VcalmWireFixtures.PostExchangeWireAsync(
-            app, segment, exchangeId, present, 400, TestContext.CancellationToken).ConfigureAwait(false);
+        return (exchangeId, vpr.GetProperty(VcalmParameterNames.Challenge).GetString()!, vpr.GetProperty(VcalmParameterNames.Domain).GetString()!);
     }
 
 
@@ -787,7 +950,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
     /// <summary>
     /// §3.6.5 active re-poll: "Posting an empty body will start the exchange or return what the exchange
-    /// is expecting to complete the next step." On a config-driven (V-5c) exchange ALREADY active (the
+    /// is expecting to complete the next step." On a workflow-driven exchange ALREADY active (the
     /// engine has issued a presentation request and is awaiting it), an empty re-poll RE-SENDS the
     /// current step's bound verifiablePresentationRequest with the SAME challenge / domain and NO state
     /// change — never a 500. The fail-closed property holds: the challenge is not re-minted, so the
@@ -943,6 +1106,61 @@ internal sealed class VcalmMultiStepExchangeTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if an
+    /// endpoint receives data, options, or option values that it does not understand or know how to process." A step's
+    /// <c>presentationSchema</c> check that reaches no verdict, its validator throwing, ending on its own budget while the
+    /// holder's request still waits, or answering an outcome the VC JSON Schema evaluation does not define, cannot process
+    /// the presented presentation: over the real wire the exchange refuses it with a
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// MALFORMED_VALUE_ERROR naming the cause, never an escaping exception and never the validator's own text, and
+    /// leaves the exchange active at its step, nothing having been decided about the presentation, so the holder can
+    /// present again.
+    /// </summary>
+    /// <param name="failure">How the validator fails: <c>throws</c>, <c>ownBudget</c> or <c>undefined</c>.</param>
+    /// <param name="causeDetail">The ending of the detail that names the cause.</param>
+    [TestMethod]
+    [DataRow("throws", "the schema validation failed.")]
+    [DataRow("ownBudget", "the schema validation was cancelled by its own budget.")]
+    [DataRow("undefined", "the schema validation returned an undefined outcome.")]
+    public async Task PresentationSchemaThatCouldNotBeCheckedLeavesTheExchangeAtItsStep(string failure, string causeDetail)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterMultiStepAsync(app, holder, SchemaGatedWorkflow(ProofRequiringSchemaEnvelope)).ConfigureAwait(false);
+        ValueTask<CredentialSchemaValidationResult> FailingValidateAsync(string schemaJson, string documentJson, CancellationToken cancellationToken) => failure switch
+        {
+            "throws" => ValueTask.FromException<CredentialSchemaValidationResult>(new InvalidOperationException(CarriedCancellationFixtures.PrivateReason)),
+            "ownBudget" => ValueTask.FromException<CredentialSchemaValidationResult>(CarriedCancellationFixtures.Create("wrapped")),
+            _ => ValueTask.FromResult(new CredentialSchemaValidationResult { Outcome = SchemaValidationTestUtilities.UndefinedValidationOutcome })
+        };
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmSchemaValidators.Register(VcalmSchemaValidatorRegistry.JsonSchemaType, FailingValidateAsync);
+        }).ConfigureAwait(false);
+
+        (string exchangeId, string challenge, string domain) = await StartExchangeOverWireAsync(app, segment).ConfigureAwait(false);
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+
+        using JsonDocument refused = await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, exchangeId, present, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        Assert.EndsWith(causeDetail, refused.RootElement.GetProperty("detail").GetString(), StringComparison.Ordinal,
+            "The refusal names why the step's schema was not checked.");
+        Assert.DoesNotContain(CarriedCancellationFixtures.PrivateReason, refused.RootElement.GetRawText(), StringComparison.Ordinal,
+            "The validator's own failure text must never leak into the refusal.");
+
+        using JsonDocument state = await VcalmWireFixtures.GetExchangeWireAsync(
+            app, segment, exchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("active", state.RootElement.GetProperty(VcalmParameterNames.State).GetString(),
+            "A schema check that reached no verdict leaves the exchange active.");
+        Assert.AreEqual("stepOne", state.RootElement.GetProperty(VcalmParameterNames.Step).GetString(),
+            "The exchange stays at the step whose schema could not be checked.");
+    }
+
+
     /// <summary>A workflow of a single presentation step gated by a §3.6.1 <c>presentationSchema</c> envelope.</summary>
     /// <param name="presentationSchemaJson">The step's <c>presentationSchema</c> envelope.</param>
     private static VcalmWorkflowConfiguration SchemaGatedWorkflow(string presentationSchemaJson) => new()
@@ -1018,7 +1236,10 @@ internal sealed class VcalmMultiStepExchangeTests
     /// <c>issue</c> step, which mints a credential from the named template and offers it back.
     /// </summary>
     /// <param name="issuerDid">The issuer the template's credential names, matching the issuance configuration.</param>
-    private static VcalmWorkflowConfiguration PresentThenIssueWorkflow(string issuerDid) => new()
+    /// <param name="credentialMemberName">
+    /// The name of the member the template renders the credential under, as the template writes it, JSON escapes included.
+    /// </param>
+    private static VcalmWorkflowConfiguration PresentThenIssueWorkflow(string issuerDid, string credentialMemberName = "credential") => new()
     {
         InitialStep = "stepOne",
         Steps = ImmutableDictionary<string, VcalmWorkflowStep>.Empty
@@ -1047,7 +1268,7 @@ internal sealed class VcalmMultiStepExchangeTests
             //the bare credential, and VcalmWorkflowStepEngine unwraps the "credential" member before
             //signing regardless of which evaluator rendered it.
             Template =
-                "{\"credential\":{" +
+                "{\"" + credentialMemberName + "\":{" +
                     "\"@context\":[\"https://www.w3.org/ns/credentials/v2\"]," +
                     "\"type\":[\"VerifiableCredential\"]," +
                     "\"issuer\":\"" + issuerDid + "\"," +
@@ -1101,7 +1322,10 @@ internal sealed class VcalmMultiStepExchangeTests
     /// emitting a document with two <c>results</c> members.
     /// </summary>
     /// <param name="issuerDid">The issuer the template's credential names, matching the issuance configuration.</param>
-    private static VcalmWorkflowConfiguration PresentThenIssueWorkflowWithReservedVariablesCollision(string issuerDid) => new()
+    /// <param name="resultsMemberName">
+    /// The <c>results</c> member name as the issue request's variables write it, JSON escapes included.
+    /// </param>
+    private static VcalmWorkflowConfiguration PresentThenIssueWorkflowWithReservedVariablesCollision(string issuerDid, string resultsMemberName) => new()
     {
         InitialStep = "stepOne",
         Steps = ImmutableDictionary<string, VcalmWorkflowStep>.Empty
@@ -1116,7 +1340,7 @@ internal sealed class VcalmMultiStepExchangeTests
             {
                 IssueRequests =
                 [
-                    new VcalmIssueRequest { CredentialTemplateId = "urn:tmpl-1", VariablesJson = "{\"results\":true}" }
+                    new VcalmIssueRequest { CredentialTemplateId = "urn:tmpl-1", VariablesJson = "{\"" + resultsMemberName + "\":true}" }
                 ]
             }),
         CredentialTemplates = [new VcalmCredentialTemplate

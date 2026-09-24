@@ -98,16 +98,16 @@ public sealed record VcalmWorkflowStep
     public string? NextStep { get; init; }
 
     /// <summary>
-    /// The §3.6.1 <c>presentationSchema</c>, verbatim JSON, or <see langword="null"/>. Modeled but
-    /// DEFERRED: the JSON-Schema validation of a presented presentation needs a JSON Schema package the
-    /// repo does not carry, so the field is round-tripped through §3.6.2 but not enforced.
+    /// The §3.6.1 <c>presentationSchema</c>, verbatim JSON, or <see langword="null"/>: the schema envelope a presentation
+    /// presented at this step must satisfy. The exchange checks the presentation against it through the validator the
+    /// deployment registered for the envelope's <c>type</c> before the step advances, and round-trips it through §3.6.2.
     /// </summary>
     public string? PresentationSchemaJson { get; init; }
 
     /// <summary>
     /// The §3.6.1 <c>openId</c>, verbatim JSON, or <see langword="null"/>. Modeled but DEFERRED: the
     /// OID4VP / OID4VCI bridge (createAuthorizationRequest / authorizationRequest / clientProfiles) is
-    /// the §3.7 interactions surface (V-5d); the field is carried verbatim, the vcapi path ignores it.
+    /// the §3.7 interactions surface; the field is carried verbatim, the vcapi path ignores it.
     /// </summary>
     public string? OpenIdJson { get; init; }
 

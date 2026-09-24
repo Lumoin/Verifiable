@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -11,8 +12,8 @@ using Verifiable.Foundation;
 namespace Verifiable.Vcalm.Exchange;
 
 /// <summary>
-/// Drives a W3C VCALM 1.0 §3.6 exchange across the admin-authored §3.6.1 step graph — the V-5c
-/// workflow surface that turns the LINEAR <c>nextStep</c> chain into a MULTI-STEP exchange. Given the
+/// Drives a W3C VCALM 1.0 §3.6 exchange across the admin-authored §3.6.1 step graph — the workflow
+/// engine that turns the LINEAR <c>nextStep</c> chain into a MULTI-STEP exchange. Given the
 /// workflow configuration, the current step, the accumulated <c>variables.results</c>, and (when a
 /// holder just presented one) the verified presentation, it walks forward through the non-interactive
 /// steps (mint-and-offer a credential, fire a §3.6.7 callback, redirect, complete) until it reaches a
@@ -205,6 +206,14 @@ public static class VcalmWorkflowStepEngine
                 "The workflow step issues a credential but no exchange issuance configuration is wired.");
         }
 
+        //Fail-closed: the reserved results member and the credential wrapper are decided on decoded member names,
+        //which only the JSON leaf reads; without that reader the step cannot tell an escaped name from an absent one.
+        if(vcalm.FindVcalmJsonMember is not { } findMember)
+        {
+            return VcalmIssuanceStepResult.Failure(
+                "The workflow step issues a credential but no JSON member reader is wired.");
+        }
+
         VcalmProofDescriptor descriptor = issuance.SigningDescriptors[0];
         DateTime proofCreated = server.TimeProvider.GetUtcNow().UtcDateTime;
 
@@ -218,14 +227,21 @@ public static class VcalmWorkflowStepEngine
                     "The workflow step's issueRequest names a credentialTemplate the workflow does not define.");
             }
 
+            //§3.6.1 reserves results for the accumulated results object, so issue request variables that redefine it,
+            //or whose member names cannot all be read, are refused before any template is evaluated over them.
+            VcalmJsonMemberLookup reservedResults = FindReservedResultsMember(issuance.MemoryPool, issueRequest, findMember);
+            if(reservedResults is not VcalmJsonMemberLookup.Absent)
+            {
+                return VcalmIssuanceStepResult.Failure(reservedResults switch
+                {
+                    VcalmJsonMemberLookup.Found => "The workflow step's issueRequest variables redefine the reserved 'results' member.",
+                    _ => "The workflow step's issueRequest variables are not one JSON object whose member names can all be read."
+                });
+            }
+
             //Evaluate the template against the exchange variables (the §3.6.6 results plus the issue
             //request's own variables) through the bounded, byte-typed template-evaluation seam.
-            using PooledMemory? composedVariables = ComposeTemplateVariables(issuance.MemoryPool, results, issueRequest);
-            if(composedVariables is null)
-            {
-                return VcalmIssuanceStepResult.Failure(
-                    "The workflow step's issueRequest variables redefine the reserved 'results' member.");
-            }
+            using PooledMemory composedVariables = ComposeTemplateVariables(issuance.MemoryPool, results, issueRequest);
 
             VcalmTemplateEvaluationResult evaluation = vcalm.VcalmTemplateEvaluators.Evaluate(
                 template, composedVariables.AsReadOnlyMemory(), issuance.MemoryPool, cancellationToken);
@@ -245,10 +261,18 @@ public static class VcalmWorkflowStepEngine
             //credentials-issue body shape renders { "credential": { ... } } rather than the bare
             //credential — unwrap it so the engine signs the credential, never the wrapper. A template
             //that rendered the bare credential directly (Appendix D.1 Example 29) has no such member
-            //and signs as-is.
+            //and signs as-is. The member is found by its decoded name, so a wrapper spelled with JSON
+            //escapes is unwrapped exactly as the plain spelling is, and a rendered object whose member
+            //names cannot all be read is refused rather than signed as whichever of the two it might be.
             ReadOnlySpan<byte> renderedSpan = rendered.AsReadOnlySpan();
-            ReadOnlySpan<byte> credentialSpan = VcalmJsonShape.TryGetTopLevelMemberValue(
-                renderedSpan, VcalmParameterNames.CredentialUtf8, out Range credentialRange)
+            VcalmJsonMemberLookup wrapper = findMember(renderedSpan, VcalmParameterNames.Credential, out Range credentialRange);
+            if(wrapper is VcalmJsonMemberLookup.Unreadable)
+            {
+                return VcalmIssuanceStepResult.Failure(
+                    "The workflow template did not render one JSON object whose member names can all be read.");
+            }
+
+            ReadOnlySpan<byte> credentialSpan = wrapper is VcalmJsonMemberLookup.Found
                 ? renderedSpan[credentialRange]
                 : renderedSpan;
 
@@ -327,29 +351,54 @@ public static class VcalmWorkflowStepEngine
 
 
     /// <summary>
+    /// Whether the issue request's own variables object carries a top-level <c>results</c> member, the name §3.6.1
+    /// reserves for the accumulated-results object: a per-request variables object that redefines it would compose a
+    /// document with two <c>results</c> members, whose reading
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see> leaves "unpredictable". The
+    /// variables are read through <paramref name="findMember"/>, on decoded member names, so a <c>results</c> member
+    /// spelled with JSON escapes is the reserved member too, and variables whose member names cannot all be read are
+    /// <see cref="VcalmJsonMemberLookup.Unreadable"/>. Variables that are not an object, §3.6.1's bare top-level
+    /// variable name, carry no members and so are <see cref="VcalmJsonMemberLookup.Absent"/>.
+    /// </summary>
+    /// <param name="pool">The pool the UTF-8 copy of the variables is rented from.</param>
+    /// <param name="issueRequest">The issue request whose variables are read.</param>
+    /// <param name="findMember">The JSON leaf's member lookup by decoded name.</param>
+    /// <returns>Whether the variables carry the reserved member, lack it, or cannot be read.</returns>
+    private static VcalmJsonMemberLookup FindReservedResultsMember(
+        BaseMemoryPool pool, VcalmIssueRequest issueRequest, FindVcalmJsonMemberDelegate findMember)
+    {
+        if(issueRequest.VariablesJson is not { Length: > 0 } variablesJson || !VcalmJsonShape.IsObject(variablesJson.AsSpan()))
+        {
+            return VcalmJsonMemberLookup.Absent;
+        }
+
+        int byteCount = Encoding.UTF8.GetByteCount(variablesJson);
+        using IMemoryOwner<byte> variablesUtf8 = pool.Rent(byteCount);
+        int written = Encoding.UTF8.GetBytes(variablesJson, variablesUtf8.Memory.Span);
+
+        return findMember(variablesUtf8.Memory.Span[..written], VcalmParameterNames.Results, out _);
+    }
+
+
+    /// <summary>
     /// Composes the UTF-8 JSON input for a template evaluation: an object carrying the exchange's
     /// §3.6.1 <c>variables.results</c> (so a template can reference
     /// <c>results.&lt;step&gt;.verifiablePresentation.holder</c>) and the issue request's own
     /// variables spliced on top. Every fragment here is ALREADY valid JSON text (the accumulated
     /// results are prior steps' recorded presentations; the issue request's variables are the
-    /// wire-verbatim §3.6.1 variables value), so composing the outer object is byte/text
+    /// wire-verbatim §3.6.1 variables value, which <see cref="FindReservedResultsMember"/> has read as one object
+    /// without a <c>results</c> member when it is an object), so composing the outer object is byte/text
     /// concatenation, never a parse: <c>Verifiable.Vcalm</c> carries no JSON parser.
     /// <see cref="VcalmJsonShape.IsObject(ReadOnlySpan{char})"/> decides whether the variables
     /// fragment's members splice directly into the outer object (an object-shaped variables value) or
     /// the fragment rides under a <c>"variables"</c> member (§3.6.1's bare top-level variable NAME
-    /// case). §3.6.1 reserves <c>results</c> for the accumulated-results object; a per-request
-    /// variables object that redefines it would produce a document with two <c>results</c> members
-    /// (RFC 8259 §4 makes object member names SHOULD-unique), so that shape is refused rather than
-    /// composed.
+    /// case).
     /// </summary>
     /// <param name="pool">The pool the composed document is allocated from.</param>
     /// <param name="results">The §3.6.6 accumulated <c>variables.results</c>.</param>
     /// <param name="issueRequest">The issue request whose own variables splice on top of <paramref name="results"/>.</param>
-    /// <returns>
-    /// The composed UTF-8 JSON document, or <see langword="null"/> when the issue request's
-    /// variables redefine the reserved <c>results</c> member.
-    /// </returns>
-    private static PooledMemory? ComposeTemplateVariables(
+    /// <returns>The composed UTF-8 JSON document.</returns>
+    private static PooledMemory ComposeTemplateVariables(
         BaseMemoryPool pool, ImmutableDictionary<string, string> results, VcalmIssueRequest issueRequest)
     {
         StringBuilder sb = JsonAppender.Rent();
@@ -375,12 +424,6 @@ public static class VcalmWorkflowStepEngine
                     string inner = trimmed[1..^1].Trim();
                     if(inner.Length > 0)
                     {
-                        byte[] innerMembersUtf8 = Encoding.UTF8.GetBytes("{" + inner + "}");
-                        if(VcalmJsonShape.TryGetTopLevelMemberValue(innerMembersUtf8, VcalmParameterNames.ResultsUtf8, out _))
-                        {
-                            return null;
-                        }
-
                         if(!isFirstMember)
                         {
                             _ = sb.Append(',');

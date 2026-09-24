@@ -148,7 +148,7 @@ internal sealed class VcalmSchemaValidationTests
 
     /// <summary>
     /// An embedded-map resolver returns the seeded schema text and <see langword="null"/> for an
-    /// unknown id, which evaluation reports as Indeterminate rather than asserting conformance.
+    /// unknown id, a schema document it did not return.
     /// </summary>
     [TestMethod]
     public async Task EmbeddedSchemaResolverResolvesSeededIdsOnly()

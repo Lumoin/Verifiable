@@ -1094,8 +1094,9 @@ public sealed class VcalmIntegration: ServerIntegration
     /// Decides the engine's next §3.6.5 vcapi move for an exchange — the application's step logic.
     /// Required when the <see cref="WellKnownVcalmCapabilities.VcalmExchange"/> capability is allowed —
     /// the engine ships no built-in workflow, so without it the §3.6.5 participate endpoint cannot
-    /// decide what to ask of or offer the client (fail-closed; the route does not materialize). The
-    /// V-5c workflow surface layers an admin-authored step graph behind this seam.
+    /// decide what to ask of or offer the client (fail-closed; the route does not materialize). When
+    /// <see cref="ResolveVcalmWorkflowForExchangeAsync"/> resolves a workflow for an exchange, that workflow's
+    /// admin-authored step graph decides the exchange's moves instead.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws
@@ -1119,8 +1120,9 @@ public sealed class VcalmIntegration: ServerIntegration
 
 
     /// <summary>
-    /// The §3.6.1 credential-template evaluation seam — the registry the workflow surface (V-5c)
-    /// consumes to turn an issue request's template + exchange variables into a credential body.
+    /// The §3.6.1 credential-template evaluation seam — the registry the §3.6 workflow engine
+    /// (<see cref="Exchange.VcalmWorkflowStepEngine"/>) evaluates an issue request's template through, turning the
+    /// template and the exchange variables into a credential body.
     /// Defaults to a registry with only the <c>literal</c> pass-through wired; a deployment registers
     /// a real JSONata engine (for example <c>Lumoin.Veritas.Jsonata</c>) for <c>jsonata</c> through
     /// <see cref="VcalmTemplateEvaluatorRegistry.Register"/> — <c>Verifiable.Vcalm</c> takes no
@@ -1237,6 +1239,35 @@ public sealed class VcalmIntegration: ServerIntegration
 
 
     /// <summary>
+    /// Locates a top-level member of a JSON object by its decoded name, the reading
+    /// <see cref="Exchange.VcalmWorkflowStepEngine"/> decides from when a template's rendered result wraps its credential
+    /// under a <c>credential</c> member and when an issue request's variables redefine the reserved <c>results</c>
+    /// member. Required for a workflow step that issues credentials: without it the step cannot tell a member spelled
+    /// with escapes from one that is absent, so it refuses rather than guess. The default JSON implementation lives in
+    /// <c>Verifiable.Json</c> and is wired by the application (serialization firewall).
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public FindVcalmJsonMemberDelegate? FindVcalmJsonMember
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
     /// Persists a §3.6.1 workflow configuration the <c>POST /workflows</c> endpoint accepted, keyed by
     /// its <c>{localWorkflowId}</c>. Required when the
     /// <see cref="WellKnownVcalmCapabilities.VcalmAdministration"/> capability is allowed — without it
@@ -1295,10 +1326,10 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <summary>
     /// Resolves the §3.6.1 workflow configuration an exchange runs on, given the exchange's
     /// <c>{localExchangeId}</c>, so the §3.6.5 engine DRIVES its step decisions off the admin-authored
-    /// step graph. Optional — when wired, the exchange engine's default step logic reads the step graph
-    /// (the V-5c workflow surface); when unwired, the engine falls back to the explicit
-    /// <see cref="ResolveVcalmExchangeStepAsync"/> seam. A deployment may wire BOTH: the explicit seam
-    /// is a per-deployment override of the config-derived default.
+    /// step graph. Optional — when it resolves a workflow for an exchange, the engine walks that workflow's
+    /// step graph; when it is unwired or resolves none, the engine falls back to the explicit
+    /// <see cref="ResolveVcalmExchangeStepAsync"/> seam, so a deployment wiring both decides each exchange by its
+    /// workflow when it has one.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws

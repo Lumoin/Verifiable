@@ -25,11 +25,11 @@ using Verifiable.Vcalm;
 namespace Verifiable.Tests.Vcalm;
 
 /// <summary>
-/// The W3C VCALM 1.0 conformance bridge end-to-end test (chunk V-6a): the in-repo proof that the
+/// The W3C VCALM 1.0 conformance bridge end-to-end test: the in-repo proof that the
 /// §3.2.1 issue and §3.3.1 verify interfaces serve over REAL Kestrel HTTPS at the stable,
 /// suite-expected flat paths behind an OAuth2 client-credentials bearer gate — the exact path the
 /// external <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c> JS suites would drive
-/// when pointed at this host (V-6b). The flow over the wire is:
+/// when pointed at this host. The flow over the wire is:
 /// </summary>
 /// <remarks>
 /// <list type="number">

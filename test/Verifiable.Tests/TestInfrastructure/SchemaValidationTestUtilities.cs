@@ -26,6 +26,15 @@ internal static class SchemaValidationTestUtilities
 
 
     /// <summary>
+    /// A validation outcome the <see cref="CredentialSchemaValidationOutcome"/> enumeration does not define, one past its
+    /// largest defined value, which a validator that answers with no verdict of the three
+    /// <see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see> outcomes stands in for.
+    /// </summary>
+    public static CredentialSchemaValidationOutcome UndefinedValidationOutcome { get; } =
+        Enum.GetValues<CredentialSchemaValidationOutcome>().Max() + 1;
+
+
+    /// <summary>
     /// Creates the Veritas-backed schema validator: the §4.2 version gate first, then
     /// <see cref="JsonSchemaValidator"/> evaluation with errors carried through as
     /// pointer-located <see cref="CredentialSchemaValidationError"/> entries.
@@ -75,10 +84,20 @@ internal static class SchemaValidationTestUtilities
     /// <see cref="VcalmSchemaValidatorRegistry.JsonSchemaType"/> mechanism.
     /// </summary>
     /// <returns>The registry.</returns>
-    public static VcalmSchemaValidatorRegistry CreateSchemaRegistry()
+    public static VcalmSchemaValidatorRegistry CreateSchemaRegistry() => CreateSchemaRegistry(CreateVeritasSchemaValidator());
+
+
+    /// <summary>
+    /// Creates a registry with <paramref name="validator"/> registered for the
+    /// <see cref="VcalmSchemaValidatorRegistry.JsonSchemaType"/> mechanism, for a test that stands a validator of its own
+    /// in for the engine.
+    /// </summary>
+    /// <param name="validator">The validator the JSON Schema mechanism dispatches to.</param>
+    /// <returns>The registry.</returns>
+    public static VcalmSchemaValidatorRegistry CreateSchemaRegistry(CredentialSchemaValidationDelegate validator)
     {
         var registry = new VcalmSchemaValidatorRegistry();
-        registry.Register(VcalmSchemaValidatorRegistry.JsonSchemaType, CreateVeritasSchemaValidator());
+        registry.Register(VcalmSchemaValidatorRegistry.JsonSchemaType, validator);
 
         return registry;
     }
@@ -86,7 +105,8 @@ internal static class SchemaValidationTestUtilities
 
     /// <summary>
     /// Creates a schema-document resolver over an embedded id → schema-text map, for deterministic
-    /// offline tests; an id absent from the map resolves to <see langword="null"/> (Indeterminate).
+    /// offline tests; an id absent from the map resolves to <see langword="null"/>, a schema document the resolver did
+    /// not return.
     /// </summary>
     /// <param name="schemas">The embedded schema documents by their <c>credentialSchema.id</c> URL.</param>
     /// <returns>The resolver delegate.</returns>
@@ -97,8 +117,12 @@ internal static class SchemaValidationTestUtilities
     }
 
 
-    //Reads the schema document's declared $schema dialect, or null when absent or unreadable
-    //(an unreadable schema document fails evaluation in the engine rather than the gate).
+    /// <summary>
+    /// Reads the schema document's declared <c>$schema</c> dialect, or <see langword="null"/> when absent or unreadable
+    /// (an unreadable schema document fails evaluation in the engine rather than the gate).
+    /// </summary>
+    /// <param name="schemaJson">The schema document.</param>
+    /// <returns>The declared dialect, or <see langword="null"/>.</returns>
     private static string? ReadSchemaVersion(string schemaJson)
     {
         try
@@ -118,7 +142,9 @@ internal static class SchemaValidationTestUtilities
     }
 
 
-    //The declared dialect matches a supported version, ignoring an empty fragment.
+    /// <summary>Whether the declared dialect matches a supported version, ignoring an empty fragment.</summary>
+    /// <param name="declaredVersion">The schema document's declared <c>$schema</c> dialect.</param>
+    /// <returns><see langword="true"/> when the dialect is one of <see cref="SupportedSchemaVersions"/>.</returns>
     private static bool IsSupportedVersion(string declaredVersion)
     {
         string normalized = declaredVersion.EndsWith('#', StringComparison.Ordinal) ? declaredVersion[..^1] : declaredVersion;

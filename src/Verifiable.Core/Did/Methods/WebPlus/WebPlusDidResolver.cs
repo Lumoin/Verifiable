@@ -457,7 +457,9 @@ public static class WebPlusDidResolver
 
     /// <summary>
     /// Drives one guarded fetch for the microledger, returning the response only on a successful 200, or
-    /// <see langword="null"/> on a transport failure or any non-200 status. Cancellation is always propagated.
+    /// <see langword="null"/> on a transport failure or any non-200 status. Cancellation is always propagated, bare or
+    /// carried inside the transport's own exception (<see cref="WrappedCancellation"/>), so the caller can tell its own
+    /// cancellation from a fetch that ended on its own budget.
     /// </summary>
     /// <param name="target">The microledger URL to fetch.</param>
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
@@ -481,10 +483,13 @@ public static class WebPlusDidResolver
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             //A transport/network failure is a not-found from this helper's perspective, cancellation
-            //excepted above.
+            //excepted above. A cancellation the transport carries inside its own exception propagates as that
+            //cancellation, as a bare one does.
+            WrappedCancellation.ThrowIfCarried(exception);
+
             return null;
         }
 

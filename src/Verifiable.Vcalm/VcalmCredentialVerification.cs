@@ -82,11 +82,11 @@ public sealed record VcalmCredentialVerification
 
     /// <summary>
     /// Resolves the schema document a <c>credentialSchema.id</c> URL identifies, or
-    /// <see langword="null"/> to leave schema evaluation unwired. An entry whose schema document the resolver does not
-    /// return evaluates as Indeterminate rather than asserting either conformance outcome; an entry whose fetch ends on
-    /// its own budget, so that the declared schema is never checked, is a MALFORMED_VALUE_ERROR under
-    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>, an unrecoverable
-    /// data-model condition.
+    /// <see langword="null"/> to leave schema evaluation unwired. A declared schema whose document cannot be retrieved
+    /// for any reason, the resolver returning none, throwing, refusing it by policy or ending on its own budget, is never
+    /// checked, which <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>
+    /// makes an unrecoverable data-model condition: the entry reports MALFORMED_VALUE_ERROR naming the cause and the
+    /// credential does not verify.
     /// </summary>
     public ResolveVcalmSchemaDocumentDelegate? ResolveSchemaDocument { get; init; }
 
@@ -113,6 +113,40 @@ public sealed record VcalmCredentialVerification
     /// value". Defaults to <see cref="DefaultMaxProofsPerDocument"/>.
     /// </summary>
     public int MaxProofsPerDocument { get; init; } = DefaultMaxProofsPerDocument;
+
+    /// <summary>
+    /// The default of <see cref="MaxContainedCredentials"/>: eight credentials. A presentation answers one verifier's
+    /// request with the credentials that request asked for, and the VC Data Model examples of presentations carry one or
+    /// two, so eight admits every such presentation with room to spare while bounding what one presentation can cost:
+    /// each contained credential is a controller document resolution, up to <see cref="MaxProofsPerDocument"/> proof
+    /// checks, and its status and schema fetches.
+    /// </summary>
+    public static int DefaultMaxContainedCredentials { get; } = 8;
+
+    /// <summary>
+    /// The most credentials one presentation may contain. A presentation containing more is refused before any of its
+    /// proofs or contained credentials is verified, with the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// <see cref="VcalmProblemTypes.RangeError"/>, "A provided value is outside of the expected range of an associated
+    /// value". Defaults to <see cref="DefaultMaxContainedCredentials"/>.
+    /// </summary>
+    public int MaxContainedCredentials { get; init; } = DefaultMaxContainedCredentials;
+
+    /// <summary>
+    /// The default of <see cref="MaxMemoizedControllerDocuments"/>: eight documents. One issuer's controller document
+    /// reused across that issuer's credentials is the case the memo serves, and a presentation's credentials come from
+    /// few issuers, so eight keeps that reuse for every issuer of a presentation within
+    /// <see cref="DefaultMaxContainedCredentials"/> while bounding the resolved documents one verify request holds.
+    /// </summary>
+    public static int DefaultMaxMemoizedControllerDocuments { get; } = 8;
+
+    /// <summary>
+    /// The most successfully resolved controller documents one verify request keeps for reuse. The request remembers the
+    /// typed failure of every controller document it could not retrieve, which holds no document, and at most this many
+    /// resolved documents; past the bound the least recently used document is dropped and, if a later proof names its
+    /// controller again, resolved again. Defaults to <see cref="DefaultMaxMemoizedControllerDocuments"/>.
+    /// </summary>
+    public int MaxMemoizedControllerDocuments { get; init; } = DefaultMaxMemoizedControllerDocuments;
 
     /// <summary>
     /// Parses an ecdsa-sd-2023 DERIVED proof value (a <c>u</c>-prefixed base64url multibase wrapping a

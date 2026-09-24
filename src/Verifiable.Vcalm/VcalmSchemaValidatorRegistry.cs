@@ -7,8 +7,10 @@ namespace Verifiable.Vcalm;
 /// Resolves the JSON Schema document a VCALM 1.0 §3.3.1 <c>credentialSchema.id</c> URL identifies,
 /// returning its text or <see langword="null"/> when the schema cannot be resolved. The application
 /// composes its own retrieval (typically the SSRF-policed outbound fetch riding
-/// <paramref name="context"/>, or a pre-seeded local set); an unresolved schema evaluates as
-/// <see cref="CredentialSchemaValidationOutcome.Indeterminate"/>.
+/// <paramref name="context"/>, or a pre-seeded local set). A schema this resolver does not return, including one its
+/// outbound policy refused, is never checked, which the verifier reports as a MALFORMED_VALUE_ERROR, an unrecoverable
+/// data-model condition under <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM
+/// §3.8.1</see>, never as <see cref="CredentialSchemaValidationOutcome.Indeterminate"/>.
 /// </summary>
 /// <param name="schemaId">The <c>credentialSchema.id</c> URL identifying the schema document.</param>
 /// <param name="context">The per-call exchange context carrying the outbound-fetch policy.</param>
@@ -47,6 +49,27 @@ public sealed class VcalmSchemaValidatorRegistry: WiringComponent
     /// §4.11 (<c>credentialSchema.type</c>) name this value for the JSON Schema mechanism.
     /// </summary>
     public const string JsonSchemaType = "JsonSchema";
+
+
+    /// <summary>
+    /// The detail ending every refusal names when a registered validator threw over the schema and the document it was
+    /// given, so the declared schema was never checked: the credential verifier's and the exchange's schema checks name
+    /// the cause alike, never the validator's own exception text.
+    /// </summary>
+    internal static string ValidationFailedDetail { get; } = "the schema validation failed.";
+
+    /// <summary>
+    /// The detail ending every refusal names when a registered validator ended on its own budget while its caller's
+    /// token was still live, so the declared schema was never checked.
+    /// </summary>
+    internal static string ValidationCancelledByOwnBudgetDetail { get; } = "the schema validation was cancelled by its own budget.";
+
+    /// <summary>
+    /// The detail ending every refusal names when a registered validator answered an outcome the
+    /// <see cref="CredentialSchemaValidationOutcome"/> enumeration does not define, which is no verdict, so the declared
+    /// schema was never checked.
+    /// </summary>
+    internal static string ValidationOutcomeUndefinedDetail { get; } = "the schema validation returned an undefined outcome.";
 
 
     /// <summary>The application operations keyed by their declared mechanism type.</summary>

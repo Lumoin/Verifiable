@@ -2196,14 +2196,30 @@ internal sealed class SourceHygieneTests
         Assert.IsTrue(failures[0].Contains("Second", StringComparison.Ordinal));
     }
 
-    /// <summary>The verification method type catalogue this repository ships, relative to its root.</summary>
-    private static string VerificationMethodTypeCatalogueFile { get; } = "src/Verifiable.Core/Model/Did/VerificationMethodTypeInfoExtensions.cs";
-
     /// <summary>
     /// The catalogue's stand-in for a verification method type the library does not recognise: a member the catalogue
     /// exposes that by its meaning describes no type, so the catalogue list leaves it out.
     /// </summary>
     private static string VerificationMethodTypeStandIn { get; } = "UndefinedMethodTypeInfo";
+
+    /// <summary>
+    /// Matches the declaration of a verification method type description, capturing the declared type: a class or a
+    /// record, of any accessibility (<c>public</c>, <c>internal</c>, <c>protected</c>, <c>private</c>, <c>file</c>) and
+    /// with any of the modifiers <c>sealed</c>, <c>partial</c>, <c>abstract</c>, <c>static</c>, <c>unsafe</c> and
+    /// <c>new</c>, a type parameter list or a record's parameter list included, whose base list names
+    /// <c>VerificationMethodTypeInfo</c> first, qualified or not, over however many source lines the declaration spans.
+    /// It runs over a whole file's text, one line start to a declaration.
+    /// </summary>
+    private static Regex VerificationMethodTypeDeclarationPattern { get; } = new(
+        @"^[ \t]*(?:(?:public|internal|protected|private|file|sealed|partial|abstract|static|unsafe|new)\s+)*(?:record(?:\s+class)?|class)\s+(?<type>\w+)(?:\s*<[^>]*>)?(?:\s*\([^)]*\))?\s*:\s*(?:global::)?(?:\w+\.)*VerificationMethodTypeInfo\b",
+        RegexOptions.Compiled | RegexOptions.Multiline);
+
+    /// <summary>
+    /// Matches the verification method type name a type description declares, its <c>TypeName = "&lt;name&gt;"</c>
+    /// initializer, capturing the name.
+    /// </summary>
+    private static Regex VerificationMethodTypeNamePattern { get; } = new(
+        @"\bTypeName\s*=\s*""(?<name>[^""]+)""", RegexOptions.Compiled);
 
     /// <summary>
     /// Matches one of the catalogue's own <c>public static &lt;Type&gt; &lt;Name&gt; =&gt; &lt;Type&gt;.Instance;</c>
@@ -2222,81 +2238,195 @@ internal sealed class SourceHygieneTests
         RegexOptions.Compiled);
 
     /// <summary>
-    /// Every completeness failure for the verification method type catalogue's text: a member whose type is not the
-    /// stand-in and is absent from the hand-kept list fails naming the member's own declaration line, and a list entry no
-    /// member exposes fails naming the file. A verifier asks the list whether a declared method type is one the library
-    /// describes, so a member missing from it would make a described type read as an unsupported securing mechanism.
+    /// Every completeness failure for the verification method type catalogue over <paramref name="files"/>, the source
+    /// files that may declare a type description, expose one as a catalogue member or hold the catalogue's hand-kept list.
+    /// A declared type description other than the stand-in that no member exposes fails naming its declaration line; a
+    /// member whose type is not the stand-in and is absent from the hand-kept list fails naming the member's own line; a
+    /// list entry no member exposes fails naming the file holding the list; a verification method type name that a second
+    /// type description declares again fails naming that later declaration, since each type name has one description;
+    /// a type description from whose declaration the gate reads no <c>TypeName = "&lt;name&gt;"</c> initializer before
+    /// the next description fails naming its declaration line, since its type name could then repeat another's unseen;
+    /// and a scan that finds no type description, no member or no list fails, so the gate never passes over nothing. The
+    /// declaration shapes scanned are the ones <see cref="VerificationMethodTypeDeclarationPattern"/> states, read over
+    /// each file's whole text, so an internal description and a declaration split over several lines are scanned alike. A
+    /// verifier asks the list whether a declared method type is one the library describes, so a description left out of
+    /// it would make a described type read as an unsupported securing mechanism, and a second description of one type
+    /// name would leave which of the two a document's type means to the order of discovery.
     /// </summary>
-    /// <param name="relativePath">The catalogue file's path, for the failure text.</param>
-    /// <param name="lines">The catalogue file's lines.</param>
-    /// <returns>The failures, empty when the list and the members agree.</returns>
-    private static List<string> FindVerificationMethodTypeCatalogueFailures(string relativePath, string[] lines)
+    /// <param name="files">Each scanned file's repository-relative path, for the failure text, and its lines.</param>
+    /// <returns>The failures, empty when the descriptions, the members and the list agree.</returns>
+    private static List<string> FindVerificationMethodTypeCatalogueFailures((string RelativePath, string[] Lines)[] files)
     {
-        List<(string Type, int LineNumber)> members = [];
-        for(int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+        List<(string Type, string RelativePath, int LineNumber)> declarations = [];
+        List<(string Name, string Type, string RelativePath, int LineNumber)> typeNames = [];
+        List<(string Type, string RelativePath, int LineNumber)> unnamedDeclarations = [];
+        foreach((string relativePath, string[] lines) in files)
         {
-            Match member = VerificationMethodTypeMemberPattern.Match(lines[lineIndex]);
-            if(member.Success && !string.Equals(member.Groups["type"].Value, VerificationMethodTypeStandIn, StringComparison.Ordinal))
+            string text = string.Join("\n", lines);
+            MatchCollection found = VerificationMethodTypeDeclarationPattern.Matches(text);
+            for(int declarationIndex = 0; declarationIndex < found.Count; declarationIndex++)
             {
-                members.Add((member.Groups["type"].Value, lineIndex + 1));
+                Match declaration = found[declarationIndex];
+                string declaredType = declaration.Groups["type"].Value;
+                int lineNumber = LineNumberAt(text, declaration.Index);
+                declarations.Add((declaredType, relativePath, lineNumber));
+
+                //The type name a description declares is read between its declaration and the next one in the file.
+                int regionEnd = declarationIndex + 1 < found.Count ? found[declarationIndex + 1].Index : text.Length;
+                Match typeName = VerificationMethodTypeNamePattern.Match(text, declaration.Index, regionEnd - declaration.Index);
+                if(typeName.Success)
+                {
+                    typeNames.Add((typeName.Groups["name"].Value, declaredType, relativePath, LineNumberAt(text, typeName.Index)));
+                }
+                else
+                {
+                    unnamedDeclarations.Add((declaredType, relativePath, lineNumber));
+                }
             }
         }
 
-        Match list = VerificationMethodTypeCatalogueListPattern.Match(string.Join("\n", lines));
-        List<string> listed = list.Success
-            ? list.Groups["members"].Value
-                .Split(',')
-                .Select(static entry => entry.Trim())
-                .Where(static entry => entry.Length > 0)
-                .Select(static entry => entry.EndsWith(".Instance", StringComparison.Ordinal) ? entry[..^".Instance".Length] : entry)
-                .ToList()
-            : [];
-        HashSet<string> listedSet = [.. listed];
-        HashSet<string> memberSet = [.. members.Select(static entry => entry.Type)];
+        HashSet<string> declaredTypes = [.. declarations.Select(static entry => entry.Type)];
+        List<(string Type, string RelativePath, int LineNumber)> members = [];
+        List<(string RelativePath, string Type)> listed = [];
+        bool isListFound = false;
+        foreach((string relativePath, string[] lines) in files)
+        {
+            for(int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+            {
+                Match member = VerificationMethodTypeMemberPattern.Match(lines[lineIndex]);
+                if(member.Success && declaredTypes.Contains(member.Groups["type"].Value))
+                {
+                    members.Add((member.Groups["type"].Value, relativePath, lineIndex + 1));
+                }
+            }
+
+            Match list = VerificationMethodTypeCatalogueListPattern.Match(string.Join("\n", lines));
+            if(list.Success)
+            {
+                isListFound = true;
+                listed.AddRange(list.Groups["members"].Value
+                    .Split(',')
+                    .Select(static entry => entry.Trim())
+                    .Where(static entry => entry.Length > 0)
+                    .Select(static entry => entry.EndsWith(".Instance", StringComparison.Ordinal) ? entry[..^".Instance".Length] : entry)
+                    .Select(type => (relativePath, type)));
+            }
+        }
+
+        HashSet<string> exposedTypes = [.. members.Select(static entry => entry.Type)];
+        HashSet<string> listedTypes = [.. listed.Select(static entry => entry.Type)];
         List<string> failures = [];
 
-        foreach((string type, int lineNumber) in members)
+        if(declarations.Count == 0)
         {
-            if(!listedSet.Contains(type))
+            failures.Add("No type deriving from VerificationMethodTypeInfo was found, so the catalogue gate had nothing to check.");
+        }
+
+        if(members.Count == 0)
+        {
+            failures.Add("No catalogue member exposing a declared verification method type was found, so the catalogue gate had nothing to check.");
+        }
+
+        if(!isListFound)
+        {
+            failures.Add("No hand-kept list of catalogued verification method types was found, so the catalogue gate had nothing to check.");
+        }
+
+        foreach((string type, string relativePath, int lineNumber) in declarations)
+        {
+            if(!string.Equals(type, VerificationMethodTypeStandIn, StringComparison.Ordinal) && !exposedTypes.Contains(type))
+            {
+                failures.Add($"{relativePath}:{lineNumber}: {type} is declared but no catalogue member exposes it.");
+            }
+        }
+
+        foreach((string type, string relativePath, int lineNumber) in unnamedDeclarations)
+        {
+            failures.Add($"{relativePath}:{lineNumber}: {type} declares no TypeName initializer the gate reads, so its type name cannot be checked against the others.");
+        }
+
+        foreach((string type, string relativePath, int lineNumber) in members)
+        {
+            if(!string.Equals(type, VerificationMethodTypeStandIn, StringComparison.Ordinal) && !listedTypes.Contains(type))
             {
                 failures.Add($"{relativePath}:{lineNumber}: {type} is exposed but missing from the catalogue's hand-kept list.");
             }
         }
 
-        foreach(string type in listed)
+        foreach((string relativePath, string type) in listed)
         {
-            if(!memberSet.Contains(type))
+            if(!exposedTypes.Contains(type))
             {
                 failures.Add($"{relativePath}: the hand-kept list names {type}, which no catalogue member exposes.");
+            }
+        }
+
+        foreach(IGrouping<string, (string Name, string Type, string RelativePath, int LineNumber)> sameName in typeNames.GroupBy(static entry => entry.Name, StringComparer.Ordinal))
+        {
+            string firstType = sameName.First().Type;
+            foreach((string name, string type, string relativePath, int lineNumber) in sameName.Skip(1))
+            {
+                failures.Add($"{relativePath}:{lineNumber}: {type} declares the verification method type name {name}, which {firstType} already declares.");
             }
         }
 
         return failures;
     }
 
+    /// <summary>The one-based line number of the character at <paramref name="index"/> of a file's line-feed-joined text.</summary>
+    /// <param name="text">The file's lines joined with line feeds.</param>
+    /// <param name="index">The character index.</param>
+    /// <returns>The line number, counted from one.</returns>
+    private static int LineNumberAt(string text, int index) => text.AsSpan(0, index).Count('\n') + 1;
+
     /// <summary>
-    /// Every verification method type the catalogue exposes as a <c>VerificationMethodTypeInfo</c> member, the stand-in for
-    /// an unrecognised type aside, is an entry of the hand-kept list the catalogue's <c>Catalogued</c> view returns, and
-    /// the list names nothing else, so the view a verifier consults is the whole catalogue and a newly declared member
-    /// cannot be left out of it.
+    /// Every verification method type description the production source tree declares, the stand-in for an unrecognised
+    /// type aside, is exposed as a catalogue member and named in the hand-kept list the catalogue's <c>Catalogued</c> view
+    /// returns, the list names nothing else, and no verification method type name has two descriptions, in whichever
+    /// source files they are declared, so the view a verifier consults is the whole catalogue and a description declared
+    /// outside it, or a second description of a catalogued type, cannot pass unnoticed.
     /// </summary>
     [TestMethod]
     public void VerificationMethodTypeCatalogueListsEveryExposedType()
     {
         string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
-        string[] lines = File.ReadAllLines(Path.Join(repositoryRoot, VerificationMethodTypeCatalogueFile));
+        (string RelativePath, string[] Lines)[] files =
+        [
+            .. SourceHygieneScanner.EnumerateSourceFilesUnder(repositoryRoot, "src").Select(filePath => (
+                Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/'),
+                File.ReadAllLines(filePath)))
+        ];
 
-        List<string> failures = FindVerificationMethodTypeCatalogueFailures(VerificationMethodTypeCatalogueFile, lines);
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures(files);
 
-        Assert.IsNotEmpty(lines.Where(static line => VerificationMethodTypeMemberPattern.IsMatch(line)).ToList(),
-            "The catalogue must expose its members in the shape this gate scans for.");
         Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// The lines of an embedded sample source file declaring one verification method type description per entry of
+    /// <paramref name="descriptions"/>, each with its own <c>TypeName</c>, in the shape the catalogue gate scans type
+    /// descriptions in.
+    /// </summary>
+    /// <param name="descriptions">The declared types and the verification method type names they declare.</param>
+    /// <returns>The sample file's lines.</returns>
+    private static string[] SampleVerificationMethodTypeDescriptions(params (string Type, string TypeName)[] descriptions)
+    {
+        List<string> lines = [];
+        foreach((string type, string typeName) in descriptions)
+        {
+            lines.Add($"public sealed class {type}: VerificationMethodTypeInfo");
+            lines.Add("{");
+            lines.Add($"    public static {type} Instance {{ get; }} = new() {{ TypeName = \"{typeName}\" }};");
+            lines.Add("}");
+        }
+
+        return [.. lines];
     }
 
     /// <summary>
     /// Proves <see cref="FindVerificationMethodTypeCatalogueFailures"/> actually fires: run over an embedded sample
     /// catalogue (never a repository file) whose hand-kept list omits one of its two exposed types, beside the stand-in it
-    /// rightly omits, the result names that type's own declaration line and nothing else.
+    /// rightly omits, the result names that type's own member line and nothing else.
     /// </summary>
     [TestMethod]
     public void VerificationMethodTypeCatalogueScannerReportsAnEmbeddedMissingEntry()
@@ -2318,12 +2448,182 @@ internal sealed class SourceHygieneTests
             "    }",
             "}",
         ];
+        string[] typeLines = SampleVerificationMethodTypeDescriptions(
+            ("FirstTypeInfo", "First2020"), ("SecondTypeInfo", "Second2020"), ("UndefinedMethodTypeInfo", "UndefinedMethod"));
 
-        List<string> failures = FindVerificationMethodTypeCatalogueFailures("Sample.cs", sampleLines);
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures([("Sample.cs", sampleLines), ("SampleTypes.cs", typeLines)]);
 
-        Assert.HasCount(1, failures);
+        Assert.HasCount(1, failures, string.Join(Environment.NewLine, failures));
         Assert.IsTrue(failures[0].StartsWith("Sample.cs:11:", StringComparison.Ordinal));
         Assert.IsTrue(failures[0].Contains("SecondTypeInfo", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Proves <see cref="FindVerificationMethodTypeCatalogueFailures"/> reads every file it is given, not the catalogue's
+    /// alone: over embedded samples (never repository files), a type description declared in a file of its own that no
+    /// catalogue member exposes, and that repeats the verification method type name of a catalogued description, is
+    /// reported at its own lines, once for each of the two defects.
+    /// </summary>
+    [TestMethod]
+    public void VerificationMethodTypeCatalogueScannerReportsADescriptionOutsideTheCatalogue()
+    {
+        string[] catalogueLines =
+        [
+            "public static class SampleVerificationMethodTypes",
+            "{",
+            "    private static IReadOnlyList<VerificationMethodTypeInfo> CataloguedTypes { get; } =",
+            "    [",
+            "        FirstTypeInfo.Instance",
+            "    ];",
+            "",
+            "    extension(VerificationMethodTypeInfo)",
+            "    {",
+            "        public static FirstTypeInfo First => FirstTypeInfo.Instance;",
+            "    }",
+            "}",
+        ];
+        string[] typeLines = SampleVerificationMethodTypeDescriptions(("FirstTypeInfo", "First2020"));
+        string[] orphanLines = SampleVerificationMethodTypeDescriptions(("OrphanTypeInfo", "First2020"));
+
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures(
+            [("Sample.cs", catalogueLines), ("SampleTypes.cs", typeLines), ("SampleOrphan.cs", orphanLines)]);
+
+        Assert.HasCount(2, failures, string.Join(Environment.NewLine, failures));
+        Assert.IsTrue(failures.TrueForAll(static failure => failure.StartsWith("SampleOrphan.cs:", StringComparison.Ordinal)));
+        Assert.IsTrue(failures.Exists(static failure => failure.Contains("OrphanTypeInfo is declared but no catalogue member exposes it", StringComparison.Ordinal)));
+        Assert.IsTrue(failures.Exists(static failure => failure.Contains("type name First2020, which FirstTypeInfo already declares", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// Proves <see cref="FindVerificationMethodTypeCatalogueFailures"/> fails closed: over an embedded sample (never a
+    /// repository file) that declares no type description, exposes no member and holds no hand-kept list, the shape a
+    /// source tree the gate no longer recognises would have, it reports each of the three absences instead of passing over
+    /// nothing.
+    /// </summary>
+    [TestMethod]
+    public void VerificationMethodTypeCatalogueScannerFailsClosedWhenItFindsNothing()
+    {
+        string[] sampleLines =
+        [
+            "public static class SampleWithoutVerificationMethodTypes",
+            "{",
+            "}",
+        ];
+
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures([("Sample.cs", sampleLines)]);
+
+        Assert.HasCount(3, failures, string.Join(Environment.NewLine, failures));
+        Assert.IsTrue(failures.TrueForAll(static failure => failure.EndsWith("so the catalogue gate had nothing to check.", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// Proves <see cref="FindVerificationMethodTypeCatalogueFailures"/> reads every declaration shape its pattern states:
+    /// over embedded samples (never repository files), an <c>internal</c> type description and one whose base list sits
+    /// on the line after its name, neither exposed by the catalogue, are each reported at their own declaration line.
+    /// </summary>
+    [TestMethod]
+    public void VerificationMethodTypeCatalogueScannerReadsInternalAndMultiLineDeclarations()
+    {
+        string[] catalogueLines =
+        [
+            "public static class SampleVerificationMethodTypes",
+            "{",
+            "    private static IReadOnlyList<VerificationMethodTypeInfo> CataloguedTypes { get; } =",
+            "    [",
+            "        FirstTypeInfo.Instance",
+            "    ];",
+            "",
+            "    extension(VerificationMethodTypeInfo)",
+            "    {",
+            "        public static FirstTypeInfo First => FirstTypeInfo.Instance;",
+            "    }",
+            "}",
+        ];
+        string[] typeLines = SampleVerificationMethodTypeDescriptions(("FirstTypeInfo", "First2020"));
+        string[] hiddenLines =
+        [
+            "internal sealed class HiddenTypeInfo: VerificationMethodTypeInfo",
+            "{",
+            "    public static HiddenTypeInfo Instance { get; } = new() { TypeName = \"Hidden2020\" };",
+            "}",
+            "",
+            "public sealed partial class SplitTypeInfo",
+            "    : Verifiable.Core.Model.Did.CryptographicSuites.VerificationMethodTypeInfo",
+            "{",
+            "    public static SplitTypeInfo Instance { get; } = new() { TypeName = \"Split2020\" };",
+            "}",
+        ];
+
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures(
+            [("Sample.cs", catalogueLines), ("SampleTypes.cs", typeLines), ("SampleHidden.cs", hiddenLines)]);
+
+        Assert.HasCount(2, failures, string.Join(Environment.NewLine, failures));
+        Assert.IsTrue(failures.Exists(static failure => failure.StartsWith("SampleHidden.cs:1: HiddenTypeInfo is declared but no catalogue member exposes it", StringComparison.Ordinal)));
+        Assert.IsTrue(failures.Exists(static failure => failure.StartsWith("SampleHidden.cs:6: SplitTypeInfo is declared but no catalogue member exposes it", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// Proves <see cref="FindVerificationMethodTypeCatalogueFailures"/> fails closed on a type name it cannot read: over
+    /// embedded samples (never repository files), a type description that the catalogue exposes and lists, but whose type
+    /// name comes from a constant rather than a string literal, is reported at its declaration line, since a second
+    /// description of that type name could otherwise pass unseen.
+    /// </summary>
+    [TestMethod]
+    public void VerificationMethodTypeCatalogueScannerFailsClosedOnATypeNameItCannotRead()
+    {
+        string[] catalogueLines =
+        [
+            "public static class SampleVerificationMethodTypes",
+            "{",
+            "    private static IReadOnlyList<VerificationMethodTypeInfo> CataloguedTypes { get; } =",
+            "    [",
+            "        FirstTypeInfo.Instance",
+            "    ];",
+            "",
+            "    extension(VerificationMethodTypeInfo)",
+            "    {",
+            "        public static FirstTypeInfo First => FirstTypeInfo.Instance;",
+            "    }",
+            "}",
+        ];
+        string[] typeLines =
+        [
+            "public sealed class FirstTypeInfo: VerificationMethodTypeInfo",
+            "{",
+            "    public static FirstTypeInfo Instance { get; } = new() { TypeName = SampleTypeNames.First };",
+            "}",
+        ];
+
+        List<string> failures = FindVerificationMethodTypeCatalogueFailures([("Sample.cs", catalogueLines), ("SampleTypes.cs", typeLines)]);
+
+        Assert.HasCount(1, failures, string.Join(Environment.NewLine, failures));
+        Assert.IsTrue(failures[0].StartsWith("SampleTypes.cs:1: FirstTypeInfo declares no TypeName initializer the gate reads", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Proves the internal-provenance pattern reports a work-item shorthand in a comment: over embedded sample lines
+    /// (never a repository file), each built from fragments for the self-tripping reason stated on the class, a lettered
+    /// shorthand in a documentation comment and a bare numbered one in a plain comment are each reported at their own
+    /// line, while a hash name whose capital V follows other capitals, the same shorthand inside a string literal, and a
+    /// lower-case letter-digit pair are not.
+    /// </summary>
+    [TestMethod]
+    public void ScannerReportsTheWorkItemShorthandInAComment()
+    {
+        string letteredDocLine = "    /// the engine walks the step graph (" + "V" + "-5c) when a workflow resolves";
+        string bareCommentLine = "        //the explicit seam (" + "V" + "-12) decides one step per message";
+        string hashNameLine = "    /// Computes the 64-bit FN" + "V" + "-1a hash of the octets.";
+        string literalLine = "        string label = \"" + "V" + "-5c\";";
+        string lowerCaseLine = "    /// a " + "v" + "-2 marker in lower case";
+
+        IReadOnlyList<SourceHygieneViolation> violations = SourceHygieneScanner.ScanLines(
+            "Sample.cs", [letteredDocLine, bareCommentLine, hashNameLine, literalLine, lowerCaseLine]);
+        List<SourceHygieneViolation> provenancePointers =
+            [.. violations.Where(static violation => violation.Kind == SourceHygieneViolationKind.InternalProvenancePointer)];
+
+        Assert.HasCount(2, provenancePointers, string.Join(Environment.NewLine, violations));
+        Assert.Contains(static violation => violation.LineNumber == 1, provenancePointers);
+        Assert.Contains(static violation => violation.LineNumber == 2, provenancePointers);
     }
 }
 
@@ -2667,6 +2967,14 @@ internal static class SourceHygieneScanner
     /// marker, and a project-prefixed numbered conformance identifier are also indirect process citations.
     /// Rejecting these shapes keeps comments focused on the rule a reader can verify in the code.
     /// </para>
+    /// <para>
+    /// A work-item shorthand in any comment line is banned too: a capital V, a hyphen and a number, with or without one
+    /// lower-case letter after the number, naming a coordinated work item rather than stating what the code IS. The
+    /// alternative is comment-anchored, so the same characters inside a string literal are left to the literal's own
+    /// review, and case-sensitive with a word boundary before the capital, so a lower-case letter-digit pair and a hash
+    /// name such as FNV-1a, whose capital V follows other capitals, never match. Collision-checked against the full
+    /// current tree with zero legitimate hits.
+    /// </para>
     /// </remarks>
     private static Regex InternalProvenancePointerPattern { get; } = new(
         @"\b" + "wave" + @"(cb|ep|pin|cm|bio|lb|nv|ext|close|xades|jades|pades|[0-9])[a-z0-9]*\b" +
@@ -2745,7 +3053,8 @@ internal static class SourceHygieneScanner
         "|" + @"^\s*//.*,\s*S\d\b" +
         "|" + @"\b" + "lane" + @"'s\s+scope\b" +
         "|" + @"\bper\s+" + "\"" + @"[A-Z][A-Za-z ]*" + "\"" + @"\s+step\s+\d+\b" +
-        "|" + @"\bthe\s+" + "brief" + @"\b",
+        "|" + @"\bthe\s+" + "brief" + @"\b" +
+        "|" + @"^\s*//.*(?-i:\bV-\d+[a-z]?\b)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>Collects C# paths from both configured source trees, excluding build outputs, for repository-wide gates.</summary>

@@ -682,7 +682,9 @@ public static class WebVhDidResolver
     /// application transport threw (an application transport that enforces <paramref name="maxResponseBytes"/>
     /// while streaming reports it this way), the outbound-fetch policy refused the target (or a redirect hop)
     /// before any terminal response, or a terminal response was obtained whose status was not 200. Cancellation
-    /// is always propagated, never turned into a failure cause.
+    /// is always propagated, never turned into a failure cause, and so is one the transport carries inside an
+    /// exception of its own (<see cref="WrappedCancellation"/>), so the caller can tell its own cancellation from a
+    /// fetch that ended on its own budget.
     /// </summary>
     /// <param name="target">The URL to fetch.</param>
     /// <param name="maxResponseBytes">The response size this fetch is bounded to.</param>
@@ -708,12 +710,15 @@ public static class WebVhDidResolver
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             //An application transport that enforces maxResponseBytes while streaming reports an oversized or
             //otherwise failed fetch by throwing; the exception's own message and type are the application
             //transport's, not the library's to publish, so only the cause is recorded here, cancellation
-            //excepted above.
+            //excepted above. A cancellation the transport carries inside its own exception propagates as that
+            //cancellation, as a bare one does.
+            WrappedCancellation.ThrowIfCarried(exception);
+
             return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.TransportFailed, StatusCode: 0);
         }
 
@@ -771,7 +776,9 @@ public static class WebVhDidResolver
     /// <summary>
     /// Fetches and verifies <c>did-witness.json</c> when the replayed log has active witnesses. Returns a problem
     /// detail to fail resolution closed (the file is absent/unreachable while witnesses are active, or a threshold
-    /// is unmet), or <see langword="null"/> when every entry requiring witnessing is approved.
+    /// is unmet), or <see langword="null"/> when every entry requiring witnessing is approved. A cancellation is not
+    /// a verdict on the witnesses: it propagates, bare or carried inside the witness file parser's or the witness
+    /// proof check's own exception (<see cref="WrappedCancellation"/>).
     /// </summary>
     /// <param name="logUrl">The DID Log URL, whose final path element is replaced to locate the witness file.</param>
     /// <param name="states">The verified entry states, carrying the witness rules and versionIds.</param>
@@ -845,9 +852,13 @@ public static class WebVhDidResolver
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
-            //A failure verifying the witness file fails resolution closed, cancellation excepted above.
+            //A failure verifying the witness file fails resolution closed, cancellation excepted above. A
+            //cancellation the witness file parser or the witness proof check carries inside its own exception
+            //propagates as that cancellation, as a bare one does.
+            WrappedCancellation.ThrowIfCarried(exception);
+
             return DidResolutionErrors.InvalidDid;
         }
         finally

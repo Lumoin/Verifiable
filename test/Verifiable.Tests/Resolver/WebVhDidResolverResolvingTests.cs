@@ -28,18 +28,33 @@ namespace Verifiable.Tests.Resolver;
 [TestClass]
 internal sealed class WebVhDidResolverResolvingTests
 {
+    /// <summary>The domain the minted test DIDs live under, so their DID Log is served at <c>https://example.com/...</c>.</summary>
     private const string Domain = "example.com";
+
+    /// <summary>The <c>versionTime</c> of every minted genesis entry.</summary>
     private const string GenesisTime = "2025-01-01T00:00:00Z";
+
+    /// <summary>The <c>versionTime</c> of a minted second entry, one month after the genesis.</summary>
     private const string SecondTime = "2025-02-01T00:00:00Z";
+
+    /// <summary>The <c>versionTime</c> of a minted third entry, one month after the second.</summary>
     private const string ThirdTime = "2025-03-01T00:00:00Z";
 
+    /// <summary>The base58btc encoder the resolver encodes multihashes and keys with.</summary>
     private static EncodeDelegate Base58Encoder { get; } = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
+
+    /// <summary>The base58btc decoder the resolver decodes multihashes and keys with.</summary>
     private static DecodeDelegate Base58Decoder { get; } = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
 
 
+    /// <summary>The MSTest context, whose cancellation token bounds every resolution these tests run.</summary>
     public TestContext TestContext { get; set; } = null!;
 
 
+    /// <summary>
+    /// A minted genesis DID Log resolves to its document, whose <c>id</c> is the DID and whose metadata carries the
+    /// genesis <c>versionId</c> and reports the DID active.
+    /// </summary>
     [TestMethod]
     public async Task ResolvesMintedGenesisLog()
     {
@@ -212,17 +227,7 @@ internal sealed class WebVhDidResolverResolvingTests
         var context = new ExchangeContext();
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
-        DidMethodResolverDelegate resolver = WebVhDidResolver.Build(
-pinningTransport,
-            WebVhLogEntryJson.Parser,
-            WebVhLogEntryJson.WitnessFileParser,
-            WebVhLogEntryJson.DocumentIdentityReader,
-            DeserializeState,
-            WebVhLogEntryJson.Canonicalizer,
-            Base58Encoder,
-            Base58Decoder,
-            BaseMemoryPool.Shared,
-            new FakeTimeProvider(TestClock.CanonicalEpoch));
+        DidMethodResolverDelegate resolver = BuildResolver(pinningTransport);
 
         DidResolutionResult result = await resolver(log.Did, DidResolutionOptions.Empty, context, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -232,6 +237,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A two-entry DID Log resolves, without a version query, to its latest entry.</summary>
     [TestMethod]
     public async Task ResolvesMultiEntryLogToLatestVersion()
     {
@@ -250,6 +256,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A log whose genesis commits to the hash of the next update key, and whose second entry is signed by that key,
+    /// resolves: the key pre-rotation commitment is honored.
+    /// </summary>
     [TestMethod]
     public async Task ResolvesPreRotationRotation()
     {
@@ -268,6 +278,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A genesis entry whose proof value was altered after minting does not verify, so the DID does not resolve and the
+    /// failure is invalidDid with a detail stating what failed.
+    /// </summary>
     [TestMethod]
     public async Task TamperedProofFailsResolution()
     {
@@ -290,6 +304,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A DID Log location that answers 404 is a notFound resolution.</summary>
     [TestMethod]
     public async Task ReportsNotFoundForMissingLog()
     {
@@ -308,6 +323,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A did:webvh resolver registered as an additional method of <see cref="DidResolverComposition"/> receives the
+    /// did:webvh DIDs the composed <see cref="DidResolver"/> dispatches, and the DID resolves through it.
+    /// </summary>
     [TestMethod]
     public async Task DispatchesDidWebVhThroughComposition()
     {
@@ -319,9 +338,7 @@ pinningTransport,
             [WebVhDidResolver.Resolve(log.Did)] = (200, string.Join('\n', log.Lines))
         });
 
-        DidMethodResolverDelegate webVh = WebVhDidResolver.Build(
-            transport.Delegate, WebVhLogEntryJson.Parser, WebVhLogEntryJson.WitnessFileParser, WebVhLogEntryJson.DocumentIdentityReader, DeserializeState, WebVhLogEntryJson.Canonicalizer,
-            Base58Encoder, Base58Decoder, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch));
+        DidMethodResolverDelegate webVh = BuildResolver(transport.Delegate);
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
@@ -340,6 +357,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A <c>versionId</c> query resolves the entry with that <c>versionId</c>, not the latest one.</summary>
     [TestMethod]
     public async Task ResolvesByVersionId()
     {
@@ -353,6 +371,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A <c>versionNumber</c> query resolves the entry of that version number.</summary>
     [TestMethod]
     public async Task ResolvesByVersionNumber()
     {
@@ -366,6 +385,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A <c>versionTime</c> query resolves the entry that was active at that time: the first entry for a time between
+    /// the two entries, the latest for a time after the last.
+    /// </summary>
     [TestMethod]
     public async Task ResolvesByVersionTimeToActiveEntry()
     {
@@ -384,6 +407,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A <c>versionId</c> query naming no entry of the log is a notFound resolution.</summary>
     [TestMethod]
     public async Task UnknownVersionIdIsNotFound()
     {
@@ -397,6 +421,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A <c>versionTime</c> query before the genesis entry, when the DID did not yet exist, is a notFound resolution.</summary>
     [TestMethod]
     public async Task VersionTimeBeforeGenesisIsNotFound()
     {
@@ -410,6 +435,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A version query for an earlier valid entry resolves even when a later entry fails verification, while resolving
+    /// the latest version of the same log fails as invalidDid.
+    /// </summary>
     [TestMethod]
     public async Task VersionQueryResolvesEarlierVersionDespiteLaterInvalidEntry()
     {
@@ -470,6 +499,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A genesis entry under a witness rule of threshold one resolves when the served <c>did-witness.json</c> carries a
+    /// valid proof from the rule's witness.
+    /// </summary>
     [TestMethod]
     public async Task ResolvesWitnessedGenesisWhenThresholdMet()
     {
@@ -492,6 +525,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A witness rule of threshold two approved by only one of its witnesses is not met, so the DID does not resolve.</summary>
     [TestMethod]
     public async Task WitnessBelowThresholdFails()
     {
@@ -516,6 +550,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A witness proof for a later entry approves every earlier entry too, so a witnessed genesis is satisfied by the
+    /// witness's proof for the second entry alone.
+    /// </summary>
     [TestMethod]
     public async Task LaterWitnessProofSatisfiesPriorEntry()
     {
@@ -541,6 +579,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A witness proof that fails verification is ignored rather than failing resolution, so the DID still resolves when
+    /// the remaining valid proofs meet the threshold.
+    /// </summary>
     [TestMethod]
     public async Task TamperedWitnessProofIgnoredButThresholdMet()
     {
@@ -566,6 +608,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A valid proof from a witness the rule does not list does not count toward the threshold.</summary>
     [TestMethod]
     public async Task ForeignWitnessProofDoesNotCount()
     {
@@ -590,6 +633,7 @@ pinningTransport,
     }
 
 
+    /// <summary>An active witness rule with no <c>did-witness.json</c> served cannot be confirmed, so resolution fails closed.</summary>
     [TestMethod]
     public async Task MissingWitnessFileWhenWitnessesActiveFails()
     {
@@ -608,6 +652,63 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// <see href="https://identity.foundation/didwebvh/v1.0/#verifying-witness-proofs-during-resolution">did:webvh v1.0
+    /// DID Witnesses</see>: "For each DID log entry requiring witnessing, the resolver MUST confirm that the
+    /// did-witness.json file contains verified witness Data Integrity proofs from a threshold of the then active witnesses
+    /// for the current or any later published log entries. If not, terminate the resolution process with an error." A
+    /// witness check that was cancelled has neither confirmed nor refuted the witnesses. When reading the served witness
+    /// file reports that cancellation inside an exception of its own, the resolver lets it propagate as the cancellation it
+    /// is instead of failing the DID as invalid, both when the caller abandoned the resolution and when the reading ended
+    /// on its own budget while the caller still waits.
+    /// </summary>
+    /// <param name="cancellationShape">How the witness file reading carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
+    /// <param name="isCallerCancelled">Whether the caller abandons the resolution while the witness file is read.</param>
+    [TestMethod]
+    [DataRow("wrapped", false)]
+    [DataRow("wrapped", true)]
+    [DataRow("aggregated", false)]
+    [DataRow("aggregated", true)]
+    public async Task WitnessCheckCancellationCarriedInsideItsOwnFaultPropagates(string cancellationShape, bool isCallerCancelled)
+    {
+        using WebVhController controller = WebVhController.Create();
+        using WebVhController witness = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintAsync(Domain,
+        [
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, WebVhWitnessSpec.Rule(1, witness))
+        ]).ConfigureAwait(false);
+        string witnessFile = await WebVhTestLog.MintWitnessFileAsync(
+        [
+            new WebVhWitnessApproval(log.VersionIds[0], [witness], GenesisTime)
+        ]).ConfigureAwait(false);
+
+        using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        ImmutableArray<WebVhWitnessProofEntry> CancelledWitnessFileParser(ReadOnlySpan<byte> witnessJson)
+        {
+            if(isCallerCancelled)
+            {
+                caller.Cancel();
+            }
+
+            throw CarriedCancellationFixtures.Create(cancellationShape);
+        }
+
+        DidMethodResolverDelegate resolver = BuildResolver(
+            new RoutingTransport(LogAndWitnessRoutes(log.Did, log.Lines, witnessFile)).Delegate, CancelledWitnessFileParser);
+        ExchangeContext context = [];
+        context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
+
+        await CarriedCancellationFixtures.AssertPropagatesAsTheCancellationAsync(
+            async () => await resolver(log.Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false),
+            isCallerCancelled,
+            caller.Token).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A witness rule first activated by a later entry takes effect from the entry after it, so a two-entry log whose
+    /// second entry activates witnesses resolves with no <c>did-witness.json</c> at all.
+    /// </summary>
     [TestMethod]
     public async Task MidLogWitnessActivationDefersToNextEntry()
     {
@@ -630,6 +731,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A witness rule disabled by a later entry stops requiring proofs from the entry after it, so the genesis and the
+    /// disabling entry are still witnessed while the third entry needs no proof.
+    /// </summary>
     [TestMethod]
     public async Task WitnessDisableTakesEffectAfterEntry()
     {
@@ -658,6 +763,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A <c>witness</c> parameter that is not a JSON object does not conform and is refused when the entry is parsed.</summary>
     [TestMethod]
     public void NonObjectWitnessParameterIsRejected()
     {
@@ -1104,6 +1210,38 @@ pinningTransport,
 
 
     /// <summary>
+    /// <see href="https://identity.foundation/didwebvh/v1.0/#read-resolve">did:webvh v1.0 Read</see>: "notFound — The DID
+    /// Log or the resource referenced by a DID URL was not found." A DID Log fetch that was cancelled has not found the log
+    /// absent. When the transport reports that cancellation inside an exception of its own, as the inner exception of its
+    /// own fault or among an aggregate's inner exceptions, the resolver lets it propagate as the cancellation it is instead
+    /// of answering notFound, both when the caller abandoned the resolution while the fetch ran and when the fetch ended on
+    /// its own budget while the caller still waits, so the caller tells the two apart by its own token.
+    /// </summary>
+    /// <param name="cancellationShape">How the transport carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
+    /// <param name="isCallerCancelled">Whether the caller abandons the resolution while the fetch runs.</param>
+    [TestMethod]
+    [DataRow("wrapped", false)]
+    [DataRow("wrapped", true)]
+    [DataRow("aggregated", false)]
+    [DataRow("aggregated", true)]
+    public async Task DidLogFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        DidMethodResolverDelegate resolver = BuildResolver(
+            CarriedCancellationFixtures.CreateTransport(cancellationShape, isCallerCancelled ? caller : null));
+        ExchangeContext context = [];
+        context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
+
+        await CarriedCancellationFixtures.AssertPropagatesAsTheCancellationAsync(
+            async () => await resolver(log.Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false),
+            isCallerCancelled,
+            caller.Token).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// A primary DID Log fetch the outbound-fetch policy refuses (before any transport call) still reports
     /// notFound, and the Detail says the policy refused it — never the policy's own diagnostic
     /// <c>DenyReason</c>, which <see cref="OutboundFetchResult.DenyReason"/> documents as not for untrusted
@@ -1191,6 +1329,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A DID whose genesis declares it portable resolves after a later entry moves it to another domain, under the
+    /// moved DID.
+    /// </summary>
     [TestMethod]
     public async Task ResolvesMovedDidWhenPortable()
     {
@@ -1234,6 +1376,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A move of a DID whose genesis did not declare it portable does not resolve.</summary>
     [TestMethod]
     public async Task MoveWithoutPortabilityFails()
     {
@@ -1251,6 +1394,7 @@ pinningTransport,
     }
 
 
+    /// <summary>A move whose moved entry does not list the prior DID in <c>alsoKnownAs</c> does not resolve.</summary>
     [TestMethod]
     public async Task MoveWithoutAlsoKnownAsFails()
     {
@@ -1268,6 +1412,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// A move whose moved entry carries an <c>alsoKnownAs</c> of the wrong JSON type fails closed as invalidDid rather
+    /// than escaping as an exception or an internal error.
+    /// </summary>
     [TestMethod]
     public async Task MoveWithTypeMalformedAlsoKnownAsFails()
     {
@@ -1287,6 +1435,7 @@ pinningTransport,
     }
 
 
+    /// <summary>The watchers an entry declares are surfaced in the resolved document's metadata.</summary>
     [TestMethod]
     public async Task ResolvedMetadataCarriesWatchers()
     {
@@ -1307,6 +1456,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// The resolved metadata carries the log's SCID, portability, ttl, version time and version id, and its created and
+    /// updated instants, which for a genesis-only log are the same.
+    /// </summary>
     [TestMethod]
     public async Task ResolvedMetadataCarriesRicherFields()
     {
@@ -1331,6 +1484,10 @@ pinningTransport,
     }
 
 
+    /// <summary>
+    /// The resolved document of a bare-domain DID carries the implicit <c>#files</c> and <c>#whois</c> services at the
+    /// domain root, the latter a LinkedVerifiablePresentation service with its own <c>@context</c>.
+    /// </summary>
     [TestMethod]
     public async Task ResolvedDocumentCarriesImplicitServices()
     {
@@ -1358,6 +1515,7 @@ pinningTransport,
     }
 
 
+    /// <summary>The implicit <c>#files</c> service of a path-bearing DID is based at the DID's full path location.</summary>
     [TestMethod]
     public async Task ImplicitServiceEndpointForPathDid()
     {
@@ -1374,11 +1532,31 @@ pinningTransport,
     }
 
 
-    //Resolves over a transport serving the did.jsonl and, when witnessJson is non-null, the did-witness.json.
-    private Task<DidResolutionResult> ResolveWithWitnessAsync(string did, ImmutableArray<string> lines, string? witnessJson, DidResolutionOptions? options = null)
+    /// <summary>
+    /// Resolves <paramref name="did"/> over a transport serving its DID Log and, when <paramref name="witnessJson"/> is
+    /// not <see langword="null"/>, its <c>did-witness.json</c>.
+    /// </summary>
+    /// <param name="did">The did:webvh identifier to resolve.</param>
+    /// <param name="lines">The DID Log's entries, one JSON line each.</param>
+    /// <param name="witnessJson">The witness file to serve, or <see langword="null"/> to serve none.</param>
+    /// <param name="options">The resolution options, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The resolution result.</returns>
+    private Task<DidResolutionResult> ResolveWithWitnessAsync(string did, ImmutableArray<string> lines, string? witnessJson, DidResolutionOptions? options = null) =>
+        ResolveAsync(did, new RoutingTransport(LogAndWitnessRoutes(did, lines, witnessJson)), options);
+
+
+    /// <summary>
+    /// The routes serving the DID Log of <paramref name="did"/> and, when <paramref name="witnessJson"/> is not
+    /// <see langword="null"/>, its <c>did-witness.json</c> beside it.
+    /// </summary>
+    /// <param name="did">The did:webvh identifier whose files are served.</param>
+    /// <param name="lines">The DID Log's entries, one JSON line each.</param>
+    /// <param name="witnessJson">The witness file to serve, or <see langword="null"/> to serve none.</param>
+    /// <returns>The (status, body) routes by absolute URL.</returns>
+    private static Dictionary<string, (int Status, string? Body)> LogAndWitnessRoutes(string did, ImmutableArray<string> lines, string? witnessJson)
     {
         string logUrl = WebVhDidResolver.Resolve(did);
-        var routes = new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        var routes = new Dictionary<string, (int Status, string? Body)>(StringComparer.Ordinal)
         {
             [logUrl] = (200, string.Join('\n', lines))
         };
@@ -1388,14 +1566,24 @@ pinningTransport,
             routes[WitnessUrl(logUrl)] = (200, witnessJson);
         }
 
-        return ResolveAsync(did, new RoutingTransport(routes), options);
+        return routes;
     }
 
 
+    /// <summary>The <c>did-witness.json</c> location beside the DID Log at <paramref name="logUrl"/>.</summary>
+    /// <param name="logUrl">The DID Log URL, ending in <c>did.jsonl</c>.</param>
+    /// <returns>The witness file URL.</returns>
     private static string WitnessUrl(string logUrl) =>
         string.Concat(logUrl.AsSpan(0, logUrl.Length - "did.jsonl".Length), "did-witness.json");
 
 
+    /// <summary>
+    /// Corrupts the proof value of every witness proof in <paramref name="witnessJson"/> made by
+    /// <paramref name="verificationMethod"/>, leaving the other witnesses' proofs intact.
+    /// </summary>
+    /// <param name="witnessJson">The witness file.</param>
+    /// <param name="verificationMethod">The verification method whose proofs are corrupted.</param>
+    /// <returns>The altered witness file.</returns>
     private static string TamperWitnessProof(string witnessJson, string verificationMethod)
     {
         JsonArray records = JsonNode.Parse(witnessJson)!.AsArray();
@@ -1415,6 +1603,9 @@ pinningTransport,
     }
 
 
+    /// <summary>Mints a two-entry log for <see cref="Domain"/>, both entries signed by <paramref name="controller"/>.</summary>
+    /// <param name="controller">The update key both entries are signed with.</param>
+    /// <returns>The minted log.</returns>
     private static Task<WebVhMintedLog> MintTwoEntryAsync(WebVhController controller)
     {
         return WebVhTestLog.MintAsync(Domain,
@@ -1425,13 +1616,21 @@ pinningTransport,
     }
 
 
+    /// <summary>Parses an ISO 8601 UTC instant for a <c>versionTime</c> query.</summary>
+    /// <param name="iso8601">The instant's text.</param>
+    /// <returns>The instant.</returns>
     private static DateTimeOffset Time(string iso8601) =>
         DateTimeOffset.Parse(iso8601, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
 
-    //Rewrites a versionId's entryHash multihash to declare a different algorithm code while keeping the 32-byte
-    //digest, so the resulting value is still a 32-byte multihash but with a non-sha2-256 algorithm prefix. The
-    //version-number prefix ("1-") is preserved.
+    /// <summary>
+    /// Rewrites a versionId's entryHash multihash to declare a different algorithm code while keeping the 32-byte
+    /// digest, so the resulting value is still a 32-byte multihash but with a non-sha2-256 algorithm prefix. The
+    /// version-number prefix (<c>1-</c>) is preserved.
+    /// </summary>
+    /// <param name="versionId">The versionId to rewrite.</param>
+    /// <param name="replacementMultihashCode">The multihash algorithm code to declare.</param>
+    /// <returns>The rewritten versionId.</returns>
     private static string RewriteEntryHashAlgorithm(string versionId, byte replacementMultihashCode)
     {
         int dashIndex = versionId.IndexOf('-', StringComparison.Ordinal);
@@ -1442,8 +1641,13 @@ pinningTransport,
     }
 
 
-    //Rewrites a base58btc-encoded multihash so it declares a different algorithm code while keeping the 32-byte
-    //digest, producing a value that is still a 32-byte multihash but with a non-sha2-256 algorithm prefix.
+    /// <summary>
+    /// Rewrites a base58btc-encoded multihash so it declares a different algorithm code while keeping the 32-byte
+    /// digest, producing a value that is still a 32-byte multihash but with a non-sha2-256 algorithm prefix.
+    /// </summary>
+    /// <param name="base58Multihash">The base58btc-encoded multihash.</param>
+    /// <param name="replacementMultihashCode">The multihash algorithm code to declare.</param>
+    /// <returns>The rewritten multihash, base58btc-encoded.</returns>
     private static string RewriteMultihashAlgorithm(string base58Multihash, byte replacementMultihashCode)
     {
         using IMemoryOwner<byte> decoded = Base58Decoder(base58Multihash, BaseMemoryPool.Shared);
@@ -1456,6 +1660,11 @@ pinningTransport,
     }
 
 
+    /// <summary>Resolves <paramref name="did"/> over a transport serving <paramref name="lines"/> as its DID Log.</summary>
+    /// <param name="did">The did:webvh identifier to resolve.</param>
+    /// <param name="lines">The DID Log's entries, one JSON line each.</param>
+    /// <param name="options">The resolution options, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The resolution result.</returns>
     private Task<DidResolutionResult> ResolveAsync(string did, System.Collections.Immutable.ImmutableArray<string> lines, DidResolutionOptions? options = null)
     {
         var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
@@ -1504,10 +1713,25 @@ pinningTransport,
     /// <returns>The resolution result.</returns>
     private async Task<DidResolutionResult> ResolveAsync(string did, OutboundTransportDelegate transport, ExchangeContext context, DidResolutionOptions? options = null)
     {
-        DidMethodResolverDelegate resolver = WebVhDidResolver.Build(
+        DidMethodResolverDelegate resolver = BuildResolver(transport);
+
+        return await resolver(did, options ?? DidResolutionOptions.Empty, context, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds the did:webvh resolver every test in this file resolves through: over <paramref name="transport"/>, with
+    /// the JSON layer's entry parser, identity reader and canonicalizer, and its witness file parser unless
+    /// <paramref name="witnessFileParser"/> stands in for it.
+    /// </summary>
+    /// <param name="transport">The single-hop transport the guarded fetches drive.</param>
+    /// <param name="witnessFileParser">A witness file parser to use instead of the JSON layer's, or <see langword="null"/>.</param>
+    /// <returns>The resolver delegate.</returns>
+    private static DidMethodResolverDelegate BuildResolver(OutboundTransportDelegate transport, WebVhWitnessFileParser? witnessFileParser = null) =>
+        WebVhDidResolver.Build(
             transport,
             WebVhLogEntryJson.Parser,
-            WebVhLogEntryJson.WitnessFileParser,
+            witnessFileParser ?? WebVhLogEntryJson.WitnessFileParser,
             WebVhLogEntryJson.DocumentIdentityReader,
             DeserializeState,
             WebVhLogEntryJson.Canonicalizer,
@@ -1516,11 +1740,13 @@ pinningTransport,
             BaseMemoryPool.Shared,
             new FakeTimeProvider(TestClock.CanonicalEpoch));
 
-        return await resolver(did, options ?? DidResolutionOptions.Empty, context, TestContext.CancellationToken).ConfigureAwait(false);
-    }
 
-
-    //The JSON layer supplies state deserialization; Verifiable.Core never parses the did.jsonl itself.
+    /// <summary>
+    /// Deserializes one DID Log entry's <c>state</c> member into a <see cref="DidDocument"/>: the JSON layer supplies
+    /// state deserialization, since Verifiable.Core never parses the <c>did.jsonl</c> itself.
+    /// </summary>
+    /// <param name="rawEntryLine">One entry of the DID Log as UTF-8 JSON.</param>
+    /// <returns>The entry's state document, or <see langword="null"/> when the line carries no readable state.</returns>
     private static DidDocument? DeserializeState(ReadOnlySpan<byte> rawEntryLine)
     {
         try
@@ -1539,20 +1765,29 @@ pinningTransport,
     }
 
 
-    //A single-hop transport returning a canned (status, body) per absolute URL; an unknown URL is a 404.
+    /// <summary>A single-hop transport returning a canned (status, body) per absolute URL; an unknown URL is a 404.</summary>
     private sealed class RoutingTransport
     {
+        /// <summary>The canned (status, body) response registered per absolute URL.</summary>
         private Dictionary<string, (int Status, string? Body)> Routes { get; }
 
+
+        /// <summary>Creates a transport that serves <paramref name="routes"/> and answers 404 for every other URL.</summary>
+        /// <param name="routes">The (status, body) responses by absolute URL.</param>
         public RoutingTransport(Dictionary<string, (int Status, string? Body)> routes)
         {
             this.Routes = routes;
         }
 
-        //Additive: response headers per URL. Left empty by every existing route, so a caller that never sets
-        //an entry here sees the same header-less OutboundResponse as before.
+
+        /// <summary>Response headers per URL; a URL without an entry is served with no headers.</summary>
         public Dictionary<string, HttpHeaderSet> ResponseHeaders { get; } = new(StringComparer.Ordinal);
 
+
+        /// <summary>
+        /// The transport delegate the resolver under test fetches through: it answers each request with the route
+        /// registered for its absolute URL and that URL's headers.
+        /// </summary>
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
             if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))

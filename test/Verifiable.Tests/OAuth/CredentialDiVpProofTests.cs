@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
+using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Net;
 using System.Text;
@@ -1141,6 +1143,78 @@ internal sealed class CredentialDiVpProofTests
 
 
     /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1">OID4VCI 1.0
+    /// §8.3.1</see>: "When the Credential Request is invalid or unauthorized, the Credential Issuer constructs the error
+    /// response as defined in this section." A Wallet that abandons its Credential Request while the Credential Issuer is
+    /// still verifying the request's di_vp key proof has sent no invalid request. The digest function the proof's
+    /// verification runs reports the Wallet's cancellation inside a fault of its own, and over the real wire the request
+    /// ends as that cancellation: the Credential Endpoint builds no <c>invalid_proof</c> response for it, the host records
+    /// no fault escaping the endpoint, and issuance is never consulted.
+    /// </summary>
+    [TestMethod]
+    public async Task DiVpCallerCancellationCarriedInsideTheDigestFaultPropagatesOverHttp()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+        DidDocument holder = await BuildHolderDidDocumentAsync(holderPublic).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
+            holder, holderPrivate, CredentialNonce, material.Registration.IssuerUri!.OriginalString).ConfigureAwait(false);
+
+        TaskCompletionSource hasEnteredDigest = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource hasObservedCancellation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        async ValueTask<(DigestValue Result, CryptoEvent? Event)> ComputeDigestUntilTheWalletAbandonsAsync(
+            ReadOnlySequence<byte> input,
+            int outputByteLength,
+            Tag tag,
+            BaseMemoryPool pool,
+            FrozenDictionary<string, object>? context,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                await VcalmWireFixtures.HangUntilCancelledAsync(hasEnteredDigest, hasObservedCancellation, cancellationToken).ConfigureAwait(false);
+            }
+            catch(OperationCanceledException cancellation)
+            {
+                //The digest function reports the cancellation of its work inside a fault of its own: an
+                //InvalidOperationException, the exception the host records when one escapes the endpoint, so the fault
+                //reaching the host instead of the cancellation it carries would be on record.
+                throw new InvalidOperationException(CarriedCancellationFixtures.PrivateReason, cancellation);
+            }
+
+            return await MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync(
+                input, outputByteLength, tag, pool, context, cancellationToken).ConfigureAwait(false);
+        }
+
+        await WireDiVpExpectationSeamAsync(host, BuildDiVpVerification(KeyDidResolverSeam) with
+        {
+            ComputeDigest = ComputeDigestUntilTheWalletAbandonsAsync
+        }).ConfigureAwait(false);
+        (Uri credentialUrl, string accessToken, Func<bool> isIssuanceConsulted) = await PrepareDiVpCredentialRequestOverHttpAsync(
+            host, material).ConfigureAwait(false);
+        string presentationJson = SerializePresentation(presentation);
+
+        await VcalmWireFixtures.AssertAbandonedRequestProducesNoResponseAsync(
+            host,
+            async (served, callerToken) =>
+            {
+                using HttpRequestMessage request = BuildDiVpCredentialRequest(credentialUrl, accessToken, presentationJson);
+
+                return await served.SharedHttpClient!.SendAsync(request, callerToken).ConfigureAwait(false);
+            },
+            hasEnteredDigest.Task,
+            hasObservedCancellation.Task,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(isIssuanceConsulted(), "An abandoned Credential Request must never reach issuance.");
+    }
+
+
+    /// <summary>
     /// Over the real HTTPS loopback host: grants the pre-authorized code, mints an access token at the token endpoint and
     /// posts a §8.2 Credential Request carrying <paramref name="presentationJson"/> as its one di_vp key proof, returning
     /// the Credential Endpoint's status and body and whether the issuance seam was consulted.
@@ -1151,6 +1225,28 @@ internal sealed class CredentialDiVpProofTests
     /// <returns>The response status, the response body and whether issuance was consulted.</returns>
     private async Task<(int StatusCode, string Body, bool IsIssuanceConsulted)> PostDiVpCredentialRequestOverHttpAsync(
         TestHostShell host, VerifierKeyMaterial material, string presentationJson)
+    {
+        (Uri credentialUrl, string accessToken, Func<bool> isIssuanceConsulted) = await PrepareDiVpCredentialRequestOverHttpAsync(
+            host, material).ConfigureAwait(false);
+        using HttpRequestMessage request = BuildDiVpCredentialRequest(credentialUrl, accessToken, presentationJson);
+        using HttpResponseMessage response = await host.Host("default").SharedHttpClient!.SendAsync(
+            request, TestContext.CancellationToken).ConfigureAwait(false);
+        string responseBody = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, responseBody, isIssuanceConsulted());
+    }
+
+
+    /// <summary>
+    /// Over the real HTTPS loopback host: grants the pre-authorized code and mints an access token at the token endpoint,
+    /// returning the Credential Endpoint's URL, the access token a §8.2 Credential Request bears, and a probe telling
+    /// whether the issuance seam has been consulted since.
+    /// </summary>
+    /// <param name="host">The host shell whose credential issuer the di_vp seams are already wired on.</param>
+    /// <param name="material">The registered wallet client the request is made for.</param>
+    /// <returns>The Credential Endpoint's URL, the access token and the issuance probe.</returns>
+    private async Task<(Uri CredentialUrl, string AccessToken, Func<bool> IsIssuanceConsulted)> PrepareDiVpCredentialRequestOverHttpAsync(
+        TestHostShell host, VerifierKeyMaterial material)
     {
         bool isIssuanceConsulted = false;
         await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
@@ -1178,17 +1274,30 @@ internal sealed class CredentialDiVpProofTests
         string tokenBody = await tokenResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)tokenResponse.StatusCode, tokenBody);
         using JsonDocument token = JsonDocument.Parse(tokenBody);
-        string body = "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"di_vp\":[" + presentationJson + "]}}";
         Uri credentialUrl = new(serving.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, segment));
-        using HttpRequestMessage request = new(HttpMethod.Post, credentialUrl)
-        {
-            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
-        };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString());
-        using HttpResponseMessage response = await serving.SharedHttpClient.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
-        string responseBody = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        return ((int)response.StatusCode, responseBody, isIssuanceConsulted);
+        return (credentialUrl, token.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!, () => isIssuanceConsulted);
+    }
+
+
+    /// <summary>
+    /// Builds the §8.2 Credential Request for the configured credential, carrying <paramref name="presentationJson"/> as
+    /// its one di_vp key proof and bearing <paramref name="accessToken"/>.
+    /// </summary>
+    /// <param name="credentialUrl">The Credential Endpoint's URL.</param>
+    /// <param name="accessToken">The access token the request bears.</param>
+    /// <param name="presentationJson">The di_vp presentation JSON the request carries.</param>
+    /// <returns>The request; the caller disposes it.</returns>
+    private static HttpRequestMessage BuildDiVpCredentialRequest(Uri credentialUrl, string accessToken, string presentationJson)
+    {
+        string body = "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"di_vp\":[" + presentationJson + "]}}";
+        HttpRequestMessage request = new(HttpMethod.Post, credentialUrl)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        return request;
     }
 
 

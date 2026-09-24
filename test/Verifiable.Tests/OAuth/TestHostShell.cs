@@ -4573,15 +4573,15 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
-    /// Starts an in-process HTTPS listener for the W3C VCALM 1.0 conformance bridge (chunk V-6a):
+    /// Starts an in-process HTTPS listener for the W3C VCALM 1.0 conformance bridge:
     /// the same ephemeral-port loopback bootstrap as <see cref="StartHttpHostAsync(string, CancellationToken)"/>,
     /// but mounting <see cref="Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication"/> so the VCALM
     /// issuer / verifier interfaces are served at the STABLE, suite-expected flat paths
     /// (<c>/credentials/issue</c>, <c>/credentials/verify</c>, <c>/presentations/verify</c>) over real
     /// HTTPS behind an OAuth2 client-credentials bearer gate, with the AS token endpoint reachable at
     /// <c>/token</c>. The external <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c>
-    /// JS suites POST to those flat paths; this is the in-repo bridge the suites would later be pointed
-    /// at (V-6b). Idempotent per host. The supplied <paramref name="registration"/> is the conformance
+    /// JS suites POST to those flat paths; this is the in-repo bridge those suites can be pointed at.
+    /// Idempotent per host. The supplied <paramref name="registration"/> is the conformance
     /// tenant whose VCALM endpoints the skin fronts.
     /// </summary>
     public async Task StartVcalmConformanceHostAsync(

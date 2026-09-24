@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
@@ -74,9 +75,6 @@ internal sealed class VcalmVerifierEndpointTests
 
     /// <summary>Builds the did:web document of a test issuer whose controller document a test serves itself.</summary>
     private static WebDidBuilder WebDidBuilder { get; } = new(BaseMemoryPool.Shared);
-
-    /// <summary>The domain of the did:web test issuer, so its DID is <c>did:web:issuer.web.test</c>.</summary>
-    private const string IssuerWebDomain = "issuer.web.test";
 
     /// <summary>The did:key resolver seam — derives the controller DID document locally with no network.</summary>
     private static DidResolver KeyDidResolverSeam { get; } = new(
@@ -433,15 +431,26 @@ internal sealed class VcalmVerifierEndpointTests
     /// controllerDocument identified by verificationRelationship, an error MUST be raised and SHOULD convey an error type
     /// of INVALID_RELATIONSHIP_FOR_VERIFICATION_METHOD." A method of a key agreement type, and a method whose key material
     /// is not a signing key of its declared type, fail step 8 even when the controller document also leaves them out of
-    /// <c>assertionMethod</c>, so each reports INVALID_VERIFICATION_METHOD, never the relationship type.
+    /// <c>assertionMethod</c>, so each reports INVALID_VERIFICATION_METHOD, never the relationship type. The detail names
+    /// the conformity failure the method has, so the problem cannot be read as the one a method the controller document
+    /// does not contain at all reports: that the method is not a conforming verification method.
     /// </summary>
+    /// <param name="cause">The nonconforming method the controller document carries outside <c>assertionMethod</c>.</param>
+    /// <param name="conformityFailure">The ending of the detail that names the method's conformity failure.</param>
     [TestMethod]
-    [DataRow("keyAgreementTypeOutsideRelationship")]
-    [DataRow("foreignCodecOutsideRelationship")]
-    public async Task NonconformingMethodOutsideTheRelationshipReportsVerificationMethodProblem(string cause)
+    [DataRow("keyAgreementTypeOutsideRelationship", "is of a key agreement type, not a signing type.")]
+    [DataRow("foreignCodecOutsideRelationship", "public key material is not a signing key of its declared type.")]
+    public async Task NonconformingMethodOutsideTheRelationshipReportsVerificationMethodProblem(string cause, string conformityFailure)
     {
-        await AssertControllerProblemAsync(cause,
-            "https://w3id.org/security#INVALID_VERIFICATION_METHOD").ConfigureAwait(false);
+        const string InvalidVerificationMethod = "https://w3id.org/security#INVALID_VERIFICATION_METHOD";
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(false).ConfigureAwait(false);
+        using JsonDocument response = await PostControllerCaseAsync(CreateControllerResolver(cause), credential).ConfigureAwait(false);
+
+        AssertVerificationProblem(response, InvalidVerificationMethod);
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, InvalidVerificationMethod, conformityFailure),
+            "The detail names the method's own conformity failure.");
+        Assert.IsFalse(VcalmWireFixtures.HasProblemOfType(response, InvalidVerificationMethod, "is not a conforming verification method."),
+            "The detail is not the one a method absent from the controller document reports.");
     }
 
 
@@ -716,7 +725,7 @@ internal sealed class VcalmVerifierEndpointTests
         {
             hasLiveCallerToken = !cancellationToken.IsCancellationRequested;
 
-            return ValueTask.FromException<(DigestValue Result, CryptoEvent? Event)>(CreateOwnBudgetCancellation(cancellationShape));
+            return ValueTask.FromException<(DigestValue Result, CryptoEvent? Event)>(CarriedCancellationFixtures.Create(cancellationShape));
         }
 
         string segment = await RegisterVerifierAsync(app, canonicalizer: isPresentation ? JcsCanonicalizer : RdfcCanonicalizer).ConfigureAwait(false);
@@ -821,7 +830,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task DependencyBudgetExhaustionBoundsRemainingContainedCredentialFetches()
     {
         await AssertContextFetchBudgetBoundsContainedCredentialsAsync(
-            () => CreateOwnBudgetCancellation("bare")).ConfigureAwait(false);
+            () => CarriedCancellationFixtures.Create("bare")).ConfigureAwait(false);
     }
 
 
@@ -838,7 +847,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task WrappedContextFetchCancellationBoundsRemainingContainedCredentialFetches()
     {
         await AssertContextFetchBudgetBoundsContainedCredentialsAsync(
-            () => CreateOwnBudgetCancellation("wrapped")).ConfigureAwait(false);
+            () => CarriedCancellationFixtures.Create("wrapped")).ConfigureAwait(false);
     }
 
 
@@ -856,7 +865,7 @@ internal sealed class VcalmVerifierEndpointTests
     public async Task AggregatedContextFetchCancellationBoundsRemainingContainedCredentialFetches()
     {
         await AssertContextFetchBudgetBoundsContainedCredentialsAsync(
-            () => CreateOwnBudgetCancellation("aggregated")).ConfigureAwait(false);
+            () => CarriedCancellationFixtures.Create("aggregated")).ConfigureAwait(false);
     }
 
 
@@ -950,7 +959,7 @@ internal sealed class VcalmVerifierEndpointTests
         {
             hasLiveCallerToken = !cancellationToken.IsCancellationRequested;
 
-            return ValueTask.FromException<DidResolutionResult>(CreateOwnBudgetCancellation(cancellationShape));
+            return ValueTask.FromException<DidResolutionResult>(CarriedCancellationFixtures.Create(cancellationShape));
         }
 
         DidResolver resolver = new(DidMethodSelectors.FromResolvers(
@@ -1113,67 +1122,222 @@ internal sealed class VcalmVerifierEndpointTests
     [TestMethod]
     public async Task ContainedCredentialsOfOneIssuerShareOneControllerResolution()
     {
-        //Three contained credentials: more than one, so a resolution per credential would be counted twice over.
-        const int ContainedCredentialCount = 3;
-
         await using TestHostShell app = new(TimeProvider);
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
-        using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
-        using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        DidDocument issuerDocument = await WebDidBuilder.BuildAsync(
-            issuerPublic,
-            MultikeyVerificationMethodTypeInfo.Instance,
-            IssuerWebDomain,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        DidResolutionResult issuerResolution = DidResolutionResult.Success(issuerDocument, DidDocumentMetadata.Empty, "application/did+json");
 
-        int resolutions = 0;
-        ValueTask<DidResolutionResult> CountingResolveAsync(
-            string did, DidResolutionOptions options, ExchangeContext context, CancellationToken cancellationToken)
-        {
-            _ = Interlocked.Increment(ref resolutions);
+        //Three contained credentials of one issuer: more than one, so a resolution per credential would be counted twice
+        //over.
+        (string segment, List<VerifiableCredential> credentials, Func<int> countResolutions) =
+            await RegisterVerifierOfWebIssuersAsync(app, issuerOrder: [0, 0, 0], VcalmCredentialVerification.DefaultMaxMemoizedControllerDocuments)
+            .ConfigureAwait(false);
 
-            return ValueTask.FromResult(issuerResolution);
-        }
+        using JsonDocument response = await PostPresentationWireAsync(
+            app, segment, BuildUnproofedPresentationRequestBody(credentials), 200).ConfigureAwait(false);
 
-        DidResolver resolver = new(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.WebDidMethodPrefix, CountingResolveAsync)));
-        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
-        await AlterVerificationAsync(app, verification => verification with { Resolver = resolver }).ConfigureAwait(false);
-
-        List<VerifiableCredential> credentials = [];
-        for(int i = 0; i < ContainedCredentialCount; i++)
-        {
-            credentials.Add(await SignCredentialAsIssuerAsync(
-                issuerPrivate,
-                issuerDocument.VerificationMethod![0].Id!,
-                issuerDocument.Id!.ToString(),
-                validUntilPast: false,
-                credentialStatus: null,
-                schemas: null).ConfigureAwait(false));
-        }
-
-        VerifiablePresentation presentation = new()
-        {
-            Context = Context.FromIris(Context.Credentials20),
-            Type = ["VerifiablePresentation"],
-            VerifiableCredential = credentials
-        };
-        string body = "{\"presentation\":" + SerializePresentation(presentation)
-            + ",\"options\":{\"returnProblemDetails\":true,\"returnResults\":true}}";
-
-        using JsonDocument response = await PostPresentationWireAsync(app, segment, body, 200).ConfigureAwait(false);
-
-        Assert.AreEqual(1, resolutions, "The issuer's controller document is resolved once for every credential naming it.");
+        Assert.AreEqual(1, countResolutions(), "The issuer's controller document is resolved once for every credential naming it.");
         Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(), response.RootElement.GetRawText());
         JsonElement credentialResults = response.RootElement
             .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Credentials);
-        Assert.AreEqual(ContainedCredentialCount, credentialResults.GetArrayLength(), "Every contained credential is reported.");
+        Assert.AreEqual(credentials.Count, credentialResults.GetArrayLength(), "Every contained credential is reported.");
         foreach(JsonElement credentialResult in credentialResults.EnumerateArray())
         {
             Assert.IsTrue(credentialResult.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
                 "Each credential verifies against the one resolved controller document.");
         }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID §3.3 Retrieve Verification Method</see>:
+    /// "Let controllerDocument be the result of dereferencing controllerDocumentUrl, according to the rules of the URL
+    /// scheme and using the supplied options." A verify request dereferences each controller document URL once while it
+    /// keeps that document, and keeps at most its configured number of resolved documents: a presentation of three
+    /// credentials from three did:web issuers, verified under a bound of two, dereferences each issuer's controller
+    /// document once, verifies every credential against its own issuer's document, and ends holding two resolved
+    /// documents, never the third.
+    /// </summary>
+    /// <remarks>
+    /// This test reads the document count the request's memo reports through
+    /// <see cref="VcalmVerificationContextExtensions"/>, so a service that keeps its documents anywhere else reads as zero
+    /// here rather than as a count over the bound. Whether the bound drops a document at all is discriminated by
+    /// <see cref="ControllerDocumentDroppedPastTheMemoBoundIsResolvedAgain"/>, which counts the second dereference of the
+    /// dropped document.
+    /// </remarks>
+    [TestMethod]
+    public async Task ControllerMemoHoldsNoMoreResolvedDocumentsThanItsBound()
+    {
+        const int MemoBound = 2;
+
+        await using TestHostShell app = new(TimeProvider);
+        (string segment, List<VerifiableCredential> credentials, Func<int> countResolutions) =
+            await RegisterVerifierOfWebIssuersAsync(app, issuerOrder: [0, 1, 2], MemoBound).ConfigureAwait(false);
+        ConcurrentQueue<int> memoizedDocumentCounts = await VcalmWireFixtures.RecordAtResponseAsync(
+            app, static (_, context) => context.VcalmMemoizedControllerDocumentCount).ConfigureAwait(false);
+
+        using JsonDocument response = await PostPresentationWireAsync(
+            app, segment, BuildUnproofedPresentationRequestBody(credentials), 200).ConfigureAwait(false);
+
+        Assert.AreEqual(3, countResolutions(), "Each of the three issuers' controller documents is dereferenced once.");
+        Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(), response.RootElement.GetRawText());
+        Assert.HasCount(1, memoizedDocumentCounts, "The verify request is the one response built.");
+        Assert.AreEqual(MemoBound, memoizedDocumentCounts.Single(),
+            "The request ends holding exactly its bound of resolved documents, never all three it resolved.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID §3.3 Retrieve Verification Method</see>:
+    /// "Let controllerDocument be the result of dereferencing controllerDocumentUrl, according to the rules of the URL
+    /// scheme and using the supplied options." A resolved document the request dropped to stay within its bound is
+    /// dereferenced again when a later credential names its controller: credentials of issuers A, B, C and A again,
+    /// verified under a bound of two, drop A's document when C's is kept, so A's controller document is dereferenced a
+    /// second time, four dereferences in all, and every credential still verifies.
+    /// </summary>
+    [TestMethod]
+    public async Task ControllerDocumentDroppedPastTheMemoBoundIsResolvedAgain()
+    {
+        const int MemoBound = 2;
+
+        await using TestHostShell app = new(TimeProvider);
+        (string segment, List<VerifiableCredential> credentials, Func<int> countResolutions) =
+            await RegisterVerifierOfWebIssuersAsync(app, issuerOrder: [0, 1, 2, 0], MemoBound).ConfigureAwait(false);
+
+        using JsonDocument response = await PostPresentationWireAsync(
+            app, segment, BuildUnproofedPresentationRequestBody(credentials), 200).ConfigureAwait(false);
+
+        Assert.AreEqual(4, countResolutions(),
+            "The first issuer's document, dropped when the third issuer's was kept, is dereferenced again when named again.");
+        Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(), response.RootElement.GetRawText());
+        JsonElement credentialResults = response.RootElement
+            .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Credentials);
+        Assert.AreEqual(4, credentialResults.GetArrayLength(), "Every contained credential is reported.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID §3.3 Retrieve Verification Method</see>:
+    /// "Let controllerDocument be the result of dereferencing controllerDocumentUrl, according to the rules of the URL
+    /// scheme and using the supplied options." Two verifications of one request that name the same issuer and both
+    /// dereference its controller document before either keeps it leave the request holding that document once: the
+    /// request's count stays one, and the document stays the one most recently used, so under a bound of two, after a
+    /// second issuer's document is kept and the first issuer is named again, keeping a third issuer's document drops the
+    /// second issuer's, and the first issuer, named once more, is not dereferenced again: four dereferences in all.
+    /// </summary>
+    /// <remarks>
+    /// Proves the controller memo's invariant, one held document per controller document URL, directly through the
+    /// public <see cref="VcalmVerificationService.VerifyCredentialAsync"/>, in-process. The wire cannot produce the case:
+    /// a verify request verifies its proofs and contained credentials one at a time on its own context, and a controller
+    /// is resolved only after the memo found no document for its URL, so within one request a URL is never recorded
+    /// twice; only two verifications that share one request's context and both resolve the same controller before either
+    /// records it do so. The two dereferences are held open and released one after the other, so the two verifications
+    /// never run at once.
+    /// </remarks>
+    [TestMethod]
+    public async Task OverlappingVerificationsOfOneIssuerKeepItsDocumentOnce()
+    {
+        const int MemoBound = 2;
+
+        await using TestHostShell app = new(TimeProvider);
+        TaskCompletionSource firstEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource secondEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseFirst = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseSecond = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task HoldTheFirstTwoResolutionsAsync(int ordinal) => ordinal switch
+        {
+            1 => EnterThenWaitAsync(firstEntered, releaseFirst.Task),
+            2 => EnterThenWaitAsync(secondEntered, releaseSecond.Task),
+            _ => Task.CompletedTask
+        };
+
+        (_, List<VerifiableCredential> credentials, Func<int> countResolutions) = await RegisterVerifierOfWebIssuersAsync(
+            app, issuerOrder: [0, 1, 2], MemoBound, beforeResolution: HoldTheFirstTwoResolutionsAsync).ConfigureAwait(false);
+        VcalmCredentialVerification verification = app.Server.Vcalm().VcalmCredentialVerification!;
+        ExchangeContext request = [];
+        Task<VcalmVerificationOutcome> VerifyAsync(int credentialIndex) => VcalmVerificationService.VerifyCredentialAsync(
+            (DataIntegritySecuredCredential)credentials[credentialIndex],
+            verification,
+            resolveStatusList: null,
+            TimeProvider.GetUtcNow(),
+            request,
+            TestContext.CancellationToken).AsTask();
+
+        Task<VcalmVerificationOutcome> first = VerifyAsync(0);
+        await firstEntered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Task<VcalmVerificationOutcome> second = VerifyAsync(0);
+        await secondEntered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        releaseFirst.SetResult();
+        Assert.IsTrue((await first.ConfigureAwait(false)).Verified, "The first verification of the issuer's credential verifies.");
+        releaseSecond.SetResult();
+        Assert.IsTrue((await second.ConfigureAwait(false)).Verified, "The second verification of the issuer's credential verifies.");
+        Assert.AreEqual(1, request.VcalmMemoizedControllerDocumentCount, "The issuer's document, recorded twice, is held once.");
+
+        //The second issuer's credential, the first issuer's again, the third issuer's, which the bound makes room for, and
+        //the first issuer's once more.
+        int[] laterCredentials = [1, 0, 2, 0];
+        foreach(int credentialIndex in laterCredentials)
+        {
+            Assert.IsTrue((await VerifyAsync(credentialIndex).ConfigureAwait(false)).Verified, "Every credential verifies.");
+        }
+
+        Assert.AreEqual(4, countResolutions(),
+            "The first issuer, used last before the third issuer's document is kept, is not the document dropped for it.");
+        Assert.AreEqual(MemoBound, request.VcalmMemoizedControllerDocumentCount, "The request holds its bound of documents.");
+    }
+
+
+    /// <summary>Completes <paramref name="entered"/>, then waits until <paramref name="release"/> completes.</summary>
+    /// <param name="entered">Completed as soon as the held operation is entered.</param>
+    /// <param name="release">Completes when the held operation may continue.</param>
+    /// <returns>A task completing when the operation is released.</returns>
+    private static async Task EnterThenWaitAsync(TaskCompletionSource entered, Task release)
+    {
+        entered.SetResult();
+        await release.ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>: RANGE_ERROR, "A
+    /// provided value is outside of the expected range of an associated value." A presentation containing more credentials
+    /// than the verifier admits is outside that range, and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "If an error is
+    /// included, the verified property of the VerificationResponse object MUST be set to false". The verifier answers HTTP
+    /// 200, the process having run, with RANGE_ERROR at the presentation level and verified false, before any contained
+    /// credential is verified and before the presentation's challenge is consumed: no controller document is
+    /// dereferenced, the challenge is never handed to the application's consume seam, and no credential result is
+    /// reported.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentationContainingMoreCredentialsThanTheBoundReportsRangeError()
+    {
+        const int ContainedCredentialBound = 2;
+
+        await using TestHostShell app = new(TimeProvider);
+        int consumedChallenges = 0;
+        (string segment, List<VerifiableCredential> credentials, Func<int> countResolutions) =
+            await RegisterVerifierOfWebIssuersAsync(
+                app,
+                issuerOrder: [0, 0, 0],
+                VcalmCredentialVerification.DefaultMaxMemoizedControllerDocuments,
+                consumeChallenge: (_, _, _) =>
+                {
+                    _ = Interlocked.Increment(ref consumedChallenges);
+
+                    return ValueTask.FromResult(true);
+                }).ConfigureAwait(false);
+        await AlterVerificationAsync(app, verification => verification with { MaxContainedCredentials = ContainedCredentialBound }).ConfigureAwait(false);
+
+        using JsonDocument response = await PostPresentationWireAsync(
+            app, segment, BuildUnproofedPresentationRequestBody(credentials, challenge: "challenge-of-an-oversized-presentation"), 200)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(), response.RootElement.GetRawText());
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/TR/vc-data-model#RANGE_ERROR"),
+            "A presentation over the contained-credential bound reports RANGE_ERROR.");
+        Assert.AreEqual(0, countResolutions(), "No contained credential is verified, so no controller document is dereferenced.");
+        Assert.AreEqual(0, Volatile.Read(ref consumedChallenges), "The challenge of a presentation refused by its size is not consumed.");
+        Assert.AreEqual(0, response.RootElement
+            .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Credentials).GetArrayLength(),
+            "No contained credential result is reported.");
     }
 
 
@@ -2109,7 +2273,7 @@ internal sealed class VcalmVerifierEndpointTests
             {
                 hasLiveCallerToken = !ct.IsCancellationRequested;
 
-                return ValueTask.FromException<VcalmResolvedStatusList?>(CreateOwnBudgetCancellation(cancellationShape));
+                return ValueTask.FromException<VcalmResolvedStatusList?>(CarriedCancellationFixtures.Create(cancellationShape));
             };
         }).ConfigureAwait(false);
 
@@ -2154,7 +2318,7 @@ internal sealed class VcalmVerifierEndpointTests
             {
                 _ = Interlocked.Increment(ref statusFetches);
 
-                return ValueTask.FromException<VcalmResolvedStatusList?>(CreateOwnBudgetCancellation("bare"));
+                return ValueTask.FromException<VcalmResolvedStatusList?>(CarriedCancellationFixtures.Create("bare"));
             };
         }).ConfigureAwait(false);
 
@@ -2188,9 +2352,9 @@ internal sealed class VcalmVerifierEndpointTests
             "A status that could not be established is a §3.8.1 warning, fetched or not, and does not flip verified.");
         JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
         Assert.AreEqual(2, problems.GetArrayLength(), "Both status entries are reported.");
-        Assert.IsTrue(HasProblem(problems, "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR",
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR",
             "cancelled by its own budget."), "The stalled status fetch reports its retrieval problem.");
-        Assert.IsTrue(HasProblem(problems, "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR",
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR",
             "not attempted: an earlier dependency of this request exhausted its budget."),
             "The unfetched status entry reports its retrieval problem, saying it was not attempted.");
     }
@@ -2229,7 +2393,7 @@ internal sealed class VcalmVerifierEndpointTests
         await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
-                ValueTask.FromException<VcalmResolvedStatusList?>(CreateOwnBudgetCancellation(cancellationShape));
+                ValueTask.FromException<VcalmResolvedStatusList?>(CarriedCancellationFixtures.Create(cancellationShape));
         }).ConfigureAwait(false);
 
         DataIntegritySecuredCredential credential = await SignCredentialAsync(
@@ -2243,11 +2407,10 @@ internal sealed class VcalmVerifierEndpointTests
         Assert.AreEqual(0, schemaFetches, "Once the status fetch exhausts its own budget, the schema document is never fetched.");
         Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
             "A declared schema left unchecked must not leave the credential verified.");
-        JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
-        Assert.IsTrue(HasProblem(problems, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             "not attempted: an earlier dependency of this request exhausted its budget."),
             "The unchecked schema entry reports its data-model error, saying it was not attempted.");
-        Assert.IsTrue(HasProblem(problems, "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR",
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR",
             "cancelled by its own budget."), "The stalled status fetch reports its retrieval problem.");
     }
 
@@ -2273,7 +2436,7 @@ internal sealed class VcalmVerifierEndpointTests
         {
             hasLiveCallerToken = !cancellationToken.IsCancellationRequested;
 
-            return ValueTask.FromException<string?>(CreateOwnBudgetCancellation(cancellationShape));
+            return ValueTask.FromException<string?>(CarriedCancellationFixtures.Create(cancellationShape));
         }
 
         string segment = await RegisterVerifierAsync(
@@ -2295,7 +2458,7 @@ internal sealed class VcalmVerifierEndpointTests
             "The application's cancellation reason must never leak into the response.");
         JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
         Assert.AreEqual(1, problems.GetArrayLength(), "The unchecked schema is the credential's only problem.");
-        Assert.IsTrue(HasProblem(problems, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", "cancelled by its own budget."),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", "cancelled by its own budget."),
             "The unchecked schema entry reports its data-model error, naming the fetch that ended on its own budget.");
         JsonElement schemaResults = response.RootElement
             .GetProperty(VcalmParameterNames.Results)
@@ -2323,7 +2486,7 @@ internal sealed class VcalmVerifierEndpointTests
         {
             _ = Interlocked.Increment(ref schemaFetches);
 
-            return ValueTask.FromException<string?>(CreateOwnBudgetCancellation("bare"));
+            return ValueTask.FromException<string?>(CarriedCancellationFixtures.Create("bare"));
         }
 
         string segment = await RegisterVerifierAsync(
@@ -2353,52 +2516,11 @@ internal sealed class VcalmVerifierEndpointTests
         Assert.IsFalse(schemaResults[1].GetProperty(VcalmParameterNames.Verified).GetBoolean());
         JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
         Assert.AreEqual(2, problems.GetArrayLength(), "Each unchecked schema asserts its own problem.");
-        Assert.IsTrue(HasProblem(problems, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", "cancelled by its own budget."),
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", "cancelled by its own budget."),
             "The stalled schema entry reports its data-model error, naming the fetch that ended on its own budget.");
-        Assert.IsTrue(HasProblem(problems, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
             "not attempted: an earlier dependency of this request exhausted its budget."),
             "The unchecked second schema entry reports its data-model error, saying it was not attempted.");
-    }
-
-
-    /// <summary>
-    /// Creates the exception a dependency whose own budget ran out raises, in one of the shapes a JSON-LD processor, a
-    /// transport or a task combinator reports it: <c>bare</c>, the cancellation itself; <c>wrapped</c>, the cancellation
-    /// as the inner exception of the dependency's own exception; <c>aggregated</c>, the cancellation as the second inner
-    /// exception of an <see cref="AggregateException"/> whose first is an ordinary fault. Every message names a private
-    /// host and path the response must never repeat.
-    /// </summary>
-    /// <param name="cancellationShape">The shape: <c>bare</c>, <c>wrapped</c> or <c>aggregated</c>.</param>
-    /// <returns>The exception the dependency raises.</returns>
-    private static Exception CreateOwnBudgetCancellation(string cancellationShape) => cancellationShape switch
-    {
-        "bare" => new OperationCanceledException("private-policy-host/path"),
-        "wrapped" => new IOException("private-policy-host/path", new OperationCanceledException("private-policy-host/path")),
-        "aggregated" => new AggregateException(
-            new IOException("private-policy-host/path"), new OperationCanceledException("private-policy-host/path")),
-        _ => throw new ArgumentOutOfRangeException(nameof(cancellationShape), cancellationShape, "Unknown cancellation shape.")
-    };
-
-
-    /// <summary>
-    /// Whether <paramref name="problems"/> holds a ProblemDetail of <paramref name="type"/> whose detail ends with
-    /// <paramref name="detailEnding"/>.
-    /// </summary>
-    /// <param name="problems">The response's or a result's <c>problemDetails</c> array.</param>
-    /// <param name="type">The literal problem type URL looked for.</param>
-    /// <param name="detailEnding">The ending the problem's detail must carry.</param>
-    private static bool HasProblem(JsonElement problems, string type, string detailEnding)
-    {
-        foreach(JsonElement problem in problems.EnumerateArray())
-        {
-            if(string.Equals(problem.GetProperty(VcalmParameterNames.ProblemType).GetString(), type, StringComparison.Ordinal)
-                && problem.GetProperty("detail").GetString()!.EndsWith(detailEnding, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
 
@@ -2560,12 +2682,11 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
-    /// An unresolvable schema document and an unregistered mechanism both evaluate Indeterminate
-    /// (<see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>):
-    /// the per-entry result is <c>verified:false</c> without asserting an error, so the overall
-    /// <c>verified</c> does not flip — an undeterminable schema is not asserted as non-conformant,
-    /// mirroring the undeterminable-status convention. With multiple schemas each entry contributes
-    /// its own result (VC Data Model 2.0 §4.11: validity per each associated type's rules).
+    /// A schema mechanism no validator is registered for evaluates Indeterminate
+    /// (<see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>): the per-entry result is
+    /// <c>verified:false</c> without asserting an error, so the overall <c>verified</c> does not flip, a schema the
+    /// verifier cannot judge being neither asserted conformant nor non-conformant. With multiple schemas each entry
+    /// contributes its own result (VC Data Model 2.0 §4.11: validity per each associated type's rules).
     /// </summary>
     [TestMethod]
     public async Task IndeterminateSchemaEntriesReportFalseWithoutFlippingVerified()
@@ -2581,7 +2702,6 @@ internal sealed class VcalmVerifierEndpointTests
             schemas:
             [
                 new CredentialSchema { Id = AlumniSchemaUrl, Type = "JsonSchema" },
-                new CredentialSchema { Id = "https://schemas.example/absent.json", Type = "JsonSchema" },
                 new CredentialSchema { Id = AlumniSchemaUrl, Type = "VendorMechanism" }
             ]).ConfigureAwait(false);
         string body = BuildCredentialRequestBody(credential, returnProblemDetails: true, returnResults: true);
@@ -2589,14 +2709,153 @@ internal sealed class VcalmVerifierEndpointTests
         using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
 
         Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
-            "Indeterminate schema entries must not flip the overall verified.");
+            "An Indeterminate schema entry must not flip the overall verified.");
         JsonElement schemaResults = response.RootElement
             .GetProperty(VcalmParameterNames.Results)
             .GetProperty(VcalmParameterNames.CredentialSchema);
-        Assert.AreEqual(3, schemaResults.GetArrayLength(), "Three entries produce three result items (§4.11).");
+        Assert.AreEqual(2, schemaResults.GetArrayLength(), "Two entries produce two result items (§4.11).");
         Assert.IsTrue(schemaResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean());
         Assert.IsFalse(schemaResults[1].GetProperty(VcalmParameterNames.Verified).GetBoolean());
-        Assert.IsFalse(schemaResults[2].GetProperty(VcalmParameterNames.Verified).GetBoolean());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "Errors are
+    /// ProblemDetails relating to cryptography, data model, and malformed context and are unrecoverable", and "If an
+    /// error is included, the verified property of the VerificationResponse object MUST be set to false". A declared
+    /// schema whose document cannot be retrieved, because the resolver returns none or throws, is never checked: an
+    /// unrecoverable data-model condition, so the entry reports
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// MALFORMED_VALUE_ERROR naming the cause, and the credential, whose proof verifies, verifies false.
+    /// </summary>
+    /// <param name="cause">How the retrieval fails: <c>notReturned</c> or <c>failed</c>.</param>
+    /// <param name="causeDetail">The ending of the detail that names the cause.</param>
+    [TestMethod]
+    [DataRow("notReturned", "the resolver returned no schema document.")]
+    [DataRow("failed", "the retrieval of the schema document failed.")]
+    public async Task UnretrievableSchemaDocumentReportsMalformedValueError(string cause, string causeDetail)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        ResolveVcalmSchemaDocumentDelegate resolveSchemaDocument = cause switch
+        {
+            "notReturned" => static (_, _, _) => ValueTask.FromResult<string?>(null),
+            _ => static (_, _, _) => ValueTask.FromException<string?>(new IOException(CarriedCancellationFixtures.PrivateReason))
+        };
+        string segment = await RegisterVerifierAsync(
+            app,
+            schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
+            resolveSchemaDocument: resolveSchemaDocument).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false,
+            schemas: [new CredentialSchema { Id = AlumniSchemaUrl, Type = "JsonSchema" }]).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true, returnResults: true);
+
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);
+
+        Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "A declared schema that could not be retrieved must not leave the credential verified.");
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", causeDetail),
+            "The unchecked schema entry reports its data-model error, naming why its document was not retrieved.");
+        Assert.IsFalse(response.RootElement.GetRawText().Contains(CarriedCancellationFixtures.PrivateReason, StringComparison.Ordinal),
+            "The resolver's own failure text must never leak into the response.");
+        JsonElement schemaResults = response.RootElement
+            .GetProperty(VcalmParameterNames.Results)
+            .GetProperty(VcalmParameterNames.CredentialSchema);
+        Assert.AreEqual(1, schemaResults.GetArrayLength(), "The declared schema is reported.");
+        Assert.IsFalse(schemaResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#error-handling">VCALM §3.8</see>: implementations "avoid raising errors
+    /// while performing verification, and instead gather ProblemDetails objects", and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "If an error is
+    /// included, the verified property of the VerificationResponse object MUST be set to false". A schema validator that
+    /// throws over the retrieved schema document, or that ends on its own budget while the caller still waits, the
+    /// cancellation carried inside its own exception, leaves the declared schema unchecked: the verifier answers HTTP 200
+    /// with <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// MALFORMED_VALUE_ERROR naming the cause and verified false, never an escaping exception.
+    /// </summary>
+    /// <param name="failure">How the validator fails: <c>throws</c> or <c>ownBudget</c>.</param>
+    /// <param name="causeDetail">The ending of the detail that names the cause.</param>
+    [TestMethod]
+    [DataRow("throws", "the schema validation failed.")]
+    [DataRow("ownBudget", "the schema validation was cancelled by its own budget.")]
+    public async Task SchemaValidatorFailureReportsMalformedValueError(string failure, string causeDetail)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        Exception validatorFault = failure switch
+        {
+            "throws" => new InvalidOperationException(CarriedCancellationFixtures.PrivateReason),
+            _ => CarriedCancellationFixtures.Create("wrapped")
+        };
+        bool hasLiveCallerToken = false;
+        ValueTask<CredentialSchemaValidationResult> FailingValidateAsync(string schemaJson, string documentJson, CancellationToken cancellationToken)
+        {
+            hasLiveCallerToken = !cancellationToken.IsCancellationRequested;
+
+            return ValueTask.FromException<CredentialSchemaValidationResult>(validatorFault);
+        }
+
+        string segment = await RegisterVerifierAsync(
+            app,
+            schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(FailingValidateAsync),
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas)).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false,
+            schemas: [new CredentialSchema { Id = AlumniSchemaUrl, Type = "JsonSchema" }]).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true, returnResults: true);
+
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);
+
+        Assert.IsTrue(hasLiveCallerToken, "The validator must fail while the caller's token is still live.");
+        Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "A declared schema the validator could not check must not leave the credential verified.");
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(response, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", causeDetail),
+            "The unchecked schema entry reports its data-model error, naming the validator's failure.");
+        Assert.IsFalse(response.RootElement.GetRawText().Contains(CarriedCancellationFixtures.PrivateReason, StringComparison.Ordinal),
+            "The validator's own failure text must never leak into the response.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "Errors are
+    /// ProblemDetails relating to cryptography, data model, and malformed context and are unrecoverable", and "If an
+    /// error is included, the verified property of the VerificationResponse object MUST be set to false". A schema
+    /// validator that answers an outcome that is none of the three the VC JSON Schema evaluation defines gives no verdict,
+    /// so the declared schema is never checked: over the real wire the verifier answers HTTP 200 with
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// MALFORMED_VALUE_ERROR naming the cause and verified false, never a schema it neither checked nor reported.
+    /// </summary>
+    [TestMethod]
+    public async Task SchemaValidatorAnsweringAnUndefinedOutcomeReportsMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(
+            app,
+            schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(static (_, _, _) =>
+                ValueTask.FromResult(new CredentialSchemaValidationResult { Outcome = SchemaValidationTestUtilities.UndefinedValidationOutcome })),
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas)).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false,
+            schemas: [new CredentialSchema { Id = AlumniSchemaUrl, Type = "JsonSchema" }]).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true, returnResults: true);
+
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);
+
+        Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "A declared schema the validator gave no verdict on must not leave the credential verified.");
+        Assert.IsTrue(VcalmWireFixtures.HasProblemOfType(
+            response, "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", "the schema validation returned an undefined outcome."),
+            "The unchecked schema entry reports its data-model error, naming the undefined outcome.");
+        JsonElement schemaResults = response.RootElement
+            .GetProperty(VcalmParameterNames.Results)
+            .GetProperty(VcalmParameterNames.CredentialSchema);
+        Assert.IsFalse(schemaResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "The unchecked schema entry reports verified false.");
     }
 
 
@@ -3109,7 +3368,7 @@ internal sealed class VcalmVerifierEndpointTests
     /// §3.3.1 + §3.4 ecdsa-sd-2023 derived proof: an issuer base-proofs a credential
     /// (W3C VC-DI-ECDSA §3.4.1 createBaseProof), a holder derives a selectively-disclosed subset
     /// (§3.4.5 createDerivedProof), and the derived credential — the form a holder presents — is POSTed
-    /// to the V-1 <c>/credentials/verify</c> endpoint. With the ecdsa-sd-2023 derived-proof seams
+    /// to the §3.3.1 <c>/credentials/verify</c> endpoint. With the ecdsa-sd-2023 derived-proof seams
     /// wired, the verifier routes the CBOR <c>0xd9 5d 01</c>-tagged proof to the SD derived-proof
     /// verifier and returns HTTP 200 with <c>verified:true</c> and no error — the disclosed claims are
     /// authentic under the issuer's base signature.
@@ -3127,7 +3386,7 @@ internal sealed class VcalmVerifierEndpointTests
         using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
 
         Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
-            "A selectively-disclosed ecdsa-sd-2023 derived credential must verify TRUE at the V-1 "
+            "A selectively-disclosed ecdsa-sd-2023 derived credential must verify TRUE at the §3.3.1 "
             + "/credentials/verify endpoint.");
 
         JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
@@ -3659,6 +3918,112 @@ internal sealed class VcalmVerifierEndpointTests
             validUntilPast,
             credentialStatus,
             schemas).ConfigureAwait(false);
+    }
+
+
+    /// <summary>The domains of the did:web issuers <see cref="RegisterVerifierOfWebIssuersAsync"/> creates, one per issuer.</summary>
+    private static string[] IssuerWebDomains { get; } = ["issuer-a.web.test", "issuer-b.web.test", "issuer-c.web.test"];
+
+
+    /// <summary>
+    /// Registers a verifier whose DID resolver serves the did:web controller documents of fresh Ed25519 issuers, one per
+    /// distinct index in <paramref name="issuerOrder"/>, counting every resolution it makes, under a controller memo bound
+    /// of <paramref name="maxMemoizedDocuments"/>; and signs one credential per entry of <paramref name="issuerOrder"/> by
+    /// the issuer that entry indexes, in that order, the credentials a presentation then carries.
+    /// </summary>
+    /// <param name="app">The host shell the verifier is registered with.</param>
+    /// <param name="issuerOrder">The issuer index of each credential, in the order a presentation carries them; indexes <see cref="IssuerWebDomains"/>.</param>
+    /// <param name="maxMemoizedDocuments">The verifier's <see cref="VcalmCredentialVerification.MaxMemoizedControllerDocuments"/>.</param>
+    /// <param name="consumeChallenge">The verifier's challenge-consume seam, or <see langword="null"/> to leave it unwired.</param>
+    /// <param name="beforeResolution">
+    /// Awaited by the resolver with the ordinal of each resolution, counted from one, before it answers, or
+    /// <see langword="null"/> to answer at once; a test holds a resolution open through it.
+    /// </param>
+    /// <returns>The verifier tenant's segment, the signed credentials, and a reader of the number of resolutions made.</returns>
+    private async Task<(string Segment, List<VerifiableCredential> Credentials, Func<int> CountResolutions)> RegisterVerifierOfWebIssuersAsync(
+        TestHostShell app,
+        int[] issuerOrder,
+        int maxMemoizedDocuments,
+        ConsumeVcalmChallengeDelegate? consumeChallenge = null,
+        Func<int, Task>? beforeResolution = null)
+    {
+        Dictionary<string, DidResolutionResult> issuerResolutions = new(StringComparer.Ordinal);
+        List<(PrivateKeyMemory PrivateKey, DidDocument Document)> issuers = [];
+        int issuerCount = issuerOrder.Max() + 1;
+        for(int issuerIndex = 0; issuerIndex < issuerCount; issuerIndex++)
+        {
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+            OwnedKeys.Add(issuerKeys.PublicKey);
+            OwnedKeys.Add(issuerKeys.PrivateKey);
+            DidDocument issuerDocument = await WebDidBuilder.BuildAsync(
+                issuerKeys.PublicKey,
+                MultikeyVerificationMethodTypeInfo.Instance,
+                IssuerWebDomains[issuerIndex],
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            issuerResolutions[issuerDocument.Id!.ToString()] = DidResolutionResult.Success(issuerDocument, DidDocumentMetadata.Empty, "application/did+json");
+            issuers.Add((issuerKeys.PrivateKey, issuerDocument));
+        }
+
+        int resolutions = 0;
+        async ValueTask<DidResolutionResult> CountingResolveAsync(
+            string did, DidResolutionOptions options, ExchangeContext context, CancellationToken cancellationToken)
+        {
+            int ordinal = Interlocked.Increment(ref resolutions);
+            if(beforeResolution is not null)
+            {
+                await beforeResolution(ordinal).ConfigureAwait(false);
+            }
+
+            return issuerResolutions[did];
+        }
+
+        DidResolver resolver = new(DidMethodSelectors.FromResolvers(
+            (WellKnownDidMethodPrefixes.WebDidMethodPrefix, CountingResolveAsync)));
+        string segment = await RegisterVerifierAsync(app, consumeChallenge: consumeChallenge).ConfigureAwait(false);
+        await AlterVerificationAsync(app, verification => verification with
+        {
+            Resolver = resolver,
+            MaxMemoizedControllerDocuments = maxMemoizedDocuments
+        }).ConfigureAwait(false);
+
+        List<VerifiableCredential> credentials = [];
+        foreach(int issuerIndex in issuerOrder)
+        {
+            (PrivateKeyMemory issuerPrivate, DidDocument issuerDocument) = issuers[issuerIndex];
+            credentials.Add(await SignCredentialAsIssuerAsync(
+                issuerPrivate,
+                issuerDocument.VerificationMethod![0].Id!,
+                issuerDocument.Id!.ToString(),
+                validUntilPast: false,
+                credentialStatus: null,
+                schemas: null).ConfigureAwait(false));
+        }
+
+        return (segment, credentials, () => Volatile.Read(ref resolutions));
+    }
+
+
+    /// <summary>
+    /// Builds a §3.3.2 verify request whose <c>presentation</c> member is an unproofed presentation carrying
+    /// <paramref name="credentials"/>, asking for problem details and the verbose results, and binding
+    /// <paramref name="challenge"/> as <c>options.challenge</c> when one is given.
+    /// </summary>
+    /// <param name="credentials">The credentials the presentation contains.</param>
+    /// <param name="challenge">The challenge the request binds, or <see langword="null"/> for none.</param>
+    /// <returns>The request body JSON text.</returns>
+    private static string BuildUnproofedPresentationRequestBody(List<VerifiableCredential> credentials, string? challenge = null)
+    {
+        VerifiablePresentation presentation = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            VerifiableCredential = credentials
+        };
+
+        string challengeOption = challenge is null ? string.Empty : ",\"challenge\":" + JsonSerializer.Serialize(challenge);
+
+        return "{\"presentation\":" + SerializePresentation(presentation)
+            + ",\"options\":{\"returnProblemDetails\":true,\"returnResults\":true" + challengeOption + "}}";
     }
 
 

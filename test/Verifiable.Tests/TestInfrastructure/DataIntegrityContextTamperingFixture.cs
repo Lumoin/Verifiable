@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.BouncyCastle;
@@ -10,7 +11,6 @@ using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 
@@ -200,15 +200,16 @@ internal static class DataIntegrityContextTamperingFixture
 
     /// <summary>
     /// Draws a fresh HMAC key for a selective-disclosure base proof from the project's entropy provider
-    /// (<see cref="BouncyCastleEntropyFunctionsAdapter.GenerateNonce"/>) rather than the platform CSPRNG directly. The
-    /// base proof's <see cref="HmacKeyGeneratorDelegate"/> takes the key as a byte array, so the drawn value is copied
-    /// out of its pooled buffer once, and the buffer is returned to the pool.
+    /// (<see cref="BouncyCastleEntropyFunctionsAdapter.GenerateNonce"/>) under the HMAC-SHA-256 key's own purpose
+    /// (<see cref="CryptoTags.HmacSha256Key"/>), never as a nonce: a salt, a nonce and a key carry different invariants.
+    /// The base proof's <see cref="HmacKeyGeneratorDelegate"/> takes the key as a byte array, so the drawn value is
+    /// copied out of its pooled buffer once, and the buffer is returned to the pool.
     /// </summary>
     /// <returns>The HMAC key bytes.</returns>
     public static byte[] GenerateSelectiveDisclosureHmacKey()
     {
         (Nonce drawn, _) = BouncyCastleEntropyFunctionsAdapter.GenerateNonce(
-            SelectiveDisclosureHmacKeyByteLength, Tag.Create(Purpose.Nonce), BaseMemoryPool.Shared);
+            SelectiveDisclosureHmacKeyByteLength, CryptoTags.HmacSha256Key, BaseMemoryPool.Shared);
         using(drawn)
         {
             byte[] hmacKey = new byte[SelectiveDisclosureHmacKeyByteLength];
@@ -492,20 +493,6 @@ internal static class DataIntegrityContextTamperingFixture
 
 
     /// <summary>
-    /// Gives <paramref name="proof"/> the proof purpose <paramref name="purpose"/>, one no verification relationship
-    /// models, exactly as the JSON proof reader reads a proof declaring it: the purpose string, and the proof's
-    /// verification method carried as an <see cref="UnknownPurposeMethod"/> under that purpose.
-    /// </summary>
-    /// <param name="proof">The proof whose declared purpose is changed in place.</param>
-    /// <param name="purpose">The unmodelled purpose the proof declares.</param>
-    public static void DeclareUnmodelledPurpose(DataIntegrityProof proof, string purpose)
-    {
-        proof.ProofPurpose = purpose;
-        proof.VerificationMethod = new UnknownPurposeMethod(purpose, proof.VerificationMethod!.Id!);
-    }
-
-
-    /// <summary>
     /// The first proof map of a secured credential's or presentation's JSON: the member itself when <c>proof</c>
     /// is a single map, its first element when <c>proof</c> is an array (a proof set or chain).
     /// </summary>
@@ -664,6 +651,113 @@ internal static class DataIntegrityContextTamperingFixture
     }
 
 
+    /// <summary>
+    /// Signs <paramref name="unsignedCredentialJson"/> with an ecdsa-sd-2023 base proof (P-256) under the purpose
+    /// <paramref name="purposeMethod"/> names, one no verification relationship models, so the proof's signature is valid
+    /// over proof options that carry that purpose.
+    /// </summary>
+    /// <remarks>
+    /// The library's base-proof creation takes no purpose: it signs every base proof for <c>assertionMethod</c>. This
+    /// overload keeps what that creation prepares independently of the purpose, the per-statement signatures under the
+    /// proof-scoped key, the HMAC key and the mandatory hash, and signs the base signature itself over the sign data
+    /// <see href="https://www.w3.org/TR/vc-di-ecdsa/#serializesigndata">VC-DI-ECDSA §3.5.1 serializeSignData</see>
+    /// defines, "the concatenation of proofHash, publicKey, and mandatoryHash, in that order", for the proof options of
+    /// <see cref="CreatePurposeBoundProofSkeleton"/>. The proof reads back from JSON as a verifier receives it.
+    /// </remarks>
+    /// <param name="unsignedCredentialJson">The unsigned credential JSON text.</param>
+    /// <param name="proofCreated">The proof's <c>created</c> timestamp.</param>
+    /// <param name="purposeMethod">The verification method reference carrying the purpose the proof is signed under.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The base-proofed credential, the issuer's public key (caller disposes), and the issuer's DID document.</returns>
+    public static async ValueTask<(DataIntegritySecuredCredential Signed, PublicKeyMemory IssuerPublicKey, DidDocument Issuer)> CreateEcdsaSdBaseProofAsync(
+        string unsignedCredentialJson, DateTime proofCreated, UnknownPurposeMethod purposeMethod, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(purposeMethod);
+
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(unsignedCredentialJson, JsonOptions)!;
+        var issuerPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        var ephemeralPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        using PrivateKeyMemory issuerPrivateKey = issuerPair.PrivateKey;
+        using PrivateKeyMemory ephemeralPrivateKey = ephemeralPair.PrivateKey;
+        using PublicKeyMemory ephemeralPublicKey = ephemeralPair.PublicKey;
+
+        using BaseProofResult prepared = await CreateEcdsaSdBaseProofVerboseAsync(
+            credential, issuerPrivateKey, ephemeralPair, purposeMethod.Id!, proofCreated, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+
+        DataIntegrityProof proof = CreatePurposeBoundProofSkeleton(EcdsaSd2023CryptosuiteInfo.Instance, proofCreated, purposeMethod);
+        using DigestValue proofHash = await HashProofOptionsAsync(proof, credential, cancellationToken).ConfigureAwait(false);
+
+        int publicKeyLength = prepared.EphemeralPublicKeyWithHeader.Memory.Length;
+        int signDataLength = proofHash.Length + publicKeyLength + prepared.MandatoryHash.Length;
+        using System.Buffers.IMemoryOwner<byte> signData = BaseMemoryPool.Shared.Rent(signDataLength);
+        proofHash.AsReadOnlySpan().CopyTo(signData.Memory.Span);
+        prepared.EphemeralPublicKeyWithHeader.Memory.Span.CopyTo(signData.Memory.Span[proofHash.Length..]);
+        prepared.MandatoryHash.CopyTo(signData.Memory.Span[(proofHash.Length + publicKeyLength)..]);
+
+        using Signature baseSignature = await issuerPrivateKey.SignAsync(signData.Memory[..signDataLength], BaseMemoryPool.Shared).ConfigureAwait(false);
+
+        //A re-signing that did not cover these sign data would leave a proof that fails its signature check, and a test
+        //that expects the purpose to be refused would stay green for the wrong reason: the fixture fails here instead.
+        bool isBaseSignatureValid = await issuerPair.PublicKey.VerifyAsync(
+            signData.Memory[..signDataLength], baseSignature, MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
+        Assert.IsTrue(isBaseSignatureValid, "The base signature re-signed over the purpose-bound sign data must verify under the issuer's key.");
+
+        proof.ProofValue = EcdsaSd2023CborSerializer.SerializeBaseProof(
+            baseSignature.AsReadOnlySpan(),
+            prepared.EphemeralPublicKeyWithHeader.Memory.Span,
+            prepared.HmacKey,
+            [.. prepared.SignedStatements.Select(static statement => statement.Signature.AsReadOnlySpan().ToArray())],
+            SelectiveDisclosureMandatoryPointers,
+            TestSetup.Base64UrlEncoder);
+
+        var issuerDidDocument = CreateSelectiveDisclosureIssuerDidDocument(
+            issuerPair.PublicKey.AsReadOnlySpan(), MulticodecHeaders.P256PublicKey, purposeMethod.Id!);
+
+        return (AttachProof(credential, proof), issuerPair.PublicKey, issuerDidDocument);
+    }
+
+
+    /// <summary>
+    /// Runs the library's verbose ecdsa-sd-2023 base proof creation over <paramref name="credential"/> with the fixture's
+    /// mandatory paths, HMAC key source, RDFC-1.0 canonicalizer and serializers, renting from <paramref name="pool"/>, so a
+    /// test reaches every intermediate the creation prepares and every buffer it rents.
+    /// </summary>
+    /// <param name="credential">The unsigned credential.</param>
+    /// <param name="issuerPrivateKey">The issuer's P-256 private key the base signature is made with.</param>
+    /// <param name="ephemeralPair">The proof-scoped P-256 key pair the disclosable statements are signed with.</param>
+    /// <param name="verificationMethodId">The issuer's verification method the proof names.</param>
+    /// <param name="proofCreated">The proof's <c>created</c> timestamp.</param>
+    /// <param name="pool">The pool the creation rents its buffers from.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The creation's intermediate state; the caller disposes it.</returns>
+    public static ValueTask<BaseProofResult> CreateEcdsaSdBaseProofVerboseAsync(
+        VerifiableCredential credential,
+        PrivateKeyMemory issuerPrivateKey,
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ephemeralPair,
+        string verificationMethodId,
+        DateTime proofCreated,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken) =>
+        credential.CreateBaseProofVerboseAsync(
+            issuerPrivateKey,
+            ephemeralPair,
+            verificationMethodId,
+            proofCreated,
+            SelectiveDisclosureMandatoryPaths,
+            GenerateSelectiveDisclosureHmacKey,
+            JsonLdSelection.PartitionStatements,
+            RdfcCanonicalizer,
+            ContextResolver,
+            SerializeCredential,
+            DeserializeCredential,
+            SerializeProofOptions,
+            EcdsaSd2023CborSerializer.SerializeBaseProof,
+            TestSetup.Base64UrlEncoder,
+            pool,
+            EmptyContext,
+            cancellationToken);
+
+
     /// <summary>Derives an ecdsa-sd-2023 proof from <paramref name="signed"/>, revealing <see cref="SelectiveDisclosureRevealedPaths"/>.</summary>
     /// <param name="signed">The base-proofed credential to derive from.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -730,6 +824,88 @@ internal static class DataIntegrityContextTamperingFixture
     }
 
 
+    /// <summary>
+    /// Signs <paramref name="unsignedCredentialJson"/> with a bbs-2023 base proof, using <paramref name="bbs"/>'s key pair,
+    /// under the purpose <paramref name="purposeMethod"/> names, one no verification relationship models, so the proof's
+    /// signature is valid over proof options that carry that purpose.
+    /// </summary>
+    /// <remarks>
+    /// The library's base-proof creation takes no purpose: it signs every base proof for <c>assertionMethod</c>. This
+    /// overload keeps what that creation prepares independently of the purpose, the non-mandatory statements that become
+    /// the BBS messages, the HMAC key and the mandatory hash, and signs the messages itself under the header
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#base-proof-serialization-bbs-2023">VC-DI-BBS §3.3.2 Base Proof
+    /// Serialization</see> defines, "the concatenation of proofHash and mandatoryHash in that order", for the proof
+    /// options of <see cref="CreatePurposeBoundProofSkeleton"/>. The proof reads back from JSON as a verifier receives it.
+    /// </remarks>
+    /// <param name="bbs">The BBS operations bound to a freshly generated BLS12-381 key pair.</param>
+    /// <param name="unsignedCredentialJson">The unsigned credential JSON text.</param>
+    /// <param name="proofCreated">The proof's <c>created</c> timestamp.</param>
+    /// <param name="purposeMethod">The verification method reference carrying the purpose the proof is signed under.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The base-proofed credential and the issuer's DID document.</returns>
+    public static async ValueTask<(DataIntegritySecuredCredential Signed, DidDocument Issuer)> CreateBbsBaseProofAsync(
+        Verifiable.Tests.DataIntegrity.Bbs2023ResolvingBindingTests.ResolvingBbsOperations bbs,
+        string unsignedCredentialJson,
+        DateTime proofCreated,
+        UnknownPurposeMethod purposeMethod,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(bbs);
+        ArgumentNullException.ThrowIfNull(purposeMethod);
+
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(unsignedCredentialJson, JsonOptions)!;
+
+        using BbsBaseProofResult prepared = await credential.CreateBaseProofVerboseAsync(
+            bbs.PublicKeyBytes,
+            purposeMethod.Id!,
+            proofCreated,
+            SelectiveDisclosureMandatoryPaths,
+            GenerateSelectiveDisclosureHmacKey,
+            JsonLdSelection.PartitionStatements,
+            RdfcCanonicalizer,
+            ContextResolver,
+            SerializeCredential,
+            DeserializeCredential,
+            SerializeProofOptions,
+            Bbs2023CborSerializer.SerializeBaseProof,
+            bbs.Sign,
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken).ConfigureAwait(false);
+
+        DataIntegrityProof proof = CreatePurposeBoundProofSkeleton(Bbs2023CryptosuiteInfo.Instance, proofCreated, purposeMethod);
+        using DigestValue proofHash = await HashProofOptionsAsync(proof, credential, cancellationToken).ConfigureAwait(false);
+
+        int bbsHeaderLength = proofHash.Length + prepared.MandatoryHash.Length;
+        using System.Buffers.IMemoryOwner<byte> bbsHeader = BaseMemoryPool.Shared.Rent(bbsHeaderLength);
+        proofHash.AsReadOnlySpan().CopyTo(bbsHeader.Memory.Span);
+        prepared.MandatoryHash.CopyTo(bbsHeader.Memory.Span[proofHash.Length..]);
+
+        byte[][] messages = [.. prepared.NonMandatoryStatements.Select(static statement => Encoding.UTF8.GetBytes(statement))];
+        byte[] bbsSignature = bbs.Sign(bbsHeader.Memory[..bbsHeaderLength], messages, BaseMemoryPool.Shared);
+
+        //A re-signing that did not cover this header and these messages would leave a proof that fails its signature
+        //check, and a test that expects the purpose to be refused would stay green for the wrong reason: the fixture
+        //fails here instead.
+        Assert.IsTrue(bbs.Verify(bbsSignature, bbsHeader.Memory[..bbsHeaderLength], messages, BaseMemoryPool.Shared),
+            "The BBS signature re-signed under the purpose-bound header must verify under the issuer's key.");
+
+        proof.ProofValue = Bbs2023CborSerializer.SerializeBaseProof(
+            bbsSignature,
+            bbsHeader.Memory.Span[..bbsHeaderLength],
+            bbs.PublicKeyBytes,
+            prepared.HmacKey,
+            SelectiveDisclosureMandatoryPointers,
+            TestSetup.Base64UrlEncoder);
+
+        var issuerDidDocument = CreateSelectiveDisclosureIssuerDidDocument(
+            bbs.PublicKeyBytes, MulticodecHeaders.Bls12381G2PublicKey, purposeMethod.Id!);
+
+        return (AttachProof(credential, proof), issuerDidDocument);
+    }
+
+
     /// <summary>Derives a bbs-2023 proof from <paramref name="signed"/>, revealing <see cref="SelectiveDisclosureRevealedPaths"/>.</summary>
     /// <param name="signed">The base-proofed credential to derive from.</param>
     /// <param name="bbs">The BBS operations bound to the same key pair the base proof was signed with.</param>
@@ -758,5 +934,79 @@ internal static class DataIntegrityContextTamperingFixture
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken);
+    }
+
+
+    /// <summary>
+    /// The mandatory pointers a selective-disclosure base proof value carries: <see cref="SelectiveDisclosureMandatoryPaths"/>
+    /// as JSON Pointer strings, the form both base proof serializations take them in.
+    /// </summary>
+    private static IReadOnlyList<string> SelectiveDisclosureMandatoryPointers =>
+        [.. SelectiveDisclosureMandatoryPaths.Select(static path => path.ToJsonPointerString())];
+
+    /// <summary>
+    /// The length, in bytes, of the proof hash a selective-disclosure base signature covers: a SHA-256 digest, the hash
+    /// both the ecdsa-sd-2023 and the bbs-2023 cryptosuites of these tests use.
+    /// </summary>
+    private static int ProofHashByteLength => 32;
+
+
+    /// <summary>
+    /// The proof a selective-disclosure base proof signed under <paramref name="purposeMethod"/>'s purpose carries, its
+    /// proof value aside: every member the base signature covers, with <paramref name="purposeMethod"/> as the
+    /// verification method and its purpose as <c>proofPurpose</c>, as the JSON proof reader reads such a proof back.
+    /// </summary>
+    /// <param name="cryptosuite">The selective-disclosure cryptosuite the proof names.</param>
+    /// <param name="proofCreated">The proof's <c>created</c> timestamp.</param>
+    /// <param name="purposeMethod">The verification method reference carrying the purpose.</param>
+    /// <returns>The proof without its <c>proofValue</c>.</returns>
+    private static DataIntegrityProof CreatePurposeBoundProofSkeleton(CryptosuiteInfo cryptosuite, DateTime proofCreated, UnknownPurposeMethod purposeMethod) => new()
+    {
+        Type = DataIntegrityProof.DataIntegrityProofType,
+        Cryptosuite = cryptosuite,
+        Created = DateTimeStampFormat.Format(proofCreated),
+        VerificationMethod = purposeMethod,
+        ProofPurpose = purposeMethod.PurposeName
+    };
+
+
+    /// <summary>
+    /// The proof hash of <paramref name="proof"/>: the SHA-256 digest of the RDFC-1.0 canonical form of the proof options
+    /// <see cref="ProofOptionsDocument.FromProof"/> derives from <paramref name="proof"/> and <paramref name="credential"/>'s
+    /// <c>@context</c>, the same options a verifier derives from the proof it receives.
+    /// </summary>
+    /// <param name="proof">The proof skeleton the options derive from.</param>
+    /// <param name="credential">The credential whose <c>@context</c> the options carry.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The proof hash; the caller disposes it.</returns>
+    private static async ValueTask<DigestValue> HashProofOptionsAsync(
+        DataIntegrityProof proof, VerifiableCredential credential, CancellationToken cancellationToken)
+    {
+        string proofOptionsJson = SerializeProofOptions(ProofOptionsDocument.FromProof(proof, credential.Context));
+        CanonicalizationResult canonical = await RdfcCanonicalizer(proofOptionsJson, ContextResolver, EmptyContext, cancellationToken)
+            .ConfigureAwait(false);
+
+        int canonicalByteCount = Encoding.UTF8.GetByteCount(canonical.CanonicalForm);
+        using System.Buffers.IMemoryOwner<byte> canonicalBytes = BaseMemoryPool.Shared.Rent(canonicalByteCount);
+        int written = Encoding.UTF8.GetBytes(canonical.CanonicalForm, canonicalBytes.Memory.Span);
+
+        return CryptographicKeyEvents.ComputeDigest(
+            canonicalBytes.Memory.Span[..written], ProofHashByteLength, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>
+    /// Secures <paramref name="credential"/> with <paramref name="proof"/> as its one proof, read from JSON as a verifier
+    /// receives a secured credential, so the proof's members read back exactly as the JSON proof reader reads them.
+    /// </summary>
+    /// <param name="credential">The unsigned credential.</param>
+    /// <param name="proof">The complete proof.</param>
+    /// <returns>The secured credential.</returns>
+    private static DataIntegritySecuredCredential AttachProof(VerifiableCredential credential, DataIntegrityProof proof)
+    {
+        JsonObject document = JsonNode.Parse(SerializeCredential(credential))!.AsObject();
+        document["proof"] = JsonNode.Parse(JsonSerializerExtensions.Serialize(proof, JsonOptions));
+
+        return (DataIntegritySecuredCredential)DeserializeCredential(document.ToJsonString());
     }
 }

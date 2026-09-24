@@ -134,9 +134,19 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Resolves <did>/path/to/file: locates the #files service, appends the DID URL path to its serviceEndpoint,
-    //and retrieves the resource. A non-HTTP(S) scheme is an invalidDid; a non-retrievable resource is a
-    //notFound (did:webvh v1.0, DID URL Path Resolution).
+    /// <summary>
+    /// Resolves <c>&lt;did&gt;/path/to/file</c>: locates the <c>#files</c> service, appends the DID URL path to its
+    /// <c>serviceEndpoint</c> and retrieves the resource. A non-HTTP(S) scheme is an <c>invalidDid</c> and a resource that
+    /// cannot be retrieved a <c>notFound</c>, per
+    /// <see href="https://identity.foundation/didwebvh/v1.0/#did-url-path-resolution">did:webvh v1.0 DID URL Path
+    /// Resolution</see>; a cancellation of the retrieval propagates (<see cref="TryFetchAsync"/>).
+    /// </summary>
+    /// <param name="document">The resolved and verified DID document carrying the <c>#files</c> service.</param>
+    /// <param name="path">The DID URL path, with its leading <c>/</c>.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The retrieved resource with its content type, or the dereferencing error.</returns>
     private static async ValueTask<DidDereferencingResult> DereferenceFilesAsync(
         DidDocument document,
         string path,
@@ -172,11 +182,31 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Resolves <did>/whois: locates the #whois service, retrieves the whois.vp, verifies it is a VCDM
-    //Verifiable Presentation signed by the DID (a static linked presentation, so it has no challenge/domain),
-    //and confirms it contains at least one credential whose credentialSubject.id is the DID. A non-HTTP(S)
-    //scheme is an invalidDid; a non-retrievable file is a notFound; a found-but-non-conforming presentation is
-    //an invalidDid (did:webvh v1.0, WHOIS Resolution).
+    /// <summary>
+    /// Resolves <c>&lt;did&gt;/whois</c>: locates the <c>#whois</c> service, retrieves the <c>whois.vp</c>, verifies it
+    /// is a VCDM Verifiable Presentation signed by the DID (a static linked presentation, so it has no challenge or
+    /// domain) and confirms it contains at least one credential whose <c>credentialSubject.id</c> is the DID, per
+    /// <see href="https://identity.foundation/didwebvh/v1.0/#whois-resolution">did:webvh v1.0 WHOIS Resolution</see>. A
+    /// non-HTTP(S) scheme is an <c>invalidDid</c>, a file that cannot be retrieved a <c>notFound</c>, and a found but
+    /// non-conforming presentation an <c>invalidDid</c>. A cancellation of the retrieval or of the parse propagates,
+    /// bare or carried inside the parser's own exception (<see cref="WrappedCancellation"/>): a cancelled parse has
+    /// shown nothing about the presentation.
+    /// </summary>
+    /// <param name="document">The resolved and verified DID document carrying the <c>#whois</c> service.</param>
+    /// <param name="baseDid">The DID the presentation must be signed by and name as a credential subject.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="presentationDeserializer">Parses the fetched <c>whois.vp</c> into a presentation.</param>
+    /// <param name="presentationCanonicalizer">The canonicalizer the presentation's proof is verified over.</param>
+    /// <param name="proofValueDecoder">Decodes the proof value to signature bytes.</param>
+    /// <param name="presentationSerializer">Serializes the proofless presentation for canonicalization.</param>
+    /// <param name="proofOptionsSerializer">Serializes the proof options for canonicalization.</param>
+    /// <param name="base58Decoder">The base58btc decoder for the proof value.</param>
+    /// <param name="computeDigest">The digest function the cryptosuite hashes with.</param>
+    /// <param name="pool">The pool the verification buffers are rented from.</param>
+    /// <param name="knownContext">The deployment's known <c>@context</c> for the presentation.</param>
+    /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The verified presentation, or the dereferencing error.</returns>
     private static async ValueTask<DidDereferencingResult> DereferenceWhoisAsync(
         DidDocument document,
         string baseDid,
@@ -221,10 +251,14 @@ public static class WebVhDidUrlDereferencer
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             //presentationDeserializer is a caller-supplied delegate over untrusted fetched bytes; any failure
-            //to parse them is an invalid DID from the dereferencer's perspective, cancellation excepted above.
+            //to parse them is an invalid DID from the dereferencer's perspective, cancellation excepted above. A
+            //cancellation the parser carries inside its own exception propagates as that cancellation, as a bare
+            //one does.
+            WrappedCancellation.ThrowIfCarried(exception);
+
             return DidDereferencingResult.Failure(DidResolutionErrors.InvalidDid);
         }
 
@@ -294,12 +328,18 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Builds a synthetic holder document that aliases the whois proof's verificationMethod id onto the resolved
-    //document's matching-fragment authentication method, so a proof referencing a parallel did:web DID (listed
-    //in the resolved document's alsoKnownAs) verifies against the already-resolved did:webvh document. Returns
-    //null — so the cross-verify is NOT attempted — unless the proof's verificationMethod DID is a did:web DID
-    //present in the resolved document's alsoKnownAs and the resolved document has an authentication method with
-    //the same fragment (the narrower, fragment-matched case).
+    /// <summary>
+    /// Builds a synthetic holder document that aliases the whois proof's <c>verificationMethod</c> id onto the resolved
+    /// document's matching-fragment authentication method, so a proof referencing a parallel did:web DID listed in the
+    /// resolved document's <c>alsoKnownAs</c> verifies against the already-resolved did:webvh document.
+    /// </summary>
+    /// <param name="document">The resolved did:webvh document.</param>
+    /// <param name="presentation">The whois presentation whose first proof names the verification method.</param>
+    /// <returns>
+    /// The alias document, or <see langword="null"/>, so the cross-verify is not attempted, unless the proof's
+    /// verification method DID is a did:web DID in the resolved document's <c>alsoKnownAs</c> and the resolved document
+    /// has an authentication method with the same fragment.
+    /// </returns>
     private static DidDocument? BuildAlsoKnownAsAliasDocument(DidDocument document, DataIntegritySecuredPresentation presentation)
     {
         if(presentation.Proof is not { Count: > 0 } proofs || proofs[0].VerificationMethod?.Id is not { Length: > 0 } proofVerificationMethodId)
@@ -364,7 +404,9 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //The fragment of a DID URL (the part after '#'), or null when it has none.
+    /// <summary>The fragment of a DID URL, the part after <c>#</c>.</summary>
+    /// <param name="didUrl">The DID URL.</param>
+    /// <returns>The fragment, or <see langword="null"/> when the DID URL has none.</returns>
     private static string? FragmentOf(string didUrl)
     {
         int fragmentIndex = didUrl.IndexOf('#', StringComparison.Ordinal);
@@ -373,8 +415,13 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Whether the presentation contains at least one Verifiable Credential whose credentialSubject.id equals the
-    //DID. Additional credentials may describe other identifiers the controller binds the DID to.
+    /// <summary>
+    /// Whether the presentation contains at least one Verifiable Credential whose <c>credentialSubject.id</c> equals the
+    /// DID. Additional credentials may describe other identifiers the controller binds the DID to.
+    /// </summary>
+    /// <param name="presentation">The whois presentation.</param>
+    /// <param name="did">The DID a credential must name as its subject.</param>
+    /// <returns><see langword="true"/> when a contained credential's subject is the DID.</returns>
     private static bool HasCredentialAboutDid(DataIntegritySecuredPresentation presentation, string did)
     {
         if(presentation.VerifiableCredential is not { } credentials)
@@ -402,8 +449,13 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //The first service whose id ends with the given fragment (an absolute "<did>#files" or a relative
-    //"#files"), or null when none is present.
+    /// <summary>
+    /// The first service whose id ends with <paramref name="fragment"/>, an absolute <c>&lt;did&gt;#files</c> or a
+    /// relative <c>#files</c> alike.
+    /// </summary>
+    /// <param name="document">The document whose services are searched.</param>
+    /// <param name="fragment">The service fragment, with its <c>#</c>.</param>
+    /// <returns>The service, or <see langword="null"/> when none is present.</returns>
     private static Service? FindServiceByFragment(DidDocument document, string fragment)
     {
         if(document.Service is not { } services)
@@ -423,11 +475,14 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //The service's HTTP(S) endpoint URL. The implicit services use the single-string serviceEndpoint form, but
-    //an explicit override (which MUST take precedence) MAY express its endpoint as an array or as a map (the
-    //CID serviceEndpointMap form, for example a linked-vp endpoint with a relativeRef). The first HTTP(S)
-    //string the chosen form yields is used so every endpoint shape an explicit override may use is honored, not
-    //only the bare string form.
+    /// <summary>
+    /// The service's HTTP(S) endpoint URL. The implicit services use the single-string <c>serviceEndpoint</c> form, but
+    /// an explicit override, which MUST take precedence, MAY express its endpoint as an array or as a map (the CID
+    /// <c>serviceEndpointMap</c> form, for example a linked-vp endpoint with a <c>relativeRef</c>), so the first HTTP(S)
+    /// string the chosen form yields is used and every endpoint shape an explicit override may use is honored.
+    /// </summary>
+    /// <param name="service">The service whose endpoint is read.</param>
+    /// <returns>The endpoint URL, or <see langword="null"/> when no form yields an HTTP(S) URL.</returns>
     private static string? ResolveHttpServiceEndpoint(Service service)
     {
         if(service.ServiceEndpoint is { } endpoint)
@@ -460,9 +515,13 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //The first HTTP(S) URL string value in a serviceEndpoint map. The map's value shapes are service-type
-    //specific (for example a "uri" member, or a linked-vp endpoint), so any string value that parses as an
-    //HTTP(S) URL is accepted as the endpoint location.
+    /// <summary>
+    /// The first HTTP(S) URL string value in a <c>serviceEndpoint</c> map. The map's value shapes are service-type
+    /// specific (for example a <c>uri</c> member, or a linked-vp endpoint), so any string value that is an HTTP(S) URL is
+    /// accepted as the endpoint location.
+    /// </summary>
+    /// <param name="map">The endpoint map.</param>
+    /// <returns>The endpoint URL, or <see langword="null"/> when no value is an HTTP(S) URL.</returns>
     private static string? ResolveHttpUrlFromMap(IDictionary<string, object> map)
     {
         foreach(KeyValuePair<string, object> member in map)
@@ -477,6 +536,9 @@ public static class WebVhDidUrlDereferencer
     }
 
 
+    /// <summary>Whether <paramref name="value"/> starts with the <c>https://</c> or <c>http://</c> scheme, compared case-insensitively.</summary>
+    /// <param name="value">The candidate endpoint string.</param>
+    /// <returns><see langword="true"/> when the string names an HTTP(S) URL.</returns>
     private static bool IsHttpUrl(string value)
     {
         return value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
@@ -484,10 +546,16 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Builds the resolution options for the base-DID resolve from the DID-URL query and accept header. A
-    //versionId, versionTime or the did:webvh-specific versionNumber query parameter pins the version the
-    //path/whois is dereferenced against; an unparseable versionTime/versionNumber is ignored (the latest version
-    //is used) rather than failing the dereference (did:webvh v1.0, Reading did:webvh DID URLs).
+    /// <summary>
+    /// Builds the resolution options for the base-DID resolve from the DID URL query and accept header. A
+    /// <c>versionId</c>, <c>versionTime</c> or the did:webvh-specific <c>versionNumber</c> query parameter pins the
+    /// version the path or whois is dereferenced against; an unparseable <c>versionTime</c> or <c>versionNumber</c> is
+    /// ignored, so the latest version is used, rather than failing the dereference (did:webvh v1.0, Reading did:webvh
+    /// DID URLs).
+    /// </summary>
+    /// <param name="query">The DID URL query without its leading <c>?</c>, or <see langword="null"/>.</param>
+    /// <param name="accept">The dereferencing accept option, or <see langword="null"/>.</param>
+    /// <returns>The resolution options.</returns>
     private static DidResolutionOptions BuildResolutionOptions(string? query, string? accept)
     {
         string? versionId = null;
@@ -526,8 +594,10 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Extracts the value of a named parameter from a raw query string (without the leading '?'), or null when the
-    //parameter is absent.
+    /// <summary>Extracts the unescaped value of a named parameter from a raw query string without its leading <c>?</c>.</summary>
+    /// <param name="query">The raw query string.</param>
+    /// <param name="name">The parameter name.</param>
+    /// <returns>The parameter's value, or <see langword="null"/> when the parameter is absent.</returns>
     private static string? GetQueryParameter(string query, string name)
     {
         string prefix = $"{name}=";
@@ -543,17 +613,27 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Appends a DID URL path (which carries its own leading '/') to a service endpoint, collapsing the boundary
-    //slash so the two never double up. The #files endpoint already has the did.jsonl file and any .well-known
-    //segment removed by the resolver, so no further stripping is needed here.
+    /// <summary>
+    /// Appends a DID URL path, which carries its own leading <c>/</c>, to a service endpoint, collapsing the boundary
+    /// slash so the two never double up. The resolver has already removed the <c>did.jsonl</c> file and any
+    /// <c>.well-known</c> segment from the <c>#files</c> endpoint, so nothing further is stripped here.
+    /// </summary>
+    /// <param name="endpoint">The service endpoint URL.</param>
+    /// <param name="path">The DID URL path.</param>
+    /// <returns>The resource URL.</returns>
     private static string AppendPath(string endpoint, string path)
     {
         return string.Concat(endpoint.TrimEnd('/'), "/", path.TrimStart('/'));
     }
 
 
-    //Parses an absolute URL and accepts only the HTTP(S) schemes did:webvh resolution supports; any other
-    //scheme (or a URL that does not parse) is rejected so the caller can map it to invalidDid.
+    /// <summary>
+    /// Parses an absolute URL and accepts only the HTTP(S) schemes did:webvh resolution supports; any other scheme, or
+    /// a URL that does not parse, is rejected so the caller maps it to <c>invalidDid</c>.
+    /// </summary>
+    /// <param name="url">The URL text.</param>
+    /// <param name="target">The parsed URL, when accepted.</param>
+    /// <returns><see langword="true"/> when the URL is an absolute HTTP(S) URL.</returns>
     private static bool TryCreateSupportedUrl(string url, [NotNullWhen(true)] out Uri? target)
     {
         if(!Uri.TryCreate(url, UriKind.Absolute, out target))
@@ -566,8 +646,18 @@ public static class WebVhDidUrlDereferencer
     }
 
 
-    //Drives the guarded outbound fetch, returning null on a transport exception so the caller maps it to
-    //notFound. Cancellation is always propagated.
+    /// <summary>
+    /// Drives the guarded outbound fetch of a DID URL's resource. A transport failure is no resource, which the caller
+    /// maps to <c>notFound</c>; a cancellation is not a "not found" condition and always propagates, bare or carried
+    /// inside the transport's own exception, as the inner exception of its own fault or among an aggregate's inner
+    /// exceptions (<see cref="WrappedCancellation"/>), so the caller tells its own cancellation from a fetch that ended
+    /// on its own budget.
+    /// </summary>
+    /// <param name="target">The resource URL.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The fetch result, or <see langword="null"/> when the transport failed.</returns>
     private static async ValueTask<OutboundFetchResult?> TryFetchAsync(
         Uri target,
         OutboundTransportDelegate transport,
@@ -584,10 +674,13 @@ public static class WebVhDidUrlDereferencer
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             //A transport/network failure is a not-found from this helper's perspective, cancellation
-            //excepted above.
+            //excepted above. A cancellation the transport carries inside its own exception propagates as that
+            //cancellation, as a bare one does.
+            WrappedCancellation.ThrowIfCarried(exception);
+
             return null;
         }
     }

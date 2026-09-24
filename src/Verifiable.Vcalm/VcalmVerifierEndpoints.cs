@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
@@ -260,7 +261,10 @@ public static class VcalmVerifierEndpoints
 
 
     /// <summary>
-    /// §3.3.2 verification: the presentation proof (when proofed), then each contained credential.
+    /// §3.3.2 verification: the presentation proof (when proofed), then each contained credential. A presentation
+    /// containing more credentials than <see cref="VcalmCredentialVerification.MaxContainedCredentials"/> admits is
+    /// refused first, with the <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0
+    /// §7.2</see> RANGE_ERROR at the presentation level, before its proof or any contained credential is verified.
     /// </summary>
     private static async ValueTask<ServerHttpResponse> VerifyPresentationAsync(
         EndpointServer server,
@@ -270,6 +274,17 @@ public static class VcalmVerifierEndpoints
     {
         var oauth = server.Vcalm();
         VcalmVerifyOptions options = request.Options;
+
+        //Each contained credential costs a controller resolution, its proofs, and its status and schema fetches, so a
+        //presentation carrying more than the verifier admits is refused before any of that work, and before its
+        //challenge is consumed.
+        VerifiablePresentation? presentation = request.DataIntegrityPresentation ?? request.UnproofedPresentation ?? request.UnsecuredVerifiablePresentation;
+        int containedCount = (presentation?.VerifiableCredential?.Count ?? 0) + (presentation?.EnvelopedVerifiableCredential?.Count ?? 0);
+        int maxContained = oauth.VcalmCredentialVerification?.MaxContainedCredentials ?? VcalmCredentialVerification.DefaultMaxContainedCredentials;
+        if(containedCount > maxContained)
+        {
+            return BuildTooManyContainedCredentialsResponse(request, presentation, containedCount, maxContained);
+        }
 
         //§3.3.3 issuance gating: when the deployment wired the consume seam and the caller bound a
         //challenge, a challenge this instance never issued is rejected at the presentation level.
@@ -418,6 +433,42 @@ public static class VcalmVerifierEndpoints
             presentationProblems.ToImmutable(),
             options,
             request.PresentationJson);
+
+        return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
+    }
+
+
+    /// <summary>
+    /// The §3.3.2 answer for a presentation containing more credentials than the verifier admits: HTTP 200, since the
+    /// verification process ran, with <c>verified</c> false and the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see> RANGE_ERROR, "A
+    /// provided value is outside of the expected range of an associated value", at the presentation level, and no
+    /// contained credential reported, none having been verified.
+    /// </summary>
+    /// <param name="request">The parsed verify request.</param>
+    /// <param name="presentation">The presentation, or <see langword="null"/> for an enveloped one.</param>
+    /// <param name="containedCount">The number of credentials the presentation contains.</param>
+    /// <param name="maximum">The number of contained credentials this verifier admits per presentation.</param>
+    /// <returns>The 200 verification response.</returns>
+    private static ServerHttpResponse BuildTooManyContainedCredentialsResponse(
+        VcalmVerifyPresentationRequest request, VerifiablePresentation? presentation, int containedCount, int maximum)
+    {
+        VcalmProblemDetail tooMany = VcalmProblemDetail.Error(
+            VcalmProblemTypes.RangeError,
+            "RANGE_ERROR",
+            $"The presentation contains {containedCount.ToString(CultureInfo.InvariantCulture)} credentials, more than the "
+            + $"{maximum.ToString(CultureInfo.InvariantCulture)} this verifier accepts per presentation.");
+        VcalmPresentationProofResult presentationResult = new()
+        {
+            Verified = false,
+            Challenge = request.Options.Challenge,
+            Domain = request.Options.Domain,
+            Holder = presentation?.Holder,
+            ProofInput = string.Empty,
+            ProblemDetails = [tooMany]
+        };
+        string body = VcalmResponseWriter.BuildPresentationVerificationResponse(
+            false, presentationResult, [], [tooMany], request.Options, request.PresentationJson);
 
         return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
     }

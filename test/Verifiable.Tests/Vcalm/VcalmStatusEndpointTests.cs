@@ -31,13 +31,13 @@ namespace Verifiable.Tests.Vcalm;
 /// provide the interface described in Section C.3 Update Status."), and the MAY §C.1
 /// <c>POST /status-lists</c> and §C.2 <c>GET /status-lists/{id}</c> interfaces, driven through the
 /// real dispatch pipeline. The issue→set-status→verify round-trip drives a credential carrying a
-/// <c>credentialStatus</c> through the V-2 issue endpoint, the §C.3 update, and the §3.3.1 verify
+/// <c>credentialStatus</c> through the §3.2.1 issue endpoint, the §C.3 update, and the §3.3.1 verify
 /// endpoint, asserting the §3.8.1 status WARNING.
 /// </summary>
 /// <remarks>
 /// The signing key (eddsa-rdfc-2022), the RDFC canonicalizer, the did:key resolver, the Core
 /// <see cref="StatusList"/> / <see cref="BitstringStatusListCodec"/> bit core, and the project crypto
-/// are the same library primitives the V-1 / V-2 flow tests use — the status service COMPOSES them,
+/// are the same library primitives the verify and issue flow tests use — the status service COMPOSES them,
 /// it does not re-roll cryptography or the bitstring codec.
 /// </remarks>
 [TestClass]
@@ -149,7 +149,7 @@ internal sealed class VcalmStatusEndpointTests
     /// <summary>
     /// §C.1 create: a valid create-status-list request returns HTTP 201 with a Data-Integrity-secured
     /// status-list credential under <c>verifiableCredential</c> and the list <c>id</c>, and that
-    /// status-list credential verifies TRUE at the V-1 verifier endpoint.
+    /// status-list credential verifies TRUE at the §3.3.1 verifier endpoint.
     /// </summary>
     [TestMethod]
     public async Task CreateStatusListReturns201AndVerifies()
@@ -178,7 +178,7 @@ internal sealed class VcalmStatusEndpointTests
         string securedStatusListJson = response.RootElement
             .GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
 
-        //The §C.1 status-list credential verifies TRUE at the V-1 verifier endpoint — it is itself a
+        //The §C.1 status-list credential verifies TRUE at the §3.3.1 verifier endpoint — it is itself a
         //verifiable credential secured with the same mechanism (§C.1).
         string verifyBody = "{\"verifiableCredential\":" + securedStatusListJson + "}";
         ServerHttpResponse verifyResponse = await app.DispatchAtEndpointAsync(
@@ -266,7 +266,7 @@ internal sealed class VcalmStatusEndpointTests
     /// <summary>
     /// §C.1 / §C.3 re-secure: <see cref="VcalmStatusListService.UpdateAsync"/> sets a status bit on the
     /// decoded list, rebuilds the status-list credential, and re-signs it — the re-secured credential
-    /// carries the set bit (and only that bit) and verifies TRUE at the V-1 verifier. This is the
+    /// carries the set bit (and only that bit) and verifies TRUE at the §3.3.1 verifier. This is the
     /// issuer's revoke / republish primitive: the §C.3 update seam mutates the live list, this turns
     /// the mutated list back into a signed, publishable status-list credential.
     /// </summary>
@@ -484,7 +484,7 @@ internal sealed class VcalmStatusEndpointTests
         const string CredentialId = "urn:uuid:roundtrip-status";
         KnownCredentials[CredentialId] = StatusListId;
 
-        //Issue a credential carrying a credentialStatus pointing at the status list (V-2 issue).
+        //Issue a credential carrying a credentialStatus pointing at the status list (§3.2.1 issue).
         string issueBody = BuildIssueRequestBodyWithStatus(ctx.IssuerDid, CredentialId, Index);
         using JsonDocument issued = await VcalmWireFixtures.PostIssueWireAsync(
             app, ctx.Segment, issueBody, 201, TestContext.CancellationToken).ConfigureAwait(false);

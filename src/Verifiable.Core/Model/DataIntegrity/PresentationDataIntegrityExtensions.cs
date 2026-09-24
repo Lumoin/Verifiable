@@ -45,7 +45,7 @@ public delegate VerifiablePresentation PresentationDeserializeDelegate(string se
 /// <para>
 /// The proof creation and verification algorithms are specified in
 /// <see href="https://www.w3.org/TR/vc-data-integrity/#add-proof">VC Data Integrity §4.2 Add Proof</see>
-/// and <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">§4.3 Verify Proof</see>.
+/// and <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">§4.4 Verify Proof</see>.
 /// The <c>proofPurpose</c> is always <c>authentication</c> for presentations, as specified in
 /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#verifiable-presentations">VC Data Model 2.0 §4.13</see>.
 /// </para>

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Model.Did;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -447,9 +448,15 @@ internal sealed class ContextTamperingBbs2023VerificationTests
     /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>: "If
     /// expectedProofPurpose was given, and it does not match proof.proofPurpose, an error MUST be raised and SHOULD convey
     /// an error type of PROOF_VERIFICATION_ERROR." A credential proof's expected purpose is <c>assertionMethod</c>, so the
-    /// bbs-2023 base proof verifier that takes its signature verifier from its caller refuses a proof declaring the
-    /// purpose <c>x</c>, one no verification relationship models, before it verifies anything.
+    /// bbs-2023 base proof verifier that takes its signature verifier from its caller refuses a proof signed under the
+    /// purpose <c>x</c>, one no verification relationship models, before it verifies anything, although the proof's
+    /// signature is valid over that purpose.
     /// </summary>
+    /// <remarks>
+    /// Proves the Core verification path directly, in-process, with the signature verifier supplied by the caller; the wire
+    /// proof of the rule is the VCALM verifier's real-wire test
+    /// <see cref="Verifiable.Tests.Vcalm.VcalmVerifierEndpointTests.ExtensionProofPurposeReportsPurposeMismatchProblem"/>.
+    /// </remarks>
     [TestMethod]
     public async Task BbsBaseProofWithUnexpectedPurposeIsRejected()
     {
@@ -457,9 +464,11 @@ internal sealed class ContextTamperingBbs2023VerificationTests
         using var bbs = Bbs2023ResolvingBindingTests.ResolvingBbsOperations.Generate();
 
         var (signed, _) = await DataIntegrityContextTamperingFixture.CreateBbsBaseProofAsync(
-            bbs, DataIntegrityContextTamperingFixture.CreateUnsignedCredentialJson(BaseCredentialId), ProofCreated, cancellationToken).ConfigureAwait(false);
-
-        DataIntegrityContextTamperingFixture.DeclareUnmodelledPurpose(signed.Proof![0], "x");
+            bbs,
+            DataIntegrityContextTamperingFixture.CreateUnsignedCredentialJson(BaseCredentialId),
+            ProofCreated,
+            new UnknownPurposeMethod("x", DataIntegrityContextTamperingFixture.BbsVerificationMethodId),
+            cancellationToken).ConfigureAwait(false);
 
         var (result, context) = await signed.VerifyBaseProofVerboseAsync(
             bbs.Verify,
@@ -486,10 +495,16 @@ internal sealed class ContextTamperingBbs2023VerificationTests
     /// <summary>
     /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>: "If
     /// expectedProofPurpose was given, and it does not match proof.proofPurpose, an error MUST be raised and SHOULD convey
-    /// an error type of PROOF_VERIFICATION_ERROR." A derived proof keeps its base proof's <c>assertionMethod</c> purpose,
-    /// so the bbs-2023 derived proof verifier that takes its proof verifier from its caller refuses a derived proof
-    /// declaring the purpose <c>x</c>, one no verification relationship models, before it verifies anything.
+    /// an error type of PROOF_VERIFICATION_ERROR." A derived proof keeps its base proof's purpose, and a credential proof's
+    /// expected purpose is <c>assertionMethod</c>, so the bbs-2023 derived proof verifier that takes its proof verifier
+    /// from its caller refuses a proof derived from a base proof signed under the purpose <c>x</c>, one no verification
+    /// relationship models, before it verifies anything, although the derived proof is valid over that purpose.
     /// </summary>
+    /// <remarks>
+    /// Proves the Core verification path directly, in-process, with the proof verifier supplied by the caller; the wire
+    /// proof of the rule is the VCALM verifier's real-wire test
+    /// <see cref="Verifiable.Tests.Vcalm.VcalmVerifierEndpointTests.ExtensionProofPurposeReportsPurposeMismatchProblem"/>.
+    /// </remarks>
     [TestMethod]
     public async Task BbsDerivedProofWithUnexpectedPurposeIsRejected()
     {
@@ -497,11 +512,13 @@ internal sealed class ContextTamperingBbs2023VerificationTests
         using var bbs = Bbs2023ResolvingBindingTests.ResolvingBbsOperations.Generate();
 
         var (signed, _) = await DataIntegrityContextTamperingFixture.CreateBbsBaseProofAsync(
-            bbs, DataIntegrityContextTamperingFixture.CreateUnsignedCredentialJson(BaseCredentialId), ProofCreated, cancellationToken).ConfigureAwait(false);
+            bbs,
+            DataIntegrityContextTamperingFixture.CreateUnsignedCredentialJson(BaseCredentialId),
+            ProofCreated,
+            new UnknownPurposeMethod("x", DataIntegrityContextTamperingFixture.BbsVerificationMethodId),
+            cancellationToken).ConfigureAwait(false);
 
         var derived = await DataIntegrityContextTamperingFixture.DeriveBbsProofAsync(signed, bbs, cancellationToken).ConfigureAwait(false);
-
-        DataIntegrityContextTamperingFixture.DeclareUnmodelledPurpose(derived.Proof![0], "x");
 
         var (result, context) = await derived.VerifyDerivedProofVerboseAsync(
             bbs.ProofVerify,

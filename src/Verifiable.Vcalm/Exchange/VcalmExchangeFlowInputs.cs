@@ -74,7 +74,7 @@ public sealed record VcalmExchangePresentationRequested: FlowInput
 /// step pointer, and issues a FRESH §3.4 verifiable presentation request bound to a fresh
 /// <see cref="Challenge"/> / <see cref="Domain"/> for the next step. Drives
 /// <see cref="VcalmExchangeActiveState"/> to a new <see cref="VcalmExchangeActiveState"/> (the
-/// active → active multi-step advance V-5b lacked). The fresh challenge binding is what keeps the
+/// active → active multi-step advance). The fresh challenge binding is what keeps the
 /// fail-closed property per-step: each presentation-requesting step verifies only against its own
 /// challenge, never a prior step's.
 /// </summary>

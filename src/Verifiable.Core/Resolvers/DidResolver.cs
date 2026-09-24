@@ -144,7 +144,7 @@ public sealed class DidResolver
             //excepted above. A cancellation the fault carries, as an inner exception or among an aggregate's
             //inner exceptions, propagates as that cancellation, so the caller can tell its own cancellation
             //from a dependency's own budget.
-            Verifiable.Core.Model.DataIntegrity.WrappedCancellation.ThrowIfCarried(exception);
+            WrappedCancellation.ThrowIfCarried(exception);
 
             return DidResolutionResult.Failure(DidResolutionErrors.InternalError);
         }
@@ -222,7 +222,10 @@ public sealed class DidResolver
     }
 
     /// <summary>
-    /// Dereferences a DID URL into a resource following the W3C DID URL Dereferencing algorithm.
+    /// Dereferences a DID URL into a resource following the W3C DID URL Dereferencing algorithm. A fault the
+    /// registered method dereferencer raises is an internal error, while a cancellation propagates, bare or carried
+    /// inside the dereferencer's own exception (<see cref="WrappedCancellation"/>), so the caller can tell its own
+    /// cancellation from a dependency that ended on its own budget.
     /// </summary>
     /// <param name="didUrl">The DID URL to dereference.</param>
     /// <param name="context">
@@ -290,11 +293,14 @@ public sealed class DidResolver
             {
                 throw;
             }
-            catch
+            catch(Exception exception)
             {
                 //The same per-method dispatch boundary as the resolution path above: a fault from the
-                //registered method resolver is an internal error rather than a signal to propagate uncaught,
-                //cancellation excepted above.
+                //registered method dereferencer is an internal error rather than a signal to propagate uncaught,
+                //cancellation excepted above. A cancellation the fault carries, as an inner exception or among an
+                //aggregate's inner exceptions, propagates as that cancellation, as it does on the resolution path.
+                WrappedCancellation.ThrowIfCarried(exception);
+
                 return DidDereferencingResult.Failure(DidResolutionErrors.InternalError);
             }
         }

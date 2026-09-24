@@ -78,6 +78,10 @@ public static class VcalmJsonExtensions
         integration.ParseVcalmPresentationSchema ??=
             VcalmJsonParsing.CreatePresentationSchemaParser();
 
+        //The §3.6 workflow engine's member lookup by decoded name reads with Utf8JsonReader alone.
+        integration.FindVcalmJsonMember ??=
+            VcalmJsonParsing.CreateMemberFinder();
+
         return integration;
     }
 }

@@ -55,12 +55,6 @@ public static class VcalmVerificationService
     /// </summary>
     private static string CancelledByOwnBudgetDetail { get; } = "the fetch was cancelled by its own budget.";
 
-    /// <summary>
-    /// The <see cref="ExchangeContext"/> key backing the controller-document resolutions of one verify request, the memo
-    /// <see cref="ResolveDocumentAsync"/> consults before it asks the DID resolver.
-    /// </summary>
-    private static string ControllerResolutionsKey { get; } = "vcalm.verify.controller_resolutions";
-
     extension(ExchangeContext context)
     {
         /// <summary>
@@ -76,27 +70,6 @@ public static class VcalmVerificationService
 
         /// <summary>Records on the request's context that one of its dependency fetches ended on its own budget.</summary>
         private void SetDependencyBudgetExhausted() => context[DependencyBudgetExhaustedKey] = true;
-
-        /// <summary>
-        /// The controller documents this verify request has already asked its DID resolver for, keyed by the controller
-        /// document URL: the resolver's own answer, a document or its typed failure, or <see langword="null"/> when the
-        /// resolver threw. The memo lives on the request's own <see cref="ExchangeContext"/> and is created on first use,
-        /// so every proof and contained credential of the request that names one controller shares one resolution, while
-        /// no other request, and so no other tenant, ever reads it.
-        /// </summary>
-        /// <returns>The request's controller-resolution memo.</returns>
-        private Dictionary<string, DidResolutionResult?> GetControllerResolutions()
-        {
-            if(context.TryGetValue(ControllerResolutionsKey, out object? memo) && memo is Dictionary<string, DidResolutionResult?> resolutions)
-            {
-                return resolutions;
-            }
-
-            Dictionary<string, DidResolutionResult?> created = new(StringComparer.Ordinal);
-            context[ControllerResolutionsKey] = created;
-
-            return created;
-        }
     }
 
 
@@ -110,9 +83,11 @@ public static class VcalmVerificationService
     /// <param name="verification">The application-supplied Data Integrity verify seams, or <see langword="null"/> (fail-closed — proofs report unverifiable).</param>
     /// <param name="resolveStatusList">
     /// The application-supplied seam resolving the decoded status list a credential's
-    /// <c>credentialStatus</c> points at, or <see langword="null"/>. When unwired (or when it returns
-    /// <see langword="null"/>) the credential's status is left unresolved and no status warning is
-    /// emitted (an undeterminable status is not asserted as revoked); a credential with no
+    /// <c>credentialStatus</c> points at, or <see langword="null"/>. When unwired, the credential's status is not
+    /// evaluated and no status warning is emitted. When it returns <see langword="null"/> for an entry, that entry's
+    /// status list could not be retrieved, which the credential reports as a
+    /// <see cref="VcalmProblemTypes.StatusRetrievalError"/> WARNING: VCALM §3.8.1 makes status problems warnings, so an
+    /// undeterminable status is neither asserted as revoked nor flips <c>verified</c>. A credential with no
     /// <c>credentialStatus</c> never invokes it.
     /// </param>
     /// <param name="now">The verification instant the validity period and status are measured against.</param>
@@ -191,9 +166,9 @@ public static class VcalmVerificationService
         //§3.3.1 results.credentialSchema[]: one entry per credentialSchema object evaluated through
         //the schema seams. A Failure is a MALFORMED_VALUE_ERROR (§3.8.1 classifies only status and
         //validity ProblemDetails as warnings, so a document that does not conform to its declared
-        //schema is an error and flips verified), and so is a declared schema whose fetch ended on its
-        //own budget or was never attempted; an Indeterminate evaluation reports verified:false
-        //without asserting an error.
+        //schema is an error and flips verified), and so is a declared schema never checked because its
+        //document could not be retrieved, its fetch was never attempted, or its validator failed; an
+        //Indeterminate evaluation reports verified:false without asserting an error.
         ImmutableArray<VcalmSchemaResult> schemaResults = await EvaluateSchemaAsync(
             credential, verification, problems, context, cancellationToken).ConfigureAwait(false);
 
@@ -257,21 +232,23 @@ public static class VcalmVerificationService
     /// and with multiple schemas validity is determined per each associated <c>type</c>'s
     /// processing rules: entries are evaluated independently and each contributes its own result.
     /// The <see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>
-    /// tri-state collapses onto the §3.3.1 boolean as: Success → <c>verified:true</c>;
-    /// Failure → <c>verified:false</c> plus a MALFORMED_VALUE_ERROR; Indeterminate (unsupported
-    /// schema version, a schema document the resolver did not return, or an unregistered mechanism type) →
-    /// <c>verified:false</c> with no ProblemDetail, so an undeterminable schema neither asserts
+    /// tri-state of an evaluation that ran collapses onto the §3.3.1 boolean as: Success → <c>verified:true</c>;
+    /// Failure → <c>verified:false</c> plus a MALFORMED_VALUE_ERROR; Indeterminate (the validator's own verdict, such
+    /// as an unsupported schema version, or a mechanism type no validator is registered for) →
+    /// <c>verified:false</c> with no ProblemDetail, so a schema the verifier cannot judge neither asserts
     /// conformance nor flips the overall <c>verified</c>.
     /// </para>
     /// <para>
-    /// A declared schema that is never checked is not Indeterminate: whether its schema document fetch ended on its own
-    /// budget while the caller's token was still live (<see cref="ResolveSchemaDocumentAsync"/>) or an earlier
-    /// dependency of the same request had already exhausted its budget so the fetch was never attempted, an unchecked
-    /// declared schema is an unrecoverable data-model condition under
+    /// A declared schema that is never checked is not Indeterminate. Its schema document may not be retrievable for any
+    /// reason, the resolver returning none, throwing, refusing it by policy, or ending on its own budget while the
+    /// caller's token is still live (<see cref="ResolveSchemaDocumentAsync"/>); an earlier dependency of the same request
+    /// may already have exhausted its budget, so the fetch is never attempted; or the validator itself may throw or end on
+    /// its own budget over the retrieved document (<see cref="ValidateSchemaAsync"/>), or answer an outcome that is none
+    /// of the three <see cref="CredentialSchemaValidationOutcome"/> defines, which is no verdict. In every one of these cases the
+    /// unchecked declared schema is an unrecoverable data-model condition under
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see> ("Errors are
-    /// ProblemDetails relating to cryptography, data model, and malformed context and are unrecoverable"). The entry
-    /// reports MALFORMED_VALUE_ERROR with a detail naming the stall or saying the fetch was not attempted, and
-    /// <c>verified</c> is false.
+    /// ProblemDetails relating to cryptography, data model, and malformed context and are unrecoverable"): the entry
+    /// reports MALFORMED_VALUE_ERROR with a detail naming the cause, and <c>verified</c> is false.
     /// </para>
     /// <para>
     /// With no declared schemas, or with the seams unwired
@@ -320,54 +297,46 @@ public static class VcalmVerificationService
             }
 
             //An earlier dependency of this request that exhausted its own budget bounds the request's cost: the
-            //schema document is not fetched. A declared schema that is never checked is an unrecoverable data-model
-            //condition (§3.8.1), so the entry is an error rather than an Indeterminate that would leave verified true.
-            if(context.HasExhaustedDependencyBudget)
+            //schema document is not fetched. Otherwise the document is retrieved and, when it was, validated.
+            SchemaCheck check = context.HasExhaustedDependencyBudget
+                ? SchemaCheck.Unchecked(DependencyNotAttemptedDetail)
+                : await ResolveSchemaDocumentAsync(resolveSchema, entry.Id, context, cancellationToken).ConfigureAwait(false) switch
+                {
+                    { SchemaJson: { } schemaJson } => await ValidateSchemaAsync(
+                        validators, entry.Type, schemaJson, credentialJson, context, cancellationToken).ConfigureAwait(false),
+                    { FailureCause: var cause } => SchemaCheck.Unchecked(cause!)
+                };
+
+            //A declared schema that is never checked, whatever the cause, is an unrecoverable data-model condition
+            //(§3.8.1), so the entry is an error rather than an Indeterminate that would leave verified true.
+            if(check.UncheckedCause is { } uncheckedCause)
             {
-                problems.Add(VcalmProblemDetail.Error(
-                    VcalmProblemTypes.MalformedValueError,
-                    "MALFORMED_VALUE_ERROR",
-                    $"The credential's conformance to its declared schema '{entry.Id}' was not evaluated: " + DependencyNotAttemptedDetail));
+                problems.Add(SchemaNotEvaluated(entry.Id, uncheckedCause));
                 results.Add(new VcalmSchemaResult { Verified = false, Id = entry.Id, Type = entry.Type });
 
                 continue;
             }
 
-            SchemaDocumentRetrieval retrieval = await ResolveSchemaDocumentAsync(resolveSchema, entry.Id, context, cancellationToken).ConfigureAwait(false);
-            if(retrieval.IsCancelledByOwnBudget)
+            //The validator's verdict decides the entry. An outcome that is none of the three the validation defines is no
+            //verdict at all: the declared schema was not checked, the same error every other unchecked cause reports.
+            VcalmProblemDetail? verdictProblem = check.Outcome switch
             {
-                //The fetch ended on its own budget, so the declared schema is never checked: the same unrecoverable
-                //data-model condition (§3.8.1) as a schema this request never attempted, never an Indeterminate.
-                problems.Add(VcalmProblemDetail.Error(
+                CredentialSchemaValidationOutcome.Success or CredentialSchemaValidationOutcome.Indeterminate => null,
+                CredentialSchemaValidationOutcome.Failure => VcalmProblemDetail.Error(
                     VcalmProblemTypes.MalformedValueError,
                     "MALFORMED_VALUE_ERROR",
-                    $"The credential's conformance to its declared schema '{entry.Id}' was not evaluated: " + CancelledByOwnBudgetDetail));
-                results.Add(new VcalmSchemaResult { Verified = false, Id = entry.Id, Type = entry.Type });
+                    $"The credential does not conform to its declared schema '{entry.Id}'."),
+                _ => SchemaNotEvaluated(entry.Id, VcalmSchemaValidatorRegistry.ValidationOutcomeUndefinedDetail)
+            };
 
-                continue;
-            }
-
-            if(retrieval.SchemaJson is not { } schemaJson)
+            if(verdictProblem is not null)
             {
-                //A schema document the resolver did not return cannot be evaluated: Indeterminate.
-                results.Add(new VcalmSchemaResult { Verified = false, Id = entry.Id, Type = entry.Type });
-
-                continue;
-            }
-
-            CredentialSchemaValidationResult validation = await validators.ValidateAsync(
-                entry.Type, schemaJson, credentialJson, cancellationToken).ConfigureAwait(false);
-            if(validation.Outcome == CredentialSchemaValidationOutcome.Failure)
-            {
-                problems.Add(VcalmProblemDetail.Error(
-                    VcalmProblemTypes.MalformedValueError,
-                    "MALFORMED_VALUE_ERROR",
-                    $"The credential does not conform to its declared schema '{entry.Id}'."));
+                problems.Add(verdictProblem);
             }
 
             results.Add(new VcalmSchemaResult
             {
-                Verified = validation.Outcome == CredentialSchemaValidationOutcome.Success,
+                Verified = check.Outcome == CredentialSchemaValidationOutcome.Success,
                 Id = entry.Id,
                 Type = entry.Type
             });
@@ -378,22 +347,116 @@ public static class VcalmVerificationService
 
 
     /// <summary>
+    /// The detail ending the problem of a declared schema whose resolver returned no schema document: the document
+    /// could be absent, refused by the application's outbound policy, or otherwise unavailable, and the schema is not
+    /// checked either way.
+    /// </summary>
+    private static string SchemaDocumentNotReturnedDetail { get; } = "the resolver returned no schema document.";
+
+    /// <summary>The detail ending the problem of a declared schema whose resolver threw while retrieving the document.</summary>
+    private static string SchemaRetrievalFailedDetail { get; } = "the retrieval of the schema document failed.";
+
+
+    /// <summary>
+    /// The error of a declared schema whose conformance was not evaluated, for the cause <paramref name="cause"/>
+    /// names: a <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VC Data Model 2.0 §7.2</see>
+    /// MALFORMED_VALUE_ERROR, since an unchecked declared schema is an unrecoverable data-model condition under
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>.
+    /// </summary>
+    /// <param name="schemaId">The caller-supplied <c>credentialSchema.id</c> of the unchecked schema.</param>
+    /// <param name="cause">The detail ending naming why the schema was not checked.</param>
+    /// <returns>The error.</returns>
+    private static VcalmProblemDetail SchemaNotEvaluated(string schemaId, string cause) =>
+        VcalmProblemDetail.Error(
+            VcalmProblemTypes.MalformedValueError,
+            "MALFORMED_VALUE_ERROR",
+            $"The credential's conformance to its declared schema '{schemaId}' was not evaluated: " + cause);
+
+
+    /// <summary>
+    /// Validates the credential against one retrieved schema document for <see cref="EvaluateSchemaAsync"/> through the
+    /// registered validator, a boundary over a dependency that throws exactly as every other verification phase is, as
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#error-handling">VCALM §3.8</see> recommends: "avoid raising errors
+    /// while performing verification, and instead gather ProblemDetails objects". A validator that throws leaves the
+    /// schema unchecked, and so does one that ends on its own budget while the caller's token is still live, its
+    /// cancellation bare or carried inside another exception (<see cref="WrappedCancellation.IsOwnBudgetCancellation"/>),
+    /// which is also recorded on the request's <see cref="ExchangeContext"/> so no further dependency of this request is
+    /// run. The caller's own cancellation, bare or carried, and <see cref="OutOfMemoryException"/> propagate.
+    /// </summary>
+    /// <param name="validators">The registry holding a validator for <paramref name="schemaType"/>.</param>
+    /// <param name="schemaType">The <c>credentialSchema</c> entry's registered mechanism type.</param>
+    /// <param name="schemaJson">The retrieved schema document.</param>
+    /// <param name="credentialJson">The credential's serialized JSON the schema is checked against.</param>
+    /// <param name="context">The verify request's context, carrying the dependency-budget flag.</param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <returns>The validator's verdict, or why the schema was not checked.</returns>
+    private static async ValueTask<SchemaCheck> ValidateSchemaAsync(
+        VcalmSchemaValidatorRegistry validators,
+        string schemaType,
+        string schemaJson,
+        string credentialJson,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            CredentialSchemaValidationResult validation = await validators.ValidateAsync(
+                schemaType, schemaJson, credentialJson, cancellationToken).ConfigureAwait(false);
+
+            return SchemaCheck.Evaluated(validation.Outcome);
+        }
+        catch(Exception exception) when(WrappedCancellation.IsOwnBudgetCancellation(exception, cancellationToken))
+        {
+            context.SetDependencyBudgetExhausted();
+
+            return SchemaCheck.Unchecked(VcalmSchemaValidatorRegistry.ValidationCancelledByOwnBudgetDetail);
+        }
+        catch(Exception exception) when(exception is not OperationCanceledException and not OutOfMemoryException)
+        {
+            //The caller's own cancellation carried inside the validator's exception propagates as that cancellation.
+            WrappedCancellation.ThrowIfCarried(exception);
+
+            return SchemaCheck.Unchecked(VcalmSchemaValidatorRegistry.ValidationFailedDetail);
+        }
+    }
+
+
+    /// <summary>
+    /// The outcome of checking one declared schema for <see cref="EvaluateSchemaAsync"/>: the validator's
+    /// <see cref="CredentialSchemaValidationOutcome"/>, or the cause that left the schema unchecked, which the schema
+    /// phase reports as an error rather than an Indeterminate.
+    /// </summary>
+    /// <param name="Outcome">The validator's verdict; meaningful only when <paramref name="UncheckedCause"/> is <see langword="null"/>.</param>
+    /// <param name="UncheckedCause">The detail ending naming why the schema was not checked, or <see langword="null"/> when it was.</param>
+    private readonly record struct SchemaCheck(CredentialSchemaValidationOutcome Outcome, string? UncheckedCause)
+    {
+        /// <summary>A schema the validator checked, with its verdict.</summary>
+        /// <param name="outcome">The validator's verdict.</param>
+        public static SchemaCheck Evaluated(CredentialSchemaValidationOutcome outcome) => new(outcome, null);
+
+        /// <summary>A schema left unchecked, for the stated cause.</summary>
+        /// <param name="cause">The detail ending naming the cause.</param>
+        public static SchemaCheck Unchecked(string cause) => new(CredentialSchemaValidationOutcome.Indeterminate, cause);
+    }
+
+
+    /// <summary>
     /// Retrieves one schema document for <see cref="EvaluateSchemaAsync"/> through the application's
     /// <see cref="ResolveVcalmSchemaDocumentDelegate"/>. The call is a boundary over a dependency that throws, as
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#error-handling">VCALM §3.8</see> recommends: "avoid raising
-    /// errors while performing verification, and instead gather ProblemDetails objects". A retrieval that ends on its
-    /// own budget while the caller's token is still live, its cancellation bare or carried inside another exception
-    /// (<see cref="WrappedCancellation.IsOwnBudgetCancellation"/>), is reported as such, so the schema phase reports the
-    /// unchecked schema as an error, and it is recorded on the request's <see cref="ExchangeContext"/> so no further
-    /// dependency of this request is fetched. A retrieval that fails in any other way retrieves no document, which the
-    /// schema phase reports as Indeterminate exactly like a resolver that returns <see langword="null"/>. The caller's own
-    /// cancellation, bare or carried, and <see cref="OutOfMemoryException"/> propagate.
+    /// errors while performing verification, and instead gather ProblemDetails objects". A retrieval that yields no
+    /// document names its cause for the schema phase, which reports the unchecked schema as an error: the resolver
+    /// returned none, which is also how an application resolver reports a fetch its outbound policy refused; the resolver
+    /// threw; or the retrieval ended on its own budget while the caller's token was still live, its cancellation bare or
+    /// carried inside another exception (<see cref="WrappedCancellation.IsOwnBudgetCancellation"/>), which is also
+    /// recorded on the request's <see cref="ExchangeContext"/> so no further dependency of this request is fetched. The
+    /// caller's own cancellation, bare or carried, and <see cref="OutOfMemoryException"/> propagate.
     /// </summary>
     /// <param name="resolveSchema">The application's schema document resolver.</param>
     /// <param name="schemaId">The <c>credentialSchema</c> entry's <c>id</c> URL.</param>
     /// <param name="context">The verify request's context, carrying the dependency-budget flag.</param>
     /// <param name="cancellationToken">The caller's cancellation token.</param>
-    /// <returns>The retrieved schema document, none, or the fetch that ended on its own budget.</returns>
+    /// <returns>The retrieved schema document, or the cause no document was retrieved.</returns>
     private static async ValueTask<SchemaDocumentRetrieval> ResolveSchemaDocumentAsync(
         ResolveVcalmSchemaDocumentDelegate resolveSchema, string schemaId, ExchangeContext context, CancellationToken cancellationToken)
     {
@@ -401,38 +464,34 @@ public static class VcalmVerificationService
         {
             string? schemaJson = await resolveSchema(schemaId, context, cancellationToken).ConfigureAwait(false);
 
-            return new SchemaDocumentRetrieval(schemaJson, IsCancelledByOwnBudget: false);
+            return new SchemaDocumentRetrieval(schemaJson, schemaJson is null ? SchemaDocumentNotReturnedDetail : null);
         }
         catch(Exception exception) when(WrappedCancellation.IsOwnBudgetCancellation(exception, cancellationToken))
         {
             context.SetDependencyBudgetExhausted();
 
-            return SchemaDocumentRetrieval.CancelledByOwnBudget;
+            return new SchemaDocumentRetrieval(null, CancelledByOwnBudgetDetail);
         }
         catch(Exception exception) when(exception is not OperationCanceledException and not OutOfMemoryException)
         {
             //The caller's own cancellation carried inside the resolver's exception propagates as that cancellation.
             WrappedCancellation.ThrowIfCarried(exception);
 
-            return SchemaDocumentRetrieval.NotRetrieved;
+            return new SchemaDocumentRetrieval(null, SchemaRetrievalFailedDetail);
         }
     }
 
 
     /// <summary>
-    /// The outcome of retrieving one schema document for <see cref="EvaluateSchemaAsync"/>: the document, none, or a
-    /// fetch that ended on its own budget, which the schema phase reports as an error rather than an Indeterminate.
+    /// The outcome of retrieving one schema document for <see cref="EvaluateSchemaAsync"/>: the document, or the cause
+    /// none was retrieved, which the schema phase reports as an error rather than an Indeterminate.
     /// </summary>
     /// <param name="SchemaJson">The retrieved schema document, or <see langword="null"/> when none was retrieved.</param>
-    /// <param name="IsCancelledByOwnBudget">Whether the fetch ended on its own budget while the caller's token was live.</param>
-    private readonly record struct SchemaDocumentRetrieval(string? SchemaJson, bool IsCancelledByOwnBudget)
-    {
-        /// <summary>No schema document was retrieved: the resolver returned none or failed.</summary>
-        public static SchemaDocumentRetrieval NotRetrieved { get; } = new(null, IsCancelledByOwnBudget: false);
-
-        /// <summary>The fetch ended on its own budget while the caller's token was still live.</summary>
-        public static SchemaDocumentRetrieval CancelledByOwnBudget { get; } = new(null, IsCancelledByOwnBudget: true);
-    }
+    /// <param name="FailureCause">
+    /// The detail ending naming why no document was retrieved, or <see langword="null"/> when <paramref name="SchemaJson"/>
+    /// carries one.
+    /// </param>
+    private readonly record struct SchemaDocumentRetrieval(string? SchemaJson, string? FailureCause);
 
 
     /// <summary>
@@ -823,7 +882,8 @@ public static class VcalmVerificationService
     /// proof options and the CID retrieval steps, preserving their distinct failure outcomes. A
     /// selective-disclosure proof is verified only as a document's single proof, so one anywhere in a proof set or
     /// chain is refused before any resolution. The controller document comes from <see cref="ResolveDocumentAsync"/>,
-    /// which resolves each controller once per verify request however many proofs and contained credentials name it.
+    /// which resolves each controller once per verify request however many proofs and contained credentials name it, for
+    /// as long as the request's bounded resolution memo keeps the document.
     /// Proofs naming the same verification method share one <see cref="ValidateVerificationMethod"/> of it, so the
     /// relationship scan and the key decode run once per method identifier however many proofs of the document name it;
     /// that check stays per document, since its issuer binding depends on the document. The transformation fetches JSON-LD
@@ -864,7 +924,8 @@ public static class VcalmVerificationService
 
         DataIntegrityProof firstProof = proofs[0];
         DocumentResolutionOutcome resolution = await ResolveDocumentAsync(
-            verification!.Resolver, firstProof.VerificationMethod!.Id!, context, cancellationToken).ConfigureAwait(false);
+            verification!.Resolver, verification.MaxMemoizedControllerDocuments, firstProof.VerificationMethod!.Id!, context,
+            cancellationToken).ConfigureAwait(false);
         if(resolution.Problem is { } resolutionProblem)
         {
             return new(resolutionProblem);
@@ -1013,7 +1074,8 @@ public static class VcalmVerificationService
         //mechanism check above whenever verification is null, so this call is reached only when it
         //is not.
         DocumentResolutionOutcome resolution = await ResolveDocumentAsync(
-            verification!.Resolver, proof!.VerificationMethod!.Id!, context, cancellationToken).ConfigureAwait(false);
+            verification!.Resolver, verification.MaxMemoizedControllerDocuments, proof!.VerificationMethod!.Id!, context,
+            cancellationToken).ConfigureAwait(false);
         if(resolution.Problem is { } problem)
         {
             return new(problem);
@@ -1170,19 +1232,25 @@ public static class VcalmVerificationService
     /// carried, propagates.
     /// </summary>
     /// <remarks>
-    /// The resolver's answer for one controller document URL, a document, a typed failure or a throw, is kept on the
-    /// request's own <see cref="ExchangeContext"/> (<c>GetControllerResolutions</c>) and reused for every later proof and
-    /// contained credential of the same request that names that controller, so a presentation of many credentials from
-    /// one issuer resolves the issuer once. Each caller still classifies the answer itself, so a detail names the
-    /// caller's own verification method URL, and the memo never outlives the request or reaches another tenant.
+    /// The outcome for one controller document URL is kept on the request's own <see cref="ExchangeContext"/>
+    /// (<see cref="VcalmControllerResolutionMemo"/>) and reused for every later proof and contained credential of the
+    /// same request that names that controller, so a presentation of many credentials from one issuer resolves the issuer
+    /// once. The memo keeps the typed CID §3.3 failure of every controller URL, which holds no document, and at most
+    /// <see cref="VcalmCredentialVerification.MaxMemoizedControllerDocuments"/> resolved documents, dropping the least
+    /// recently used one past that bound, so a document dropped and named again is resolved again. Each caller turns a
+    /// kept failure into its own problem, so a detail names the caller's own verification method URL, and the memo never
+    /// outlives the request or reaches another tenant.
     /// </remarks>
     /// <param name="resolver">The verifier's DID resolver.</param>
+    /// <param name="maxMemoizedDocuments">
+    /// The most resolved documents the request's memo keeps, <see cref="VcalmCredentialVerification.MaxMemoizedControllerDocuments"/>.
+    /// </param>
     /// <param name="verificationMethodId">The caller-supplied verification method URL the proof names.</param>
     /// <param name="context">The verify request's context, carrying the dependency-budget flag and the resolution memo.</param>
     /// <param name="cancellationToken">The caller's cancellation token.</param>
     /// <returns>The conforming controller document, or the classified CID §3.3 failure.</returns>
     private static async ValueTask<DocumentResolutionOutcome> ResolveDocumentAsync(
-        DidResolver resolver, string verificationMethodId, ExchangeContext context, CancellationToken cancellationToken)
+        DidResolver resolver, int maxMemoizedDocuments, string verificationMethodId, ExchangeContext context, CancellationToken cancellationToken)
     {
         if(!IsValidVerificationMethodUrl(verificationMethodId))
         {
@@ -1191,62 +1259,99 @@ public static class VcalmVerificationService
         }
 
         string controllerId = GetControllerDocumentId(verificationMethodId);
-        Dictionary<string, DidResolutionResult?> resolutions = context.GetControllerResolutions();
-        if(!resolutions.TryGetValue(controllerId, out DidResolutionResult? resolution))
+        VcalmControllerResolutionMemo memo = VcalmControllerResolutionMemo.GetOrCreate(context, maxMemoizedDocuments);
+        if(memo.TryGetFailure(controllerId, out VcalmControllerDocumentFailure knownFailure))
         {
-            if(context.HasExhaustedDependencyBudget)
-            {
-                return new(null, ControllerDocumentNotRetrieved(verificationMethodId, DependencyNotAttemptedDetail).Problem);
-            }
-
-            try
-            {
-                resolution = await resolver.ResolveAsync(controllerId, context, options: null, cancellationToken).ConfigureAwait(false);
-            }
-            catch(Exception exception) when(WrappedCancellation.IsOwnBudgetCancellation(exception, cancellationToken))
-            {
-                //The fetch ended on its own budget while the caller still waits, so the controller document could not
-                //be retrieved: CID §3.3 step 5, the same as a transport failure the DID resolver contains.
-                context.SetDependencyBudgetExhausted();
-
-                return new(null, ControllerDocumentNotRetrieved(verificationMethodId, CancelledByOwnBudgetDetail).Problem);
-            }
-            catch(Exception exception) when(exception is not OperationCanceledException and not OutOfMemoryException)
-            {
-                //The caller's own cancellation carried inside the resolver's exception propagates as that cancellation;
-                //any other throw is recorded as no answer, which every caller of this request reports as step 5.
-                WrappedCancellation.ThrowIfCarried(exception);
-                resolution = null;
-            }
-
-            resolutions[controllerId] = resolution;
+            return new(null, DescribeControllerDocumentFailure(knownFailure, verificationMethodId));
         }
 
-        if(resolution is null)
+        if(memo.TryGetDocument(controllerId, out DidDocument? knownDocument))
         {
-            return new(null, ControllerDocumentNotRetrieved(verificationMethodId, cause: null).Problem);
+            return new(knownDocument, null);
         }
 
-        VcalmProblemDetail? problem = resolution switch
+        if(context.HasExhaustedDependencyBudget)
         {
-            //The resolver refused a document whose id is not the requested identifier. The DID Resolution error
-            //stays invalidDidDocument; its stated reason is what separates step 6 from step 5. The comparison goes
-            //through DidProblemDetails equality because Uri equality ignores the fragment that alone distinguishes
-            //the DID Resolution error types.
-            { InvalidDocumentReason: InvalidDidDocumentReason.IdMismatch }
-                when DidResolutionErrors.InvalidDidDocument.Equals(resolution.ResolutionMetadata.Error) =>
-                DocumentIdMismatch(verificationMethodId).Problem,
-            _ when !resolution.IsSuccessful || resolution.Document?.Id is null
-                || !DidUrl.TryParseAbsolute(resolution.Document.Id.ToString(), out _)
-                || resolution.Document.Controller?.Any(controller => controller is null || !IsValidVerificationMethodUrl(controller.Did)) == true =>
-                ControllerDocumentNotRetrieved(verificationMethodId, cause: null).Problem,
-            _ when !string.Equals(resolution.Document.Id.ToString(), controllerId, StringComparison.Ordinal) =>
-                DocumentIdMismatch(verificationMethodId).Problem,
-            _ => null
-        };
+            return new(null, ControllerDocumentNotRetrieved(verificationMethodId, DependencyNotAttemptedDetail).Problem);
+        }
 
-        return new(problem is null ? resolution.Document : null, problem);
+        DidResolutionResult? resolution;
+        try
+        {
+            resolution = await resolver.ResolveAsync(controllerId, context, options: null, cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception exception) when(WrappedCancellation.IsOwnBudgetCancellation(exception, cancellationToken))
+        {
+            //The fetch ended on its own budget while the caller still waits, so the controller document could not
+            //be retrieved: CID §3.3 step 5, the same as a transport failure the DID resolver contains.
+            context.SetDependencyBudgetExhausted();
+
+            return new(null, ControllerDocumentNotRetrieved(verificationMethodId, CancelledByOwnBudgetDetail).Problem);
+        }
+        catch(Exception exception) when(exception is not OperationCanceledException and not OutOfMemoryException)
+        {
+            //The caller's own cancellation carried inside the resolver's exception propagates as that cancellation;
+            //any other throw is no answer, which every caller of this request reports as step 5.
+            WrappedCancellation.ThrowIfCarried(exception);
+            resolution = null;
+        }
+
+        if(ClassifyControllerResolution(resolution, controllerId) is { } failure)
+        {
+            memo.RecordFailure(controllerId, failure);
+
+            return new(null, DescribeControllerDocumentFailure(failure, verificationMethodId));
+        }
+
+        DidDocument document = resolution!.Document!;
+        memo.RecordDocument(controllerId, document);
+
+        return new(document, null);
     }
+
+
+    /// <summary>
+    /// Classifies the DID resolver's answer for the controller document at <paramref name="controllerId"/> by the
+    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID §3.3</see> step it fails, or finds it a
+    /// conforming document. A resolver refusal that states <see cref="InvalidDidDocumentReason.IdMismatch"/>, and a
+    /// document whose own <c>id</c> is not the controller document URL, fail step 6; no answer, any other refusal, and a
+    /// document without an absolute DID <c>id</c> or naming a controller that is not a valid URL fail step 5.
+    /// </summary>
+    /// <param name="resolution">The resolver's answer, or <see langword="null"/> when it threw.</param>
+    /// <param name="controllerId">The controller document URL that was resolved.</param>
+    /// <returns>The failed step, or <see langword="null"/> when the answer carries a conforming controller document.</returns>
+    private static VcalmControllerDocumentFailure? ClassifyControllerResolution(DidResolutionResult? resolution, string controllerId) => resolution switch
+    {
+        null => VcalmControllerDocumentFailure.NotRetrieved,
+        //The resolver refused a document whose id is not the requested identifier. The DID Resolution error stays
+        //invalidDidDocument; its stated reason is what separates step 6 from step 5. The comparison goes through
+        //DidProblemDetails equality because Uri equality ignores the fragment that alone distinguishes the DID
+        //Resolution error types.
+        { InvalidDocumentReason: InvalidDidDocumentReason.IdMismatch }
+            when DidResolutionErrors.InvalidDidDocument.Equals(resolution.ResolutionMetadata.Error) =>
+            VcalmControllerDocumentFailure.IdMismatch,
+        _ when !resolution.IsSuccessful || resolution.Document?.Id is null
+            || !DidUrl.TryParseAbsolute(resolution.Document.Id.ToString(), out _)
+            || resolution.Document.Controller?.Any(controller => controller is null || !IsValidVerificationMethodUrl(controller.Did)) == true =>
+            VcalmControllerDocumentFailure.NotRetrieved,
+        _ when !string.Equals(resolution.Document.Id.ToString(), controllerId, StringComparison.Ordinal) =>
+            VcalmControllerDocumentFailure.IdMismatch,
+        _ => null
+    };
+
+
+    /// <summary>
+    /// The problem a caller reports for a controller document it could not use: step 6's
+    /// <see cref="DocumentIdMismatch"/> or step 5's <see cref="ControllerDocumentNotRetrieved"/>, naming the caller's own
+    /// verification method URL.
+    /// </summary>
+    /// <param name="failure">Why the controller document could not be used.</param>
+    /// <param name="verificationMethodId">The caller-supplied verification method URL the detail names.</param>
+    private static VcalmProblemDetail DescribeControllerDocumentFailure(VcalmControllerDocumentFailure failure, string verificationMethodId) => failure switch
+    {
+        VcalmControllerDocumentFailure.IdMismatch => DocumentIdMismatch(verificationMethodId).Problem!,
+        _ => ControllerDocumentNotRetrieved(verificationMethodId, cause: null).Problem!
+    };
 
 
     /// <summary>

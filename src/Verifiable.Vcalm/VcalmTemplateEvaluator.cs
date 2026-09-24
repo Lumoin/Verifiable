@@ -9,8 +9,8 @@ namespace Verifiable.Vcalm;
 /// is the gathered exchange claims / values the template maps into a credential, itself UTF-8 JSON.
 /// </summary>
 /// <remarks>
-/// This is the integration point a §3.6 workflow surface (V-5c) consumes to turn an issue request's
-/// template + variables into a credential body. <c>Verifiable.Vcalm</c> ships no <c>jsonata</c>
+/// The §3.6 workflow engine (<see cref="Exchange.VcalmWorkflowStepEngine"/>) evaluates an issue request's template
+/// through this delegate to turn the template and the exchange variables into a credential body. <c>Verifiable.Vcalm</c> ships no <c>jsonata</c>
 /// evaluator of its own — the seam carries raw bytes precisely so the application can wire a real
 /// JSONata engine (for example <c>Lumoin.Veritas.Jsonata</c>) without <c>Verifiable.Vcalm</c> taking a
 /// reference to it or to <c>System.Text.Json</c> (the serialization firewall). The one built-in

@@ -289,77 +289,104 @@ public static class CredentialEcdsaSd2023Extensions
                 pool: memoryPool,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
+            //The proof-scoped key's multikey form, the sign data, the base signature and each disclosable statement's
+            //signature are rented below and pass to the returned BaseProofResult only on success. Every other exit, a
+            //canonicalization, digest or signing function that throws, or the caller's cancellation between the steps,
+            //returns them to the pool in the finally block, which the ownership flag tells from the success exit.
             var ephemeralPublicKeyWithHeader = MultibaseSerializer.PrependHeader(
                 ephemeralKeyPair.PublicKey,
                 memoryPool);
+            IMemoryOwner<byte>? baseSignatureData = null;
+            Signature? baseSignature = null;
+            List<NQuadSignedStatement> signedStatements = [];
+            bool isOwnershipTransferred = false;
+            try
+            {
+                var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
+                using DigestValue proofOptionsHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                    Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
+                    outputByteLength: 32,
+                    tag: CryptoTags.Sha256Digest,
+                    pool: memoryPool,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, exchangeContext, cancellationToken).ConfigureAwait(false);
-            using DigestValue proofOptionsHash = await CryptographicKeyEvents.ComputeDigestAsync(
-                Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
-                outputByteLength: 32,
-                tag: CryptoTags.Sha256Digest,
-                pool: memoryPool,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                int signatureDataLength = proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length + mandatoryHash.Length;
+                baseSignatureData = memoryPool.Rent(signatureDataLength);
+                var signatureDataSpan = baseSignatureData.Memory.Span;
+                proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
+                ephemeralPublicKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
+                mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length)..]);
 
-            int signatureDataLength = proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length + mandatoryHash.Length;
-            var baseSignatureData = memoryPool.Rent(signatureDataLength);
-            var signatureDataSpan = baseSignatureData.Memory.Span;
-            proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
-            ephemeralPublicKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
-            mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length)..]);
+                cancellationToken.ThrowIfCancellationRequested();
 
-            cancellationToken.ThrowIfCancellationRequested();
+                baseSignature = await issuerPrivateKey.SignAsync(
+                    baseSignatureData.Memory[..signatureDataLength],
+                    memoryPool).ConfigureAwait(false);
 
-            var baseSignature = await issuerPrivateKey.SignAsync(
-                baseSignatureData.Memory[..signatureDataLength],
-                memoryPool).ConfigureAwait(false);
+                //Sign non-mandatory statements.
+                var sortedNonMandatoryIndexes = prepared.NonMandatoryIndexes.OrderBy(i => i).ToList();
+                var sortedNonMandatoryStatements = sortedNonMandatoryIndexes
+                    .Select(idx => prepared.SortedStatements[idx])
+                    .ToList();
 
-            //Sign non-mandatory statements.
-            var sortedNonMandatoryIndexes = prepared.NonMandatoryIndexes.OrderBy(i => i).ToList();
-            var sortedNonMandatoryStatements = sortedNonMandatoryIndexes
-                .Select(idx => prepared.SortedStatements[idx])
-                .ToList();
+                await SignStatementsAsync(
+                    sortedNonMandatoryStatements,
+                    sortedNonMandatoryIndexes,
+                    ephemeralKeyPair.PrivateKey,
+                    memoryPool,
+                    signedStatements,
+                    cancellationToken).ConfigureAwait(false);
 
-            var signedStatements = await SignStatementsAsync(
-                sortedNonMandatoryStatements,
-                sortedNonMandatoryIndexes,
-                ephemeralKeyPair.PrivateKey,
-                memoryPool,
-                cancellationToken).ConfigureAwait(false);
+                var signatureBytes = baseSignature.AsReadOnlySpan().ToArray();
+                var statementSignatures = signedStatements
+                    .Select(s => s.Signature.AsReadOnlySpan().ToArray())
+                    .ToList();
+                var mandatoryPointerStrings = mandatoryPaths
+                    .Where(p => p.IsJsonPath)
+                    .Select(p => p.ToJsonPointerString())
+                    .ToList();
 
-            var signatureBytes = baseSignature.AsReadOnlySpan().ToArray();
-            var statementSignatures = signedStatements
-                .Select(s => s.Signature.AsReadOnlySpan().ToArray())
-                .ToList();
-            var mandatoryPointerStrings = mandatoryPaths
-                .Where(p => p.IsJsonPath)
-                .Select(p => p.ToJsonPointerString())
-                .ToList();
+                var proofValue = serializeBaseProof(
+                    signatureBytes,
+                    ephemeralPublicKeyWithHeader.Memory.Span,
+                    hmacKey,
+                    statementSignatures,
+                    mandatoryPointerStrings,
+                    encoder);
 
-            var proofValue = serializeBaseProof(
-                signatureBytes,
-                ephemeralPublicKeyWithHeader.Memory.Span,
-                hmacKey,
-                statementSignatures,
-                mandatoryPointerStrings,
-                encoder);
+                var result = new BaseProofResult(
+                    proofOptionsCanonicalization.CanonicalForm,
+                    proofValue,
+                    canonicalStatements,
+                    prepared.SortedStatements.ToList(),
+                    prepared.LabelMap,
+                    prepared.MandatoryIndexes.OrderBy(i => i).ToList(),
+                    prepared.NonMandatoryIndexes.OrderBy(i => i).ToList(),
+                    mandatoryHash.AsReadOnlySpan().ToArray(),
+                    proofOptionsHash.AsReadOnlySpan().ToArray(),
+                    hmacKey,
+                    ephemeralPublicKeyWithHeader,
+                    baseSignature,
+                    signedStatements,
+                    baseSignatureData,
+                    signatureDataLength);
+                isOwnershipTransferred = true;
 
-            return new BaseProofResult(
-                proofOptionsCanonicalization.CanonicalForm,
-                proofValue,
-                canonicalStatements,
-                prepared.SortedStatements.ToList(),
-                prepared.LabelMap,
-                prepared.MandatoryIndexes.OrderBy(i => i).ToList(),
-                prepared.NonMandatoryIndexes.OrderBy(i => i).ToList(),
-                mandatoryHash.AsReadOnlySpan().ToArray(),
-                proofOptionsHash.AsReadOnlySpan().ToArray(),
-                hmacKey,
-                ephemeralPublicKeyWithHeader,
-                baseSignature,
-                signedStatements,
-                baseSignatureData,
-                signatureDataLength);
+                return result;
+            }
+            finally
+            {
+                if(!isOwnershipTransferred)
+                {
+                    ephemeralPublicKeyWithHeader.Dispose();
+                    baseSignatureData?.Dispose();
+                    baseSignature?.Dispose();
+                    foreach(NQuadSignedStatement signed in signedStatements)
+                    {
+                        signed.Signature.Dispose();
+                    }
+                }
+            }
         }
     }
 
@@ -603,7 +630,7 @@ public static class CredentialEcdsaSd2023Extensions
         /// For production usage, prefer <see cref="VerifyBaseProofAsync(DataIntegritySecuredCredential, PublicKeyMemory, VerificationDelegate, ParseBaseProofDelegate, PartitionStatementsDelegate, CanonicalizationDelegate, ContextResolverDelegate?, Context, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/> which discards intermediates.
         /// </para>
         /// </remarks>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the signatures.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The rented sign data, each disclosable statement's signature copy, the proof-scoped key copy and the base signature copy pass to the returned HolderProofContext, which the caller disposes; on every other exit (a refused signature, a signature check that throws, or the caller's cancellation after the sign data is assembled) the finally block guarded by the ownership flag returns what was rented, a conditional disposal the analyzer does not trace.")]
         public async ValueTask<(CredentialVerificationResult Result, HolderProofContext? Context)> VerifyBaseProofVerboseAsync(
             PublicKeyMemory issuerPublicKey,
             VerificationDelegate verificationDelegate,
@@ -753,79 +780,90 @@ public static class CredentialEcdsaSd2023Extensions
                 parsedProof.EphemeralPublicKey,
                 memoryPool);
 
+            //The sign data, each disclosable statement's signature copy, the proof-scoped key copy and the base signature
+            //copy are rented below and pass to the returned HolderProofContext only on success. Every other exit, a
+            //refused signature, a signature check that throws or the caller's cancellation after the sign data is
+            //assembled, returns them to the pool in the finally block, which the ownership flag tells from the success
+            //exit.
             int signatureDataLength = proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length + mandatoryHash.Length;
             var baseSignatureData = memoryPool.Rent(signatureDataLength);
-            var signatureDataSpan = baseSignatureData.Memory.Span;
-            proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
-            ephemeralKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
-            mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            bool isValid;
+            List<NQuadSignedStatement> signedStatements = [];
+            IMemoryOwner<byte>? ephemeralKeyMemory = null;
+            Signature? baseSignature = null;
+            bool isOwnershipTransferred = false;
             try
             {
-                isValid = await issuerPublicKey.VerifyAsync(
+                var signatureDataSpan = baseSignatureData.Memory.Span;
+                proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
+                ephemeralKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
+                mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                bool isValid = await issuerPublicKey.VerifyAsync(
                     baseSignatureData.Memory[..signatureDataLength],
                     parsedProof.BaseSignature,
                     verificationDelegate).ConfigureAwait(false);
+                if(!isValid)
+                {
+                    return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
+                }
+
+                //Build signed statements from parsed proof.
+                var sortedNonMandatoryIndexes = prepared.NonMandatoryIndexes.OrderBy(i => i).ToList();
+                for(int i = 0; i < parsedProof.Signatures.Count && i < sortedNonMandatoryIndexes.Count; i++)
+                {
+                    var statementIndex = sortedNonMandatoryIndexes[i];
+                    var statement = prepared.SortedStatements[statementIndex];
+                    var signature = parsedProof.Signatures[i];
+
+                    var sigBytes = signature.AsReadOnlySpan().ToArray();
+                    var sigMemory = memoryPool.Rent(sigBytes.Length);
+                    sigBytes.CopyTo(sigMemory.Memory.Span);
+                    var ownedSignature = new Signature(sigMemory, signature.Tag);
+
+                    signedStatements.Add(new NQuadSignedStatement(statement, ownedSignature, statementIndex));
+                }
+
+                //Store key with header for HolderProofContext.
+                ephemeralKeyMemory = memoryPool.Rent(ephemeralKeyWithHeader.Memory.Length);
+                ephemeralKeyWithHeader.Memory.Span.CopyTo(ephemeralKeyMemory.Memory.Span);
+
+                var baseSignatureBytes = parsedProof.BaseSignature.AsReadOnlySpan().ToArray();
+                var baseSignatureMemory = memoryPool.Rent(baseSignatureBytes.Length);
+                baseSignatureBytes.CopyTo(baseSignatureMemory.Memory.Span);
+                baseSignature = new Signature(baseSignatureMemory, parsedProof.BaseSignature.Tag);
+
+                var context = new HolderProofContext(
+                    canonicalStatements,
+                    prepared.SortedStatements.ToList(),
+                    prepared.LabelMap.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+                    prepared.MandatoryIndexes.OrderBy(i => i).ToList(),
+                    signedStatements,
+                    baseSignature,
+                    baseSignatureData,
+                    signatureDataLength,
+                    ephemeralKeyMemory,
+                    parsedProof.HmacKey,
+                    proofOptionsHash.AsReadOnlySpan().ToArray(),
+                    mandatoryHash.AsReadOnlySpan().ToArray());
+                isOwnershipTransferred = true;
+
+                return (CredentialVerificationResult.Success(), context);
             }
-            catch
+            finally
             {
-                baseSignatureData.Dispose();
-
-                throw;
+                if(!isOwnershipTransferred)
+                {
+                    baseSignatureData.Dispose();
+                    ephemeralKeyMemory?.Dispose();
+                    baseSignature?.Dispose();
+                    foreach(NQuadSignedStatement signed in signedStatements)
+                    {
+                        signed.Signature.Dispose();
+                    }
+                }
             }
-
-            if(!isValid)
-            {
-                baseSignatureData.Dispose();
-
-                return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
-            }
-
-            //Build signed statements from parsed proof.
-            var sortedNonMandatoryIndexes = prepared.NonMandatoryIndexes.OrderBy(i => i).ToList();
-            var signedStatements = new List<NQuadSignedStatement>();
-
-            for(int i = 0; i < parsedProof.Signatures.Count && i < sortedNonMandatoryIndexes.Count; i++)
-            {
-                var statementIndex = sortedNonMandatoryIndexes[i];
-                var statement = prepared.SortedStatements[statementIndex];
-                var signature = parsedProof.Signatures[i];
-
-                var sigBytes = signature.AsReadOnlySpan().ToArray();
-                var sigMemory = memoryPool.Rent(sigBytes.Length);
-                sigBytes.CopyTo(sigMemory.Memory.Span);
-                var ownedSignature = new Signature(sigMemory, signature.Tag);
-
-                signedStatements.Add(new NQuadSignedStatement(statement, ownedSignature, statementIndex));
-            }
-
-            //Store key with header for HolderProofContext.
-            var ephemeralKeyMemory = memoryPool.Rent(ephemeralKeyWithHeader.Memory.Length);
-            ephemeralKeyWithHeader.Memory.Span.CopyTo(ephemeralKeyMemory.Memory.Span);
-
-            var baseSignatureBytes = parsedProof.BaseSignature.AsReadOnlySpan().ToArray();
-            var baseSignatureMemory = memoryPool.Rent(baseSignatureBytes.Length);
-            baseSignatureBytes.CopyTo(baseSignatureMemory.Memory.Span);
-            var baseSignature = new Signature(baseSignatureMemory, parsedProof.BaseSignature.Tag);
-
-            var context = new HolderProofContext(
-                canonicalStatements,
-                prepared.SortedStatements.ToList(),
-                prepared.LabelMap.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
-                prepared.MandatoryIndexes.OrderBy(i => i).ToList(),
-                signedStatements,
-                baseSignature,
-                baseSignatureData,
-                signatureDataLength,
-                ephemeralKeyMemory,
-                parsedProof.HmacKey,
-                proofOptionsHash.AsReadOnlySpan().ToArray(),
-                mandatoryHash.AsReadOnlySpan().ToArray());
-
-            return (CredentialVerificationResult.Success(), context);
         }
 
 
@@ -1343,7 +1381,7 @@ public static class CredentialEcdsaSd2023Extensions
         /// A tuple containing the verification result and, if successful, the verifier context
         /// with all intermediate values for W3C test vector validation.
         /// </returns>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The rented signature data, the ephemeral public key and each disclosed statement's signature are owned by the returned VerifierProofContext, which the caller disposes; every early return and the catch around each signature check dispose whatever was rented before it, which the analyzer does not trace through the ownership transfer.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The rented signature data, the ephemeral public key, each disclosed statement's signature and the base signature copy pass to the returned VerifierProofContext, which the caller disposes; on every other exit (a refused signature, a signature check that throws, or a cancellation) the finally block guarded by the ownership flag returns what was rented, a conditional disposal the analyzer does not trace.")]
         public async ValueTask<(CredentialVerificationResult Result, VerifierProofContext? Context)> VerifyDerivedProofVerboseAsync(
             PublicKeyMemory issuerPublicKey,
             VerificationDelegate verificationDelegate,
@@ -1517,141 +1555,131 @@ public static class CredentialEcdsaSd2023Extensions
                 parsedProof.EphemeralPublicKey,
                 memoryPool);
 
+            //The signature data, the ephemeral key, each disclosed statement's signature and the base signature copy are
+            //rented below and pass to the returned VerifierProofContext only on success. Every other exit, a refused
+            //signature, a signature check that throws or the caller's cancellation between the checks, returns them to
+            //the pool in the finally block, which the ownership flag tells from the success exit.
             int signatureDataLength = proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length + mandatoryHash.Length;
             var baseSignatureData = memoryPool.Rent(signatureDataLength);
-            var signatureDataSpan = baseSignatureData.Memory.Span;
-            proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
-            ephemeralKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
-            mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            bool baseSignatureValid;
+            PublicKeyMemory? ephemeralPublicKey = null;
+            List<NQuadSignedStatement> disclosedStatements = [];
+            Signature? baseSignature = null;
+            bool isOwnershipTransferred = false;
             try
             {
-                baseSignatureValid = await issuerPublicKey.VerifyAsync(
+                var signatureDataSpan = baseSignatureData.Memory.Span;
+                proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
+                ephemeralKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
+                mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                bool baseSignatureValid = await issuerPublicKey.VerifyAsync(
                     baseSignatureData.Memory[..signatureDataLength],
                     parsedProof.BaseSignature,
                     verificationDelegate).ConfigureAwait(false);
-            }
-            catch
-            {
-                baseSignatureData.Dispose();
-
-                throw;
-            }
-
-            if(!baseSignatureValid)
-            {
-                baseSignatureData.Dispose();
-
-                return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
-            }
-
-            //Verify disclosed statement signatures.
-            var rawKeyBytes = parsedProof.EphemeralPublicKey.AsReadOnlySpan();
-            var ephemeralKeyMemory = memoryPool.Rent(rawKeyBytes.Length);
-            rawKeyBytes.CopyTo(ephemeralKeyMemory.Memory.Span);
-            var ephemeralPublicKey = new PublicKeyMemory(ephemeralKeyMemory, CryptoTags.P256PublicKey);
-
-            //A derived proof must carry exactly one signature per disclosed (non-mandatory) statement; the
-            //base signature covers only the mandatory hash and the ephemeral key, never the disclosed
-            //statement content. An unequal count means at least one disclosed statement has no signature
-            //verifying it, so it must be refused here rather than silently skipped by a loop bounded on
-            //the shorter of the two counts.
-            if(parsedProof.Signatures.Count != nonMandatoryIndexes.Count)
-            {
-                baseSignatureData.Dispose();
-                ephemeralPublicKey.Dispose();
-
-                return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
-            }
-
-            var disclosedStatements = new List<NQuadSignedStatement>();
-            for(int i = 0; i < nonMandatoryIndexes.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var statementIndex = nonMandatoryIndexes[i];
-                var statement = sortedStatements[statementIndex];
-                var signature = parsedProof.Signatures[i];
-
-                var statementBytes = Encoding.UTF8.GetBytes(statement);
-                bool sigValid;
-                try
+                if(!baseSignatureValid)
                 {
-                    sigValid = await ephemeralPublicKey.VerifyAsync(
-                        statementBytes,
-                        signature,
-                        verificationDelegate).ConfigureAwait(false);
-                }
-                catch
-                {
-                    baseSignatureData.Dispose();
-                    ephemeralPublicKey.Dispose();
-                    foreach(NQuadSignedStatement disclosed in disclosedStatements)
-                    {
-                        disclosed.Signature.Dispose();
-                    }
-
-                    throw;
-                }
-
-                if(!sigValid)
-                {
-                    baseSignatureData.Dispose();
-                    ephemeralPublicKey.Dispose();
-                    foreach(NQuadSignedStatement disclosed in disclosedStatements)
-                    {
-                        disclosed.Signature.Dispose();
-                    }
-
                     return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
                 }
 
-                var sigBytes = signature.AsReadOnlySpan().ToArray();
-                var sigMemory = memoryPool.Rent(sigBytes.Length);
-                sigBytes.CopyTo(sigMemory.Memory.Span);
-                var ownedSignature = new Signature(sigMemory, signature.Tag);
+                //Verify disclosed statement signatures.
+                var rawKeyBytes = parsedProof.EphemeralPublicKey.AsReadOnlySpan();
+                var ephemeralKeyMemory = memoryPool.Rent(rawKeyBytes.Length);
+                rawKeyBytes.CopyTo(ephemeralKeyMemory.Memory.Span);
+                ephemeralPublicKey = new PublicKeyMemory(ephemeralKeyMemory, CryptoTags.P256PublicKey);
 
-                disclosedStatements.Add(new NQuadSignedStatement(statement, ownedSignature, statementIndex));
+                //A derived proof must carry exactly one signature per disclosed (non-mandatory) statement; the
+                //base signature covers only the mandatory hash and the ephemeral key, never the disclosed
+                //statement content. An unequal count means at least one disclosed statement has no signature
+                //verifying it, so it must be refused here rather than silently skipped by a loop bounded on
+                //the shorter of the two counts.
+                if(parsedProof.Signatures.Count != nonMandatoryIndexes.Count)
+                {
+                    return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
+                }
+
+                for(int i = 0; i < nonMandatoryIndexes.Count; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var statementIndex = nonMandatoryIndexes[i];
+                    var statement = sortedStatements[statementIndex];
+                    var signature = parsedProof.Signatures[i];
+
+                    var statementBytes = Encoding.UTF8.GetBytes(statement);
+                    bool sigValid = await ephemeralPublicKey.VerifyAsync(
+                        statementBytes,
+                        signature,
+                        verificationDelegate).ConfigureAwait(false);
+                    if(!sigValid)
+                    {
+                        return (CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
+                    }
+
+                    var sigBytes = signature.AsReadOnlySpan().ToArray();
+                    var sigMemory = memoryPool.Rent(sigBytes.Length);
+                    sigBytes.CopyTo(sigMemory.Memory.Span);
+                    var ownedSignature = new Signature(sigMemory, signature.Tag);
+
+                    disclosedStatements.Add(new NQuadSignedStatement(statement, ownedSignature, statementIndex));
+                }
+
+                var baseSignatureBytes = parsedProof.BaseSignature.AsReadOnlySpan().ToArray();
+                var baseSignatureMemory = memoryPool.Rent(baseSignatureBytes.Length);
+                baseSignatureBytes.CopyTo(baseSignatureMemory.Memory.Span);
+                baseSignature = new Signature(baseSignatureMemory, parsedProof.BaseSignature.Tag);
+
+                var context = new VerifierProofContext(
+                    baseSignature,
+                    baseSignatureData,
+                    signatureDataLength,
+                    ephemeralPublicKey,
+                    disclosedStatements,
+                    parsedProof.LabelMap.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+                    parsedProof.MandatoryIndexes.ToList());
+                isOwnershipTransferred = true;
+
+                return (CredentialVerificationResult.Success(), context);
             }
-
-            var baseSignatureBytes = parsedProof.BaseSignature.AsReadOnlySpan().ToArray();
-            var baseSignatureMemory = memoryPool.Rent(baseSignatureBytes.Length);
-            baseSignatureBytes.CopyTo(baseSignatureMemory.Memory.Span);
-            var baseSignature = new Signature(baseSignatureMemory, parsedProof.BaseSignature.Tag);
-
-            var context = new VerifierProofContext(
-                baseSignature,
-                baseSignatureData,
-                signatureDataLength,
-                ephemeralPublicKey,
-                disclosedStatements,
-                parsedProof.LabelMap.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
-                parsedProof.MandatoryIndexes.ToList());
-
-            return (CredentialVerificationResult.Success(), context);
+            finally
+            {
+                if(!isOwnershipTransferred)
+                {
+                    baseSignatureData.Dispose();
+                    ephemeralPublicKey?.Dispose();
+                    baseSignature?.Dispose();
+                    foreach(NQuadSignedStatement disclosed in disclosedStatements)
+                    {
+                        disclosed.Signature.Dispose();
+                    }
+                }
+            }
         }
     }
 
 
-    /// <summary>Signs each non-mandatory statement with the per-proof ephemeral key, keeping its statement index.</summary>
+    /// <summary>
+    /// Signs each non-mandatory statement with the per-proof ephemeral key, keeping its statement index, and adds each
+    /// signed statement to <paramref name="signedStatements"/> as soon as it is made. The caller owns that list and every
+    /// signature in it, so a signature made before the caller's cancellation or a failing signing function ends the loop
+    /// is still the caller's to return to the pool.
+    /// </summary>
     /// <param name="statements">The statements to sign.</param>
     /// <param name="statementIndexes">The index of each statement in the canonical document.</param>
     /// <param name="privateKey">The ephemeral private key the statements are signed with.</param>
     /// <param name="pool">The pool the signatures are rented from.</param>
+    /// <param name="signedStatements">The caller-owned list the signed statements are added to, in input order.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The signed statements in input order.</returns>
-    private static async ValueTask<List<NQuadSignedStatement>> SignStatementsAsync(
+    /// <returns>A task completing when every statement is signed.</returns>
+    private static async ValueTask SignStatementsAsync(
         IReadOnlyList<string> statements,
         IReadOnlyList<int> statementIndexes,
         PrivateKeyMemory privateKey,
         BaseMemoryPool pool,
+        List<NQuadSignedStatement> signedStatements,
         CancellationToken cancellationToken)
     {
-        var signedStatements = new List<NQuadSignedStatement>(statements.Count);
-
         for(int i = 0; i < statements.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1663,8 +1691,6 @@ public static class CredentialEcdsaSd2023Extensions
 
             signedStatements.Add(new NQuadSignedStatement(statement, signature, statementIndexes[i]));
         }
-
-        return signedStatements;
     }
 
 

@@ -252,7 +252,7 @@ public static class CredentialProofValidator
     /// Validates one OID4VCI 1.0 Appendix F.2 <c>di_vp</c> key proof — a W3C Verifiable Presentation
     /// secured with a Data Integrity proof — by COMPOSING the library's tested
     /// <see cref="PresentationDataIntegrityExtensions.VerifyAsync"/> surface (W3C VC Data Integrity
-    /// §4.3 Verify Proof). It deserializes the presentation, resolves the holder DID document through
+    /// §4.4 Verify Proof). It deserializes the presentation, resolves the holder DID document through
     /// the supplied <see cref="DiVpProofVerification.Resolver"/> (threading <paramref name="context"/>
     /// so a remote holder is fetched under its SSRF policy), and verifies the embedded proof with
     /// <paramref name="expectedChallenge"/> mapped to the server-provided <c>c_nonce</c> and
@@ -285,7 +285,8 @@ public static class CredentialProofValidator
     /// inside another exception (<see cref="WrappedCancellation.IsOwnBudgetCancellation"/>), leaves the presentation
     /// unverified: it is <see cref="DiVpProofValidationFailureReason.DependencyBudgetExhausted"/>, which the endpoint
     /// answers as <c>invalid_proof</c>, never an exception escaping the endpoint. The caller's own cancellation
-    /// propagates.
+    /// propagates as the cancellation it is, whether bare or carried inside a dependency's own exception
+    /// (<see cref="WrappedCancellation.ThrowIfCarried"/>), never as that dependency's wrapper.
     /// </para>
     /// </remarks>
     /// <param name="presentationJson">One <c>di_vp</c> array entry's serialized JSON.</param>
@@ -360,6 +361,14 @@ public static class CredentialProofValidator
             //document is transformed, ended on its own budget while the request is still live: the presentation was
             //not shown to be signed with a key in the Holder's possession, an invalid proof.
             return DiVpProofValidationResult.Failure(DiVpProofValidationFailureReason.DependencyBudgetExhausted);
+        }
+        catch(Exception exception) when(exception is not OperationCanceledException and not OutOfMemoryException)
+        {
+            //The caller's own cancellation carried inside a dependency's exception propagates as that cancellation,
+            //never as the dependency's wrapper; any other exception a dependency raises propagates unchanged.
+            WrappedCancellation.ThrowIfCarried(exception);
+
+            throw;
         }
 
         if(result.IsValid && result.Verified is Verified<DataIntegritySecuredPresentation> verified)

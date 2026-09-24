@@ -69,8 +69,8 @@ public delegate ValueTask<string?> ResolveVcalmExchangeFlowIdDelegate(
 /// presentation, accept a presented one, complete, or redirect). Required when the
 /// <see cref="WellKnownVcalmCapabilities.VcalmExchange"/> capability is allowed — the engine has no
 /// built-in workflow, so without this seam there is no step logic (fail-closed; the §3.6 routes do
-/// not materialize). This is the V-5c extension point: a workflow surface drives the same decisions
-/// off an admin-authored step graph.
+/// not materialize). An exchange for which <see cref="ResolveVcalmWorkflowForExchangeDelegate"/> resolves a
+/// workflow is decided off that workflow's admin-authored step graph instead, the same kinds of decisions.
 /// </summary>
 /// <remarks>
 /// The seam is the only application-owned policy in the exchange engine; everything else (challenge
