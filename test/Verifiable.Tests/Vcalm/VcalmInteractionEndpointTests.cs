@@ -498,6 +498,13 @@ internal sealed class VcalmInteractionEndpointTests
                 ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
         }).ConfigureAwait(false);
 
+        //§3.6.3 / §3.6.6 REQUIRED seam: the coordinator authorization the create-exchange and
+        //state-read routes need to materialize at all.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizeVcalmCoordinatorAsync = VcalmWireFixtures.AuthorizeTestCoordinator;
+        }).ConfigureAwait(false);
+
         await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ResolveVcalmExchangeStepAsync = (exchangeId, message, _, _) =>
@@ -537,7 +544,8 @@ internal sealed class VcalmInteractionEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            new RequestFields(), "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), VcalmWireFixtures.CoordinatorAuthorizationHeaders, "{}",
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
 

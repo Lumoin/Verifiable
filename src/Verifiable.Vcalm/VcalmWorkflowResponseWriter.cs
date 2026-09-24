@@ -7,8 +7,9 @@ namespace Verifiable.Vcalm;
 /// the workflow configuration echoed back through <see cref="JsonAppender"/> per the
 /// <c>Verifiable.Vcalm</c> serialization firewall (no <c>System.Text.Json</c>). Each step's verbatim
 /// sub-objects (the §3.4 <c>verifiablePresentationRequest</c>, the offered <c>verifiablePresentation</c>,
-/// the <c>presentationSchema</c> / <c>openId</c>) and the <c>authorization</c> object ride through with
-/// <see cref="JsonAppender.AppendRawField"/> so they are returned byte-faithful.
+/// the <c>presentationSchema</c> / <c>openId</c>) ride through with <see cref="JsonAppender.AppendRawField"/>
+/// so they are returned byte-faithful; the typed <c>authorization</c> object is written field-by-field
+/// from <see cref="VcalmWorkflowAuthorization"/>.
 /// </summary>
 public static class VcalmWorkflowResponseWriter
 {
@@ -38,9 +39,9 @@ public static class VcalmWorkflowResponseWriter
                 JsonAppender.AppendStringField(sb, VcalmParameterNames.Controller, controller, ref first);
             }
 
-            if(configuration.AuthorizationJson is { } authorizationJson)
+            if(configuration.Authorization is { } authorization)
             {
-                JsonAppender.AppendRawField(sb, VcalmParameterNames.Authorization, authorizationJson, ref first);
+                AppendAuthorization(sb, authorization, ref first);
             }
 
             AppendSteps(sb, configuration, ref first);
@@ -141,6 +142,62 @@ public static class VcalmWorkflowResponseWriter
         }
 
         _ = sb.Append('}');
+    }
+
+
+    /// <summary>
+    /// Writes the §3.6.2 <c>authorization</c> object — <c>{ oauth2? : { issuerConfigUrl } }</c> — from
+    /// the workflow's typed <see cref="VcalmWorkflowAuthorization"/>, so <c>GET /workflows/{id}</c>
+    /// echoes the same declaration the workflow was created with.
+    /// </summary>
+    /// <param name="sb">The response buffer being appended to.</param>
+    /// <param name="authorization">The workflow's parsed authorization declaration.</param>
+    /// <param name="first">Whether this is the first member of its enclosing object.</param>
+    private static void AppendAuthorization(StringBuilder sb, VcalmWorkflowAuthorization authorization, ref bool first)
+    {
+        if(!first)
+        {
+            _ = sb.Append(',');
+        }
+
+        _ = sb.Append('"');
+        JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Authorization);
+        _ = sb.Append("\":{");
+
+        bool authorizationFirst = true;
+        if(authorization.OAuth2 is { } oauth2)
+        {
+            AppendOAuth2(sb, oauth2, ref authorizationFirst);
+        }
+
+        _ = sb.Append('}');
+        first = false;
+    }
+
+
+    /// <summary>
+    /// Writes the §3.6.2 <c>authorization.oauth2</c> object — <c>{ issuerConfigUrl }</c> — from the
+    /// workflow's typed <see cref="VcalmOAuth2Authorization"/>.
+    /// </summary>
+    /// <param name="sb">The response buffer being appended to.</param>
+    /// <param name="oauth2">The workflow's parsed OAuth2 authorization configuration.</param>
+    /// <param name="first">Whether this is the first member of its enclosing object.</param>
+    private static void AppendOAuth2(StringBuilder sb, VcalmOAuth2Authorization oauth2, ref bool first)
+    {
+        if(!first)
+        {
+            _ = sb.Append(',');
+        }
+
+        _ = sb.Append('"');
+        JsonAppender.AppendEscapedString(sb, VcalmParameterNames.OAuth2);
+        _ = sb.Append("\":{");
+
+        bool oauth2First = true;
+        JsonAppender.AppendUriField(sb, VcalmParameterNames.IssuerConfigUrl, oauth2.IssuerConfigUrl, ref oauth2First);
+
+        _ = sb.Append('}');
+        first = false;
     }
 
 

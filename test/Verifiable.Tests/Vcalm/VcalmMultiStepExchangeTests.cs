@@ -667,8 +667,8 @@ internal sealed class VcalmMultiStepExchangeTests
     private async Task<(string ExchangeId, string Challenge, string Domain)> StartExchangeOverWireAsync(TestHostShell app, string segment)
     {
         string exchangeId;
-        using(JsonDocument created = await VcalmWireFixtures.PostEndpointWireAsync(
-            app, segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "{}", 201, TestContext.CancellationToken).ConfigureAwait(false))
+        using(JsonDocument created = await VcalmWireFixtures.PostCreateExchangeWireAsync(
+            app, segment, "{}", 201, TestContext.CancellationToken).ConfigureAwait(false))
         {
             exchangeId = created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
         }
@@ -1008,6 +1008,364 @@ internal sealed class VcalmMultiStepExchangeTests
         }
 
         Assert.IsEmpty(WorkflowStore, "Every case was refused before the store seam, so nothing was stored.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM §3.6.1</see>: "authorization [object]
+    /// An OPTIONAL property that specifies authorization scheme information for the endpoint, such as an OAuth2
+    /// configuration. It MUST be an object of the following form: oauth2 [object] OAuth2 configuration. It MUST
+    /// be an object of the following form: issuerConfigUrl [string] OAuth2 issuer config URL." A non-object
+    /// <c>authorization</c> or <c>oauth2</c> value fits neither form and is refused as malformed; likewise an
+    /// <c>issuerConfigUrl</c> not using the <c>https</c> scheme
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see>: the issuer identifier
+    /// "MUST be a URL that uses the 'https' scheme") or carrying a userinfo, query or fragment component RFC 8414
+    /// §2 excludes. A member of either object this specification does not name is the §2.4 unknown-option MUST
+    /// ("Implementations MUST throw an error if an endpoint receives data, options, or option values that it
+    /// does not understand or know how to process", <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>).
+    /// A conforming <c>https</c> <c>issuerConfigUrl</c> with none of those three components is accepted and
+    /// echoed back verbatim by <c>GET /workflows/{localWorkflowId}</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task WorkflowAuthorizationIsParsedStrictly()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterMultiStepAsync(app, holder, workflow: null).ConfigureAwait(false);
+
+        static string WorkflowCase(string authorizationJson) =>
+            "{\"initialStep\":\"step1\",\"steps\":{\"step1\":{}},\"authorization\":" + authorizationJson + "}";
+
+        const string malformedValueError = "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR";
+        const string unknownOptionProvided = "https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED";
+
+        (string Case, string ExpectedType)[] cases =
+        [
+            (WorkflowCase("\"oauth2\""), malformedValueError),
+            (WorkflowCase("{\"oauth2\":\"x\"}"), malformedValueError),
+            (WorkflowCase("{\"oauth2\":{}}"), malformedValueError),
+            (WorkflowCase("{\"oauth2\":{\"issuerConfigUrl\":\"http://issuer.example/.well-known/oauth-authorization-server\"}}"),
+                malformedValueError),
+            (WorkflowCase("{\"zcap\":{}}"), unknownOptionProvided),
+            //§2.4: a member of oauth2 other than issuerConfigUrl is an unknown option, not silently dropped.
+            (WorkflowCase("{\"oauth2\":{\"issuerConfigUrl\":\"https://issuer.example/x\",\"clientId\":\"c\"}}"),
+                unknownOptionProvided),
+            //issuerConfigUrl present with a non-string value fits neither form the specification names.
+            (WorkflowCase("{\"oauth2\":{\"issuerConfigUrl\":5}}"), malformedValueError),
+            //RFC 8414 §2: the issuer identifier "has no query or fragment components"; RFC 3986 §3.2.1
+            //deprecates userinfo. An https issuerConfigUrl carrying any of the three fits neither form.
+            (WorkflowCase("{\"oauth2\":{\"issuerConfigUrl\":\"https://user:secret@issuer.example/.well-known/oauth-authorization-server\"}}"),
+                malformedValueError),
+            (WorkflowCase("{\"oauth2\":{\"issuerConfigUrl\":\"https://issuer.example/.well-known/oauth-authorization-server?x=1\"}}"),
+                malformedValueError),
+            (WorkflowCase("{\"oauth2\":{\"issuerConfigUrl\":\"https://issuer.example/.well-known/oauth-authorization-server#x\"}}"),
+                malformedValueError)
+        ];
+
+        foreach((string workflowCase, string expectedType) in cases)
+        {
+            using JsonDocument response = await VcalmWireFixtures.PostEndpointWireAsync(
+                app, segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, workflowCase, 400, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.AreEqual(expectedType,
+                response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+                $"Case {workflowCase} is refused with the expected problem type.");
+        }
+
+        Assert.IsEmpty(WorkflowStore, "Every malformed or unknown case was refused before the store seam, so nothing was stored.");
+
+        const string issuerConfigUrl = "https://issuer.example/.well-known/oauth-authorization-server";
+        string acceptedCase = WorkflowCase("{\"oauth2\":{\"issuerConfigUrl\":\"" + issuerConfigUrl + "\"}}");
+        using JsonDocument created = await VcalmWireFixtures.PostEndpointWireAsync(
+            app, segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, acceptedCase, 201, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string workflowId = created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
+
+        using JsonDocument echoed = await VcalmWireFixtures.GetWorkflowWireAsync(
+            app, segment, workflowId, 200, TestContext.CancellationToken).ConfigureAwait(false);
+        JsonElement echoedAuthorization = echoed.RootElement.GetProperty(VcalmParameterNames.Authorization);
+        Assert.AreEqual(issuerConfigUrl,
+            echoedAuthorization.GetProperty("oauth2").GetProperty("issuerConfigUrl").GetString(),
+            "§3.6.2 echoes the same authorization object the workflow was created with.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#workflows-and-exchanges">VCALM 1.0 §3.6</see>: "Once a
+    /// workflow instance exists, authorization to create and query particular workflow interactions, called
+    /// exchanges, can be given to coordinators" — an OAuth 2.0 scope <c>write:/exchanges</c> "would allow a
+    /// client to create an exchange on a particular workflow instance" and <c>read:/exchanges</c> "would allow
+    /// a client to retrieve the state of an exchange"; "Querying the exchange in this way requires additional
+    /// authorization that the coordinator is expected to have and that the exchange client is not".
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-exchange">§3.6.3</see> and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#get-exchange-state">§3.6.6</see> materialize only when the
+    /// coordinator authorization seam is wired (404 otherwise); both name "401 Not Authorized" as the response
+    /// to a request this seam refuses, answered per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>, "the resource server MUST
+    /// include the HTTP 'WWW-Authenticate' response header field", with an empty body — for the state read,
+    /// BEFORE the §3.6.6 existence check, so a denial looks identical whether or not the targeted exchange id
+    /// exists, and for creation, before the request body is even read. §3.6's "Initiating the exchange does not
+    /// require any authorization beyond the exchange URL" — the §3.6.5 participate route stays open, and the
+    /// seam receives the targeted exchange's workflow's declared <c>authorization</c> on a state read.
+    /// </summary>
+    [TestMethod]
+    public async Task CoordinatorOperationsRequireAuthorization()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterMultiStepAsync(app, holder, TwoPresentationStepWorkflow()).ConfigureAwait(false);
+
+        const string coordinatorChallenge = "Bearer realm=\"vcalm-test\"";
+
+        string createPath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment);
+
+        //§3.6.3: no Authorization header, then a wrong bearer token — both 401, the literal RFC 6750 §3
+        //challenge, an empty body.
+        (int noHeaderStatus, string? noHeaderChallenge, string noHeaderBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", createPath, "{}", authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, noHeaderStatus, "§3.6.3: create-exchange with no Authorization header is denied.");
+        Assert.AreEqual(coordinatorChallenge, noHeaderChallenge,
+            "RFC 6750 §3: the denial carries the WWW-Authenticate challenge.");
+        Assert.AreEqual(string.Empty, noHeaderBody, "The denial carries an empty body.");
+
+        (int wrongTokenStatus, string? wrongTokenChallenge, string wrongTokenBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", createPath, "{}", authorizationHeader: "Bearer wrong", TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, wrongTokenStatus, "§3.6.3: create-exchange with the wrong bearer token is denied.");
+        Assert.AreEqual(coordinatorChallenge, wrongTokenChallenge);
+        Assert.AreEqual(string.Empty, wrongTokenBody);
+
+        //An unauthenticated create is denied before the request body is ever read: a malformed body answers
+        //the same 401, never a 400 that would tell an unauthenticated caller its body did not even parse.
+        (int malformedBodyStatus, string? malformedBodyChallenge, string malformedBodyBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", createPath, "{not valid json", authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, malformedBodyStatus, "§3.6.3: an unauthenticated create is denied before its body is parsed.");
+        Assert.AreEqual(coordinatorChallenge, malformedBodyChallenge);
+        Assert.AreEqual(string.Empty, malformedBodyBody);
+
+        //With the coordinator's own token, create-exchange succeeds (201).
+        string exchangeId;
+        using(JsonDocument created = await VcalmWireFixtures.PostCreateExchangeWireAsync(
+            app, segment, "{}", 201, TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            exchangeId = created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
+        }
+
+        string exchangePath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmParticipateInExchange, segment)
+            + "/" + Uri.EscapeDataString(exchangeId);
+
+        //§3.6.6: the same two denials on the state read, answered BEFORE the existence check — a denial looks
+        //identical whether or not the exchange id exists.
+        (int stateNoHeaderStatus, string? stateNoHeaderChallenge, string stateNoHeaderBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "GET", exchangePath, body: null, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, stateNoHeaderStatus, "§3.6.6: a state read with no Authorization header is denied.");
+        Assert.AreEqual(coordinatorChallenge, stateNoHeaderChallenge);
+        Assert.AreEqual(string.Empty, stateNoHeaderBody);
+
+        (int stateWrongTokenStatus, string? stateWrongTokenChallenge, string stateWrongTokenBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "GET", exchangePath, body: null, authorizationHeader: "Bearer wrong", TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, stateWrongTokenStatus, "§3.6.6: a state read with the wrong bearer token is denied.");
+        Assert.AreEqual(coordinatorChallenge, stateWrongTokenChallenge);
+        Assert.AreEqual(string.Empty, stateWrongTokenBody);
+
+        //The same two denials against an exchange id that was NEVER created — identical to the denials above
+        //(same status, same challenge, same empty body), proving the seam is consulted BEFORE the §3.6.6
+        //existence check: an implementation that checked existence first would answer 404 here instead.
+        string neverCreatedPath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmParticipateInExchange, segment)
+            + "/urn:uuid:00000000-0000-0000-0000-000000000000";
+
+        (int unknownNoHeaderStatus, string? unknownNoHeaderChallenge, string unknownNoHeaderBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "GET", neverCreatedPath, body: null, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, unknownNoHeaderStatus,
+            "§3.6.6: a state read with no Authorization header is denied identically for an unknown exchange id.");
+        Assert.AreEqual(coordinatorChallenge, unknownNoHeaderChallenge);
+        Assert.AreEqual(string.Empty, unknownNoHeaderBody);
+
+        (int unknownWrongTokenStatus, string? unknownWrongTokenChallenge, string unknownWrongTokenBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "GET", neverCreatedPath, body: null, authorizationHeader: "Bearer wrong", TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, unknownWrongTokenStatus,
+            "§3.6.6: a state read with the wrong bearer token is denied identically for an unknown exchange id.");
+        Assert.AreEqual(coordinatorChallenge, unknownWrongTokenChallenge);
+        Assert.AreEqual(string.Empty, unknownWrongTokenBody);
+
+        //With the token, the state read succeeds (200).
+        using(JsonDocument state = await VcalmWireFixtures.GetExchangeWireAsync(
+            app, segment, exchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            Assert.AreEqual("pending", state.RootElement.GetProperty(VcalmParameterNames.State).GetString());
+        }
+
+        //§3.6: "Initiating the exchange does not require any authorization beyond the exchange URL" — the
+        //§3.6.5 participate route stays open, no Authorization header sent.
+        (int participateStatus, _, _) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", exchangePath, "{}", authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, participateStatus, "§3.6: initiating the exchange needs no coordinator authorization.");
+
+        //The coordinator authorization seam receives the targeted exchange's workflow's declared authorization
+        //on a state read — a workflow whose authorization declares an oauth2 issuerConfigUrl — driven entirely
+        //over the real wire through VcalmWireFixtures, and every request the seam saw is captured, so both the
+        //create and the state-read requests can be checked, not only the last one.
+        await using TestHostShell oauth2App = new(TimeProvider);
+        HolderSigningContext oauth2Holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        Uri declaredIssuerConfigUrl = new("https://issuer.example/.well-known/oauth-authorization-server");
+        VcalmWorkflowConfiguration oauth2Workflow = TwoPresentationStepWorkflow() with
+        {
+            Authorization = new VcalmWorkflowAuthorization
+            {
+                OAuth2 = new VcalmOAuth2Authorization { IssuerConfigUrl = declaredIssuerConfigUrl }
+            }
+        };
+        string oauth2Segment = await RegisterMultiStepAsync(oauth2App, oauth2Holder, oauth2Workflow).ConfigureAwait(false);
+
+        List<VcalmCoordinatorRequest> capturedCoordinatorRequests = [];
+        await TestHostShell.AlterVcalmAsync(oauth2App.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizeVcalmCoordinatorAsync = (request, _, _) =>
+            {
+                capturedCoordinatorRequests.Add(request);
+
+                return ValueTask.FromResult(VcalmCoordinatorDecision.Permit);
+            };
+        }).ConfigureAwait(false);
+
+        string oauth2ExchangeId;
+        using(JsonDocument oauth2Created = await VcalmWireFixtures.PostCreateExchangeWireAsync(
+            oauth2App, oauth2Segment, "{}", 201, TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            oauth2ExchangeId = oauth2Created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
+        }
+
+        using(JsonDocument oauth2State = await VcalmWireFixtures.GetExchangeWireAsync(
+            oauth2App, oauth2Segment, oauth2ExchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            Assert.AreEqual("pending", oauth2State.RootElement.GetProperty(VcalmParameterNames.State).GetString());
+        }
+
+        Assert.HasCount(2, capturedCoordinatorRequests, "The seam was consulted once for the create and once for the state read.");
+
+        VcalmCoordinatorRequest createRequest = capturedCoordinatorRequests[0];
+        Assert.AreEqual(VcalmCoordinatorOperation.CreateExchange, createRequest.Operation,
+            "§3.6.3: the create request authorizes the CreateExchange operation.");
+        Assert.IsNull(createRequest.ExchangeId, "§3.6.3: no exchange exists yet at creation.");
+        Assert.IsNull(createRequest.WorkflowAuthorization, "§3.6.3: an exchange does not know its workflow at creation.");
+
+        VcalmCoordinatorRequest stateRequest = capturedCoordinatorRequests[1];
+        Assert.AreEqual(VcalmCoordinatorOperation.ReadExchangeState, stateRequest.Operation,
+            "§3.6.6: the state read authorizes the ReadExchangeState operation.");
+        Assert.AreEqual(oauth2ExchangeId, stateRequest.ExchangeId, "§3.6.6: the seam receives the targeted exchange's own id.");
+        Assert.AreEqual(declaredIssuerConfigUrl, stateRequest.WorkflowAuthorization?.OAuth2?.IssuerConfigUrl,
+            "The seam receives the targeted exchange's workflow's declared authorization.oauth2.issuerConfigUrl.");
+
+        //A host without the coordinator authorization seam wired: the §3.6.3 create route does not materialize
+        //at all — a REQUIRED seam absent is HTTP 404, never a 401. The exchange is created FIRST, while the
+        //seam is still wired, so the state-read check below targets a KNOWN exchange id: an implementation
+        //that let the §3.6.6 route materialize without the seam (serving it fail-open) would answer 200 with
+        //the exchange's state here, not 404.
+        await using TestHostShell unwiredApp = new(TimeProvider);
+        HolderSigningContext unwiredHolder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string unwiredSegment = await RegisterMultiStepAsync(unwiredApp, unwiredHolder, TwoPresentationStepWorkflow()).ConfigureAwait(false);
+
+        string unwiredKnownExchangeId;
+        using(JsonDocument unwiredCreated = await VcalmWireFixtures.PostCreateExchangeWireAsync(
+            unwiredApp, unwiredSegment, "{}", 201, TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            unwiredKnownExchangeId = unwiredCreated.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
+        }
+
+        await TestHostShell.AlterVcalmAsync(unwiredApp.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizeVcalmCoordinatorAsync = null;
+        }).ConfigureAwait(false);
+
+        string unwiredCreatePath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, unwiredSegment);
+        (int unwiredCreateStatus, _, _) = await VcalmWireFixtures.SendWireAsync(
+            unwiredApp, "POST", unwiredCreatePath, "{}", authorizationHeader: VcalmWireFixtures.CoordinatorAuthorizationHeader,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(404, unwiredCreateStatus, "§3.6.3: the REQUIRED seam absent, the create route does not materialize.");
+
+        string unwiredKnownStatePath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmParticipateInExchange, unwiredSegment)
+            + "/" + Uri.EscapeDataString(unwiredKnownExchangeId);
+        (int unwiredStateStatus, _, _) = await VcalmWireFixtures.SendWireAsync(
+            unwiredApp, "GET", unwiredKnownStatePath, body: null, authorizationHeader: VcalmWireFixtures.CoordinatorAuthorizationHeader,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(404, unwiredStateStatus,
+            "§3.6.6: the REQUIRED seam absent, the state-read route does not materialize even for a KNOWN exchange id.");
+
+        //A seam implementation that returns no decision at all (a coding defect, not a documented outcome) is
+        //answered as a denial with a library-built default challenge rather than a 500: VcalmCoordinatorDecision
+        //cannot itself be built with a denial carrying no challenge (see CoordinatorDecisionRefusesAnUnsafeChallenge),
+        //so this exercises the endpoint's own defence against a delegate that ignores its own return type.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizeVcalmCoordinatorAsync = (_, _, _) => ValueTask.FromResult<VcalmCoordinatorDecision>(null!);
+        }).ConfigureAwait(false);
+
+        (int noDecisionStatus, string? noDecisionChallenge, string noDecisionBody) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", createPath, "{}", authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, noDecisionStatus, "A seam returning no decision is answered as a denial, never a server error.");
+        Assert.AreEqual("Bearer", noDecisionChallenge, "The default challenge is used when the seam gave none to read.");
+        Assert.AreEqual(string.Empty, noDecisionBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>'s <c>WWW-Authenticate</c>
+    /// challenge is built from the <c>auth-param</c> grammar
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7235#section-2.1">RFC 7235 §2.1</see>), whose values never
+    /// admit a carriage return or line feed into a header field
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7230#section-3.2">RFC 7230 §3.2</see>): a challenge an
+    /// application built by echoing request-derived text could otherwise carry one, injecting an extra response
+    /// header. <see cref="VcalmCoordinatorDecision.Deny(string)"/> refuses such a challenge rather than building
+    /// a decision the endpoint would answer with it verbatim.
+    /// </summary>
+    [TestMethod]
+    public void CoordinatorDecisionRefusesAnUnsafeChallenge()
+    {
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => VcalmCoordinatorDecision.Deny("Bearer realm=\"x\"\r\nSet-Cookie: a=b"));
+
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => VcalmCoordinatorDecision.Deny("Bearer realm=\"x\"\n"));
+
+        Assert.IsNull(VcalmCoordinatorDecision.Permit.Challenge, "A permitted decision carries no challenge.");
+
+        VcalmCoordinatorDecision denial = VcalmCoordinatorDecision.Deny("Bearer realm=\"x\"");
+        Assert.IsFalse(denial.IsPermitted);
+        Assert.AreEqual("Bearer realm=\"x\"", denial.Challenge);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-exchange">VCALM 1.0 §3.6.3</see>'s coordinator
+    /// authorization is decided before the create-exchange endpoint has any flow to mint an id for — a denied
+    /// create never costs the host's identifier seam, which a fail-closed §3.6.3 route requires so that
+    /// denying a flood of unauthenticated create requests cannot exhaust identifier or storage capacity.
+    /// </summary>
+    [TestMethod]
+    public async Task DeniedCreateExchangeMintsNoFlowId()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterMultiStepAsync(app, holder, TwoPresentationStepWorkflow()).ConfigureAwait(false);
+
+        int identifierCalls = 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
+            candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
+            {
+                identifierCalls++;
+
+                return original(purpose, context, ct);
+            };
+        }).ConfigureAwait(false);
+
+        string createPath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment);
+        (int status, _, _) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", createPath, "{}", authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, status, "The create is denied.");
+        Assert.AreEqual(0, identifierCalls,
+            "§3.6.3: a denied create never reaches the flow-id minting step, so the identifier seam is never called.");
     }
 
 
@@ -1593,6 +1951,13 @@ internal sealed class VcalmMultiStepExchangeTests
                 ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
         }).ConfigureAwait(false);
 
+        //§3.6.3 / §3.6.6 REQUIRED seam: the coordinator authorization the create-exchange and
+        //state-read routes need to materialize at all.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizeVcalmCoordinatorAsync = VcalmWireFixtures.AuthorizeTestCoordinator;
+        }).ConfigureAwait(false);
+
         //§3.6.5 / §3.6.8: the exchange runs on a workflow — a directly-supplied config (the unit-style
         //multi-step tests) or, when none is supplied, the single configuration the §3.6.1 endpoint
         //authored into the store (the end-to-end test). The step decision DERIVES from its step graph.
@@ -1885,6 +2250,13 @@ internal sealed class VcalmMultiStepExchangeTests
                 ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
         }).ConfigureAwait(false);
 
+        //§3.6.3 / §3.6.6 REQUIRED seam: the coordinator authorization the create-exchange and
+        //state-read routes need to materialize at all.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizeVcalmCoordinatorAsync = VcalmWireFixtures.AuthorizeTestCoordinator;
+        }).ConfigureAwait(false);
+
         await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.VcalmExchangeVerification = new VcalmCredentialVerification
@@ -2012,7 +2384,8 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            new RequestFields(), "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), VcalmWireFixtures.CoordinatorAuthorizationHeaders, "{}",
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
         using JsonDocument created = JsonDocument.Parse(response.Body);
@@ -2029,7 +2402,8 @@ internal sealed class VcalmMultiStepExchangeTests
     private async Task<JsonDocument> GetExchangeStateAsync(TestHostShell app, string segment, string exchangeId)
     {
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "GET", exchangeId, jsonBody: null, [], TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", exchangeId, jsonBody: null, [], TestContext.CancellationToken,
+            VcalmWireFixtures.CoordinatorAuthorizationHeaders).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
 

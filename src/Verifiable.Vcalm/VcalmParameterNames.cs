@@ -612,10 +612,32 @@ public static class VcalmParameterNames
     public static ReadOnlySpan<byte> AuthorizationUtf8 => "authorization"u8;
 
     /// <summary>
-    /// The §3.6.1 OPTIONAL <c>authorization</c> object — the OAuth2 / zcap authorization-scheme config.
-    /// Modeled and round-tripped through §3.6.2; the field's enforcement is deferred.
+    /// The §3.6.1 OPTIONAL <c>authorization</c> object — the OAuth2 authorization-scheme configuration
+    /// (<see cref="VcalmWorkflowAuthorization"/>). Strictly parsed and round-tripped through §3.6.2; any
+    /// other scheme is refused as an unknown option.
     /// </summary>
     public static string Authorization { get; } = Utf8Constants.ToInternedString(AuthorizationUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="OAuth2"/>.</summary>
+    public static ReadOnlySpan<byte> OAuth2Utf8 => "oauth2"u8;
+
+    /// <summary>
+    /// The §3.6.1 <c>authorization.oauth2</c> object member — the OAuth2 authorization-scheme
+    /// configuration, carrying <see cref="IssuerConfigUrl"/>.
+    /// </summary>
+    public static string OAuth2 { get; } = Utf8Constants.ToInternedString(OAuth2Utf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="IssuerConfigUrl"/>.</summary>
+    public static ReadOnlySpan<byte> IssuerConfigUrlUtf8 => "issuerConfigUrl"u8;
+
+    /// <summary>
+    /// The §3.6.1 <c>authorization.oauth2.issuerConfigUrl</c> member — the OAuth2 issuer's metadata
+    /// URL (<see href="https://www.rfc-editor.org/rfc/rfc8414#section-3">RFC 8414 §3</see>: an
+    /// absolute URL using the <c>https</c> scheme).
+    /// </summary>
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire member NAME 'issuerConfigUrl' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string IssuerConfigUrl { get; } = Utf8Constants.ToInternedString(IssuerConfigUrlUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CreateChallenge"/>.</summary>
     public static ReadOnlySpan<byte> CreateChallengeUtf8 => "createChallenge"u8;

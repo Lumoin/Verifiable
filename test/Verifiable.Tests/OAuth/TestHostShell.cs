@@ -2910,7 +2910,9 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <see cref="DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>
     /// for endpoints that read <c>IncomingRequest.Body</c> (AuthZEN, SSF, Global
     /// Token Revocation). A <see langword="null"/> <paramref name="jsonBody"/>
-    /// dispatches with no body.
+    /// dispatches with no body. The header-and-body-carrying overload below sends a
+    /// request header such as <c>Authorization</c> alongside a body, for example the
+    /// VCALM §3.6.3 coordinator authorization.
     /// </summary>
     public async ValueTask<ServerHttpResponse> DispatchAtEndpointAsync(
         string segment,
@@ -2959,7 +2961,8 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Dispatches a request carrying a body with an explicit content type and raw bytes — the
     /// content-type-controlling form used to exercise the §2.4 <c>application/json</c> MUST and the
     /// §2.4 / B.4 payload-size 413 (a non-JSON content type, or a body over the cap, must be
-    /// rejected before parsing). An empty <paramref name="contentType"/> dispatches with no body.
+    /// rejected before parsing). An empty <paramref name="contentType"/> dispatches with no body; a
+    /// <see langword="null"/> <paramref name="headers"/> dispatches with <see cref="RequestHeaders.Empty"/>.
     /// </summary>
     public async ValueTask<ServerHttpResponse> DispatchWithBodyAsync(
         string segment,
@@ -2968,7 +2971,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         ReadOnlyMemory<byte> bodyBytes,
         string contentType,
         ExchangeContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        RequestHeaders? headers = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segment);
         ArgumentException.ThrowIfNullOrWhiteSpace(endpointName);
@@ -2990,7 +2994,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Path: path,
             Method: httpMethod,
             Fields: new RequestFields(),
-            Headers: RequestHeaders.Empty,
+            Headers: headers ?? RequestHeaders.Empty,
             RouteValues: RouteValues.Empty)
         {
             Body = body
@@ -3121,7 +3125,9 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// path (resolved from <see cref="WellKnownVcalmEndpointNames.VcalmParticipateInExchange"/>) plus the
     /// URL-escaped exchange id as the trailing path segment. The §3.6.5 / §3.6.6 matchers extract the id
     /// from this trailing segment. A <see langword="null"/> <paramref name="jsonBody"/> dispatches with
-    /// no body (the §3.6.6 GET); a non-null body is the §3.6.5 vcapi message.
+    /// no body (the §3.6.6 GET); a non-null body is the §3.6.5 vcapi message. A <see langword="null"/>
+    /// <paramref name="headers"/> dispatches with <see cref="RequestHeaders.Empty"/>, for a §3.6.6 read
+    /// against the REQUIRED coordinator authorization seam whose test needs an <c>Authorization</c> header.
     /// </summary>
     public async ValueTask<ServerHttpResponse> DispatchVcalmExchangeByIdAsync(
         string segment,
@@ -3129,7 +3135,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         string exchangeId,
         string? jsonBody,
         ExchangeContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        RequestHeaders? headers = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segment);
         ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
@@ -3151,7 +3158,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Path: path,
             Method: httpMethod,
             Fields: new RequestFields(),
-            Headers: RequestHeaders.Empty,
+            Headers: headers ?? RequestHeaders.Empty,
             RouteValues: RouteValues.Empty)
         {
             Body = body

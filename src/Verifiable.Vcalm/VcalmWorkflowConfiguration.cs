@@ -15,7 +15,8 @@ namespace Verifiable.Vcalm;
 /// exchange starts on), the REQUIRED <c>steps</c> object (each <c>STEP_NAME</c> keying its step data),
 /// an OPTIONAL <c>credentialTemplates</c> array (the templates an <c>issueRequests</c> step evaluates),
 /// an OPTIONAL <c>controller</c> (the zcap root controller, modeled but not yet enforced), and an
-/// OPTIONAL <c>authorization</c> object (OAuth2 / zcap config, modeled — enforcement not yet implemented).
+/// OPTIONAL <c>authorization</c> object (the OAuth2 configuration a coordinator's requests are checked
+/// against).
 /// </para>
 /// <para>
 /// The step graph here is the LINEAR <c>nextStep</c> chain: a step has at most one <c>nextStep</c>
@@ -59,12 +60,12 @@ public sealed record VcalmWorkflowConfiguration
     public string? Controller { get; init; }
 
     /// <summary>
-    /// The §3.6.1 OPTIONAL <c>authorization</c> object (verbatim JSON) — the OAuth2 / zcap
-    /// authorization-scheme config. Modeled and carried verbatim; the authorization field's ENFORCEMENT
-    /// (zcap in particular) is not yet implemented, so the value is round-tripped through §3.6.2 but not
-    /// acted on by the exchange engine.
+    /// The §3.6.1 OPTIONAL <c>authorization</c> object — the OAuth2 authorization-scheme config, its
+    /// <c>{oauth2?: {issuerConfigUrl}}</c> shape strictly parsed. A coordinator seam that AUTHORIZES an
+    /// exchange request against this configuration is a separate mechanism this type only carries the
+    /// declared configuration for.
     /// </summary>
-    public string? AuthorizationJson { get; init; }
+    public VcalmWorkflowAuthorization? Authorization { get; init; }
 
     /// <summary>The strict-parse outcome; <see cref="VcalmParseFailure.None"/> on success.</summary>
     public VcalmParseFailure Failure { get; init; }

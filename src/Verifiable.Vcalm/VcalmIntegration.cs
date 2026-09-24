@@ -1049,6 +1049,39 @@ public sealed class VcalmIntegration: ServerIntegration
 
 
     /// <summary>
+    /// Authorizes a §3.6 coordinator's create-exchange or read-exchange-state request against the
+    /// caller's own presented credential. Required for the §3.6.3 <c>POST .../exchanges</c> and §3.6.6
+    /// <c>GET .../exchanges/{localExchangeId}</c> routes to materialize, in the pattern
+    /// <see cref="DeleteVcalmIssuedCredentialAsync"/> sets for its own required seam — without it those
+    /// two routes do not materialize at all (fail-closed; HTTP 404). Creation and the state read need
+    /// this seam because <see href="https://www.w3.org/TR/vcalm-1.0/#workflows-and-exchanges">
+    /// VCALM 1.0 §3.6</see> grants a coordinator authorization "to create and query particular workflow
+    /// interactions"; the same clause's "Initiating the exchange does not require any authorization
+    /// beyond the exchange URL" is why the §3.6.4 protocols read and the §3.6.5 participate route stay
+    /// open instead.
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public AuthorizeVcalmCoordinatorDelegate? AuthorizeVcalmCoordinatorAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
     /// The application-supplied Data Integrity verification seams the §3.6.5 exchange engine composes
     /// to verify a <c>verifiablePresentation</c> a holder presents during a vcapi step (the same
     /// <see cref="VcalmCredentialVerification"/> shape the §3.3.2 verifier uses). Optional — when

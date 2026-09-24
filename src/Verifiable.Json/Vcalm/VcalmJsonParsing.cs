@@ -367,8 +367,10 @@ public static class VcalmJsonParsing
     /// <c>initialStep</c> / <c>steps</c>, an unrecognized top-level member, or a recognized member
     /// present with a value of the wrong kind (<c>id</c> / <c>controller</c> both <c>[string]</c>) is
     /// the strict-parse rejection (<see cref="VcalmParseFailure.Malformed"/> /
-    /// <see cref="VcalmParseFailure.UnknownOption"/>). The §3.6.1 step-graph structural MUSTs are
-    /// enforced separately by <see cref="Verifiable.Vcalm.VcalmWorkflowValidation"/>.
+    /// <see cref="VcalmParseFailure.UnknownOption"/>); <c>authorization</c>'s own <c>{oauth2?:
+    /// {issuerConfigUrl}}</c> shape is enforced the same way by <see cref="ParseWorkflowAuthorization"/>.
+    /// The §3.6.1 step-graph structural MUSTs are enforced separately by
+    /// <see cref="Verifiable.Vcalm.VcalmWorkflowValidation"/>.
     /// </summary>
     /// <param name="requestBody">The create-workflow request body JSON text.</param>
     /// <returns>The parsed workflow configuration, or a strict-parse rejection.</returns>
@@ -467,10 +469,17 @@ public static class VcalmJsonParsing
                 return VcalmWorkflowConfiguration.Malformed();
             }
 
-            string? authorizationJson = root.TryGetProperty(VcalmParameterNames.Authorization, out JsonElement authorizationElement)
-                && authorizationElement.ValueKind == JsonValueKind.Object
-                ? authorizationElement.GetRawText()
-                : null;
+            VcalmWorkflowAuthorization? authorization = null;
+            if(root.TryGetProperty(VcalmParameterNames.Authorization, out JsonElement authorizationElement))
+            {
+                (authorization, VcalmParseFailure authorizationFailure) = ParseWorkflowAuthorization(authorizationElement);
+                if(authorizationFailure != VcalmParseFailure.None)
+                {
+                    return authorizationFailure == VcalmParseFailure.UnknownOption
+                        ? VcalmWorkflowConfiguration.UnknownOption()
+                        : VcalmWorkflowConfiguration.Malformed();
+                }
+            }
 
             return new VcalmWorkflowConfiguration
             {
@@ -479,9 +488,83 @@ public static class VcalmJsonParsing
                 Steps = steps.ToImmutable(),
                 CredentialTemplates = templates,
                 Controller = controller,
-                AuthorizationJson = authorizationJson
+                Authorization = authorization
             };
         }
+    }
+
+
+    /// <summary>
+    /// §3.6.1 <c>authorization</c>: <c>{oauth2?: {issuerConfigUrl}}</c>. STRICT per §2.4: a non-object
+    /// <c>authorization</c> or <c>oauth2</c> value, or an <c>issuerConfigUrl</c> that is not an absolute
+    /// <c>https</c> URL with no userinfo, query or fragment component
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see>: the issuer
+    /// identifier "MUST be a URL that uses the 'https' scheme and has no query or fragment
+    /// components"; <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.1">RFC 3986 §3.2.1</see>
+    /// deprecates userinfo in a URL), is <see cref="VcalmParseFailure.Malformed"/> — it fits neither
+    /// form the specification names. A member of <c>authorization</c> other than <c>oauth2</c>, a member
+    /// of <c>oauth2</c> other than <c>issuerConfigUrl</c>, or either object's member name repeated, is
+    /// <see cref="VcalmParseFailure.UnknownOption"/> per
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM 1.0 §2.4</see> ("Implementations MUST
+    /// throw an error if an endpoint receives data, options, or option values that it does not
+    /// understand or know how to process").
+    /// </summary>
+    /// <param name="authorizationElement">The <c>authorization</c> member's value.</param>
+    /// <returns>The parsed authorization and <see cref="VcalmParseFailure.None"/> on success, or a
+    /// strict-parse rejection with a <see langword="null"/> authorization.</returns>
+    private static (VcalmWorkflowAuthorization? Authorization, VcalmParseFailure Failure) ParseWorkflowAuthorization(
+        JsonElement authorizationElement)
+    {
+        if(authorizationElement.ValueKind != JsonValueKind.Object)
+        {
+            return (null, VcalmParseFailure.Malformed);
+        }
+
+        VcalmOAuth2Authorization? oauth2 = null;
+        HashSet<string> seenAuthorizationMemberNames = new(StringComparer.Ordinal);
+        foreach(JsonProperty authorizationProperty in authorizationElement.EnumerateObject())
+        {
+            if(!string.Equals(authorizationProperty.Name, VcalmParameterNames.OAuth2, StringComparison.Ordinal)
+                || !seenAuthorizationMemberNames.Add(authorizationProperty.Name))
+            {
+                return (null, VcalmParseFailure.UnknownOption);
+            }
+
+            if(authorizationProperty.Value.ValueKind != JsonValueKind.Object)
+            {
+                return (null, VcalmParseFailure.Malformed);
+            }
+
+            Uri? issuerConfigUrl = null;
+            HashSet<string> seenOAuth2MemberNames = new(StringComparer.Ordinal);
+            foreach(JsonProperty oauth2Property in authorizationProperty.Value.EnumerateObject())
+            {
+                if(!string.Equals(oauth2Property.Name, VcalmParameterNames.IssuerConfigUrl, StringComparison.Ordinal)
+                    || !seenOAuth2MemberNames.Add(oauth2Property.Name))
+                {
+                    return (null, VcalmParseFailure.UnknownOption);
+                }
+
+                if(!TryReadString(oauth2Property.Value, out string? issuerConfigUrlText)
+                    || !Uri.TryCreate(issuerConfigUrlText, UriKind.Absolute, out issuerConfigUrl)
+                    || !string.Equals(issuerConfigUrl.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+                    || !string.IsNullOrEmpty(issuerConfigUrl.UserInfo)
+                    || !string.IsNullOrEmpty(issuerConfigUrl.Query)
+                    || !string.IsNullOrEmpty(issuerConfigUrl.Fragment))
+                {
+                    return (null, VcalmParseFailure.Malformed);
+                }
+            }
+
+            if(issuerConfigUrl is null)
+            {
+                return (null, VcalmParseFailure.Malformed);
+            }
+
+            oauth2 = new VcalmOAuth2Authorization { IssuerConfigUrl = issuerConfigUrl };
+        }
+
+        return (new VcalmWorkflowAuthorization { OAuth2 = oauth2 }, VcalmParseFailure.None);
     }
 
 

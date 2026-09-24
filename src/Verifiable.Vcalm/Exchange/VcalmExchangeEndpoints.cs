@@ -58,13 +58,25 @@ public static class VcalmExchangeEndpoints
         if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmExchange)
             && server?.Vcalm() is { ResolveVcalmExchangeFlowIdAsync: not null } vcalm)
         {
-            if(vcalm.ParseVcalmCreateExchangeAsync is not null)
+            //§3.6.3 create and §3.6.6 state-read are REQUIRED-seam routes: without the coordinator
+            //authorization seam wired, the engine cannot tell a coordinator's request from an
+            //anonymous one, so neither route materializes (fail-closed; the same pattern
+            //VcalmIntegration.DeleteVcalmIssuedCredentialAsync sets for its own required seam). §3.6.4
+            //protocols and §3.6.5 participate stay open: VCALM 1.0 §3.6's "Initiating the exchange
+            //does not require any authorization beyond the exchange URL" is why participation needs
+            //none, while the same clause's grant of authorization "to create and query" is why
+            //creation and the state read need this seam.
+            if(vcalm.ParseVcalmCreateExchangeAsync is not null && vcalm.AuthorizeVcalmCoordinatorAsync is not null)
             {
                 candidates.Add(BuildCreateExchange());
             }
 
             candidates.Add(BuildGetExchangeProtocols());
-            candidates.Add(BuildGetExchangeState());
+
+            if(vcalm.AuthorizeVcalmCoordinatorAsync is not null)
+            {
+                candidates.Add(BuildGetExchangeState());
+            }
 
             //§3.6.5: the participate endpoint needs the message parser and a step driver — either the
             //explicit step-decision seam, which decides one step per message, or the workflow resolver,
@@ -99,6 +111,14 @@ public static class VcalmExchangeEndpoints
             //is the §3.6.5 participate POST).
             MatchesRequest = static (fields, context, endpoint, ct) =>
                 MatchExactCollection(context, endpoint, WellKnownHttpMethods.Post),
+
+            //§3.6.3 REQUIRED seam: the coordinator's authorization is decided in the dispatcher's
+            //pre-correlation step, before it mints a flow id or creates any PDA state for the request
+            //(EndpointServer.HandleCoreAsync step 1 runs before step 3's GenerateIdentifierAsync /
+            //statefulKind.CreateAsync for a StartsNewFlow endpoint) — a denial costs no flow id and
+            //persists no state, and never depends on, or reveals, whether the body would otherwise
+            //have parsed.
+            BeforeCorrelationAsync = BeforeCreateExchangeCorrelationAsync,
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
@@ -189,6 +209,38 @@ public static class VcalmExchangeEndpoints
 
 
     /// <summary>
+    /// The §3.6.3 create-exchange endpoint's pre-correlation step: the coordinator's authorization is
+    /// decided here so a denial answers before <see cref="Verifiable.Server.EndpointServer"/> mints a
+    /// flow id or creates any PDA state for the request. Wired as
+    /// <see cref="Verifiable.Server.EndpointCandidate.BeforeCorrelationAsync"/> on
+    /// <see cref="BuildCreateExchange"/>.
+    /// </summary>
+    /// <param name="endpoint">The resolved create-exchange endpoint (unused: the decision needs no endpoint metadata).</param>
+    /// <param name="fields">The request's extracted fields (unused: §3.6.3 carries no query-string authorization input).</param>
+    /// <param name="context">The per-request context the caller's presented credential is read from.</param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <returns>The 401 denial when the coordinator seam refuses the request, else <see langword="null"/> to let the request proceed.</returns>
+    private static async ValueTask<ServerHttpResponse?> BeforeCreateExchangeCorrelationAsync(
+        ServerEndpoint endpoint, RequestFields fields, ExchangeContext context, CancellationToken cancellationToken)
+    {
+        EndpointServer server = context.RequestServer!;
+        var vcalm = server.Vcalm();
+
+        VcalmCoordinatorDecision? creationAuthorization = await vcalm.AuthorizeVcalmCoordinatorAsync!(
+            new VcalmCoordinatorRequest
+            {
+                Operation = VcalmCoordinatorOperation.CreateExchange,
+                ExchangeId = null,
+                WorkflowAuthorization = null
+            },
+            context,
+            cancellationToken).ConfigureAwait(false);
+
+        return creationAuthorization is { IsPermitted: true } ? null : UnauthorizedRequest(creationAuthorization);
+    }
+
+
+    /// <summary>
     /// Builds the endpoint for §3.6.4 GET /workflows/{localWorkflowId}/exchanges/{localExchangeId}/protocols.
     /// The handler uses the admitted request wiring for its parser and application delegates.
     /// <see href="https://www.w3.org/TR/vcalm-1.0/">Credential lifecycle API</see>.
@@ -274,6 +326,28 @@ public static class VcalmExchangeEndpoints
                 if(string.IsNullOrEmpty(exchangeId))
                 {
                     return (null, MalformedRequest());
+                }
+
+                //§3.6.6 REQUIRED seam: resolve the exchange's workflow (when a resolver is wired) and
+                //decide the coordinator's authorization BEFORE the existence check below, so a denial
+                //never reveals whether the targeted exchange exists.
+                VcalmWorkflowConfiguration? workflow = vcalm.ResolveVcalmWorkflowForExchangeAsync is { } resolveWorkflow
+                    ? await resolveWorkflow(exchangeId, context, ct).ConfigureAwait(false)
+                    : null;
+
+                VcalmCoordinatorDecision? stateAuthorization = await vcalm.AuthorizeVcalmCoordinatorAsync!(
+                    new VcalmCoordinatorRequest
+                    {
+                        Operation = VcalmCoordinatorOperation.ReadExchangeState,
+                        ExchangeId = exchangeId,
+                        WorkflowAuthorization = workflow?.Authorization
+                    },
+                    context,
+                    ct).ConfigureAwait(false);
+
+                if(stateAuthorization is not { IsPermitted: true })
+                {
+                    return (null, UnauthorizedRequest(stateAuthorization));
                 }
 
                 //§3.6.6: an unknown exchange id is a 404.
@@ -1265,6 +1339,40 @@ public static class VcalmExchangeEndpoints
 
         return ProblemDetailsResponse(problem, 400);
     }
+
+
+    /// <summary>
+    /// The §3.6.3 / §3.6.6 REQUIRED-seam denial:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> "MUST include
+    /// the HTTP 'WWW-Authenticate' response header field" — 401 with the decision's challenge as that
+    /// header and an empty body, never a §3.8 ProblemDetails body, since a bearer-credential denial is
+    /// a transport-level authentication failure, not a VCALM data-model problem. A
+    /// <paramref name="decision"/> of <see langword="null"/> — a seam implementation that returned no
+    /// decision at all — is answered as a denial with a library-built default challenge rather than
+    /// throwing, since <see cref="VcalmCoordinatorDecision"/>'s own construction already guarantees a
+    /// non-null <see cref="VcalmCoordinatorDecision.Challenge"/> whenever
+    /// <see cref="VcalmCoordinatorDecision.IsPermitted"/> is <see langword="false"/>.
+    /// </summary>
+    /// <param name="decision">The seam's denial, or <see langword="null"/> when the seam returned none.</param>
+    /// <returns>The 401 response carrying the challenge as <c>WWW-Authenticate</c> and an empty body.</returns>
+    private static ServerHttpResponse UnauthorizedRequest(VcalmCoordinatorDecision? decision)
+    {
+        string challenge = decision?.Challenge ?? DefaultCoordinatorChallenge;
+
+        return new ServerHttpResponse
+        {
+            StatusCode = 401,
+            Body = string.Empty,
+            ContentType = string.Empty
+        }.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
+    }
+
+
+    /// <summary>
+    /// The <c>WWW-Authenticate</c> challenge <see cref="UnauthorizedRequest(VcalmCoordinatorDecision?)"/>
+    /// answers with when the coordinator seam returned no decision to read a challenge from.
+    /// </summary>
+    private static string DefaultCoordinatorChallenge { get; } = "Bearer";
 
 
     //§3.6: a POST to a complete / invalid exchange — a finished exchange cannot continue. A §3.6 4xx.

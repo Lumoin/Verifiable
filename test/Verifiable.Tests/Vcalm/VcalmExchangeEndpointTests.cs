@@ -509,7 +509,8 @@ internal sealed class VcalmExchangeEndpointTests
         string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "GET", "urn:uuid:never-created", jsonBody: null, [], TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", "urn:uuid:never-created", jsonBody: null, [], TestContext.CancellationToken,
+            VcalmWireFixtures.CoordinatorAuthorizationHeaders).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode, "An unknown exchange id is 404.");
     }
@@ -549,7 +550,8 @@ internal sealed class VcalmExchangeEndpointTests
         byte[] bytes = Encoding.UTF8.GetBytes("{}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            bytes, "text/plain", [], TestContext.CancellationToken).ConfigureAwait(false);
+            bytes, "text/plain", [], TestContext.CancellationToken,
+            VcalmWireFixtures.CoordinatorAuthorizationHeaders).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "A non-application/json body is rejected before parsing (§2.4 content-serialization MUST).");
@@ -637,6 +639,13 @@ internal sealed class VcalmExchangeEndpointTests
         {
             candidateIntegration.ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
                 ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+        }).ConfigureAwait(false);
+
+        //§3.6.3 / §3.6.6 REQUIRED seam: the coordinator authorization the create-exchange and
+        //state-read routes need to materialize at all.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizeVcalmCoordinatorAsync = VcalmWireFixtures.AuthorizeTestCoordinator;
         }).ConfigureAwait(false);
 
         //§3.6.5 step logic: on the empty initiating message request a DID Authentication presentation;
@@ -861,7 +870,8 @@ internal sealed class VcalmExchangeEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), VcalmWireFixtures.CoordinatorAuthorizationHeaders, body,
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
 
@@ -888,9 +898,8 @@ internal sealed class VcalmExchangeEndpointTests
     /// <returns>The created exchange's id.</returns>
     private async Task<string> CreateExchangeAndGetIdOverWireAsync(TestHostShell app, string segment)
     {
-        using JsonDocument created = await VcalmWireFixtures.PostEndpointWireAsync(
-            app, segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "{}", 201, TestContext.CancellationToken)
-            .ConfigureAwait(false);
+        using JsonDocument created = await VcalmWireFixtures.PostCreateExchangeWireAsync(
+            app, segment, "{}", 201, TestContext.CancellationToken).ConfigureAwait(false);
 
         return created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
     }
@@ -904,7 +913,8 @@ internal sealed class VcalmExchangeEndpointTests
     private async Task<JsonDocument> GetExchangeStateAsync(TestHostShell app, string segment, string exchangeId)
     {
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "GET", exchangeId, jsonBody: null, [], TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", exchangeId, jsonBody: null, [], TestContext.CancellationToken,
+            VcalmWireFixtures.CoordinatorAuthorizationHeaders).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
 

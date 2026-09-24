@@ -5,6 +5,7 @@ using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.OAuth;
 using Verifiable.Vcalm;
 
@@ -172,8 +173,9 @@ internal static class VcalmWireFixtures
 
     /// <summary>
     /// GETs the §3.6.6 state of the exchange <paramref name="exchangeId"/> of the tenant <paramref name="segment"/> over
-    /// the real wire, starting the host when it is not yet listening, and returns the parsed state after checking the
-    /// response status.
+    /// the real wire, presenting <see cref="CoordinatorToken"/> against the REQUIRED §3.6.6 coordinator authorization
+    /// seam, starting the host when it is not yet listening, and returns the parsed state after checking the response
+    /// status.
     /// </summary>
     /// <param name="app">The host shell whose default host serves the request.</param>
     /// <param name="segment">The exchange tenant segment.</param>
@@ -184,9 +186,148 @@ internal static class VcalmWireFixtures
     internal static async Task<JsonDocument> GetExchangeWireAsync(
         TestHostShell app, string segment, string exchangeId, int expectedStatus, CancellationToken cancellationToken)
     {
+        (int statusCode, _, string responseBody) = await SendWireAsync(
+            app, "GET", ComposeExchangePath(segment, exchangeId), body: null,
+            authorizationHeader: CoordinatorAuthorizationHeader, cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(expectedStatus, statusCode, responseBody);
+
+        return JsonDocument.Parse(responseBody);
+    }
+
+
+    /// <summary>
+    /// POSTs a §3.6.3 create-exchange request over the real wire, presenting <see cref="CoordinatorToken"/> against the
+    /// REQUIRED §3.6.3 coordinator authorization seam, and returns the parsed response after checking the response
+    /// status.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="segment">The exchange tenant segment.</param>
+    /// <param name="body">The create-exchange request body JSON text.</param>
+    /// <param name="expectedStatus">The HTTP status the response must carry.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The parsed response body; the caller disposes it.</returns>
+    internal static async Task<JsonDocument> PostCreateExchangeWireAsync(
+        TestHostShell app, string segment, string body, int expectedStatus, CancellationToken cancellationToken)
+    {
+        string path = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment);
+        (int statusCode, _, string responseBody) = await SendWireAsync(
+            app, "POST", path, body, authorizationHeader: CoordinatorAuthorizationHeader, cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(expectedStatus, statusCode, responseBody);
+
+        return JsonDocument.Parse(responseBody);
+    }
+
+
+    /// <summary>
+    /// Sends an HTTP request of <paramref name="method"/> to <paramref name="path"/> on the loopback HTTPS host of
+    /// <paramref name="app"/> over the real wire, starting the host when it is not yet listening, with an optional
+    /// JSON <paramref name="body"/> and an optional <paramref name="authorizationHeader"/> value carried on the
+    /// request's <c>Authorization</c> header — the primitive a REQUIRED-seam route's denial is proven through: RFC
+    /// 6750 §3 requires the response carry a <c>WWW-Authenticate</c> challenge, which this returns unparsed
+    /// alongside the status and body for the caller's own assertions.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The request body JSON text, or <see langword="null"/> to send no body.</param>
+    /// <param name="authorizationHeader">
+    /// The <c>Authorization</c> header value to send, or <see langword="null"/> to send no <c>Authorization</c> header.
+    /// </param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The response status code, its <c>WWW-Authenticate</c> header value (or <see langword="null"/> when absent), and its body text.</returns>
+    internal static async Task<(int StatusCode, string? WwwAuthenticate, string Body)> SendWireAsync(
+        TestHostShell app, string method, string path, string? body, string? authorizationHeader, CancellationToken cancellationToken)
+    {
         await app.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
-        Uri url = new(host.HttpBaseAddress!, ComposeExchangePath(segment, exchangeId));
+        Uri url = new(host.HttpBaseAddress!, path);
+
+        using HttpRequestMessage request = new(new HttpMethod(method), url);
+        if(body is not null)
+        {
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+        }
+
+        if(authorizationHeader is not null)
+        {
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, authorizationHeader);
+        }
+
+        using HttpResponseMessage response = await host.SharedHttpClient!.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        string responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        string? wwwAuthenticate = null;
+        if(response.Headers.TryGetValues(WellKnownHttpHeaderNames.WwwAuthenticate, out IEnumerable<string>? values))
+        {
+            foreach(string value in values)
+            {
+                wwwAuthenticate = value;
+
+                break;
+            }
+        }
+
+        return ((int)response.StatusCode, wwwAuthenticate, responseBody);
+    }
+
+
+    /// <summary>The bearer token <see cref="AuthorizeTestCoordinator"/> permits a §3.6 coordinator operation for.</summary>
+    internal static string CoordinatorToken { get; } = "vcalm-test-coordinator-token";
+
+    /// <summary>The RFC 6750 §3 <c>WWW-Authenticate</c> challenge value <see cref="AuthorizeTestCoordinator"/> denies with.</summary>
+    internal static string CoordinatorChallenge { get; } = "Bearer realm=\"vcalm-test\"";
+
+    /// <summary>
+    /// The <c>Authorization</c> header value a create-exchange or state-read helper presents to satisfy
+    /// <see cref="AuthorizeTestCoordinator"/> — reused directly by a caller that composes its own request
+    /// over the real wire instead of one of this fixture's own send helpers.
+    /// </summary>
+    internal static string CoordinatorAuthorizationHeader { get; } = $"Bearer {CoordinatorToken}";
+
+    /// <summary>
+    /// The <see cref="RequestHeaders"/> an in-process create-exchange or state-read dispatch carries so its request
+    /// satisfies <see cref="AuthorizeTestCoordinator"/> — the <see cref="TestHostShell"/> dispatch helpers' headers
+    /// argument, for tests that reach the §3.6.3 / §3.6.6 REQUIRED coordinator authorization seam without the real wire.
+    /// </summary>
+    internal static RequestHeaders CoordinatorAuthorizationHeaders { get; } = new(
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            [WellKnownHttpHeaderNames.Authorization] = [CoordinatorAuthorizationHeader]
+        });
+
+    /// <summary>
+    /// An <see cref="AuthorizeVcalmCoordinatorDelegate"/> permitting a §3.6 coordinator operation whose request
+    /// presents <c>Authorization: {CoordinatorAuthorizationHeader}</c>, denying every other request with
+    /// <see cref="CoordinatorChallenge"/> — VCALM 1.0 A4016 / A4758's "401 Not Authorized",
+    /// RFC 6750 §3's <c>WWW-Authenticate</c> challenge.
+    /// </summary>
+    internal static AuthorizeVcalmCoordinatorDelegate AuthorizeTestCoordinator { get; } = (request, context, cancellationToken) =>
+    {
+        bool isPermitted = context.IncomingRequest is { } incoming
+            && incoming.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authorizationHeader)
+            && string.Equals(authorizationHeader, CoordinatorAuthorizationHeader, StringComparison.Ordinal);
+
+        return ValueTask.FromResult(isPermitted ? VcalmCoordinatorDecision.Permit : VcalmCoordinatorDecision.Deny(CoordinatorChallenge));
+    };
+
+
+    /// <summary>
+    /// GETs the §3.6.2 configuration of the workflow <paramref name="workflowId"/> of the tenant
+    /// <paramref name="segment"/> over the real wire, starting the host when it is not yet listening, and
+    /// returns the parsed configuration after checking the response status.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="segment">The workflow tenant segment.</param>
+    /// <param name="workflowId">The workflow whose configuration is read.</param>
+    /// <param name="expectedStatus">The HTTP status the response must carry.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The parsed workflow configuration; the caller disposes it.</returns>
+    internal static async Task<JsonDocument> GetWorkflowWireAsync(
+        TestHostShell app, string segment, string workflowId, int expectedStatus, CancellationToken cancellationToken)
+    {
+        await app.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string collectionPath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmGetWorkflow, segment);
+        Uri url = new(host.HttpBaseAddress!, $"{collectionPath}/{Uri.EscapeDataString(workflowId)}");
         using HttpResponseMessage response = await host.SharedHttpClient!.GetAsync(url, cancellationToken).ConfigureAwait(false);
         string responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(expectedStatus, (int)response.StatusCode, responseBody);
