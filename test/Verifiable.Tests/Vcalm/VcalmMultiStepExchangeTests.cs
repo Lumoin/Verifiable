@@ -256,9 +256,10 @@ internal sealed class VcalmMultiStepExchangeTests
 
         Assert.AreEqual(400, refused.StatusCode, refused.Body);
         using JsonDocument problem = JsonDocument.Parse(refused.Body);
-        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR",
+        Assert.AreEqual("https://w3id.org/security#INVALID_CHALLENGE_ERROR",
             problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
-            "§3.6: a presentation echoing a PRIOR step's challenge does not verify against the current step's bound challenge.");
+            "§3.6: a presentation echoing a PRIOR step's challenge fails Data Integrity's own challenge check "
+            + "against the current step's bound challenge, so the exchange refuses it with that check's own type.");
 
         using JsonDocument invalidState = await GetExchangeStateAsync(app, segment, exchangeId).ConfigureAwait(false);
         Assert.AreEqual("invalid", invalidState.RootElement.GetProperty(VcalmParameterNames.State).GetString(),

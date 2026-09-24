@@ -940,6 +940,138 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// "This endpoint is used to verify a verifiable presentation and, by default, all verifiable
+    /// credentials contained within it." An <c>EnvelopedVerifiableCredential</c> is one such contained
+    /// credential: it is reported as its own <c>results.credentials[]</c> entry, unverified, whether it
+    /// is the presentation's only contained credential or sits alongside a validly-signed one, rather
+    /// than being left unexamined.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM §3.3.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ContainedEnvelopedCredentialIsReportedUnverified()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+
+        EnvelopedVerifiableCredential envelope = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Id = "data:application/vc+jwt,eyJhbGciOiJFUzI1NiJ9.e30.c2ln",
+            Type = [CredentialConstants.EnvelopedVerifiableCredentialType]
+        };
+
+        //A bare (unproofed) presentation carrying only the enveloped credential.
+        VerifiablePresentation bare = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            EnvelopedVerifiableCredential = [envelope]
+        };
+        string bareBody = "{\"presentation\":" + SerializePresentation(bare)
+            + ",\"options\":{\"returnProblemDetails\":true,\"returnResults\":true}}";
+
+        using JsonDocument bareResponse = await PostPresentationWireAsync(app, segment, bareBody, 200).ConfigureAwait(false);
+        Assert.IsFalse(bareResponse.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        JsonElement bareCredentials = bareResponse.RootElement
+            .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Credentials);
+        Assert.AreEqual(1, bareCredentials.GetArrayLength(), "The enveloped credential is reported as its own contained-credential entry.");
+        AssertSoleCredentialProblem(bareCredentials[0],
+            "https://verifiable.lumoin.com/problems#UNSUPPORTED_SECURING_MECHANISM",
+            "The proof's securing mechanism is not supported by this verifier.");
+
+        //A signed presentation carrying a valid contained credential together with the enveloped one.
+        DataIntegritySecuredCredential validCredential = await SignMinimalContainedCredentialAsync().ConfigureAwait(false);
+        DataIntegritySecuredPresentation signed = await SignPresentationAsync(
+            "challenge-contained", "verifier.example",
+            containedCredentials: [validCredential],
+            envelopedCredentials: [envelope]).ConfigureAwait(false);
+        string signedBody = BuildPresentationRequestBody(
+            signed, "challenge-contained", "verifier.example", returnProblemDetails: true, returnResults: true);
+
+        using JsonDocument signedResponse = await PostPresentationWireAsync(app, segment, signedBody, 200).ConfigureAwait(false);
+        Assert.IsFalse(signedResponse.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        JsonElement signedCredentials = signedResponse.RootElement
+            .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Credentials);
+        Assert.AreEqual(2, signedCredentials.GetArrayLength(),
+            "Both the validly-signed contained credential and the enveloped credential are reported.");
+
+        int verifiedCount = 0;
+        int unsupportedCount = 0;
+        foreach(JsonElement credentialResult in signedCredentials.EnumerateArray())
+        {
+            if(credentialResult.GetProperty(VcalmParameterNames.Verified).GetBoolean())
+            {
+                verifiedCount++;
+            }
+            else
+            {
+                unsupportedCount++;
+                AssertSoleCredentialProblem(credentialResult,
+                    "https://verifiable.lumoin.com/problems#UNSUPPORTED_SECURING_MECHANISM",
+                    "The proof's securing mechanism is not supported by this verifier.");
+            }
+        }
+
+        Assert.AreEqual(1, verifiedCount, "The validly-signed contained credential verifies true.");
+        Assert.AreEqual(1, unsupportedCount, "The enveloped contained credential is reported unverified.");
+    }
+
+
+    /// <summary>
+    /// VC Data Model 2.0 §4.13: "The verifiableCredential property MAY be present. The value MUST be
+    /// one or more verifiable credential and/or enveloped verifiable credential objects (the values
+    /// MUST NOT be non-object values such as numbers, strings, or URLs)."
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#verifiable-presentations">VC-DM 2.0 §4.13</see>.
+    /// A single credential object is one such object, so it reads as a one-item list; a string, or an
+    /// array item that is not an object, is refused wherever
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM §3.3.2</see> reads a presentation.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentationCredentialMemberShapeIsHonoured()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        VerifiableCredential loneCredential = VcalmWireFixtures.BuildCredential(
+            "did:example:vcalm-lone-credential-issuer", "urn:uuid:vcalm-lone-credential");
+        JsonNode loneCredentialNode = JsonNode.Parse(SerializeCredential(loneCredential))!;
+
+        static JsonObject BuildRequest(JsonNode? credentialValue) => new()
+        {
+            ["presentation"] = new JsonObject
+            {
+                ["@context"] = new JsonArray("https://www.w3.org/ns/credentials/v2"),
+                ["type"] = new JsonArray("VerifiablePresentation"),
+                ["verifiableCredential"] = credentialValue
+            },
+            ["options"] = new JsonObject { ["returnProblemDetails"] = true, ["returnResults"] = true }
+        };
+
+        using JsonDocument objectResponse = await PostPresentationWireAsync(
+            app, segment, BuildRequest(loneCredentialNode).ToJsonString(), 200).ConfigureAwait(false);
+        Assert.IsFalse(objectResponse.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        JsonElement credentialResults = objectResponse.RootElement
+            .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Credentials);
+        Assert.AreEqual(1, credentialResults.GetArrayLength(), "A lone credential object for verifiableCredential reads as a one-item list.");
+        AssertSoleCredentialProblem(credentialResults[0],
+            "https://www.w3.org/TR/vc-data-model#PARSING_ERROR",
+            "The secured credential or its proof could not be parsed as a map.");
+
+        using JsonDocument stringResponse = await PostPresentationWireAsync(
+            app, segment, BuildRequest(JsonValue.Create("https://example.edu/credentials/3732")).ToJsonString(), 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            stringResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A string verifiableCredential value is not an object, so it is refused as malformed.");
+
+        using JsonDocument nullItemResponse = await PostPresentationWireAsync(
+            app, segment, BuildRequest(new JsonArray((JsonNode?)null)).ToJsonString(), 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            nullItemResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A null verifiableCredential array item is not an object, so it is refused as malformed.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID §3.3</see>: "If controllerDocument
     /// is not a conforming controlled identifier document, an error MUST be raised and SHOULD convey an error type of
     /// INVALID_CONTROLLED_IDENTIFIER_DOCUMENT." A controller document fetch that ends on its own budget while the
@@ -3872,6 +4004,58 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// Signs a minimal VC-DM 2.0 credential with eddsa-jcs-2022 under a FRESH did:key issuer the
+    /// <see cref="KeyDidResolverSeam"/> resolves locally, for embedding as a <c>verifiableCredential</c>
+    /// entry inside a JCS-signed presentation. Its <c>@context</c> is the single base context a
+    /// JCS-canonicalized verifier's <see cref="VcalmCredentialVerification.KnownContext"/> is configured
+    /// with (<see cref="RegisterVerifierAsync"/>), so a contained credential using the two-entry
+    /// context <see cref="VcalmWireFixtures.BuildCredential"/> issues would fail context validation
+    /// before the check under test ever runs.
+    /// </summary>
+    /// <returns>The signed, validly-issued contained credential.</returns>
+    private async Task<DataIntegritySecuredCredential> SignMinimalContainedCredentialAsync()
+    {
+        Verifiable.Cryptography.PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
+            TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+        using PublicKeyMemory issuerPublic = keyPair.PublicKey;
+        using PrivateKeyMemory issuerPrivate = keyPair.PrivateKey;
+
+        DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
+            issuerPublic,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            Pool,
+            includeDefaultContext: false,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        VerifiableCredential unsignedCredential = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Id = "urn:uuid:vcalm-presentation-contained-credential",
+            Type = ["VerifiableCredential"],
+            Issuer = new Issuer { Id = issuerDidDocument.Id!.ToString() },
+            CredentialSubject = [new CredentialSubject { Id = "did:example:vcalm-presentation-contained-subject" }]
+        };
+
+        return await unsignedCredential.SignAsync(
+            issuerPrivate,
+            issuerDidDocument.VerificationMethod![0].Id!,
+            EddsaJcs2022CryptosuiteInfo.Instance,
+            TimeProvider.GetUtcNow().UtcDateTime,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.EncodeBase58Btc,
+            SerializeCredential,
+            DeserializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Encoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            Pool,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Signs a VC-DM 2.0 credential with eddsa-rdfc-2022 under a did:key issuer the KeyDidResolver
     /// resolves locally. The issuer key is the cached Ed25519 identity
     /// (<see cref="TestKeyMaterialProvider.CreateEd25519KeyMaterial"/>), so every credential this helper signs names the
@@ -4110,7 +4294,7 @@ internal sealed class VcalmVerifierEndpointTests
     /// <paramref name="signerVerificationMethodId"/>, binding the given
     /// <paramref name="challenge"/> and <paramref name="domain"/>, at this class's clock instant. This is the common
     /// plumbing shared by every <c>SignPresentation*</c> fixture below; the signing itself is the one shared
-    /// <see cref="DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime)"/>.
+    /// <see cref="DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?)"/>.
     /// </summary>
     /// <param name="challenge">The verifier's challenge to bind into the proof.</param>
     /// <param name="domain">The verifier's domain to bind into the proof.</param>
@@ -4119,15 +4303,20 @@ internal sealed class VcalmVerifierEndpointTests
     /// <param name="signerVerificationMethodId">
     /// The verification method id the proof's <c>verificationMethod</c> references.
     /// </param>
+    /// <param name="containedCredentials">The presentation's <c>verifiableCredential</c> entries, or <see langword="null"/> for none.</param>
+    /// <param name="envelopedCredentials">The presentation's enveloped credential entries, or <see langword="null"/> for none.</param>
     /// <returns>The signed <see cref="DataIntegritySecuredPresentation"/>.</returns>
     private Task<DataIntegritySecuredPresentation> SignPresentationCoreAsync(
         string challenge,
         string domain,
         string holderDid,
         PrivateKeyMemory signerPrivate,
-        string signerVerificationMethodId) =>
+        string signerVerificationMethodId,
+        List<VerifiableCredential>? containedCredentials = null,
+        List<EnvelopedVerifiableCredential>? envelopedCredentials = null) =>
         DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(
-            holderDid, signerVerificationMethodId, signerPrivate, challenge, domain, TimeProvider.GetUtcNow().UtcDateTime);
+            holderDid, signerVerificationMethodId, signerPrivate, challenge, domain, TimeProvider.GetUtcNow().UtcDateTime,
+            containedCredentials, envelopedCredentials);
 
 
     /// <summary>
@@ -4141,8 +4330,14 @@ internal sealed class VcalmVerifierEndpointTests
     /// </summary>
     /// <param name="challenge">The verifier's challenge to bind into the proof.</param>
     /// <param name="domain">The verifier's domain to bind into the proof.</param>
+    /// <param name="containedCredentials">The presentation's <c>verifiableCredential</c> entries, or <see langword="null"/> for none.</param>
+    /// <param name="envelopedCredentials">The presentation's enveloped credential entries, or <see langword="null"/> for none.</param>
     /// <returns>The signed, honestly-held <see cref="DataIntegritySecuredPresentation"/>.</returns>
-    private async Task<DataIntegritySecuredPresentation> SignPresentationAsync(string challenge, string domain)
+    private async Task<DataIntegritySecuredPresentation> SignPresentationAsync(
+        string challenge,
+        string domain,
+        List<VerifiableCredential>? containedCredentials = null,
+        List<EnvelopedVerifiableCredential>? envelopedCredentials = null)
     {
         Verifiable.Cryptography.PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
             TestKeyMaterialProvider.CreateEd25519KeyMaterial();
@@ -4160,7 +4355,8 @@ internal sealed class VcalmVerifierEndpointTests
         string holderDid = holderDidDocument.Id!.ToString();
 
         return await SignPresentationCoreAsync(
-            challenge, domain, holderDid, holderPrivate, verificationMethodId).ConfigureAwait(false);
+            challenge, domain, holderDid, holderPrivate, verificationMethodId,
+            containedCredentials, envelopedCredentials).ConfigureAwait(false);
     }
 
 
@@ -4406,15 +4602,18 @@ internal sealed class VcalmVerifierEndpointTests
     /// <param name="challenge">The challenge the verify options bind.</param>
     /// <param name="domain">The domain the verify options bind.</param>
     /// <param name="returnProblemDetails">Whether the options ask for the <c>problemDetails</c> array.</param>
+    /// <param name="returnResults">Whether the options ask for the verbose <c>results</c> object.</param>
     /// <returns>The request body JSON text.</returns>
     private static string BuildPresentationRequestBody(
-        DataIntegritySecuredPresentation presentation, string challenge, string domain, bool returnProblemDetails = false)
+        DataIntegritySecuredPresentation presentation, string challenge, string domain,
+        bool returnProblemDetails = false, bool returnResults = false)
     {
         string presentationJson = SerializePresentation(presentation);
         string problemDetailsOption = returnProblemDetails ? ",\"returnProblemDetails\":true" : string.Empty;
+        string resultsOption = returnResults ? ",\"returnResults\":true" : string.Empty;
 
         return "{\"verifiablePresentation\":" + presentationJson
-            + ",\"options\":{\"challenge\":\"" + challenge + "\",\"domain\":\"" + domain + "\"" + problemDetailsOption + "}}";
+            + ",\"options\":{\"challenge\":\"" + challenge + "\",\"domain\":\"" + domain + "\"" + problemDetailsOption + resultsOption + "}}";
     }
 
 

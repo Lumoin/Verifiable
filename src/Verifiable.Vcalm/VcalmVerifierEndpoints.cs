@@ -132,8 +132,8 @@ public static class VcalmVerifierEndpoints
                 //registered-handler seam. The envelope and an embedded credential that could not be
                 //parsed have distinct causes.
                 VcalmVerificationOutcome envelopedOutcome = request.EnvelopedCredential is not null
-                    ? BuildUnverifiableEnvelopeOutcome()
-                    : BuildUnparseableCredentialOutcome();
+                    ? VcalmVerificationService.BuildUnverifiableEnvelopeOutcome()
+                    : VcalmVerificationService.BuildUnparseableCredentialOutcome();
                 string envelopedBody = VcalmResponseWriter.BuildCredentialVerificationResponse(
                     envelopedOutcome, request.Options, request.CredentialJson);
 
@@ -274,6 +274,7 @@ public static class VcalmVerifierEndpoints
     {
         var oauth = server.Vcalm();
         VcalmVerifyOptions options = request.Options;
+        DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
         //Each contained credential costs a controller resolution, its proofs, and its status and schema fetches, so a
         //presentation carrying more than the verifier admits is refused before any of that work, and before its
@@ -305,7 +306,7 @@ public static class VcalmVerifierEndpoints
         }
 
         VcalmPresentationProofResult presentationResult;
-        List<VcalmVerificationOutcome> credentialOutcomes = [];
+        ImmutableArray<VcalmVerificationOutcome> credentialOutcomes = ImmutableArray<VcalmVerificationOutcome>.Empty;
         bool presentationProofVerified;
 
         if(request.DataIntegrityPresentation is { } proofed)
@@ -320,8 +321,8 @@ public static class VcalmVerifierEndpoints
 
             presentationProofVerified = presentationResult.Verified;
 
-            await VerifyContainedCredentialsAsync(
-                server, proofed.VerifiableCredential, credentialOutcomes, context, cancellationToken)
+            credentialOutcomes = await VcalmVerificationService.VerifyContainedCredentialsAsync(
+                proofed, oauth.VcalmCredentialVerification, oauth.ResolveVcalmStatusListAsync, now, context, cancellationToken)
                 .ConfigureAwait(false);
         }
         else if(request.UnproofedPresentation is { } unproofed)
@@ -342,8 +343,8 @@ public static class VcalmVerifierEndpoints
 
             presentationProofVerified = true;
 
-            await VerifyContainedCredentialsAsync(
-                server, unproofed.VerifiableCredential, credentialOutcomes, context, cancellationToken)
+            credentialOutcomes = await VcalmVerificationService.VerifyContainedCredentialsAsync(
+                unproofed, oauth.VcalmCredentialVerification, oauth.ResolveVcalmStatusListAsync, now, context, cancellationToken)
                 .ConfigureAwait(false);
         }
         else if(request.UnsecuredVerifiablePresentation is { } unsecured)
@@ -372,8 +373,8 @@ public static class VcalmVerifierEndpoints
 
             presentationProofVerified = false;
 
-            await VerifyContainedCredentialsAsync(
-                server, unsecured.VerifiableCredential, credentialOutcomes, context, cancellationToken)
+            credentialOutcomes = await VcalmVerificationService.VerifyContainedCredentialsAsync(
+                unsecured, oauth.VcalmCredentialVerification, oauth.ResolveVcalmStatusListAsync, now, context, cancellationToken)
                 .ConfigureAwait(false);
         }
         else
@@ -471,50 +472,6 @@ public static class VcalmVerifierEndpoints
             false, presentationResult, [], [tooMany], request.Options, request.PresentationJson);
 
         return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
-    }
-
-
-    /// <summary>
-    /// Verifies each embedded Data Integrity credential the presentation contains (§3.3.2: "Verifying
-    /// each contained verifiable credential's proof, status, and validity period(s)").
-    /// </summary>
-    private static async ValueTask VerifyContainedCredentialsAsync(
-        EndpointServer server,
-        IReadOnlyList<Core.Model.Credentials.VerifiableCredential>? credentials,
-        List<VcalmVerificationOutcome> outcomes,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        var oauth = server.Vcalm();
-        if(credentials is null)
-        {
-            return;
-        }
-
-        DateTimeOffset now = server.TimeProvider.GetUtcNow();
-        foreach(Core.Model.Credentials.VerifiableCredential credential in credentials)
-        {
-            if(credential is DataIntegritySecuredCredential secured)
-            {
-                VcalmVerificationOutcome outcome = await VcalmVerificationService.VerifyCredentialAsync(
-                    secured,
-                    oauth.VcalmCredentialVerification,
-                    oauth.ResolveVcalmStatusListAsync,
-                    now,
-                    context,
-                    cancellationToken).ConfigureAwait(false);
-
-                outcomes.Add(outcome);
-            }
-            else
-            {
-                //A contained credential with no embedded proof cannot be cryptographically verified
-                //here; report it as a credential-level ERROR (§3.8.1).
-                outcomes.Add(credential?.Type?.Contains(CredentialConstants.EnvelopedVerifiableCredentialType, StringComparer.Ordinal) == true
-                    ? BuildUnverifiableEnvelopeOutcome()
-                    : BuildUnparseableCredentialOutcome());
-            }
-        }
     }
 
 
@@ -632,38 +589,4 @@ public static class VcalmVerifierEndpoints
         return ServerHttpResponse.Json(
             400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
     }
-
-
-    /// <summary>
-    /// Reports an absent or unparseable proof map as <see cref="VcalmProblemTypes.ParsingError"/>,
-    /// as required by <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>.
-    /// </summary>
-    private static VcalmVerificationOutcome BuildUnparseableCredentialOutcome() =>
-        new()
-        {
-            Verified = false,
-            ProblemDetails =
-            [
-                VcalmProblemDetail.Error(VcalmProblemTypes.ParsingError, "PARSING_ERROR",
-                    "The secured credential or its proof could not be parsed as a map.")
-            ]
-        };
-
-
-    /// <summary>
-    /// Reports an unsupported credential envelope as <see cref="VcalmProblemTypes.UnsupportedSecuringMechanism"/>,
-    /// using the library-defined type permitted by <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4">RFC 9457 §4</see>.
-    /// </summary>
-    private static VcalmVerificationOutcome BuildUnverifiableEnvelopeOutcome() =>
-        new()
-        {
-            Verified = false,
-            ProblemDetails =
-            [
-                VcalmProblemDetail.Error(
-                    VcalmProblemTypes.UnsupportedSecuringMechanism,
-                    "UNSUPPORTED_SECURING_MECHANISM",
-                    VcalmProblemTypes.UnsupportedSecuringMechanismDetail)
-            ]
-        };
 }

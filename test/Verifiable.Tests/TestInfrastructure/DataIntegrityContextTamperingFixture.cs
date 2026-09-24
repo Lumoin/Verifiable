@@ -223,7 +223,7 @@ internal static class DataIntegrityContextTamperingFixture
     /// <summary>
     /// Signs an eddsa-jcs-2022 presentation for the holder of <paramref name="holderDidDocument"/> with the document's
     /// first verification method, through
-    /// <see cref="SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime)"/>.
+    /// <see cref="SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?)"/>.
     /// </summary>
     /// <param name="holderDidDocument">
     /// The holder's DID document: its first verification method signs, and its <c>id</c> is the presentation's holder.
@@ -246,7 +246,10 @@ internal static class DataIntegrityContextTamperingFixture
     /// The signature covers SHA-256 of the JCS form of the proof options followed by SHA-256 of the JCS form of the
     /// presentation, the eddsa-jcs-2022 hashing a bound signer performs too, so a verifier checks the proof over whatever
     /// binding it carries. The holder and the signer are separate inputs so a test can present a holder that does not
-    /// control the signing method.
+    /// control the signing method. When <paramref name="containedCredentials"/> or <paramref name="envelopedCredentials"/>
+    /// is given, its entries are part of the presentation this signs over, so a caller may embed an ALREADY tampered
+    /// contained credential and still get a validly-signed outer presentation: the signature covers whatever bytes are
+    /// present at signing time, tampered or not.
     /// </summary>
     /// <param name="holderDid">The DID the presentation's <c>holder</c> member claims.</param>
     /// <param name="signerVerificationMethodId">The verification method the proof's <c>verificationMethod</c> names.</param>
@@ -254,6 +257,8 @@ internal static class DataIntegrityContextTamperingFixture
     /// <param name="challenge">The challenge to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="domain">The domain to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="proofCreated">The instant written into the proof's <c>created</c> member.</param>
+    /// <param name="containedCredentials">The presentation's <c>verifiableCredential</c> entries, or <see langword="null"/> for none.</param>
+    /// <param name="envelopedCredentials">The presentation's enveloped credential entries, or <see langword="null"/> for none.</param>
     /// <returns>The secured presentation.</returns>
     public static async Task<DataIntegritySecuredPresentation> SignJcsPresentationAsync(
         string holderDid,
@@ -261,13 +266,17 @@ internal static class DataIntegrityContextTamperingFixture
         PrivateKeyMemory signerPrivateKey,
         string? challenge,
         string? domain,
-        DateTime proofCreated)
+        DateTime proofCreated,
+        List<VerifiableCredential>? containedCredentials = null,
+        List<EnvelopedVerifiableCredential>? envelopedCredentials = null)
     {
         VerifiablePresentation unsigned = new()
         {
             Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
-            Holder = holderDid
+            Holder = holderDid,
+            VerifiableCredential = containedCredentials,
+            EnvelopedVerifiableCredential = envelopedCredentials
         };
 
         DataIntegrityProof newProof = new()
@@ -305,6 +314,8 @@ internal static class DataIntegrityContextTamperingFixture
             Context = unsigned.Context,
             Type = unsigned.Type,
             Holder = unsigned.Holder,
+            VerifiableCredential = unsigned.VerifiableCredential,
+            EnvelopedVerifiableCredential = unsigned.EnvelopedVerifiableCredential,
             Proof = [newProof]
         };
     }

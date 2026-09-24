@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
@@ -95,6 +96,10 @@ internal sealed class VcalmExchangeEndpointTests
     /// <summary>Serializes a credential for the engine's verification configuration.</summary>
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializerExtensions.Serialize(credential, JsonOptions);
+
+    /// <summary>Reads a credential back for tampering a contained credential after it was signed.</summary>
+    private static CredentialDeserializeDelegate DeserializeCredential { get; } = serialized =>
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
 
     /// <summary>Serializes the proof options a Data Integrity proof hashes.</summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
@@ -331,8 +336,8 @@ internal sealed class VcalmExchangeEndpointTests
 
     /// <summary>
     /// §3.6.5 failed verification: the holder POSTs a presentation bound to a DIFFERENT challenge than
-    /// the engine requested → the engine cannot verify it → HTTP 4xx + ProblemDetails, and the §3.6.6
-    /// state goes to invalid with a lastError.
+    /// the engine requested → the engine cannot verify it → HTTP 4xx + ProblemDetails carrying Data
+    /// Integrity's own challenge-mismatch type, and the §3.6.6 state goes to invalid with a lastError.
     /// </summary>
     [TestMethod]
     public async Task ParticipateWithUnverifiablePresentationYields4xxAndInvalidState()
@@ -358,15 +363,101 @@ internal sealed class VcalmExchangeEndpointTests
 
         Assert.AreEqual(400, rejected.StatusCode, rejected.Body);
         using JsonDocument problem = JsonDocument.Parse(rejected.Body);
-        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR",
+        Assert.AreEqual("https://w3id.org/security#INVALID_CHALLENGE_ERROR",
             problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
-            "§3.6 / §3.8: an unverifiable presentation is a cryptographic-security ProblemDetail.");
+            "§3.6 / §3.8: an unverifiable presentation is refused with the failed check's own problem type; a "
+            + "wrong-challenge proof fails Data Integrity's own challenge check, not a signature check.");
 
         using JsonDocument invalidState = await GetExchangeStateAsync(app, segment, exchangeId).ConfigureAwait(false);
         Assert.AreEqual("invalid", invalidState.RootElement.GetProperty(VcalmParameterNames.State).GetString(),
             "§3.6.6: a rejected presentation drives the exchange to invalid.");
         Assert.IsTrue(invalidState.RootElement.TryGetProperty(VcalmParameterNames.LastError, out _),
             "§3.6.6: an invalid exchange carries a lastError ProblemDetail.");
+    }
+
+
+    /// <summary>
+    /// "Verifying each contained verifiable credential's proof, status, and validity period(s)" applies
+    /// to a presentation an exchange verifies too, through the same
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM §3.3.2</see> composition
+    /// its <see href="https://www.w3.org/TR/vcalm-1.0/#participate-in-an-exchange">§3.6 participate</see>
+    /// step calls: a contained credential the presentation's own proof does not cover independently — an
+    /// issuer-signed credential altered after it was signed, or an enveloped credential this verifier
+    /// cannot dispatch — refuses the exchange with the failed check's OWN problem type (a
+    /// cryptographic-security error only for the altered credential's failed signature; an
+    /// unsupported-securing-mechanism error for the envelope), never the presentation-proof-only
+    /// refusal a validly-signed outer envelope would otherwise pass. Driven over the real HTTPS wire
+    /// through <see cref="VcalmWireFixtures"/>, so the request crosses the same transport and body
+    /// handling a deployed endpoint does.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithUnverifiedContainedCredentialIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterExchangeAsync(app, holder).ConfigureAwait(false);
+
+        //A contained credential validly issued, then altered after signing: its own proof no longer
+        //matches its content, even though the outer presentation — signed AFTER the alteration — verifies.
+        DataIntegritySecuredCredential signedCredential = await SignContainedCredentialAsync().ConfigureAwait(false);
+        JsonObject credentialNode = JsonNode.Parse(SerializeCredential(signedCredential))!.AsObject();
+        credentialNode["credentialSubject"]!["id"] = "did:example:vcalm-exchange-attacker-subject";
+        DataIntegritySecuredCredential tamperedCredential =
+            (DataIntegritySecuredCredential)DeserializeCredential(credentialNode.ToJsonString());
+
+        string tamperedExchangeId = await CreateExchangeAndGetIdOverWireAsync(app, segment).ConfigureAwait(false);
+        using JsonDocument tamperedInitiate = await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, tamperedExchangeId, "{}", 200, TestContext.CancellationToken).ConfigureAwait(false);
+        JsonElement tamperedVpr = tamperedInitiate.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentationRequest);
+        string tamperedChallenge = tamperedVpr.GetProperty(VcalmParameterNames.Challenge).GetString()!;
+        string tamperedDomain = tamperedVpr.GetProperty(VcalmParameterNames.Domain).GetString()!;
+
+        string tamperedPresentationJson = await SignPresentationAsync(
+            holder, tamperedChallenge, tamperedDomain, containedCredentials: [tamperedCredential]).ConfigureAwait(false);
+        using JsonDocument tamperedRejection = await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, tamperedExchangeId, "{\"verifiablePresentation\":" + tamperedPresentationJson + "}", 400,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR",
+            tamperedRejection.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A contained credential altered after signing fails its own signature check.");
+
+        using JsonDocument tamperedState = await VcalmWireFixtures.GetExchangeWireAsync(
+            app, segment, tamperedExchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("invalid", tamperedState.RootElement.GetProperty(VcalmParameterNames.State).GetString(),
+            "A presentation refused for a contained credential's failure drives the exchange to invalid.");
+        Assert.IsTrue(tamperedState.RootElement.TryGetProperty(VcalmParameterNames.LastError, out _),
+            "An invalid exchange carries a lastError ProblemDetail naming the failed check.");
+
+        //A contained enveloped credential: this verifier dispatches no envelope verifier for it.
+        string envelopeExchangeId = await CreateExchangeAndGetIdOverWireAsync(app, segment).ConfigureAwait(false);
+        using JsonDocument envelopeInitiate = await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, envelopeExchangeId, "{}", 200, TestContext.CancellationToken).ConfigureAwait(false);
+        JsonElement envelopeVpr = envelopeInitiate.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentationRequest);
+        string envelopeChallenge = envelopeVpr.GetProperty(VcalmParameterNames.Challenge).GetString()!;
+        string envelopeDomain = envelopeVpr.GetProperty(VcalmParameterNames.Domain).GetString()!;
+
+        string envelopePresentationJson = await SignPresentationAsync(
+            holder, envelopeChallenge, envelopeDomain,
+            envelopedCredentials:
+            [
+                new EnvelopedVerifiableCredential
+                {
+                    Context = Context.FromIris(Context.Credentials20),
+                    Id = "data:application/vc+jwt,eyJhbGciOiJFUzI1NiJ9.e30.c2ln",
+                    Type = [CredentialConstants.EnvelopedVerifiableCredentialType]
+                }
+            ]).ConfigureAwait(false);
+        using JsonDocument envelopeRejection = await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, envelopeExchangeId, "{\"verifiablePresentation\":" + envelopePresentationJson + "}", 400,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("https://verifiable.lumoin.com/problems#UNSUPPORTED_SECURING_MECHANISM",
+            envelopeRejection.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A contained enveloped credential has no envelope verifier dispatched for it.");
+
+        using JsonDocument envelopeState = await VcalmWireFixtures.GetExchangeWireAsync(
+            app, segment, envelopeExchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("invalid", envelopeState.RootElement.GetProperty(VcalmParameterNames.State).GetString(),
+            "A presentation refused for a contained credential's failure drives the exchange to invalid.");
     }
 
 
@@ -678,14 +769,23 @@ internal sealed class VcalmExchangeEndpointTests
     /// <param name="holder">The holder signing the presentation.</param>
     /// <param name="challenge">The challenge the engine bound to the request.</param>
     /// <param name="domain">The domain the engine bound to the request.</param>
+    /// <param name="containedCredentials">The presentation's <c>verifiableCredential</c> entries, or <see langword="null"/> for none.</param>
+    /// <param name="envelopedCredentials">The presentation's enveloped credential entries, or <see langword="null"/> for none.</param>
     /// <returns>The serialized signed presentation.</returns>
-    private async Task<string> SignPresentationAsync(HolderSigningContext holder, string challenge, string domain)
+    private async Task<string> SignPresentationAsync(
+        HolderSigningContext holder,
+        string challenge,
+        string domain,
+        List<VerifiableCredential>? containedCredentials = null,
+        List<EnvelopedVerifiableCredential>? envelopedCredentials = null)
     {
         VerifiablePresentation unproofed = new()
         {
             Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
-            Holder = holder.HolderDid
+            Holder = holder.HolderDid,
+            VerifiableCredential = containedCredentials,
+            EnvelopedVerifiableCredential = envelopedCredentials
         };
 
         DataIntegritySecuredPresentation secured = await VcalmHolderService.CreatePresentationAsync(
@@ -699,6 +799,56 @@ internal sealed class VcalmExchangeEndpointTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         return holder.Signing.SerializePresentation(secured);
+    }
+
+
+    /// <summary>
+    /// Signs a minimal VC Data Model 2.0 credential with eddsa-jcs-2022 under a FRESH did:key issuer the
+    /// <see cref="KeyDidResolverSeam"/> resolves locally, for embedding as a <c>verifiableCredential</c>
+    /// entry inside a presentation the engine verifies. Its <c>@context</c> is the single base context
+    /// the engine's <see cref="VcalmCredentialVerification.KnownContext"/> is configured with
+    /// (<see cref="WireExchangeSeamsAsync"/>), so it context-validates cleanly before any tampering.
+    /// </summary>
+    /// <returns>The signed, validly-issued contained credential.</returns>
+    private async Task<DataIntegritySecuredCredential> SignContainedCredentialAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+        using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
+        using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
+
+        DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
+            issuerPublic,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            Pool,
+            includeDefaultContext: false,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        VerifiableCredential unsignedCredential = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Id = "urn:uuid:vcalm-exchange-contained-credential",
+            Type = ["VerifiableCredential"],
+            Issuer = new Issuer { Id = issuerDidDocument.Id!.ToString() },
+            CredentialSubject = [new CredentialSubject { Id = "did:example:vcalm-exchange-contained-subject" }]
+        };
+
+        return await unsignedCredential.SignAsync(
+            issuerPrivate,
+            issuerDidDocument.VerificationMethod![0].Id!,
+            EddsaJcs2022CryptosuiteInfo.Instance,
+            TimeProvider.GetUtcNow().UtcDateTime,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.EncodeBase58Btc,
+            SerializeCredential,
+            DeserializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Encoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            Pool,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -727,6 +877,20 @@ internal sealed class VcalmExchangeEndpointTests
     private async Task<string> CreateExchangeAndGetIdAsync(TestHostShell app, string segment, string body = "{}")
     {
         using JsonDocument created = await CreateExchangeAsync(app, segment, body).ConfigureAwait(false);
+
+        return created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
+    }
+
+
+    /// <summary>Creates an exchange through the §3.6.3 endpoint over the real wire and returns its id.</summary>
+    /// <param name="app">The host running the exchange tenant.</param>
+    /// <param name="segment">The tenant's path segment.</param>
+    /// <returns>The created exchange's id.</returns>
+    private async Task<string> CreateExchangeAndGetIdOverWireAsync(TestHostShell app, string segment)
+    {
+        using JsonDocument created = await VcalmWireFixtures.PostEndpointWireAsync(
+            app, segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "{}", 201, TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         return created.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
     }

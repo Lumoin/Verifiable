@@ -173,34 +173,85 @@ public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentati
     }
 
 
-    //Reads the heterogeneous verifiableCredential array, routing each element to either the
-    //enveloped-credential list or the credential list per its type/id discriminators.
+    /// <summary>
+    /// Reads the heterogeneous <c>verifiableCredential</c> member, routing each element to either the
+    /// enveloped-credential list or the credential list per its type/id discriminators. VC Data Model
+    /// 2.0 §4.13 requires the value to be "one or more verifiable credential and/or enveloped
+    /// verifiable credential objects": a lone object is a one-item list; anything else that is not an
+    /// array — or an array carrying a non-object item — is not one of those forms and is refused as
+    /// malformed.
+    /// </summary>
+    /// <param name="array">The <c>verifiableCredential</c> member's JSON value.</param>
+    /// <param name="presentation">The presentation whose <see cref="VerifiablePresentation.VerifiableCredential"/> and
+    /// <see cref="VerifiablePresentation.EnvelopedVerifiableCredential"/> this populates.</param>
+    /// <param name="options">The serializer options carrying the registered converters.</param>
     private static void ReadCredentialArray(JsonElement array, VerifiablePresentation presentation, JsonSerializerOptions options)
     {
-        if(array.ValueKind != JsonValueKind.Array)
+        switch(array.ValueKind)
         {
-            return;
+            case JsonValueKind.Object:
+            {
+                ReadCredentialElement(array, presentation, options);
+                break;
+            }
+            case JsonValueKind.Array:
+            {
+                List<VerifiableCredential>? credentials = null;
+                List<EnvelopedVerifiableCredential>? enveloped = null;
+
+                foreach(var element in array.EnumerateArray())
+                {
+                    if(element.ValueKind != JsonValueKind.Object)
+                    {
+                        JsonThrowHelper.ThrowJsonException(
+                            "Each verifiableCredential array item must be a verifiable credential or enveloped verifiable credential object.");
+                    }
+
+                    if(IsEnveloped(element))
+                    {
+                        enveloped ??= [];
+                        enveloped.Add(ReadEnveloped(element, options));
+                    }
+                    else
+                    {
+                        credentials ??= [];
+                        credentials.Add(Deserialize<VerifiableCredential>(element, options)!);
+                    }
+                }
+
+                presentation.VerifiableCredential = credentials;
+                presentation.EnvelopedVerifiableCredential = enveloped;
+                break;
+            }
+            default:
+            {
+                JsonThrowHelper.ThrowJsonException(
+                    "verifiableCredential must be one or more verifiable credential and/or enveloped verifiable credential objects.");
+                break;
+            }
         }
+    }
 
-        List<VerifiableCredential>? credentials = null;
-        List<EnvelopedVerifiableCredential>? enveloped = null;
 
-        foreach(var element in array.EnumerateArray())
+    /// <summary>
+    /// Reads a lone <c>verifiableCredential</c> object as VC Data Model 2.0 §4.13's one-item list: the
+    /// same enveloped/credential discrimination <see cref="ReadCredentialArray"/> applies to each array
+    /// element.
+    /// </summary>
+    /// <param name="element">The lone <c>verifiableCredential</c> object.</param>
+    /// <param name="presentation">The presentation whose <see cref="VerifiablePresentation.VerifiableCredential"/> or
+    /// <see cref="VerifiablePresentation.EnvelopedVerifiableCredential"/> one-item list this sets.</param>
+    /// <param name="options">The serializer options carrying the registered converters.</param>
+    private static void ReadCredentialElement(JsonElement element, VerifiablePresentation presentation, JsonSerializerOptions options)
+    {
+        if(IsEnveloped(element))
         {
-            if(IsEnveloped(element))
-            {
-                enveloped ??= [];
-                enveloped.Add(ReadEnveloped(element, options));
-            }
-            else
-            {
-                credentials ??= [];
-                credentials.Add(Deserialize<VerifiableCredential>(element, options)!);
-            }
+            presentation.EnvelopedVerifiableCredential = [ReadEnveloped(element, options)];
         }
-
-        presentation.VerifiableCredential = credentials;
-        presentation.EnvelopedVerifiableCredential = enveloped;
+        else
+        {
+            presentation.VerifiableCredential = [Deserialize<VerifiableCredential>(element, options)!];
+        }
     }
 
 

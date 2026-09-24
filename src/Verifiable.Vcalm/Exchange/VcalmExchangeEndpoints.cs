@@ -431,24 +431,21 @@ public static class VcalmExchangeEndpoints
         if(message.VerifiablePresentation is DataIntegritySecuredPresentation presentation
             && currentState is VcalmExchangeActiveState active)
         {
-            bool isVerified = await VcalmExchangeService.VerifyPresentationAsync(
+            Result<DataIntegritySecuredPresentation, VcalmProblemDetail> verification = await VcalmExchangeService.VerifyPresentationAsync(
                 presentation,
                 active.Challenge,
                 active.Domain,
                 vcalm.EffectiveExchangeVerification,
+                now,
                 context,
                 cancellationToken).ConfigureAwait(false);
 
-            if(!isVerified)
+            if(verification.Error is { } problem)
             {
-                //§3.6 4xx: the presented presentation did not verify. Stage the ProblemDetails reply
-                //and emit the rejection input that drives the exchange to invalid (keeping prior results).
-                VcalmProblemDetail problem = VcalmProblemDetail.Error(
-                    VcalmProblemTypes.CryptographicSecurityError,
-                    "CRYPTOGRAPHIC_SECURITY_ERROR",
-                    "The presented verifiablePresentation could not be verified against the exchange's "
-                    + "bound challenge and domain.");
-
+                //§3.6 4xx: the presented presentation, its bound challenge/domain, or one of its
+                //contained credentials, did not verify. The refusal carries the failed check's own
+                //problem type and a detail naming the failed part; stage the ProblemDetails reply and
+                //emit the rejection input that drives the exchange to invalid (keeping prior results).
                 context.SetVcalmExchangeReply(ProblemDetailsResponse(problem, 400));
 
                 return Advance(new VcalmExchangeRejected

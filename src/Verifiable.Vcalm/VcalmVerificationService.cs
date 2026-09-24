@@ -197,6 +197,100 @@ public static class VcalmVerificationService
 
 
     /// <summary>
+    /// Verifies every §3.3.2 contained credential of <paramref name="presentation"/>: each
+    /// <see cref="VerifiableCredential"/> its <c>verifiableCredential</c> member carries, through
+    /// <see cref="VerifyCredentialAsync"/> when it is a <see cref="DataIntegritySecuredCredential"/>, or
+    /// reported as an unsecured object (<see cref="VcalmProblemTypes.ParsingError"/>) otherwise; then
+    /// each <see cref="EnvelopedVerifiableCredential"/> the presentation carries, reported as
+    /// <see cref="VcalmProblemTypes.UnsupportedSecuringMechanism"/> — this composition dispatches no
+    /// envelope verifier for a credential envelope carried inside a presentation.
+    /// </summary>
+    /// <param name="presentation">The presentation whose contained credentials are verified, or <see langword="null"/> for none.</param>
+    /// <param name="verification">The application-supplied Data Integrity verify seams, or <see langword="null"/> (fail-closed — proofs report unverifiable).</param>
+    /// <param name="resolveStatusList">The application-supplied status-list seam, or <see langword="null"/> when status is not evaluated.</param>
+    /// <param name="now">The verification instant validity periods and status are measured against.</param>
+    /// <param name="context">The per-request context threaded to the DID resolver and canonicalizer.</param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <returns>One outcome per contained credential: plain credentials first in presentation order, then enveloped credentials in presentation order.</returns>
+    internal static async ValueTask<ImmutableArray<VcalmVerificationOutcome>> VerifyContainedCredentialsAsync(
+        VerifiablePresentation? presentation,
+        VcalmCredentialVerification? verification,
+        ResolveVcalmStatusListDelegate? resolveStatusList,
+        DateTimeOffset now,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if(presentation is null)
+        {
+            return ImmutableArray<VcalmVerificationOutcome>.Empty;
+        }
+
+        ImmutableArray<VcalmVerificationOutcome>.Builder outcomes = ImmutableArray.CreateBuilder<VcalmVerificationOutcome>();
+
+        if(presentation.VerifiableCredential is { } credentials)
+        {
+            foreach(VerifiableCredential credential in credentials)
+            {
+                outcomes.Add(credential is DataIntegritySecuredCredential secured
+                    ? await VerifyCredentialAsync(secured, verification, resolveStatusList, now, context, cancellationToken).ConfigureAwait(false)
+                    : BuildUnparseableCredentialOutcome());
+            }
+        }
+
+        //§3.3.2: VC-DM 2.0's EnvelopedVerifiableCredential form is a distinct securing mechanism this
+        //verifier's Data Integrity composition does not dispatch to; every enveloped contained credential
+        //is reported unverified rather than left unexamined.
+        if(presentation.EnvelopedVerifiableCredential is { } enveloped)
+        {
+            for(int i = 0; i < enveloped.Count; ++i)
+            {
+                outcomes.Add(BuildUnverifiableEnvelopeOutcome());
+            }
+        }
+
+        return outcomes.ToImmutable();
+    }
+
+
+    /// <summary>
+    /// Reports an absent or unparseable proof map as <see cref="VcalmProblemTypes.ParsingError"/>,
+    /// as required by <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>.
+    /// Shared by the §3.3.1 single-credential verify endpoint and <see cref="VerifyContainedCredentialsAsync"/>.
+    /// </summary>
+    internal static VcalmVerificationOutcome BuildUnparseableCredentialOutcome() =>
+        new()
+        {
+            Verified = false,
+            ProblemDetails =
+            [
+                VcalmProblemDetail.Error(VcalmProblemTypes.ParsingError, "PARSING_ERROR",
+                    "The secured credential or its proof could not be parsed as a map.")
+            ]
+        };
+
+
+    /// <summary>
+    /// Reports an unsupported credential envelope as <see cref="VcalmProblemTypes.UnsupportedSecuringMechanism"/>,
+    /// using the library-defined type permitted by <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4">RFC 9457 §4</see>.
+    /// Shared by the §3.3.1 single-credential verify endpoint and <see cref="VerifyContainedCredentialsAsync"/>.
+    /// </summary>
+    internal static VcalmVerificationOutcome BuildUnverifiableEnvelopeOutcome() =>
+        new()
+        {
+            Verified = false,
+            ProblemDetails =
+            [
+                VcalmProblemDetail.Error(
+                    VcalmProblemTypes.UnsupportedSecuringMechanism,
+                    "UNSUPPORTED_SECURING_MECHANISM",
+                    VcalmProblemTypes.UnsupportedSecuringMechanismDetail)
+            ]
+        };
+
+
+    /// <summary>
     /// The number of proofs one document may carry for this verifier: the configured
     /// <see cref="VcalmCredentialVerification.MaxProofsPerDocument"/>, or
     /// <see cref="VcalmCredentialVerification.DefaultMaxProofsPerDocument"/> when the verification seams are unwired, so
