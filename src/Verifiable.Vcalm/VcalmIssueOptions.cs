@@ -19,8 +19,9 @@ public sealed record VcalmIssueOptions
     public string? CredentialId { get; init; }
 
     /// <summary>
-    /// Whether the request carried a <c>credentialId</c> member (distinguishing an explicit
-    /// <c>null</c>/empty value from absence for the §3.2.1 SHOULD-NOT-both-set rule).
+    /// Whether the request carried a <c>credentialId</c> member: the parser admits only a non-empty
+    /// string value here, so this is <see langword="true"/> exactly when <see cref="CredentialId"/>
+    /// names a value, distinguishing that presence from absence for the §3.2.1 SHOULD-NOT-both-set rule.
     /// </summary>
     public bool HasCredentialId { get; init; }
 

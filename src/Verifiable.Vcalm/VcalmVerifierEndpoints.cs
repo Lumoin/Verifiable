@@ -292,7 +292,7 @@ public static class VcalmVerifierEndpoints
         ImmutableArray<VcalmProblemDetail>.Builder presentationProblems =
             ImmutableArray.CreateBuilder<VcalmProblemDetail>();
 
-        if(!string.IsNullOrEmpty(options.Challenge)
+        if(options.Challenge is not null
             && oauth.ConsumeVcalmChallengeAsync is { } consume)
         {
             bool isIssued = await consume(options.Challenge, context, cancellationToken).ConfigureAwait(false);
@@ -329,19 +329,39 @@ public static class VcalmVerifierEndpoints
         {
             //§3.3.2 unproofed presentation alternative: there is no presentation proof to verify, so
             //the presentation-level result carries no proof and the verification reduces to the
-            //contained credentials. The presentation sub-result reflects the bound challenge/domain
-            //(verified as true since there is nothing to contradict them at the presentation level).
+            //contained credentials. Data Integrity §4.4 raises INVALID_CHALLENGE_ERROR / INVALID_DOMAIN_ERROR
+            //when a binding "was given" and does not match the proof's own value; with no proof at all,
+            //a bound challenge or domain trivially fails to match, so a request that gave neither has
+            //nothing to contradict and the presentation sub-result reports verified.
+            ImmutableArray<VcalmProblemDetail>.Builder unproofedBindingProblems =
+                ImmutableArray.CreateBuilder<VcalmProblemDetail>();
+            if(options.Challenge is not null)
+            {
+                unproofedBindingProblems.Add(VcalmProblemDetail.Error(
+                    VcalmProblemTypes.InvalidChallengeError,
+                    "INVALID_CHALLENGE_ERROR",
+                    "The presentation carries no proof, so the requested options.challenge cannot be bound."));
+            }
+
+            if(options.Domain is not null)
+            {
+                unproofedBindingProblems.Add(VcalmProblemDetail.Error(
+                    VcalmProblemTypes.InvalidDomainError,
+                    "INVALID_DOMAIN_ERROR",
+                    "The presentation carries no proof, so the requested options.domain cannot be bound."));
+            }
+
             presentationResult = new VcalmPresentationProofResult
             {
-                Verified = true,
+                Verified = unproofedBindingProblems.Count == 0,
                 Challenge = options.Challenge,
                 Domain = options.Domain,
                 Holder = unproofed.Holder,
                 ProofInput = string.Empty,
-                ProblemDetails = ImmutableArray<VcalmProblemDetail>.Empty
+                ProblemDetails = unproofedBindingProblems.ToImmutable()
             };
 
-            presentationProofVerified = true;
+            presentationProofVerified = presentationResult.Verified;
 
             credentialOutcomes = await VcalmVerificationService.VerifyContainedCredentialsAsync(
                 unproofed, oauth.VcalmCredentialVerification, oauth.ResolveVcalmStatusListAsync, now, context, cancellationToken)

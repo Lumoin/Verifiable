@@ -1072,6 +1072,181 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// "Implementations MUST throw an error if an endpoint receives data, options, or option values
+    /// that it does not understand or know how to process."
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>. §3.3.2's own options
+    /// object names <c>challenge [string]</c>, <c>domain [string]</c> and <c>returnPresentation
+    /// [boolean]</c>; §3.3.1's names <c>returnCredential [boolean]</c> in its place
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">§3.3.1</see>,
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">§3.3.2</see>). A value of the
+    /// wrong kind for a member the calling endpoint does recognize, and a member that belongs only to
+    /// the OTHER endpoint's own options object, are both an option value this endpoint does not know
+    /// how to process.
+    /// </summary>
+    [TestMethod]
+    public async Task OptionValueTheVerifierCannotUseYields400()
+    {
+        await using TestHostShell presentationApp = new(TimeProvider);
+        string presentationSegment = await RegisterVerifierAsync(presentationApp, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync("bound-elsewhere", "verifier.example").ConfigureAwait(false);
+        string presentationJson = SerializePresentation(presentation);
+
+        async Task AssertPresentationOptionUnknownAsync(JsonObject options)
+        {
+            JsonObject request = new()
+            {
+                ["verifiablePresentation"] = JsonNode.Parse(presentationJson),
+                ["options"] = options
+            };
+            using JsonDocument response = await PostPresentationWireAsync(
+                presentationApp, presentationSegment, request.ToJsonString(), 400).ConfigureAwait(false);
+            Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+                response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        }
+
+        //A non-string challenge, a non-string domain (an array), a non-boolean returnResults, and the
+        //§3.3.1-only returnCredential presented to §3.3.2 — each is refused before the presentation's
+        //own proof, bound for a different challenge, is ever examined.
+        await AssertPresentationOptionUnknownAsync(new JsonObject { ["challenge"] = 123 }).ConfigureAwait(false);
+        await AssertPresentationOptionUnknownAsync(new JsonObject { ["domain"] = new JsonArray("v.example") }).ConfigureAwait(false);
+        await AssertPresentationOptionUnknownAsync(new JsonObject { ["returnResults"] = "true" }).ConfigureAwait(false);
+        await AssertPresentationOptionUnknownAsync(new JsonObject { ["returnCredential"] = true }).ConfigureAwait(false);
+
+        //Guards: §2.4's options object itself, when not an object at all, is refused independently of
+        //any one member's kind or endpoint — this stays green across the fix above.
+        JsonObject stringOptionsRequest = new() { ["verifiablePresentation"] = JsonNode.Parse(presentationJson), ["options"] = "x" };
+        using JsonDocument stringOptionsResponse = await PostPresentationWireAsync(
+            presentationApp, presentationSegment, stringOptionsRequest.ToJsonString(), 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            stringOptionsResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+
+        JsonObject arrayOptionsRequest = new() { ["verifiablePresentation"] = JsonNode.Parse(presentationJson), ["options"] = new JsonArray() };
+        using JsonDocument arrayOptionsResponse = await PostPresentationWireAsync(
+            presentationApp, presentationSegment, arrayOptionsRequest.ToJsonString(), 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            arrayOptionsResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+
+        await using TestHostShell credentialApp = new(TimeProvider);
+        string credentialSegment = await RegisterVerifierAsync(credentialApp).ConfigureAwait(false);
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(false).ConfigureAwait(false);
+        string credentialJson = SerializeCredential(credential);
+
+        async Task AssertCredentialOptionUnknownAsync(JsonObject options)
+        {
+            JsonObject request = new()
+            {
+                ["verifiableCredential"] = JsonNode.Parse(credentialJson),
+                ["options"] = options
+            };
+            using JsonDocument response = await PostCredentialWireAsync(
+                credentialApp, credentialSegment, request.ToJsonString(), 400).ConfigureAwait(false);
+            Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+                response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        }
+
+        //The §3.3.2-only challenge, domain and returnPresentation presented to §3.3.1.
+        await AssertCredentialOptionUnknownAsync(new JsonObject { ["challenge"] = "some-challenge" }).ConfigureAwait(false);
+        await AssertCredentialOptionUnknownAsync(new JsonObject { ["domain"] = "some-domain" }).ConfigureAwait(false);
+        await AssertCredentialOptionUnknownAsync(new JsonObject { ["returnPresentation"] = true }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see> leaves the resolution of a
+    /// repeated JSON member name to the application; <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM
+    /// §2.4</see>'s "Implementations MUST throw an error if an endpoint receives data, options, or option values
+    /// that it does not understand or know how to process" covers a body no reader can process without picking
+    /// between two conflicting values for the same name, so a repeated top-level or <c>options</c> member name
+    /// is refused rather than resolved to whichever occurrence a per-name lookup happens to find.
+    /// </summary>
+    [TestMethod]
+    public async Task RepeatedMemberNameYields400()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync("bound-elsewhere", "verifier.example").ConfigureAwait(false);
+        string presentationJson = SerializePresentation(presentation);
+
+        //A repeated top-level "options" member: a reader that took only the first occurrence would see
+        //challenge:123 and reject before the second, empty options object ever reached the proof's own
+        //binding — picking between the two guesses is refused instead.
+        string duplicateTopLevelBody = "{\"verifiablePresentation\":" + presentationJson
+            + ",\"options\":{\"challenge\":123},\"options\":{}}";
+        using JsonDocument duplicateTopLevelResponse = await PostPresentationWireAsync(
+            app, segment, duplicateTopLevelBody, 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            duplicateTopLevelResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+
+        //A member name repeated WITHIN one options object.
+        string duplicateOptionMemberBody = "{\"verifiablePresentation\":" + presentationJson
+            + ",\"options\":{\"challenge\":\"bound-elsewhere\",\"challenge\":\"a-different-challenge\"}}";
+        using JsonDocument duplicateOptionMemberResponse = await PostPresentationWireAsync(
+            app, segment, duplicateOptionMemberBody, 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            duplicateOptionMemberResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>: "The behavior of
+    /// software that receives JSON texts containing such values is unpredictable" — an unpaired surrogate escape
+    /// in an <c>options.challenge</c> string is data <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM
+    /// §2.4</see> requires this endpoint to refuse, not an input that escapes the parser as an exception.
+    /// </summary>
+    [TestMethod]
+    public async Task UnpairedSurrogateOptionValueYields400()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync("bound-elsewhere", "verifier.example").ConfigureAwait(false);
+        string presentationJson = SerializePresentation(presentation);
+
+        string body = "{\"verifiablePresentation\":" + presentationJson + ",\"options\":{\"challenge\":\"\\ud800\"}}";
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, body, 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM §3.3.2</see>: "Alternatively, the
+    /// /presentations/verify endpoint can also use the following schema" naming <c>presentation</c> in place of
+    /// <c>verifiablePresentation</c> — one alternative or the other, never both, and each names an OBJECT. A body
+    /// naming both members, or naming either with a non-object value, is data this endpoint does not know how to
+    /// process: "Implementations MUST throw an error if an endpoint receives data, options, or option values that
+    /// it does not understand or know how to process"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task PresentationAndVerifiablePresentationMembersAreExclusive()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync("challenge", "domain").ConfigureAwait(false);
+        string presentationJson = SerializePresentation(presentation);
+
+        //Both members present: an object 'presentation' beside a wrong-kind 'verifiablePresentation'. A reader
+        //that dropped the wrong-kind member and fell back to the unproofed alternative would verify this with
+        //no proof at all.
+        string bothPresentObjectAndWrongKindVpBody = "{\"presentation\":{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],"
+            + "\"type\":[\"VerifiablePresentation\"]},\"verifiablePresentation\":\"eyJ.not.an.object\"}";
+        using JsonDocument bothPresentResponse = await PostPresentationWireAsync(
+            app, segment, bothPresentObjectAndWrongKindVpBody, 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            bothPresentResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+
+        //A wrong-kind 'presentation' beside the secured 'verifiablePresentation'. A reader that dropped the
+        //wrong-kind member and fell through to the secured alternative would silently ignore it.
+        string wrongKindPresentationBesideVpBody = "{\"verifiablePresentation\":" + presentationJson + ",\"presentation\":5}";
+        using JsonDocument wrongKindResponse = await PostPresentationWireAsync(
+            app, segment, wrongKindPresentationBesideVpBody, 400).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            wrongKindResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+    }
+
+
+    /// <summary>
     /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID §3.3</see>: "If controllerDocument
     /// is not a conforming controlled identifier document, an error MUST be raised and SHOULD convey an error type of
     /// INVALID_CONTROLLED_IDENTIFIER_DOCUMENT." A controller document fetch that ends on its own budget while the
@@ -3484,6 +3659,75 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// Data Integrity §4.4: "If challenge was given, and it does not match proof.challenge, an error
+    /// MUST be raised and SHOULD convey an error type of INVALID_CHALLENGE_ERROR" and "If domain was
+    /// given, and it does not contain the same strings as proof.domain (treating a single string as a
+    /// set containing just that string), an error MUST be raised and SHOULD convey an error type of
+    /// INVALID_DOMAIN_ERROR."
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>.
+    /// The <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">§3.3.2</see> unproofed
+    /// <c>presentation</c> alternative carries no proof, so a requested challenge or domain trivially
+    /// fails to match one.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestedBindingWithoutProofVerifiesFalse()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+
+        using JsonDocument challengeResponse = await PostPresentationWireAsync(
+            app, segment, BuildUnproofedPresentationRequestBody([], challenge: "requested-challenge"), 200).ConfigureAwait(false);
+        Assert.IsFalse(challengeResponse.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "A presentation with no proof cannot satisfy a requested challenge binding.");
+        AssertVerificationProblem(challengeResponse, "https://w3id.org/security#INVALID_CHALLENGE_ERROR");
+        JsonElement challengeResult = challengeResponse.RootElement
+            .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Presentation).GetProperty(VcalmParameterNames.Challenge);
+        Assert.IsFalse(challengeResult.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "The challenge sub-result itself reports false beside the error that produced it.");
+
+        using JsonDocument domainResponse = await PostPresentationWireAsync(
+            app, segment, BuildUnproofedPresentationRequestBody([], domain: "requested-domain"), 200).ConfigureAwait(false);
+        Assert.IsFalse(domainResponse.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "A presentation with no proof cannot satisfy a requested domain binding.");
+        AssertVerificationProblem(domainResponse, "https://w3id.org/security#INVALID_DOMAIN_ERROR");
+        JsonElement domainResult = domainResponse.RootElement
+            .GetProperty(VcalmParameterNames.Results).GetProperty(VcalmParameterNames.Presentation).GetProperty(VcalmParameterNames.Domain);
+        Assert.IsFalse(domainResult.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "The domain sub-result itself reports false beside the error that produced it.");
+    }
+
+
+    /// <summary>
+    /// Data Integrity §4.4: "If challenge was given, and it does not match proof.challenge, an error
+    /// MUST be raised" — an empty string is a value GIVEN, not the absence of one.
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM §3.3.3</see>: "the instance
+    /// should create a challenge for use during verification"; this instance's own issuance-tracking
+    /// gate consults its consume seam for an explicit empty <c>options.challenge</c> exactly as it
+    /// does for a non-empty one, rather than treating the empty string as though none were given.
+    /// </summary>
+    [TestMethod]
+    public async Task ExplicitEmptyChallengeReachesTheIssuanceGate()
+    {
+        //A proofed presentation whose OWN proof binds an empty challenge, presented with an EXPLICIT
+        //empty options.challenge: the Data Integrity binding check matches ("" equals ""), so only the
+        //issuance gate is under test — it must still consult a wired consume seam for an empty
+        //challenge rather than treating it as none given.
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(
+            app, canonicalizer: JcsCanonicalizer, consumeChallenge: (_, _, _) => ValueTask.FromResult(false)).ConfigureAwait(false);
+        const string Domain = "verifier.example";
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync(string.Empty, Domain).ConfigureAwait(false);
+        string body = BuildPresentationRequestBody(presentation, string.Empty, Domain, returnProblemDetails: true);
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, body, 200).ConfigureAwait(false);
+        Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "An explicit empty challenge still reaches the issuance gate, which this seam denies.");
+        AssertVerificationProblem(response, "https://verifiable.lumoin.com/problems#CHALLENGE_NOT_ISSUED");
+    }
+
+
+    /// <summary>
     /// §3.3.1 malformed input: a body that is not a JSON object yields HTTP 400.
     /// </summary>
     [TestMethod]
@@ -4190,12 +4434,15 @@ internal sealed class VcalmVerifierEndpointTests
     /// <summary>
     /// Builds a §3.3.2 verify request whose <c>presentation</c> member is an unproofed presentation carrying
     /// <paramref name="credentials"/>, asking for problem details and the verbose results, and binding
-    /// <paramref name="challenge"/> as <c>options.challenge</c> when one is given.
+    /// <paramref name="challenge"/> / <paramref name="domain"/> as <c>options.challenge</c> / <c>options.domain</c>
+    /// when given.
     /// </summary>
     /// <param name="credentials">The credentials the presentation contains.</param>
     /// <param name="challenge">The challenge the request binds, or <see langword="null"/> for none.</param>
+    /// <param name="domain">The domain the request binds, or <see langword="null"/> for none.</param>
     /// <returns>The request body JSON text.</returns>
-    private static string BuildUnproofedPresentationRequestBody(List<VerifiableCredential> credentials, string? challenge = null)
+    private static string BuildUnproofedPresentationRequestBody(
+        List<VerifiableCredential> credentials, string? challenge = null, string? domain = null)
     {
         VerifiablePresentation presentation = new()
         {
@@ -4205,9 +4452,10 @@ internal sealed class VcalmVerifierEndpointTests
         };
 
         string challengeOption = challenge is null ? string.Empty : ",\"challenge\":" + JsonSerializer.Serialize(challenge);
+        string domainOption = domain is null ? string.Empty : ",\"domain\":" + JsonSerializer.Serialize(domain);
 
         return "{\"presentation\":" + SerializePresentation(presentation)
-            + ",\"options\":{\"returnProblemDetails\":true,\"returnResults\":true" + challengeOption + "}}";
+            + ",\"options\":{\"returnProblemDetails\":true,\"returnResults\":true" + challengeOption + domainOption + "}}";
     }
 
 

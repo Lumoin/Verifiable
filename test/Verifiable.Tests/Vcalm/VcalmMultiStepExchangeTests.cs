@@ -950,6 +950,140 @@ internal sealed class VcalmMultiStepExchangeTests
 
 
     /// <summary>
+    /// "Implementations MUST throw an error if an endpoint receives data, options, or option values
+    /// that it does not understand or know how to process."
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>. §3.6.1 names the shape
+    /// of every <c>POST /workflows</c> step and workflow member
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">§3.6.1</see>), including
+    /// <c>presentationSchema</c>: "It MUST be an object of the following form: type [string] The value
+    /// MUST be JsonSchema. jsonSchema [object] an object", "or … It MUST be an object of the following
+    /// form: type [string]". A member present with a value of the wrong kind, an envelope fitting
+    /// neither of those two forms, or a step member name repeated
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see> leaves the
+    /// resolution of a duplicate member name to the application), is refused before the step graph is
+    /// stored, never silently dropped to its default or resolved to one occurrence.
+    /// </summary>
+    [TestMethod]
+    public async Task WorkflowMemberOfWrongKindYields400()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterMultiStepAsync(app, holder, workflow: null).ConfigureAwait(false);
+
+        static string StepCase(string memberJson) =>
+            "{\"initialStep\":\"step1\",\"steps\":{\"step1\":{" + memberJson + "}}}";
+
+        static string WorkflowCase(string memberJson) =>
+            "{\"initialStep\":\"step1\",\"steps\":{\"step1\":{}}," + memberJson + "}";
+
+        //§3.6.1 presentationSchema is EITHER an object naming type "JsonSchema" with an object
+        //jsonSchema, OR an object naming any other type string; a bare string, an object missing type,
+        //a "JsonSchema" envelope missing jsonSchema, and a non-object jsonSchema all fit neither form.
+        //The remaining cases are one wrong-kind member each, at step level and workflow level, and a
+        //step member name repeated with two different values.
+        string[] cases =
+        [
+            StepCase("\"presentationSchema\":\"JsonSchema\""),
+            StepCase("\"presentationSchema\":{}"),
+            StepCase("\"presentationSchema\":{\"type\":\"JsonSchema\"}"),
+            StepCase("\"presentationSchema\":{\"type\":\"JsonSchema\",\"jsonSchema\":\"x\"}"),
+            StepCase("\"nextStep\":5"),
+            StepCase("\"redirectUrl\":true"),
+            StepCase("\"verifiablePresentation\":\"x\""),
+            StepCase("\"openId\":[]"),
+            StepCase("\"createChallenge\":\"true\""),
+            StepCase("\"createChallenge\":true,\"createChallenge\":false"),
+            WorkflowCase("\"id\":7"),
+            WorkflowCase("\"controller\":{}")
+        ];
+
+        foreach(string workflowCase in cases)
+        {
+            using JsonDocument response = await VcalmWireFixtures.PostEndpointWireAsync(
+                app, segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, workflowCase, 400, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+                response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+                $"Case {workflowCase} is refused as malformed.");
+        }
+
+        Assert.IsEmpty(WorkflowStore, "Every case was refused before the store seam, so nothing was stored.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM §3.6.1</see>: <c>presentationSchema</c>
+    /// "MUST be an object of the following form: type [string] The value MUST be JsonSchema. jsonSchema [object]
+    /// an object", "or … It MUST be an object of the following form: type [string]" — both well-formed
+    /// alternatives are accepted and stored, so a parser refusing every <c>presentationSchema</c> could not pass
+    /// this beside <see cref="WorkflowMemberOfWrongKindYields400"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task WorkflowPresentationSchemaAlternativesAreAccepted()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterMultiStepAsync(app, holder, workflow: null).ConfigureAwait(false);
+
+        async Task AssertAcceptedAsync(string presentationSchemaJson)
+        {
+            string body = "{\"initialStep\":\"step1\",\"steps\":{\"step1\":{\"presentationSchema\":"
+                + presentationSchemaJson + "}}}";
+            using JsonDocument response = await VcalmWireFixtures.PostEndpointWireAsync(
+                app, segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, body, 201, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            string workflowId = response.RootElement.GetProperty(VcalmParameterNames.Id).GetString()!;
+            VcalmWorkflowConfiguration stored = WorkflowStore[workflowId];
+            Assert.IsNotNull(stored.Steps["step1"].PresentationSchemaJson,
+                $"The accepted presentationSchema {presentationSchemaJson} is stored verbatim.");
+        }
+
+        await AssertAcceptedAsync("{\"type\":\"JsonSchema\",\"jsonSchema\":{}}").ConfigureAwait(false);
+        await AssertAcceptedAsync("{\"type\":\"SomeOtherMechanism\"}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM §3.6.1</see>: "Each issue request
+    /// object identifies a credential template to use, either by its identifier (credentialTemplateId) or by
+    /// its index (credentialTemplateIndex)"; a <c>credentialTemplates</c> entry names its own <c>id</c>. Each
+    /// is a <c>[string]</c> (<c>credentialTemplateIndex</c> an <c>[integer]</c>); a present member of the
+    /// wrong kind is refused before the step graph is stored, never silently coerced to absent.
+    /// </summary>
+    [TestMethod]
+    public async Task IssueRequestAndCredentialTemplateMemberOfWrongKindYields400()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterMultiStepAsync(app, holder, workflow: null).ConfigureAwait(false);
+
+        string[] cases =
+        [
+            //A wrong-kind credentialTemplateId beside a well-formed credentialTemplateIndex: dropping the
+            //wrong-kind member and reading only the index would satisfy the XOR-presence check below and
+            //accept the step with no id at all.
+            "{\"initialStep\":\"step1\",\"steps\":{\"step1\":{\"issueRequests\":[{\"credentialTemplateId\":5,\"credentialTemplateIndex\":0}]}}}",
+            //A well-formed credentialTemplateId beside a wrong-kind credentialTemplateIndex: the same drop
+            //would satisfy the XOR check reading only the id.
+            "{\"initialStep\":\"step1\",\"steps\":{\"step1\":{\"issueRequests\":[{\"credentialTemplateId\":\"t\",\"credentialTemplateIndex\":\"0\"}]}}}",
+            "{\"initialStep\":\"step1\",\"steps\":{\"step1\":{}},\"credentialTemplates\":[{\"id\":7,\"type\":\"jsonata\",\"template\":\"{}\"}]}"
+        ];
+
+        foreach(string workflowCase in cases)
+        {
+            using JsonDocument response = await VcalmWireFixtures.PostEndpointWireAsync(
+                app, segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, workflowCase, 400, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+                response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+                $"Case {workflowCase} is refused as malformed.");
+        }
+
+        Assert.IsEmpty(WorkflowStore, "Every case was refused before the store seam, so nothing was stored.");
+    }
+
+
+    /// <summary>
     /// §3.6.5 active re-poll: "Posting an empty body will start the exchange or return what the exchange
     /// is expecting to complete the next step." On a workflow-driven exchange ALREADY active (the
     /// engine has issued a presentation request and is awaiting it), an empty re-poll RE-SENDS the

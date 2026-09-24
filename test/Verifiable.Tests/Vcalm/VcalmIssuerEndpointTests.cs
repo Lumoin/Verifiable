@@ -603,6 +603,71 @@ internal sealed class VcalmIssuerEndpointTests
 
 
     /// <summary>
+    /// "Implementations MUST throw an error if an endpoint receives data, options, or option values
+    /// that it does not understand or know how to process."
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>. §3.2.1 names
+    /// <c>credentialId [string]</c>
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#issue-credential">§3.2.1</see>), so a value of any
+    /// other kind, including an explicit JSON <c>null</c> or an empty string naming no URI, is an
+    /// option value this issuer does not know how to process; so is a <c>credentialId</c> member
+    /// repeated in the same <c>options</c> object
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see> leaves the
+    /// resolution of a duplicate member name to the application).
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialIdOfWrongKindYields400()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+        string credentialJson = BuildCredentialJson(ctx.IssuerDid, credentialId: null);
+
+        async Task AssertCredentialIdRejectedAsync(string credentialIdJson)
+        {
+            string body = "{\"credential\":" + credentialJson + ",\"options\":{\"credentialId\":" + credentialIdJson + "}}";
+            using JsonDocument response = await VcalmWireFixtures.PostIssueWireAsync(
+                app, ctx.Segment, body, 400, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+                response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        }
+
+        await AssertCredentialIdRejectedAsync("42").ConfigureAwait(false);
+        await AssertCredentialIdRejectedAsync("{}").ConfigureAwait(false);
+        await AssertCredentialIdRejectedAsync("null").ConfigureAwait(false);
+
+        //§3.2.1 credentialId is "a URI identifying" the credential; an empty string names none, so it
+        //is refused rather than silently treated as though credentialId were never given.
+        await AssertCredentialIdRejectedAsync("\"\"").ConfigureAwait(false);
+
+        Assert.IsEmpty(CredentialStore, "A refused issue request is never issued, so the store seam is never reached.");
+
+        //Guards: a non-string mandatoryPointers item and a non-object options are refused
+        //independently of the fix under test, and stay green across it.
+        string numericPointerBody = "{\"credential\":" + credentialJson + ",\"options\":{\"mandatoryPointers\":[1]}}";
+        using JsonDocument numericPointerResponse = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, numericPointerBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            numericPointerResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+
+        string arrayOptionsBody = "{\"credential\":" + credentialJson + ",\"options\":[]}";
+        using JsonDocument arrayOptionsResponse = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, arrayOptionsBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            arrayOptionsResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+
+        //A repeated options member name (RFC 8259 §4 leaves duplicate resolution to the application) is
+        //refused rather than resolved to whichever occurrence a per-name read would find: the first
+        //credentialId here names a value a reader taking the first occurrence would store.
+        string duplicateOptionMemberBody = "{\"credential\":" + credentialJson
+            + ",\"options\":{\"credentialId\":\"urn:uuid:first\",\"credentialId\":\"urn:uuid:second\"}}";
+        using JsonDocument duplicateOptionMemberResponse = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, duplicateOptionMemberBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            duplicateOptionMemberResponse.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString());
+        Assert.IsEmpty(CredentialStore, "The duplicate-option case was refused before the store seam, so nothing was stored.");
+    }
+
+
+    /// <summary>
     /// §3.2.2 retrieval: a stored credential is returned with HTTP 200, an unknown id is 404, and a
     /// soft-deleted id is 410 Gone. §3.2.2: 200 / 404 / 410 (and never 418).
     /// </summary>

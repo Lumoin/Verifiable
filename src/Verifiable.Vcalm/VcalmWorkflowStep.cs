@@ -20,10 +20,13 @@ namespace Verifiable.Vcalm;
 /// successor; MUST NOT be present on the final step, §3.6.1).
 /// </para>
 /// <para>
-/// Modeled-but-deferred: <c>presentationSchema</c> (a §3.6.1 JSON-Schema validation of the presented
-/// presentation — no JSON Schema package, so the field is carried verbatim but not enforced) and
-/// <c>openId</c> (the OID4VP / OID4VCI bridge — the field is carried verbatim but the vcapi participation
-/// path does not consume it).
+/// <c>presentationSchema</c> MUST be a JSON object of the §3.6.1 shape (a string <c>type</c>, and for
+/// the <c>JsonSchema</c> mechanism an object <c>jsonSchema</c>), which is checked when a workflow is
+/// authored; the field is then carried verbatim here. A presented presentation is checked against it
+/// at participation through the validator the deployment registers for the envelope's <c>type</c> (see
+/// <see cref="PresentationSchemaJson"/>); the library bundles no JSON Schema engine. Modeled but
+/// DEFERRED: <c>openId</c> (the OID4VP / OID4VCI bridge — MUST be a JSON object, carried verbatim, but
+/// the vcapi participation path does not consume it).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("VcalmWorkflowStep CreateChallenge={CreateChallenge} NextStep={NextStep}")]
