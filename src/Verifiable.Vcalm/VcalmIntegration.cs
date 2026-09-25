@@ -861,6 +861,36 @@ public sealed class VcalmIntegration: ServerIntegration
             : ValueTask.FromResult(VcalmPresentationSigning);
 
     /// <summary>
+    /// Resolves the §3.4.3.2 current communication channel's domain for the §3.5.2 create-presentation
+    /// request being answered. Required for the §3.5.2 <c>POST /presentations</c> route to materialize
+    /// at all, in the pattern <see cref="AuthorizeVcalmCoordinatorAsync"/> sets for its own required
+    /// seam — without it the route does not materialize (fail-closed; HTTP 404). VCALM 1.0 §3.4.3.2:
+    /// "Holder implementations MUST ensure that the domain specified by the verifier matches the domain
+    /// used for the current channel of communication" (<see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-response-format">
+    /// VCALM 1.0 §3.4.3.2</see>).
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveVcalmChannelDomainDelegate? ResolveVcalmChannelDomainAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
     /// Persists a presentation the VCALM 1.0 §3.5.2 endpoint secured, keyed by its id, so the §3.5.3 /
     /// §3.5.4 / §3.5.5 listing / retrieval / deletion interfaces can reach it. Optional — when unwired
     /// the holder is stateless and the §3.5.3 / §3.5.4 / §3.5.5 MAY interfaces do not materialize.

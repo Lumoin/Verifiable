@@ -12,7 +12,9 @@ namespace Verifiable.Vcalm;
 /// presentation Data Integrity sign surface
 /// (<see cref="PresentationDataIntegrityExtensions.SignAsync"/>, §3.5.2). It does not re-roll
 /// cryptography: the cryptosuite-specific seams flow in on <see cref="VcalmCredentialDerivation"/> and
-/// <see cref="VcalmPresentationSigning"/>.
+/// <see cref="VcalmPresentationSigning"/>. It performs no
+/// <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-response-format">VCALM 1.0
+/// §3.4.3.2</see> channel-domain check itself; see the <see cref="CreatePresentationAsync"/> remarks.
 /// </summary>
 public static class VcalmHolderService
 {
@@ -102,12 +104,23 @@ public static class VcalmHolderService
     /// <param name="context">The per-request context threaded to the canonicalizer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <remarks>
+    /// <para>
     /// The presentation proof covers the presentation's existing proofs and every contained credential's proofs, so each
     /// must carry the <c>type</c>, <c>verificationMethod</c> and <c>proofPurpose</c>
     /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of every
     /// proof (<see cref="HasCompleteInputProofs"/>). The §3.5.2 endpoint refuses an input that does not with a 400 through
     /// that same predicate before it calls this method; any other caller that passes one breaks this method's precondition
     /// and is refused before any signing, so no presentation proof ever signs over a defective input proof.
+    /// </para>
+    /// <para>
+    /// This method performs NO <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-response-format">
+    /// VCALM 1.0 §3.4.3.2</see> channel-domain check: "Holder implementations MUST ensure that the domain specified by
+    /// the verifier matches the domain used for the current channel of communication." It signs
+    /// <paramref name="domain"/> exactly as given. The §3.5.2 <c>POST /presentations</c> endpoint enforces that MUST
+    /// before calling this method, through <see cref="VcalmIntegration.ResolveVcalmChannelDomainAsync"/>; any other
+    /// caller MUST confirm that <paramref name="domain"/> equals its own current communication channel's domain
+    /// before calling.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException">An input proof of <paramref name="presentation"/> lacks a Data Integrity §4.4 mandatory member.</exception>
     public static async ValueTask<DataIntegritySecuredPresentation> CreatePresentationAsync(

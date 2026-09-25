@@ -23,7 +23,6 @@ using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Vcalm;
-using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -151,6 +150,15 @@ internal sealed class VcalmHolderEndpointTests
     /// <summary>The in-memory presentation store the §3.5.3 / §3.5.4 / §3.5.5 storage seams read and write.</summary>
     private ConcurrentDictionary<string, VcalmStoredPresentation> PresentationStore { get; } =
         new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The value the wired §3.4.3.2 channel-domain seam answers with for the request about to be
+    /// dispatched — staged before each create-presentation call, the same "stage a value, wire a
+    /// resolver that reads it" shape <see cref="PresentationStore"/> uses for the storage seams.
+    /// Defaults to the domain literal every create-presentation success case in this class already
+    /// uses, so a test that never touches the channel domain still signs.
+    /// </summary>
+    private string? ChannelDomainSeamValue { get; set; } = "verifier.example";
 
 
     /// <summary>Disposes the registrations and key material the test created, and empties the presentation store.</summary>
@@ -432,65 +440,89 @@ internal sealed class VcalmHolderEndpointTests
 
 
     /// <summary>
-    /// §3.4.3.2 holder anti-replay (refuse): when the deployment staged the current communication
-    /// channel's domain on the context and it does NOT match the request's <c>options.domain</c>, the
-    /// holder refuses to sign — a 400 MALFORMED_VALUE_ERROR — because the request's domain names a
-    /// verifier other than the one on the wire (a relayed / replayed presentation request).
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-response-format">VCALM 1.0
+    /// §3.4.3.2</see>: "Holder implementations MUST ensure that the domain specified by the verifier
+    /// matches the domain used for the current channel of communication." The §3.4.3.2 channel-domain
+    /// seam is REQUIRED for the §3.5.2 <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">
+    /// create-presentation</see> route to materialize at all (a host that never wires it answers 404,
+    /// exactly like every other required seam); once wired, a channel it cannot determine (the seam
+    /// answers <see langword="null"/>) or a channel whose domain does not match the request's
+    /// <c>options.domain</c> both refuse with <c>https://w3id.org/security#INVALID_DOMAIN_ERROR</c> and
+    /// sign and store nothing —
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>: "If
+    /// domain was given, and it does not contain the same strings as proof.domain (treating a single
+    /// string as a set containing just that string), an error MUST be raised and SHOULD convey an error
+    /// type of INVALID_DOMAIN_ERROR" — never the VC Data Model's <c>MALFORMED_VALUE_ERROR</c>, since the
+    /// request itself is well-formed. A channel whose domain matches signs normally and stores the result.
     /// </summary>
     [TestMethod]
-    public async Task CreatePresentationRefusesWhenChannelDomainMismatches()
+    public async Task CreatePresentationRequiresTheChannelDomain()
     {
         await using TestHostShell app = new(TimeProvider);
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
 
+        const string RequestedDomain = "verifier.example";
         string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson
-            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\"}}";
+            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"" + RequestedDomain + "\"}}";
 
-        //The channel the holder is actually answering over belongs to a DIFFERENT verifier than the
-        //one the request's domain names — the §3.4.3.2 mismatch the holder must refuse fail-closed.
-        ExchangeContext context = [];
-        context.SetCurrentChannelDomain("attacker.example");
+        //A channel the seam cannot determine refuses fail-closed: the holder never signs over a
+        //domain it cannot confirm belongs to the channel it is actually communicating on.
+        ChannelDomainSeamValue = null;
+        using JsonDocument unknownChannel = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("https://w3id.org/security#INVALID_DOMAIN_ERROR",
+            unknownChannel.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "An undeterminable channel domain is a §3.4.3.2 anti-replay refusal.");
+        Assert.Contains("could not be determined",
+            unknownChannel.RootElement.GetProperty(VcalmParameterNames.ProblemDetail).GetString()!,
+            "The detail names an undeterminable channel, not a mismatch.");
+        Assert.IsTrue(PresentationStore.IsEmpty, "An undeterminable channel domain signs and stores nothing.");
 
-        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
-            segment, WellKnownVcalmEndpointNames.VcalmCreatePresentation, "POST",
-            new RequestFields(), createBody, context, TestContext.CancellationToken).ConfigureAwait(false);
+        //A channel belonging to a DIFFERENT verifier than the one the request's domain names is the
+        //§3.4.3.2 relayed / replayed request the holder must refuse fail-closed; the detail names both.
+        const string ChannelDomain = "attacker.example";
+        ChannelDomainSeamValue = ChannelDomain;
+        using JsonDocument mismatch = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual("https://w3id.org/security#INVALID_DOMAIN_ERROR",
+            mismatch.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A channel-domain mismatch is a §3.4.3.2 anti-replay refusal.");
+        string mismatchDetail = mismatch.RootElement.GetProperty(VcalmParameterNames.ProblemDetail).GetString()!;
+        Assert.Contains(RequestedDomain, mismatchDetail, "The detail names the requested domain.");
+        Assert.Contains(ChannelDomain, mismatchDetail, "The detail names the channel's own domain.");
+        Assert.IsTrue(PresentationStore.IsEmpty, "A channel-domain mismatch signs and stores nothing.");
 
-        Assert.AreEqual(400, response.StatusCode, response.Body);
-        using JsonDocument doc = JsonDocument.Parse(response.Body);
-        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
-            doc.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
-            "A §3.4.3.2 channel-domain mismatch is an anti-replay refusal (malformed-value 400).");
-    }
+        //A channel whose domain matches the requested domain signs normally — the check binds only
+        //when the two disagree.
+        ChannelDomainSeamValue = RequestedDomain;
+        using JsonDocument created = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 201, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(created.RootElement.TryGetProperty(VcalmParameterNames.VerifiablePresentation, out _),
+            "A matching channel domain signs and returns the secured presentation.");
+        Assert.HasCount(1, PresentationStore,
+            "A matching channel domain stores exactly the one presentation it signed.");
 
+        //A host that never wires the channel-domain seam does not materialize the §3.5.2 route at all.
+        await using TestHostShell unwiredApp = new(TimeProvider);
+        HolderSigningContext unwiredHolder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string unwiredSegment = await RegisterHolderAsync(
+            unwiredApp, unwiredHolder, alsoVerifier: false, wireChannelDomainSeam: false).ConfigureAwait(false);
 
-    /// <summary>
-    /// §3.4.3.2 holder anti-replay (allow): when the staged current communication channel's domain
-    /// MATCHES the request's <c>options.domain</c>, the holder signs normally — 201. The check binds
-    /// only when the channel domain is populated; the matching case is indistinguishable from the
-    /// stateless primitive.
-    /// </summary>
-    [TestMethod]
-    public async Task CreatePresentationSignsWhenChannelDomainMatches()
-    {
-        await using TestHostShell app = new(TimeProvider);
-        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
-        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+        //The unwired tenant's other §3.5 routes are live on the same host: the 404 below is the missing
+        //REQUIRED channel-domain seam, not a dead tenant or an unreachable host.
+        string unwiredPresentationsPath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmGetPresentations, unwiredSegment);
+        (int unwiredListStatus, _, _) = await VcalmWireFixtures.SendWireAsync(
+            unwiredApp, "GET", unwiredPresentationsPath, body: null, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, unwiredListStatus,
+            "The unwired tenant's other routes are reachable; only the required seam's own route is absent.");
 
-        const string Domain = "verifier.example";
-        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
-        string createBody = "{\"presentation\":" + presentationJson
-            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"" + Domain + "\"}}";
-
-        ExchangeContext context = [];
-        context.SetCurrentChannelDomain(Domain);
-
-        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
-            segment, WellKnownVcalmEndpointNames.VcalmCreatePresentation, "POST",
-            new RequestFields(), createBody, context, TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(201, response.StatusCode, response.Body);
+        string unwiredPath = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreatePresentation, unwiredSegment);
+        (int unwiredStatus, _, _) = await VcalmWireFixtures.SendWireAsync(
+            unwiredApp, "POST", unwiredPath, createBody, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(404, unwiredStatus,
+            "§3.5.2: the REQUIRED channel-domain seam absent, the create-presentation route does not materialize.");
     }
 
 
@@ -699,7 +731,7 @@ internal sealed class VcalmHolderEndpointTests
 
     /// <summary>
     /// Registers a tenant with the VCALM holder capability and wires the parse seams, the holder's selective-disclosure
-    /// derive configuration and the presentation store, with no presentation signing.
+    /// derive configuration, the §3.4.3.2 channel-domain seam and the presentation store, with no presentation signing.
     /// </summary>
     /// <param name="app">The host shell the tenant is registered with.</param>
     /// <returns>The tenant segment.</returns>
@@ -717,13 +749,21 @@ internal sealed class VcalmHolderEndpointTests
     /// <summary>
     /// Registers a holder with the capabilities and delegates needed by the presentation cases.
     /// </summary>
-    private async Task<string> RegisterHolderAsync(TestHostShell app, HolderSigningContext holder, bool alsoVerifier = false)
+    /// <param name="app">The host shell the tenant is registered with.</param>
+    /// <param name="holder">The holder's presentation-signing configuration and DID.</param>
+    /// <param name="alsoVerifier">Whether the tenant also gets the verifier role, for the §3.5.2 → §3.3.2 round-trip.</param>
+    /// <param name="wireChannelDomainSeam">
+    /// Whether to wire the §3.4.3.2 channel-domain seam. <see langword="false"/> leaves the §3.5.2
+    /// create-presentation route unmaterialized, for the required-seam 404 case.
+    /// </param>
+    private async Task<string> RegisterHolderAsync(
+        TestHostShell app, HolderSigningContext holder, bool alsoVerifier = false, bool wireChannelDomainSeam = true)
     {
         VerifierKeyMaterial material = await app.RegisterClientAsync(
             ClientId, ClientBaseUri, alsoVerifier ? HolderAndVerifierCapabilities : HolderCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        await WireHolderSeamsAsync(app, holder.Signing).ConfigureAwait(false);
+        await WireHolderSeamsAsync(app, holder.Signing, wireChannelDomainSeam).ConfigureAwait(false);
 
         if(alsoVerifier)
         {
@@ -753,9 +793,17 @@ internal sealed class VcalmHolderEndpointTests
 
 
     /// <summary>
-    /// Installs credential derivation and presentation storage delegates on the holder wiring.
+    /// Installs the §3.5 parse seams, the credential-derivation configuration, the optional presentation-signing
+    /// configuration, the §3.4.3.2 channel-domain seam and the presentation storage delegates on the holder wiring.
     /// </summary>
-    private async Task WireHolderSeamsAsync(TestHostShell app, VcalmPresentationSigning? presentationSigning)
+    /// <param name="app">The host shell the tenant is registered with.</param>
+    /// <param name="presentationSigning">The §3.5.2 presentation-signing configuration to wire, or <see langword="null"/> to wire none.</param>
+    /// <param name="wireChannelDomainSeam">
+    /// Whether to wire the §3.4.3.2 channel-domain seam (<see cref="ChannelDomainSeamValue"/> as the
+    /// answer). <see langword="false"/> leaves the §3.5.2 create-presentation route unmaterialized.
+    /// </param>
+    private async Task WireHolderSeamsAsync(
+        TestHostShell app, VcalmPresentationSigning? presentationSigning, bool wireChannelDomainSeam = true)
     {
         await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
@@ -786,6 +834,16 @@ internal sealed class VcalmHolderEndpointTests
             await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
             {
                 candidateIntegration.VcalmPresentationSigning = presentationSigning;
+            }).ConfigureAwait(false);
+        }
+
+        //§3.4.3.2 channel-domain seam, required for the §3.5.2 route to materialize: answers with
+        //whatever the current test case staged on ChannelDomainSeamValue.
+        if(wireChannelDomainSeam)
+        {
+            await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.ResolveVcalmChannelDomainAsync = (_, _) => ValueTask.FromResult(ChannelDomainSeamValue);
             }).ConfigureAwait(false);
         }
 

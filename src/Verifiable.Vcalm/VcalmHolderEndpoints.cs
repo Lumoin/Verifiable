@@ -3,7 +3,6 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.JCose;
-using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Vcalm;
 
@@ -56,11 +55,15 @@ public static class VcalmHolderEndpoints
                 candidates.Add(BuildDeriveCredential());
             }
 
-            //§3.5.2 create-presentation materializes only when the parse seam and the signing
-            //configuration are both wired.
+            //§3.5.2 create-presentation materializes only when the parse seam, the signing
+            //configuration, and the §3.4.3.2 channel-domain seam are all wired — the anti-replay MUST
+            //("Holder implementations MUST ensure that the domain specified by the verifier matches the
+            //domain used for the current channel of communication") needs the channel's own domain to
+            //enforce, the same required-seam shape the §3.6 coordinator routes use.
             if(server?.Vcalm().ParseVcalmCreatePresentationAsync is not null
                 && (server?.Vcalm().VcalmPresentationSigning is not null
-                    || server?.Vcalm().ResolveVcalmPresentationSigningAsync is not null))
+                    || server?.Vcalm().ResolveVcalmPresentationSigningAsync is not null)
+                && server?.Vcalm().ResolveVcalmChannelDomainAsync is not null)
             {
                 candidates.Add(BuildCreatePresentation());
             }
@@ -216,18 +219,22 @@ public static class VcalmHolderEndpoints
                     return (null, MissingChallengeOrDomainRequest());
                 }
 
-                //§3.4.3.2 holder anti-replay: when the deployment's channel adapter populated the current
-                //communication channel's domain on the context, the holder MUST verify the request's
-                //domain (the verifier identity the proof will bind) matches it before signing. A mismatch
-                //means the request's domain names a verifier other than the one on the wire — a relayed /
-                //replayed presentation request — so the holder refuses fail-closed. When the channel
-                //domain is unset the §3.5.2 stateless primitive signs the request domain verbatim;
-                //populating it is the §3.4.3.2 deployment MUST (documented on CurrentChannelDomain).
-                string? channelDomain = context.CurrentChannelDomain;
-                if(channelDomain is not null
-                    && !string.Equals(channelDomain, request.Options.Domain, StringComparison.Ordinal))
+                //§3.4.3.2 holder anti-replay: "Holder implementations MUST ensure that the domain
+                //specified by the verifier matches the domain used for the current channel of
+                //communication." The seam is REQUIRED for this route to materialize at all (the Builder
+                //gate above), so it is always wired here; a channel it cannot determine, or one that
+                //names a verifier other than the request's own domain (a relayed / replayed presentation
+                //request), both refuse fail-closed under Data Integrity's domain-mismatch type — the
+                //request itself is well-formed, so neither is a malformed-value 400.
+                string? channelDomain = await vcalm.ResolveVcalmChannelDomainAsync!(context, ct).ConfigureAwait(false);
+                if(channelDomain is null)
                 {
-                    return (null, ChannelDomainMismatchRequest());
+                    return (null, UnknownChannelDomainRequest());
+                }
+
+                if(!string.Equals(channelDomain, request.Options.Domain, StringComparison.Ordinal))
+                {
+                    return (null, ChannelDomainMismatchRequest(request.Options.Domain!, channelDomain));
                 }
 
                 return (null, await CreatePresentationAsync(server, request, context, ct).ConfigureAwait(false));
@@ -812,20 +819,42 @@ public static class VcalmHolderEndpoints
 
 
     /// <summary>
-    /// The §3.4.3.2 channel-domain-mismatch 400: the request asked the holder to bind a verifier domain that does not
-    /// match the current communication channel the deployment staged on the context. That is a relayed or replayed
-    /// presentation request, so the holder refuses to sign, the anti-replay MUST ("the holder MUST check that the
-    /// domain value matches the domain of the verifier it is communicating with"), carried as the §3.8
-    /// MALFORMED_VALUE_ERROR request-refusal family.
+    /// The §3.4.3.2 channel-domain-mismatch 400: the current communication channel's domain the wired seam resolved
+    /// does not match the request's <c>options.domain</c>. That is a relayed or replayed presentation request, so the
+    /// holder refuses to sign under Data Integrity's domain-mismatch type
+    /// (<see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>) — the request
+    /// itself is well-formed, so this is never <see cref="VcalmProblemTypes.MalformedValueError"/>.
     /// </summary>
-    private static ServerHttpResponse ChannelDomainMismatchRequest()
+    /// <param name="requestedDomain">The verifier domain the request asked the presentation proof to bind.</param>
+    /// <param name="channelDomain">The current communication channel's domain the wired seam resolved.</param>
+    private static ServerHttpResponse ChannelDomainMismatchRequest(string requestedDomain, string channelDomain)
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
-            VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
-            "The request's options.domain does not match the current communication channel; a §3.4.3.2 "
-            + "holder refuses to sign a presentation whose domain names a verifier other than the one it "
-            + "is communicating with (anti-replay).");
+            VcalmProblemTypes.InvalidDomainError,
+            "INVALID_DOMAIN_ERROR",
+            $"The request's options.domain '{requestedDomain}' does not match the current communication "
+            + $"channel's domain '{channelDomain}'; a §3.4.3.2 holder refuses to sign a presentation whose "
+            + "domain names a verifier other than the one it is communicating with (anti-replay).");
+
+        return ServerHttpResponse.Json(
+            400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
+    }
+
+
+    /// <summary>
+    /// The §3.4.3.2 unknown-channel-domain 400: the wired channel-domain seam could not determine the current
+    /// communication channel's domain for this request. A holder cannot confirm the verifier identity it is
+    /// communicating with, so it refuses to sign fail-closed under Data Integrity's domain-mismatch type
+    /// (<see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see>) — the request
+    /// itself is well-formed, so this is never <see cref="VcalmProblemTypes.MalformedValueError"/>.
+    /// </summary>
+    private static ServerHttpResponse UnknownChannelDomainRequest()
+    {
+        VcalmProblemDetail problem = VcalmProblemDetail.Error(
+            VcalmProblemTypes.InvalidDomainError,
+            "INVALID_DOMAIN_ERROR",
+            "The current communication channel's domain could not be determined; a §3.4.3.2 holder "
+            + "refuses to sign a presentation whose verifier identity it cannot confirm (anti-replay).");
 
         return ServerHttpResponse.Json(
             400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);

@@ -135,3 +135,22 @@ public delegate ValueTask<bool> DeleteVcalmPresentationDelegate(
     string presentationId,
     ExchangeContext context,
     CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Resolves the VCALM 1.0 §3.4.3.2 current communication channel's domain for the request the §3.5.2
+/// <c>POST /presentations</c> endpoint is answering — the domain of the channel the deployment's
+/// channel adapter established (for example the TLS origin or verifier identity the wallet is
+/// actually talking to), not the domain the request body itself names. Required for the §3.5.2 route
+/// to materialize at all, in the pattern <see cref="AuthorizeVcalmCoordinatorDelegate"/> sets for its
+/// own required seam — without it the route does not materialize (fail-closed; HTTP 404).
+/// <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-response-format">VCALM 1.0
+/// §3.4.3.2</see>: "Holder implementations MUST ensure that the domain specified by the verifier
+/// matches the domain used for the current channel of communication."
+/// </summary>
+/// <param name="context">The per-request context bag carrying the incoming request the channel adapter inspects.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The current communication channel's domain, or <see langword="null"/> when it could not be determined.</returns>
+public delegate ValueTask<string?> ResolveVcalmChannelDomainDelegate(
+    ExchangeContext context,
+    CancellationToken cancellationToken);

@@ -16,7 +16,6 @@ using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Vcalm;
-using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -103,6 +102,14 @@ internal sealed class VcalmMultiTenantFlowTests
         JsonSerializerExtensions.Deserialize<VerifiablePresentation>(serialized, JsonOptions)!;
 
     private List<IDisposable> OwnedKeys { get; } = [];
+
+    /// <summary>
+    /// The value the wired §3.4.3.2 channel-domain seam answers with for the create-presentation call
+    /// about to be dispatched — staged by <see cref="PostCreatePresentationAsync"/> immediately before
+    /// each dispatch, since the tenants of this class create presentations under several distinct
+    /// domains within a single test method.
+    /// </summary>
+    private string? ChannelDomainSeamValue { get; set; }
 
     //The issued-credential store, keyed by (tenant segment, credentialId), so the §3.2.2 retrieval is
     //tenant-scoped — a credential issued by one tenant is not reachable through another tenant's store.
@@ -406,15 +413,19 @@ internal sealed class VcalmMultiTenantFlowTests
             candidateIntegration.ResolveVcalmPresentationSigningAsync = (_, _) =>
                 ValueTask.FromResult<VcalmPresentationSigning?>(null);
         }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            //The §3.4.3.2 channel-domain seam is required for the route to materialize; wiring it to
+            //match the request's own domain isolates this test to the fail-closed signing check.
+            candidateIntegration.ResolveVcalmChannelDomainAsync = (_, _) => ValueTask.FromResult<string?>("d.example");
+        }).ConfigureAwait(false);
 
         string body = "{\"presentation\":" + VcalmWireFixtures.SerializeUnproofedPresentation("did:example:holder", SerializePresentation)
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"d.example\"}}";
-        ExchangeContext context = [];
-        context.SetCurrentChannelDomain("d.example");
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             hostMaterial.Registration.TenantId.Value, WellKnownVcalmEndpointNames.VcalmCreatePresentation, "POST",
-            new RequestFields(), body, context, TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(500, response.StatusCode, response.Body);
         Assert.Contains("No VCALM presentation-signing configuration resolved for this tenant.", response.Body,
@@ -861,6 +872,13 @@ internal sealed class VcalmMultiTenantFlowTests
                 ValueTask.FromResult(signingBySegment.GetValueOrDefault(TenantSegment(context)));
         }).ConfigureAwait(false);
 
+        //§3.4.3.2 channel-domain seam, required for the §3.5.2 route to materialize: answers with
+        //whatever domain PostCreatePresentationAsync staged for the call about to be dispatched.
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmChannelDomainAsync = (_, _) => ValueTask.FromResult(ChannelDomainSeamValue);
+        }).ConfigureAwait(false);
+
         return new Showcase(
             segmentA, issuerA.IssuerDid, issuerA.VerificationMethodId, holderA.HolderDid, holderA.VerificationMethodId,
             segmentB, issuerB.IssuerDid, issuerB.VerificationMethodId, holderB.HolderDid, holderB.VerificationMethodId);
@@ -923,20 +941,36 @@ internal sealed class VcalmMultiTenantFlowTests
     }
 
 
+    /// <summary>
+    /// Posts a §3.5.2 create-presentation request for the tenant <paramref name="segment"/>, staging
+    /// <paramref name="domain"/> as the answer the wired §3.4.3.2 channel-domain seam gives for the call
+    /// about to be dispatched — this class's tenants create presentations under several distinct domains
+    /// within a single test method, so the staged value is set immediately before each dispatch rather
+    /// than once for the whole host.
+    /// </summary>
+    /// <param name="app">The host shell the tenant is registered with.</param>
+    /// <param name="segment">The tenant segment the presentation is created under.</param>
+    /// <param name="holderDid">The holder DID the unproofed presentation names.</param>
+    /// <param name="domain">
+    /// The verifier domain the request asks the presentation proof to bind, and the domain the
+    /// channel-domain seam is staged to answer for this call.
+    /// </param>
+    /// <param name="expectedStatus">The HTTP status the response must carry.</param>
+    /// <returns>The parsed response body; the caller disposes it.</returns>
     private async Task<JsonDocument> PostCreatePresentationAsync(
         TestHostShell app, string segment, string holderDid, string domain, int expectedStatus)
     {
         string body = "{\"presentation\":" + VcalmWireFixtures.SerializeUnproofedPresentation(holderDid, SerializePresentation)
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"" + domain + "\"}}";
 
-        //§3.5.2 binds the proof's domain to the channel domain — the holder refuses a domain that does
-        //not match the channel it is presenting over.
-        ExchangeContext context = [];
-        context.SetCurrentChannelDomain(domain);
+        //§3.4.3.2 binds the proof's domain to the current communication channel's domain — the holder
+        //refuses a domain that does not match the channel it is presenting over. The wired seam answers
+        //with this call's own domain.
+        ChannelDomainSeamValue = domain;
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreatePresentation, "POST",
-            new RequestFields(), body, context, TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);
 
