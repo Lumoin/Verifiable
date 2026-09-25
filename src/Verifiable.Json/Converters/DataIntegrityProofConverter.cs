@@ -155,7 +155,9 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
         //Retain the received wire form: verification reconstructs the §4.2 proof
         //options (proof minus proofValue) from these bytes so the signer's member
-        //shapes survive exactly. Parse provenance only — never written back out.
+        //shapes survive exactly. Parse provenance only — never re-serialized by
+        //this converter's Write; a VCALM verifier echoes it separately as a
+        //verification response's proof-result input.
         proof.ReceivedProofJson = root.GetRawText();
 
         if(root.TryGetProperty("previousProof", out var previousProofElement))

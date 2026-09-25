@@ -461,6 +461,10 @@ internal sealed class VcalmVerifierEndpointTests
     /// §3.3</see> compares the method's controller only with the controller document URL ("If the absolute URL value of
     /// verificationMethod.controller does not equal controllerDocumentUrl"), which the signer's own document satisfies
     /// here, and no pulled specification text defines the binding of that controller to the presentation's holder.
+    /// The proof itself fails this check, so
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM 1.0 §3.3.2</see>'s "Checking that the
+    /// holder in the presentation matches the verification method used in the presentation's proof" reports both the
+    /// proof and the holder unverified, never a holder true beside a failed proof.
     /// </summary>
     [TestMethod]
     public async Task PresentationHolderNotControllingItsMethodReportsControllerMismatch()
@@ -471,11 +475,17 @@ internal sealed class VcalmVerifierEndpointTests
         const string Challenge = "challenge-holder-binding";
         const string Domain = "verifier.example";
         DataIntegritySecuredPresentation forged = await SignPresentationWithForgedHolderAsync(Challenge, Domain).ConfigureAwait(false);
-        string body = BuildPresentationRequestBody(forged, Challenge, Domain, returnProblemDetails: true);
+        string body = BuildPresentationRequestBody(forged, Challenge, Domain, returnProblemDetails: true, returnResults: true);
 
         using JsonDocument response = await PostPresentationWireAsync(app, segment, body, 200).ConfigureAwait(false);
 
         AssertVerificationProblem(response, "https://verifiable.lumoin.com/problems#VERIFICATION_METHOD_CONTROLLER_MISMATCH");
+
+        JsonElement presentationResults = response.RootElement.GetProperty("results").GetProperty("presentation");
+        Assert.IsFalse(presentationResults.GetProperty("proof")[0].GetProperty("verified").GetBoolean(),
+            "The holder-controller mismatch fails the presentation's own proof, not only the holder check.");
+        Assert.IsFalse(presentationResults.GetProperty("holder").GetProperty("verified").GetBoolean(),
+            "The holder cannot be reported verified beside a proof that failed.");
     }
 
 
@@ -2890,11 +2900,240 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
-    /// §3.3.1 <c>returnResults</c>: the verbose results object carries validFrom/validUntil/proof
-    /// sub-results, each shaped <c>{ verified, input }</c>.
+    /// VCALM 1.0 §3.3.2 "Checking that the holder in the presentation matches the verification
+    /// method used in the presentation's proof" cannot hold with no proof to check: an unproofed
+    /// presentation's holder sub-result reports <c>verified:false</c>.
     /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM 1.0 §3.3.2 Verify
+    /// Presentation</see>.
+    /// </remarks>
     [TestMethod]
-    public async Task ReturnResultsEmitsPerStepResults()
+    public async Task UnproofedPresentationHolderReportsUnverified()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+
+        VerifiablePresentation unproofed = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            Holder = "did:example:vcalm-unproofed-holder"
+        };
+        string unproofedBody = "{\"presentation\":" + SerializePresentation(unproofed) + ",\"options\":{\"returnResults\":true}}";
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, unproofedBody, 200).ConfigureAwait(false);
+        JsonElement presentationResults = response.RootElement.GetProperty("results").GetProperty("presentation");
+
+        Assert.IsFalse(presentationResults.GetProperty("holder").GetProperty("verified").GetBoolean(),
+            "An unproofed presentation carries no proof, so its holder cannot be reported verified.");
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.2 "Results from verifying the proof objects if any": an unproofed presentation
+    /// examines no Data Integrity proof, so its <c>proof</c> results array is empty rather than a
+    /// fabricated entry.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM 1.0 §3.3.2 Verify
+    /// Presentation</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task UnproofedPresentationReportsEmptyProofArray()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+
+        VerifiablePresentation unproofed = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            Holder = "did:example:vcalm-unproofed-holder"
+        };
+        string unproofedBody = "{\"presentation\":" + SerializePresentation(unproofed) + ",\"options\":{\"returnResults\":true}}";
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, unproofedBody, 200).ConfigureAwait(false);
+        JsonElement presentationResults = response.RootElement.GetProperty("results").GetProperty("presentation");
+
+        Assert.AreEqual(0, presentationResults.GetProperty("proof").GetArrayLength(),
+            "An unproofed presentation examines no Data Integrity proof.");
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.2 "Results from verifying the proof objects if any … input [object]": a
+    /// signed presentation's proof sub-result's <c>input</c> is the proof exactly as the holder
+    /// sent it, member for member with none added or dropped, and the holder sub-result is
+    /// <c>verified:true</c> only beside that verified proof.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM 1.0 §3.3.2 Verify
+    /// Presentation</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task SignedPresentationProofResultEchoesSentProofAndHolderVerifies()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+
+        DataIntegritySecuredPresentation signed = await SignPresentationAsync("challenge-results", "verifier.example").ConfigureAwait(false);
+        string signedBody = BuildPresentationRequestBody(signed, "challenge-results", "verifier.example", returnResults: true);
+        JsonObject sentPresentation = JsonNode.Parse(signedBody)!.AsObject()["verifiablePresentation"]!.AsObject();
+        JsonObject sentProof = DataIntegrityContextTamperingFixture.FirstProof(sentPresentation);
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, signedBody, 200).ConfigureAwait(false);
+        JsonElement presentationResults = response.RootElement.GetProperty("results").GetProperty("presentation");
+        JsonElement proofResults = presentationResults.GetProperty("proof");
+        Assert.AreEqual(1, proofResults.GetArrayLength(), "One presentation proof examined, one proof result.");
+        Assert.IsTrue(proofResults[0].GetProperty("verified").GetBoolean(), "The sent proof verifies.");
+
+        JsonElement receivedProofInput = proofResults[0].GetProperty("input");
+        int receivedMemberCount = 0;
+        foreach(JsonProperty _ in receivedProofInput.EnumerateObject())
+        {
+            receivedMemberCount++;
+        }
+
+        Assert.AreEqual(sentProof.Count, receivedMemberCount,
+            "The echoed proof carries exactly the sent proof's members, none added or dropped.");
+        foreach((string member, JsonNode? value) in sentProof)
+        {
+            Assert.AreEqual(value!.ToJsonString(), receivedProofInput.GetProperty(member).GetRawText(),
+                $"The proof result's input must echo the sent proof's '{member}' member exactly.");
+        }
+
+        Assert.IsTrue(presentationResults.GetProperty("holder").GetProperty("verified").GetBoolean(),
+            "The holder sub-result is verified:true only beside a verified presentation proof.");
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.2 "Results from verifying the proof objects if any": a presentation carrying
+    /// only an <c>EnvelopedVerifiablePresentation</c> has no Data Integrity proof to examine, so its
+    /// <c>proof</c> results array is empty rather than a fabricated entry.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM 1.0 §3.3.2 Verify
+    /// Presentation</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task EnvelopedPresentationReportsEmptyProofArray()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+
+        string envelopeBody = "{\"verifiablePresentation\":{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],"
+            + "\"type\":[\"EnvelopedVerifiablePresentation\"],\"id\":\"data:application/vp+jwt,eyJhbGciOiJFUzI1NiJ9.e30.c2ln\"},"
+            + "\"options\":{\"returnResults\":true}}";
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, envelopeBody, 200).ConfigureAwait(false);
+        JsonElement presentationResults = response.RootElement.GetProperty("results").GetProperty("presentation");
+
+        Assert.AreEqual(0, presentationResults.GetProperty("proof").GetArrayLength(),
+            "An enveloped presentation carries no Data Integrity proof to examine.");
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.1 "Results from verifying the proof objects if any … input [object]": a
+    /// credential's proof sub-result on <c>POST /credentials/verify</c> is the proof exactly as
+    /// sent, member for member, never the bare <c>verificationMethod</c> string.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">VCALM 1.0 §3.3.1 Verify
+    /// Credential</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task CredentialProofResultEchoesSentProofOnCredentialVerify()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: false, returnResults: true);
+        JsonObject sentCredential = JsonNode.Parse(body)!.AsObject()["verifiableCredential"]!.AsObject();
+        JsonObject sentProof = DataIntegrityContextTamperingFixture.FirstProof(sentCredential);
+
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);
+        JsonElement proofResults = response.RootElement.GetProperty("results").GetProperty("proof");
+        Assert.AreEqual(1, proofResults.GetArrayLength(), "One credential proof examined, one proof result.");
+        Assert.IsTrue(proofResults[0].GetProperty("verified").GetBoolean(), "The sent proof verifies.");
+
+        JsonElement receivedProofInput = proofResults[0].GetProperty("input");
+        int receivedMemberCount = 0;
+        foreach(JsonProperty _ in receivedProofInput.EnumerateObject())
+        {
+            receivedMemberCount++;
+        }
+
+        Assert.AreEqual(sentProof.Count, receivedMemberCount,
+            "The echoed proof carries exactly the sent proof's members, none added or dropped.");
+        foreach((string member, JsonNode? value) in sentProof)
+        {
+            Assert.AreEqual(value!.ToJsonString(), receivedProofInput.GetProperty(member).GetRawText(),
+                $"The proof result's input must echo the sent proof's '{member}' member exactly.");
+        }
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.2 "results for each VerifiableCredential" reuses §3.3.1's proof sub-result
+    /// shape for a contained credential: its own <c>results.proof[].input</c> is the contained
+    /// credential's proof exactly as sent, member for member.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM 1.0 §3.3.2 Verify
+    /// Presentation</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task ContainedCredentialProofResultEchoesSentProof()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential contained = await SignMinimalContainedCredentialAsync().ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
+            "challenge-contained-proof", "verifier.example", containedCredentials: [contained]).ConfigureAwait(false);
+        string body = BuildPresentationRequestBody(presentation, "challenge-contained-proof", "verifier.example", returnResults: true);
+        JsonObject sentPresentation = JsonNode.Parse(body)!.AsObject()["verifiablePresentation"]!.AsObject();
+        JsonObject sentCredential = sentPresentation["verifiableCredential"]!.AsArray()[0]!.AsObject();
+        JsonObject sentProof = DataIntegrityContextTamperingFixture.FirstProof(sentCredential);
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, body, 200).ConfigureAwait(false);
+        JsonElement containedResults = response.RootElement.GetProperty("results").GetProperty("credentials")[0].GetProperty("results");
+        JsonElement proofResults = containedResults.GetProperty("proof");
+        Assert.AreEqual(1, proofResults.GetArrayLength(), "One contained-credential proof examined, one proof result.");
+        Assert.IsTrue(proofResults[0].GetProperty("verified").GetBoolean(), "The sent proof verifies.");
+
+        JsonElement receivedProofInput = proofResults[0].GetProperty("input");
+        int receivedMemberCount = 0;
+        foreach(JsonProperty _ in receivedProofInput.EnumerateObject())
+        {
+            receivedMemberCount++;
+        }
+
+        Assert.AreEqual(sentProof.Count, receivedMemberCount,
+            "The echoed proof carries exactly the sent proof's members, none added or dropped.");
+        foreach((string member, JsonNode? value) in sentProof)
+        {
+            Assert.AreEqual(value!.ToJsonString(), receivedProofInput.GetProperty(member).GetRawText(),
+                $"The proof result's input must echo the sent proof's '{member}' member exactly.");
+        }
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.1 defines a <c>results.validFrom</c> sub-result of <c>{ verified, input }</c>:
+    /// a credential whose <c>validFrom</c> already lies in the past relative to the verification
+    /// instant reports <c>verified:true</c> with <c>input</c> the literal <c>validFrom</c> string.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">VCALM 1.0 §3.3.1 Verify
+    /// Credential</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task CredentialValidFromResultReportsVerifiedTrueWithLiteralInput()
     {
         await using TestHostShell app = new(TimeProvider);
         string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
@@ -2902,17 +3141,191 @@ internal sealed class VcalmVerifierEndpointTests
         DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
         string body = BuildCredentialRequestBody(credential, returnProblemDetails: false, returnResults: true);
 
-        using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);
+        JsonElement validFromResult = response.RootElement.GetProperty("results").GetProperty("validFrom");
 
-        JsonElement results = response.RootElement.GetProperty(VcalmParameterNames.Results);
-        JsonElement proofResults = results.GetProperty(VcalmParameterNames.Proof);
-        Assert.AreEqual(1, proofResults.GetArrayLength(), "One proof → one proof result.");
-        Assert.IsTrue(proofResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean());
-        Assert.StartsWith("did:key:", proofResults[0].GetProperty(VcalmParameterNames.Input).GetString(),
-            "The proof result input is the verificationMethod.");
+        Assert.IsTrue(validFromResult.GetProperty("verified").GetBoolean(),
+            "The credential's validFrom already lies in the past relative to the verification instant.");
+        Assert.AreEqual("2023-01-01T00:00:00Z", validFromResult.GetProperty("input").GetString());
+    }
 
-        JsonElement validFrom = results.GetProperty(VcalmParameterNames.ValidFrom);
-        Assert.IsTrue(validFrom.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.1 "value [integer] … input [object]": a resolving <c>credentialStatus</c>
+    /// entry's result reports the entry itself as the <c>input</c> object, never a bare string, and
+    /// its <c>value</c> the literal cleared bit for an unset status.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">VCALM 1.0 §3.3.1 Verify
+    /// Credential</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task CredentialStatusResultReportsEntryObjectAndClearedIntegerValue()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = ResolveClearedStatusListAsync;
+        }).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false, withStatus: true).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: false, returnResults: true);
+
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);
+        AssertStatusResultShape(response.RootElement.GetProperty("results"));
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.2 "results for each VerifiableCredential" reuses §3.3.1's status sub-result
+    /// shape for a contained credential: the entry object as <c>input</c>, never a bare string,
+    /// whether the credential is verified alone or contained in a presentation.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM 1.0 §3.3.2 Verify
+    /// Presentation</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task ContainedCredentialStatusResultReportsEntryObjectAndClearedIntegerValue()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = ResolveClearedStatusListAsync;
+        }).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential statusCredential = await SignCredentialAsync(
+            validUntilPast: false, withStatus: true).ConfigureAwait(false);
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync(
+            "challenge-status", "verifier.example", containedCredentials: [statusCredential]).ConfigureAwait(false);
+        string body = BuildPresentationRequestBody(presentation, "challenge-status", "verifier.example", returnResults: true);
+
+        using JsonDocument response = await PostPresentationWireAsync(app, segment, body, 200).ConfigureAwait(false);
+        JsonElement containedResults = response.RootElement.GetProperty("results").GetProperty("credentials")[0].GetProperty("results");
+        AssertStatusResultShape(containedResults);
+    }
+
+
+    /// <summary>
+    /// VCALM 1.0 §3.3.1 "Results from verifying the proof objects if any … input [object]" falls
+    /// back to a proof's typed members when no wire JSON was retained for it — an app-wired parse
+    /// seam that does not use <see cref="Verifiable.Json.Converters.DataIntegrityProofConverter"/>,
+    /// or a received value that is present but empty: every reconstructable member is present in
+    /// the fallback object, not only a minimal subset.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">VCALM 1.0 §3.3.1 Verify
+    /// Credential</see>.
+    /// </remarks>
+    [TestMethod]
+    public async Task ProofFallbackReconstructsTypedMembersWhenReceivedJsonIsUnavailable()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
+        DataIntegrityProof signed = credential.Proof![0];
+
+        //An empty ReceivedProofJson (as distinct from null) is the shape a byte-faithful echo must
+        //not mistake for present wire JSON, and every member this proof carries reconstructs.
+        DataIntegrityProof fallbackProof = new()
+        {
+            Id = "urn:uuid:vcalm-fallback-proof",
+            Type = signed.Type,
+            Cryptosuite = signed.Cryptosuite,
+            VerificationMethod = signed.VerificationMethod,
+            ProofPurpose = signed.ProofPurpose,
+            Created = signed.Created,
+            Expires = "2031-01-01T00:00:00Z",
+            ProofValue = signed.ProofValue,
+            Domain = ["verifier-a.example", "verifier-b.example"],
+            Challenge = "fallback-challenge",
+            Nonce = "fallback-nonce",
+            PreviousProof = "urn:uuid:vcalm-previous-proof",
+            ReceivedProofJson = string.Empty
+        };
+        credential.Proof = [fallbackProof];
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ParseVcalmVerifyCredentialAsync = (requestBody, context, cancellationToken) =>
+                ValueTask.FromResult<VcalmVerifyCredentialRequest?>(new VcalmVerifyCredentialRequest
+                {
+                    DataIntegrityCredential = credential,
+                    CredentialJson = requestBody,
+                    Options = new VcalmVerifyOptions { ReturnResults = true }
+                });
+        }).ConfigureAwait(false);
+
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, "{}", 200).ConfigureAwait(false);
+        JsonElement proofResults = response.RootElement.GetProperty("results").GetProperty("proof");
+        Assert.AreEqual(1, proofResults.GetArrayLength());
+
+        JsonElement input = proofResults[0].GetProperty("input");
+        Assert.AreEqual(fallbackProof.Id, input.GetProperty("id").GetString());
+        Assert.AreEqual(fallbackProof.Type, input.GetProperty("type").GetString());
+        Assert.AreEqual(fallbackProof.Expires, input.GetProperty("expires").GetString());
+        Assert.AreEqual(fallbackProof.Nonce, input.GetProperty("nonce").GetString());
+        Assert.AreEqual(fallbackProof.PreviousProof, input.GetProperty("previousProof").GetString());
+
+        JsonElement domain = input.GetProperty("domain");
+        Assert.AreEqual(JsonValueKind.Array, domain.ValueKind, "A multi-value domain reconstructs as an array.");
+        Assert.AreEqual(2, domain.GetArrayLength());
+    }
+
+
+    /// <summary>
+    /// A status-list resolver reporting an unset bit for every entry, so a <c>credentialStatus</c>
+    /// entry resolves cleanly to a §3.3.1 <c>credentialStatus[]</c> result rather than a warning.
+    /// </summary>
+    private static ValueTask<VcalmResolvedStatusList?> ResolveClearedStatusListAsync(
+        BitstringStatusListEntry entry, ExchangeContext exchangeContext, CancellationToken cancellationToken)
+    {
+        CoreStatusList list = CoreStatusList.Create(
+            BitstringStatusListCodec.MinimumEntries, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+
+        return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
+        {
+            StatusList = list,
+            Purposes = ["revocation"]
+        });
+    }
+
+
+    /// <summary>
+    /// Checks that a §3.3.1 <c>results.credentialStatus[]</c> entry's <c>input</c> is
+    /// <see cref="DefaultStatusEntry"/>'s own five members as an object (no more, no fewer), its
+    /// <c>value</c> the literal cleared integer <c>0</c>, and its <c>verified</c> <c>true</c>.
+    /// </summary>
+    /// <param name="results">The §3.3.1 <c>results</c> object carrying the <c>credentialStatus</c> array.</param>
+    private static void AssertStatusResultShape(JsonElement results)
+    {
+        JsonElement statusResults = results.GetProperty("credentialStatus");
+        Assert.AreEqual(1, statusResults.GetArrayLength(), "One credentialStatus entry maps to one status result.");
+
+        JsonElement statusResult = statusResults[0];
+        Assert.IsTrue(statusResult.GetProperty("value").TryGetInt64(out long clearedValue),
+            "The status result's value is an integer.");
+        Assert.AreEqual(0L, clearedValue, "An unset status bit resolves to the literal integer 0.");
+        Assert.IsTrue(statusResult.GetProperty("verified").GetBoolean(), "An unset status bit is not revoked.");
+
+        JsonElement input = statusResult.GetProperty("input");
+        Assert.AreEqual(JsonValueKind.Object, input.ValueKind, "The status result's input is the status entry object.");
+        int memberCount = 0;
+        foreach(JsonProperty _ in input.EnumerateObject())
+        {
+            memberCount++;
+        }
+
+        Assert.AreEqual(5, memberCount, "The input object carries exactly the entry's five identifying members.");
+        Assert.AreEqual(DefaultStatusEntry.Id, input.GetProperty("id").GetString());
+        Assert.AreEqual(DefaultStatusEntry.Type, input.GetProperty("type").GetString());
+        Assert.AreEqual(DefaultStatusEntry.StatusPurpose, input.GetProperty("statusPurpose").GetString());
+        Assert.AreEqual(DefaultStatusEntry.StatusListIndex, input.GetProperty("statusListIndex").GetString());
+        Assert.AreEqual(DefaultStatusEntry.StatusListCredential, input.GetProperty("statusListCredential").GetString());
     }
 
 
@@ -3961,21 +4374,8 @@ internal sealed class VcalmVerifierEndpointTests
             MemoryPool = Pool
         };
 
-        static ValueTask<VcalmResolvedStatusList?> ResolveStatusList(
-            BitstringStatusListEntry entry, ExchangeContext exchangeContext, CancellationToken cancellationToken)
-        {
-            CoreStatusList list = CoreStatusList.Create(
-                BitstringStatusListCodec.MinimumEntries, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
-
-            return ValueTask.FromResult<VcalmResolvedStatusList?>(new VcalmResolvedStatusList
-            {
-                StatusList = list,
-                Purposes = ["revocation"]
-            });
-        }
-
         VcalmVerificationOutcome outcome = await VcalmVerificationService.VerifyCredentialAsync(
-            credential, verification, ResolveStatusList, TimeProvider.GetUtcNow(), EmptyContext,
+            credential, verification, ResolveClearedStatusListAsync, TimeProvider.GetUtcNow(), EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, outcome.StatusResults, "One credentialStatus entry maps to one status result.");

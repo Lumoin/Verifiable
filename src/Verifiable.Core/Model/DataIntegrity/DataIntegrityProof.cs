@@ -286,8 +286,16 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
     /// proofs this library minted itself.
     /// </para>
     /// <para>
-    /// Carried as parse provenance, not data: excluded from equality and never written
-    /// back to the wire.
+    /// Carried as parse provenance, not data: excluded from equality and never re-serialized by
+    /// <c>DataIntegrityProofConverter.Write</c>.
+    /// </para>
+    /// <para>
+    /// A VCALM 1.0 verifier echoes this value verbatim as the <c>results...proof[].input</c> object of
+    /// a verification response, so a wire-parsed proof's reported input is the proof exactly as its
+    /// caller sent it — see
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">VCALM 1.0 §3.3.1</see> and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">§3.3.2</see>, "Results from
+    /// verifying the proof objects if any … input [object]".
     /// </para>
     /// </remarks>
     public string? ReceivedProofJson { get; set; }

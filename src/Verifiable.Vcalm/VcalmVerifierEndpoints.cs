@@ -357,7 +357,7 @@ public static class VcalmVerifierEndpoints
                 Challenge = options.Challenge,
                 Domain = options.Domain,
                 Holder = unproofed.Holder,
-                ProofInput = string.Empty,
+                ProofResults = [],
                 ProblemDetails = unproofedBindingProblems.ToImmutable()
             };
 
@@ -381,7 +381,7 @@ public static class VcalmVerifierEndpoints
                 Challenge = options.Challenge,
                 Domain = options.Domain,
                 Holder = unsecured.Holder,
-                ProofInput = string.Empty,
+                ProofResults = [],
                 ProblemDetails =
                 [
                     VcalmProblemDetail.Error(
@@ -407,7 +407,7 @@ public static class VcalmVerifierEndpoints
                 Challenge = options.Challenge,
                 Domain = options.Domain,
                 Holder = null,
-                ProofInput = string.Empty,
+                ProofResults = [],
                 ProblemDetails =
                 [
                     VcalmProblemDetail.Error(
@@ -485,7 +485,7 @@ public static class VcalmVerifierEndpoints
             Challenge = request.Options.Challenge,
             Domain = request.Options.Domain,
             Holder = presentation?.Holder,
-            ProofInput = string.Empty,
+            ProofResults = [],
             ProblemDetails = [tooMany]
         };
         string body = VcalmResponseWriter.BuildPresentationVerificationResponse(

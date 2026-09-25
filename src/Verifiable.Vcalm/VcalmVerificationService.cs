@@ -118,7 +118,7 @@ public static class VcalmVerificationService
         }
 
         ImmutableArray<VcalmProblemDetail>.Builder problems = ImmutableArray.CreateBuilder<VcalmProblemDetail>();
-        ImmutableArray<VcalmInputResult>.Builder proofResults = ImmutableArray.CreateBuilder<VcalmInputResult>();
+        ImmutableArray<VcalmProofResult>.Builder proofResults = ImmutableArray.CreateBuilder<VcalmProofResult>();
 
         //Data Integrity §4.4 identifies an absent proof as a parsing error.
         if(proofs is null || proofs.Count == 0)
@@ -133,15 +133,16 @@ public static class VcalmVerificationService
             ProofVerificationOutcome proofOutcome = await VerifyCredentialProofAsync(
                 credential, verification, context, cancellationToken).ConfigureAwait(false);
 
-            //§3.3.1 results.proof[]: one entry per proof, input is the proof's verificationMethod.
-            //The chain verifies as a whole (Data Integrity §2.1.2); a single failing link fails the
-            //whole credential, which the per-entry verified mirrors.
+            //§3.3.1 results.proof[]: one entry per proof, input is the proof examined (echoed on the
+            //wire from its received JSON, or from its typed members). The chain verifies as a whole
+            //(Data Integrity §2.1.2); a single failing link fails the whole credential, which the
+            //per-entry verified mirrors.
             foreach(DataIntegrityProof proof in proofs)
             {
-                proofResults.Add(new VcalmInputResult
+                proofResults.Add(new VcalmProofResult
                 {
                     Verified = proofOutcome.IsValid,
-                    Input = proof?.VerificationMethod?.Id ?? string.Empty
+                    Proof = proof
                 });
             }
 
@@ -696,7 +697,7 @@ public static class VcalmVerificationService
                 {
                     Value = statusResult.Status,
                     Verified = statusResult.IsValid,
-                    Input = status.Id ?? string.Empty,
+                    Entry = status,
                     Purpose = statusResult.Purpose,
                     Message = statusResult.Message
                 });
@@ -888,7 +889,7 @@ public static class VcalmVerificationService
                 Challenge = expectedChallenge,
                 Domain = expectedDomain,
                 Holder = presentation.Holder,
-                ProofInput = string.Empty,
+                ProofResults = [],
                 ProblemDetails = [TooManyProofs(proofCount, maxProofs)]
             };
         }
@@ -920,7 +921,11 @@ public static class VcalmVerificationService
             Challenge = expectedChallenge,
             Domain = expectedDomain,
             Holder = presentation.Holder,
-            ProofInput = proof?.VerificationMethod?.Id ?? string.Empty,
+            //§3.3.2 results.presentation.proof[]: one entry per proof actually examined; a presentation
+            //carrying no proof examines none, so it contributes no entry rather than a placeholder.
+            ProofResults = proof is not null
+                ? [new VcalmProofResult { Verified = outcome.IsValid, Proof = proof }]
+                : ImmutableArray<VcalmProofResult>.Empty,
             ProblemDetails = outcome.Problem is { } problem ? [problem] : []
         };
     }
@@ -1900,8 +1905,11 @@ public sealed record VcalmPresentationProofResult
     /// <summary>The presentation's holder, or <see langword="null"/> when absent.</summary>
     public string? Holder { get; init; }
 
-    /// <summary>The proof's <c>verificationMethod</c> as the §3.3.2 <c>results.presentation.proof[].input</c>.</summary>
-    public required string ProofInput { get; init; }
+    /// <summary>
+    /// The §3.3.2 <c>results.presentation.proof[]</c> sub-results: one entry per proof actually
+    /// examined, empty when the presentation carried no proof or was an envelope.
+    /// </summary>
+    public ImmutableArray<VcalmProofResult> ProofResults { get; init; } = ImmutableArray<VcalmProofResult>.Empty;
 
     /// <summary>The §3.8.1 ProblemDetails gathered for this presentation proof.</summary>
     public ImmutableArray<VcalmProblemDetail> ProblemDetails { get; init; } = ImmutableArray<VcalmProblemDetail>.Empty;

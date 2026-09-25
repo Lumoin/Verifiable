@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 using System.Text;
+using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Vcalm;
 
@@ -297,7 +299,7 @@ public static class VcalmResponseWriter
         //declares no schemas or the schema seams are unwired.
         AppendSchemaResultsField(sb, VcalmParameterNames.CredentialSchema, outcome.SchemaResults, ref resultsFirst);
         AppendStatusResultsField(sb, VcalmParameterNames.CredentialStatus, outcome.StatusResults, ref resultsFirst);
-        AppendInputResultArrayField(sb, VcalmParameterNames.Proof, outcome.ProofResults, ref resultsFirst);
+        AppendProofResultsArrayField(sb, VcalmParameterNames.Proof, outcome.ProofResults, ref resultsFirst);
 
         _ = sb.Append('}');
     }
@@ -314,6 +316,9 @@ public static class VcalmResponseWriter
     /// <c>domain.verified</c> as the "Result of verifying the security domain across all proofs provided". Each is
     /// false whenever the presentation proof failed or its own check produced an error among the presentation-level
     /// problems, a challenge the verifier never issued included, so a sub-result never reads true beside its error.
+    /// The same clause requires "Checking that the holder in the presentation matches the verification method used
+    /// in the presentation's proof", so <c>holder.verified</c> is true only beside a proof that itself verified,
+    /// never merely because no challenge or domain was requested of an unproofed presentation.
     /// </remarks>
     /// <param name="sb">The builder receiving the JSON.</param>
     /// <param name="presentationResult">The presentation proof's outcome and bound inputs.</param>
@@ -374,18 +379,17 @@ public static class VcalmResponseWriter
 
         if(presentationResult.Holder is not null)
         {
+            //§3.3.2 "matches the verification method used in the presentation's proof" (see the
+            //remarks above): true only beside a proof that itself verified.
+            bool isHolderVerified = presentationResult.ProofResults is [{ Verified: true }, ..];
             AppendInputResultField(
                 sb,
                 VcalmParameterNames.Holder,
-                new VcalmInputResult { Verified = presentationResult.Verified, Input = presentationResult.Holder },
+                new VcalmInputResult { Verified = isHolderVerified, Input = presentationResult.Holder },
                 ref presentationFirst);
         }
 
-        AppendInputResultArrayField(
-            sb,
-            VcalmParameterNames.Proof,
-            [new VcalmInputResult { Verified = presentationResult.Verified, Input = presentationResult.ProofInput }],
-            ref presentationFirst);
+        AppendProofResultsArrayField(sb, VcalmParameterNames.Proof, presentationResult.ProofResults, ref presentationFirst);
 
         _ = sb.Append('}');
         resultsFirst = false;
@@ -477,9 +481,13 @@ public static class VcalmResponseWriter
     }
 
 
-    /// <summary>Writes a §3.3.1 array member of per-step sub-results, such as <c>results.proof[]</c>.</summary>
-    private static void AppendInputResultArrayField(
-        StringBuilder sb, string key, IReadOnlyList<VcalmInputResult> results, ref bool first)
+    /// <summary>
+    /// Writes a §3.3.1 / §3.3.2 array member of proof sub-results, such as <c>results.proof[]</c>:
+    /// each item is <c>{ verified, input }</c> where <c>input</c> is the proof examined, echoed
+    /// through <see cref="AppendProofInputField"/>.
+    /// </summary>
+    private static void AppendProofResultsArrayField(
+        StringBuilder sb, string key, IReadOnlyList<VcalmProofResult> results, ref bool first)
     {
         if(!first)
         {
@@ -500,12 +508,119 @@ public static class VcalmResponseWriter
             _ = sb.Append('{');
             bool resultFirst = true;
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, results[i].Verified, ref resultFirst);
-            JsonAppender.AppendStringField(sb, VcalmParameterNames.Input, results[i].Input, ref resultFirst);
+            AppendProofInputField(sb, results[i].Proof, ref resultFirst);
             _ = sb.Append('}');
         }
 
         _ = sb.Append(']');
         first = false;
+    }
+
+
+    /// <summary>
+    /// Writes the <c>input</c> member of one §3.3.1 / §3.3.2 proof sub-result: the proof's own
+    /// received wire JSON (<see cref="DataIntegrityProof.ReceivedProofJson"/>) when the proof was
+    /// read from a wire document, so the object echoed is byte-faithful to what the caller sent;
+    /// otherwise a reconstruction from the proof's typed members, for a proof built in memory.
+    /// </summary>
+    private static void AppendProofInputField(StringBuilder sb, DataIntegrityProof proof, ref bool first)
+    {
+        if(proof.ReceivedProofJson is { Length: > 0 } receivedProofJson)
+        {
+            JsonAppender.AppendRawField(sb, VcalmParameterNames.Input, receivedProofJson, ref first);
+
+            return;
+        }
+
+        if(!first)
+        {
+            _ = sb.Append(',');
+        }
+
+        _ = sb.Append('"');
+        JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Input);
+        _ = sb.Append("\":");
+        AppendProofObject(sb, proof);
+
+        first = false;
+    }
+
+
+    /// <summary>
+    /// Reconstructs a proof's members as a JSON object — the fallback <c>input</c> shape for a proof
+    /// with no <see cref="DataIntegrityProof.ReceivedProofJson"/> (one built in memory rather than
+    /// read from the wire, or an empty received value). Members absent on <paramref name="proof"/> are
+    /// omitted, in the order <c>DataIntegrityProofConverter.Write</c> emits them. An embedded
+    /// <c>verificationMethod</c> object reduces to its identifying <c>id</c>, since reconstructing the
+    /// full embedded object would need a JSON writer this library keeps out of <c>Verifiable.Vcalm</c>.
+    /// </summary>
+    private static void AppendProofObject(StringBuilder sb, DataIntegrityProof proof)
+    {
+        _ = sb.Append('{');
+        bool proofFirst = true;
+
+        if(proof.Id is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Id, proof.Id, ref proofFirst);
+        }
+
+        JsonAppender.AppendStringField(sb, VcalmParameterNames.Type, proof.Type, ref proofFirst);
+
+        if(proof.Cryptosuite is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Cryptosuite, proof.Cryptosuite.CryptosuiteName, ref proofFirst);
+        }
+
+        if(proof.Created is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Created, proof.Created, ref proofFirst);
+        }
+
+        if(proof.Expires is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Expires, proof.Expires, ref proofFirst);
+        }
+
+        if(proof.VerificationMethod?.Id is { } verificationMethodId)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.VerificationMethod, verificationMethodId, ref proofFirst);
+        }
+
+        if(proof.ProofPurpose is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.ProofPurpose, proof.ProofPurpose, ref proofFirst);
+        }
+
+        if(proof.ProofValue is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.ProofValue, proof.ProofValue, ref proofFirst);
+        }
+
+        if(proof.Domain is { Count: 1 } singleDomain)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Domain, singleDomain[0], ref proofFirst);
+        }
+        else if(proof.Domain is { Count: > 1 } domains)
+        {
+            JsonAppender.AppendStringArrayField(sb, VcalmParameterNames.Domain, domains, ref proofFirst);
+        }
+
+        if(proof.Challenge is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Challenge, proof.Challenge, ref proofFirst);
+        }
+
+        if(proof.Nonce is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Nonce, proof.Nonce, ref proofFirst);
+        }
+
+        if(proof.PreviousProof is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.PreviousProof, proof.PreviousProof, ref proofFirst);
+        }
+
+        _ = sb.Append('}');
     }
 
 
@@ -557,7 +672,12 @@ public static class VcalmResponseWriter
     }
 
 
-    /// <summary>Writes the §3.3.1 <c>results.credentialStatus[]</c> array: each item is <c>{ value, verified, input }</c>.</summary>
+    /// <summary>
+    /// Writes the §3.3.1 <c>results.credentialStatus[]</c> array: each item is
+    /// <c>{ value, verified, input }</c> where <c>input</c> is the examined status entry's identifying
+    /// members (<c>id</c>, <c>type</c>, <c>statusPurpose</c>, <c>statusListIndex</c>,
+    /// <c>statusListCredential</c>), not every member <see cref="CredentialStatus"/> carries.
+    /// </summary>
     private static void AppendStatusResultsField(
         StringBuilder sb, string key, IReadOnlyList<VcalmStatusResult> results, ref bool first)
     {
@@ -581,11 +701,56 @@ public static class VcalmResponseWriter
             bool resultFirst = true;
             JsonAppender.AppendInt64Field(sb, VcalmParameterNames.Value, results[i].Value, ref resultFirst);
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, results[i].Verified, ref resultFirst);
-            JsonAppender.AppendStringField(sb, VcalmParameterNames.Input, results[i].Input, ref resultFirst);
+            AppendCredentialStatusInputField(sb, results[i].Entry, ref resultFirst);
             _ = sb.Append('}');
         }
 
         _ = sb.Append(']');
+        first = false;
+    }
+
+
+    /// <summary>
+    /// Writes the <c>input</c> member of one §3.3.1 <c>results.credentialStatus[]</c> item: the
+    /// examined <see cref="CredentialStatus"/> entry's own members (<c>id</c>, <c>type</c>,
+    /// <c>statusPurpose</c>, <c>statusListIndex</c>, <c>statusListCredential</c>), each present only
+    /// when <paramref name="entry"/> carries it.
+    /// </summary>
+    private static void AppendCredentialStatusInputField(StringBuilder sb, CredentialStatus entry, ref bool first)
+    {
+        if(!first)
+        {
+            _ = sb.Append(',');
+        }
+
+        _ = sb.Append('"');
+        JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Input);
+        _ = sb.Append("\":{");
+
+        bool entryFirst = true;
+        if(entry.Id is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Id, entry.Id, ref entryFirst);
+        }
+
+        JsonAppender.AppendStringField(sb, VcalmParameterNames.Type, entry.Type, ref entryFirst);
+
+        if(entry.StatusPurpose is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.StatusPurpose, entry.StatusPurpose, ref entryFirst);
+        }
+
+        if(entry.StatusListIndex is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.StatusListIndex, entry.StatusListIndex, ref entryFirst);
+        }
+
+        if(entry.StatusListCredential is not null)
+        {
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.StatusListCredential, entry.StatusListCredential, ref entryFirst);
+        }
+
+        _ = sb.Append('}');
         first = false;
     }
 

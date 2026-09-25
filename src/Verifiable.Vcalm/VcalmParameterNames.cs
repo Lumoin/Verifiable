@@ -323,6 +323,38 @@ public static class VcalmParameterNames
     /// </summary>
     public static string Created { get; } = Utf8Constants.ToInternedString(CreatedUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="ProofValue"/>.</summary>
+    public static ReadOnlySpan<byte> ProofValueUtf8 => "proofValue"u8;
+
+    /// <summary>
+    /// The Data Integrity 1.0 §2.1 <c>proofValue</c> member — the proof's multibase-encoded signature.
+    /// Used to reconstruct a §3.3.1 / §3.3.2 <c>results...proof[].input</c> object from a proof's
+    /// typed members when its received wire JSON is unavailable (<see cref="Verifiable.Core.Model.DataIntegrity.DataIntegrityProof.ReceivedProofJson"/>).
+    /// </summary>
+    public static string ProofValue { get; } = Utf8Constants.ToInternedString(ProofValueUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="PreviousProof"/>.</summary>
+    public static ReadOnlySpan<byte> PreviousProofUtf8 => "previousProof"u8;
+
+    /// <summary>
+    /// The Data Integrity 1.0 §2.1.2 <c>previousProof</c> member — a proof chain's link to the proof
+    /// it depends on. Used to reconstruct a §3.3.1 / §3.3.2 <c>results...proof[].input</c> object from
+    /// a proof's typed members when its received wire JSON is unavailable
+    /// (<see cref="Verifiable.Core.Model.DataIntegrity.DataIntegrityProof.ReceivedProofJson"/>).
+    /// </summary>
+    public static string PreviousProof { get; } = Utf8Constants.ToInternedString(PreviousProofUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Nonce"/>.</summary>
+    public static ReadOnlySpan<byte> NonceUtf8 => "nonce"u8;
+
+    /// <summary>
+    /// The Data Integrity 1.0 §2.1 <c>nonce</c> member — additional randomness that decreases the
+    /// linkability of a deterministic signature. Used to reconstruct a §3.3.1 / §3.3.2
+    /// <c>results...proof[].input</c> object from a proof's typed members when its received wire JSON
+    /// is unavailable (<see cref="Verifiable.Core.Model.DataIntegrity.DataIntegrityProof.ReceivedProofJson"/>).
+    /// </summary>
+    public static string Nonce { get; } = Utf8Constants.ToInternedString(NonceUtf8);
+
     //VCALM 1.0 §3.4 verifiable-presentation-request (VPR) request members.
 
     /// <summary>The UTF-8 source literal of <see cref="Query"/>.</summary>

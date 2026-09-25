@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
+using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Vcalm;
 
@@ -10,8 +12,8 @@ namespace Verifiable.Vcalm;
 /// <remarks>
 /// <para>
 /// <see cref="ProofResults"/> carries one entry per proof in chain order, each pairing the
-/// per-proof verified outcome with the proof's <c>verificationMethod</c> as its <c>input</c>
-/// (§3.3.1 <c>results.proof[]</c>). <see cref="ProblemDetails"/> gathers every §3.8.1 ProblemDetail
+/// per-proof verified outcome with the proof examined as its <c>input</c> object (§3.3.1
+/// <c>results.proof[]</c>). <see cref="ProblemDetails"/> gathers every §3.8.1 ProblemDetail
 /// — errors and warnings both. <see cref="Verified"/> is the §3.8.1 roll-up: false iff any
 /// <see cref="VcalmProblemDetail.IsError"/> entry is present.
 /// </para>
@@ -42,7 +44,7 @@ public sealed record VcalmVerificationOutcome
     public ImmutableArray<VcalmSchemaResult> SchemaResults { get; init; } = ImmutableArray<VcalmSchemaResult>.Empty;
 
     /// <summary>The §3.3.1 <c>results.proof[]</c> sub-results, in chain order.</summary>
-    public ImmutableArray<VcalmInputResult> ProofResults { get; init; } = ImmutableArray<VcalmInputResult>.Empty;
+    public ImmutableArray<VcalmProofResult> ProofResults { get; init; } = ImmutableArray<VcalmProofResult>.Empty;
 
     /// <summary>Every §3.8.1 ProblemDetail gathered for this credential — errors and warnings.</summary>
     public ImmutableArray<VcalmProblemDetail> ProblemDetails { get; init; } = ImmutableArray<VcalmProblemDetail>.Empty;
@@ -70,9 +72,10 @@ public sealed record VcalmSchemaResult
 
 
 /// <summary>
-/// A §3.3.1 per-step sub-result: a boolean <c>verified</c> paired with the <c>input</c> value the
-/// step examined (a <c>validFrom</c> / <c>validUntil</c> string, or a proof's
-/// <c>verificationMethod</c>).
+/// A §3.3.1 / §3.3.2 per-step sub-result: a boolean <c>verified</c> paired with the string
+/// <c>input</c> value the step examined — a credential's <c>validFrom</c> / <c>validUntil</c>, or a
+/// presentation's §3.3.2 <c>challenge</c>, <c>domain</c> or <c>holder</c>. A proof's own sub-result
+/// is <see cref="VcalmProofResult"/> instead, whose <c>input</c> is the proof object.
 /// </summary>
 [DebuggerDisplay("VcalmInputResult Verified={Verified} Input={Input}")]
 public sealed record VcalmInputResult
@@ -86,8 +89,24 @@ public sealed record VcalmInputResult
 
 
 /// <summary>
+/// A §3.3.1 / §3.3.2 <c>results...proof[]</c> sub-result: the per-proof boolean <c>verified</c>
+/// paired with the proof examined as the <c>input</c> object — "Results from verifying the proof
+/// objects if any … input [object]" (VCALM 1.0 §3.3.1, §3.3.2).
+/// </summary>
+[DebuggerDisplay("VcalmProofResult Verified={Verified}")]
+public sealed record VcalmProofResult
+{
+    /// <summary>The proof's boolean verification result.</summary>
+    public required bool Verified { get; init; }
+
+    /// <summary>The proof examined, echoed as the <c>input</c> object.</summary>
+    public required DataIntegrityProof Proof { get; init; }
+}
+
+
+/// <summary>
 /// A §3.3.1 <c>results.credentialStatus[]</c> sub-result: the integer status <c>value</c>, the
-/// boolean <c>verified</c>, and the <c>input</c> status entry id.
+/// boolean <c>verified</c>, and the <c>input</c> status entry object.
 /// </summary>
 [DebuggerDisplay("VcalmStatusResult Value={Value} Verified={Verified}")]
 public sealed record VcalmStatusResult
@@ -98,8 +117,8 @@ public sealed record VcalmStatusResult
     /// <summary>The status-check result (§3.3.1 <c>verified</c>): true when the credential is not revoked / suspended.</summary>
     public required bool Verified { get; init; }
 
-    /// <summary>The status entry's <c>id</c> as the <c>input</c>, or empty when it has none.</summary>
-    public required string Input { get; init; }
+    /// <summary>The status entry examined, echoed as the §3.3.1 <c>input</c> object ("value [integer] … input [object]").</summary>
+    public required CredentialStatus Entry { get; init; }
 
     /// <summary>
     /// The status purpose this result was evaluated against (e.g. <c>revocation</c>).
