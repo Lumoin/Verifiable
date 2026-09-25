@@ -5,6 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -1289,6 +1290,41 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.AreEqual(400, StatusCode, Body);
         Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", Body, StringComparison.Ordinal);
         Assert.Contains("only the S256 code challenge method is supported", Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>: "the
+    /// "request_uri" authorization request parameter defined in Section 4 of [RFC9101] ... MUST NOT be
+    /// provided" on a pushed authorization request. A PAR body otherwise carrying a complete,
+    /// well-formed authorization request is refused for presenting one.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUriIsRefusedWhenPresentedToThePushedAuthorizationEndpoint()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.RequestUri] = "urn:ietf:params:oauth:request_uri:arbitrary"
+        };
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        using JsonDocument error = JsonDocument.Parse(Body);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, error.RootElement.GetProperty("error").GetString());
     }
 
 
@@ -5355,16 +5391,6 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
 
-        static Uri BuildDirectAuthorizeUrl(HostedAuthorizationServer hosted, string segment, string clientId, PkceParameters pkce) =>
-            new(hosted.HttpBaseAddress!,
-                $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeDirectAuthorize, segment)}" +
-                $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}" +
-                $"&{OAuthRequestParameterNames.CodeChallenge}={Uri.EscapeDataString(pkce.EncodedChallenge)}" +
-                $"&{OAuthRequestParameterNames.CodeChallengeMethod}={WellKnownCodeChallengeMethods.S256}" +
-                $"&{OAuthRequestParameterNames.RedirectUri}={Uri.EscapeDataString(RedirectUri.OriginalString)}" +
-                $"&{OAuthRequestParameterNames.Scope}={Uri.EscapeDataString(WellKnownScopes.OpenId)}" +
-                $"&{OAuthRequestParameterNames.ResponseType}={WellKnownResponseTypes.Code}");
-
         //The mismatching request: refused directly.
         PkceParameters mismatchPkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         Uri mismatchUrl = BuildDirectAuthorizeUrl(hosted, segment, "not-the-registration", mismatchPkce);
@@ -5561,43 +5587,146 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// A reference that is unknown, has no token or stored request, or has reached its expiry cannot authorize
-    /// a code and receives <c>invalid_request_uri</c> as defined by
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
-    /// defines the reference and its lifetime, and
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>
-    /// requires expired references to be rejected as invalid.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>
-    /// treats parameters without a value as omitted. A whitespace-only <c>request_uri</c> has a value
-    /// and receives <c>invalid_request_uri</c> as an invalid reference, rather than the missing-parameter
-    /// <c>invalid_request</c> reserved for an empty value.
+    /// A whitespace-only <c>request_uri</c> is refused before any correlation-resolver or flow-state-store
+    /// call, with or without a resolver wired. <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">
+    /// RFC 6749 §3.1</see>: "Parameters sent without a value MUST be treated as if they were omitted from the
+    /// request" — only the empty value is omitted, so a whitespace-only value is present. The registration's
+    /// policy does not require pushed authorization requests, so
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see> answers such an
+    /// unresolvable reference with <c>invalid_request_uri</c>: "The "request_uri" in the authorization request
+    /// returns an error or contains invalid data."
     /// </summary>
-    /// <param name="referenceCondition">The unavailable-reference condition presented at authorization.</param>
+    /// <param name="configuration">
+    /// "resolver null" runs with no correlation resolver wired at all; "observed store" keeps the resolver
+    /// wired but observes it. Both configurations observe the flow-state store and assert it is never
+    /// touched for this reference.
+    /// </param>
     [TestMethod]
-    [DataRow("unknown")]
-    [DataRow("empty token")]
-    [DataRow("blank token")]
-    [DataRow("missing record")]
-    [DataRow("expired")]
-    public async Task UnavailableRequestUriIsRefusedInvalidRequestUri(string referenceCondition)
+    [DataRow("resolver null")]
+    [DataRow("observed store")]
+    public async Task BlankRequestUriIsRefusedBeforeAnyCorrelation(string configuration)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        bool isObservedStore = string.Equals(configuration, "observed store", StringComparison.Ordinal);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+            if(!isObservedStore)
+            {
+                candidateIntegration.ResolveCorrelationKeyAsync = null;
+            }
+        }).ConfigureAwait(false);
+        int before = hosted.StorageObservations.Count;
+
+        Uri authorizeUrl = BuildRequestUriAuthorizationUrl(hosted, segment, "  ", ClientId);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "A blank request_uri is refused directly, never a redirect.");
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidRequestUri, error.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("Flow not found or expired.", error.RootElement.GetProperty("error_description").GetString());
+
+        //Both configurations prove the same zero-store-call guarantee: with the resolver cleared, the
+        //blank value must never reach a load either.
+        AssertNoGrantStorageTouched(hosted, before, "a blank request_uri refusal");
+    }
+
+
+    /// <summary>
+    /// A reference that is unknown, foreign, has no token, or is stored answers according to the pushed
+    /// authorization request policy: one that never identified a pending pushed request answers
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: "...will refuse, using
+    /// the "invalid_request" error code, to process any request to the authorization endpoint that does not
+    /// have a "request_uri" parameter with a value obtained from the PAR endpoint" — a reference that never
+    /// identified a pending pushed request was never obtained from it, so it answers this
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>
+    /// <c>invalid_request</c> when the policy requires pushed authorization requests, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>'s
+    /// <c>invalid_request_uri</c> — "The "request_uri" in the authorization request returns an error or
+    /// contains invalid data" — otherwise. One that resolved but is now missing its record or has reached its
+    /// expiry always answers <c>invalid_request_uri</c>, under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see> (the reference and its
+    /// lifetime) and RFC 9126 §4 ("An expired "request_uri" MUST be rejected as invalid"), regardless of
+    /// policy.
+    /// </summary>
+    /// <param name="referenceCondition">
+    /// The unavailable-reference condition presented at authorization. "missing record, no resolver" and
+    /// "blank resolver answer" run only under the PAR-optional policy: the PAR-required profile in this
+    /// fixture also needs the correlation resolver for its own JWT-replay store, so altering the resolver
+    /// seam is confined to the policy that does not depend on it.
+    /// </param>
+    /// <param name="requiresPushedAuthorizationRequests">
+    /// <see langword="true"/> runs the registration under a profile requiring pushed authorization requests.
+    /// </param>
+    [TestMethod]
+    [DataRow("unknown", false)]
+    [DataRow("empty token", false)]
+    [DataRow("blank token", false)]
+    [DataRow("never issued", false)]
+    [DataRow("missing record", false)]
+    [DataRow("missing record, no resolver", false)]
+    [DataRow("expired", false)]
+    [DataRow("blank resolver answer", false)]
+    [DataRow("unknown", true)]
+    [DataRow("empty token", true)]
+    [DataRow("blank token", true)]
+    [DataRow("never issued", true)]
+    [DataRow("missing record", true)]
+    [DataRow("expired", true)]
+    public async Task UnavailableRequestUriIsRefusedByReferenceStateAndParPolicy(
+        string referenceCondition, bool requiresPushedAuthorizationRequests)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri,
+            profile: requiresPushedAuthorizationRequests ? PolicyProfile.Fapi20 : PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
         string requestUri = await PushRequestUriAsync(host, segment).ConfigureAwait(false);
         string flowId = hosted.RequestUriTokenIndex[TestHostShell.ExtractRequestUriToken(new Uri(requestUri))];
         (FlowState state, int stepCount) = hosted.FlowStates[flowId];
         ParRequestReceivedState parState = (ParRequestReceivedState)state;
+
+        //"missing record, no resolver" and "blank resolver answer" need the resolver seam itself
+        //altered, not just the stored record, so they are applied before the switch picks the
+        //presented reference (both reuse the issued requestUri).
+        if(string.Equals(referenceCondition, "missing record, no resolver", StringComparison.Ordinal))
+        {
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ResolveCorrelationKeyAsync = null;
+            }).ConfigureAwait(false);
+        }
+        else if(string.Equals(referenceCondition, "blank resolver answer", StringComparison.Ordinal))
+        {
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ResolveCorrelationKeyAsync = (_, _, _, _, _) => ValueTask.FromResult<string?>(" ");
+            }).ConfigureAwait(false);
+        }
+
         (string presentedReference, ParRequestReceivedState? storedRequest) = referenceCondition switch
         {
             "unknown" => (requestUri + "-unknown", parState),
+            //A syntactically well-formed reference naming a token this server never issued to any
+            //registration — distinct from "unknown" (a live token with a garbage suffix) — still
+            //never identifies a pending pushed request.
+            "never issued" => ("urn:ietf:params:oauth:request_uri:never-issued-" + Guid.NewGuid().ToString("N"), parState),
             "empty token" => ("urn:ietf:params:oauth:request_uri:", parState),
             "blank token" => (" ", parState),
-            "missing record" => (requestUri, null),
+            "missing record" or "missing record, no resolver" => (requestUri, null),
             "expired" => (requestUri, parState with { ExpiresAt = TimeProvider.GetUtcNow() }),
+            "blank resolver answer" => (requestUri, parState),
             _ => throw new ArgumentOutOfRangeException(nameof(referenceCondition))
         };
         if(storedRequest is null)
@@ -5616,26 +5745,52 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.IsNull(response.Headers.Location);
         using JsonDocument error = JsonDocument.Parse(body);
-        Assert.AreEqual(OAuthErrors.InvalidRequestUri, error.RootElement.GetProperty("error").GetString());
+
+        //"missing record" and "expired" resolved to a real reference whose stored state is now
+        //unusable: RFC 9126 §4 and §2.2 answer invalid_request_uri regardless of policy.
+        //"missing record, no resolver" never resolved at all (no resolver is wired), so it joins the
+        //never-resolved group governed by policy. Every other condition never resolved at all, so the
+        //policy in force at the PAR-optional/PAR-required split decides between invalid_request_uri and
+        //invalid_request.
+        bool isKnownButUnusable = referenceCondition is "missing record" or "expired";
+        string expectedError = isKnownButUnusable
+            ? OAuthErrors.InvalidRequestUri
+            : requiresPushedAuthorizationRequests ? OAuthErrors.InvalidRequest : OAuthErrors.InvalidRequestUri;
+        Assert.AreEqual(expectedError, error.RootElement.GetProperty("error").GetString());
+
+        //Neither the never-resolved nor the resolved-but-unusable refusal names its own description on
+        //this endpoint, so both fall back to the same host-generic literal: every condition in this
+        //test answers the identical description regardless of policy or reference state.
+        Assert.AreEqual("Flow not found or expired.", error.RootElement.GetProperty("error_description").GetString());
         Assert.DoesNotContain(entry => entry.State is ServerCodeIssuedState, hosted.FlowStates.Values,
             "An unavailable reference must issue no authorization code.");
     }
 
 
     /// <summary>
-    /// An already-authorized reference cannot issue another code after the successful state is saved.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
-    /// defines the single-use reference, and this server enforces the one-time-use recommendation in
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see> with
+    /// An already-authorized reference cannot issue another code after the successful state is saved, under
+    /// either pushed authorization request policy. <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">
+    /// RFC 9126 §2.2</see> defines the single-use reference, and this server enforces the one-time-use
+    /// recommendation in <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see> with
     /// <c>invalid_request_uri</c>, the reference-error code in
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>. This resolves to a real,
+    /// already-consumed reference — a reference state, not an unresolved handle — so the pushed authorization
+    /// request policy never changes the answer.
     /// </summary>
+    /// <param name="requiresPushedAuthorizationRequests">
+    /// <see langword="true"/> runs the registration under a profile requiring pushed authorization requests.
+    /// </param>
     [TestMethod]
-    public async Task ConsumedRequestUriIsRefusedInvalidRequestUriAfterAuthorizationIsSaved()
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task ConsumedRequestUriIsRefusedInvalidRequestUriAfterAuthorizationIsSaved(
+        bool requiresPushedAuthorizationRequests)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+            ClientId, ClientBaseUri,
+            profile: requiresPushedAuthorizationRequests ? PolicyProfile.Fapi20 : PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         HostedAuthorizationServer hosted = host.Host("default");
         string requestUri = await PushRequestUriAsync(host, segment).ConfigureAwait(false);
@@ -5662,28 +5817,281 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// An empty reference value is treated as an omitted parameter under
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>,
-    /// so it receives the missing-parameter <c>invalid_request</c> error defined in
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>'s server "will
+    /// refuse, using the "invalid_request" error code, to process any request to the authorization
+    /// endpoint that does not have a "request_uri" parameter with a value obtained from the PAR
+    /// endpoint." A GET carrying no usable <c>request_uri</c> under a policy requiring pushed
+    /// authorization requests answers this
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>
+    /// <c>invalid_request</c>, since the registration owns neither the JAR-by-value nor the
+    /// direct-authorization endpoint the request's shape would otherwise route to. An omitted
+    /// <c>request_uri</c> and an empty one answer byte-identically for both shapes —
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request" — because that
+    /// same rule governs both the routing matchers and the both-present guard (RFC 9101 §5) equally: an
+    /// empty <c>request_uri</c> alongside a present <c>request</c> is one present parameter, not two,
+    /// so it is not claimed by the both-present guard either.
     /// </summary>
+    /// <param name="shape">
+    /// "PKCE" sends no <c>request</c> parameter (the direct-authorization shape); "request object" sends one
+    /// (the JAR-by-value shape). Neither owning endpoint is registered, so both fall to this refusal.
+    /// </param>
     [TestMethod]
-    public async Task EmptyRequestUriIsRefusedAsAMissingParameter()
+    [DataRow("PKCE")]
+    [DataRow("request object")]
+    public async Task MissingRequestUriIsRefusedInvalidRequestWhenParIsRequired(string shape)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Uri authorizeUrl = BuildRequestUriAuthorizationUrl(
-            host.Host("default"), material.Registration.TenantId.Value, string.Empty, ClientId);
-        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, authorizeUrl, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        bool isRequestObjectShape = string.Equals(shape, "request object", StringComparison.Ordinal);
+        Dictionary<string, string> baseFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
+        if(isRequestObjectShape)
+        {
+            baseFields[OAuthRequestParameterNames.Request] = "not-a-real-request-object-jwt";
+        }
+
+        using HttpResponseMessage omittedResponse = await SendAuthorizeGetAsync(host, hosted, segment, baseFields)
+            .ConfigureAwait(false);
+        string omittedBody = await omittedResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)omittedResponse.StatusCode, omittedBody);
+        Assert.IsNull(omittedResponse.Headers.Location);
+        using JsonDocument omittedError = JsonDocument.Parse(omittedBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, omittedError.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("Missing request_uri.", omittedError.RootElement.GetProperty("error_description").GetString());
+
+        Dictionary<string, string> emptyFields = new(baseFields, StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.RequestUri] = string.Empty
+        };
+        using HttpResponseMessage emptyResponse = await SendAuthorizeGetAsync(host, hosted, segment, emptyFields)
+            .ConfigureAwait(false);
+        string emptyBody = await emptyResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual((int)omittedResponse.StatusCode, (int)emptyResponse.StatusCode);
+        Assert.AreEqual(omittedBody, emptyBody,
+            "An omitted request_uri and an empty one must answer byte-identically.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: "...will refuse,
+    /// using the "invalid_request" error code, to process any request to the authorization endpoint
+    /// that does not have a "request_uri" parameter with a value obtained from the PAR endpoint." This
+    /// holds even when the registration also carries direct-authorization capability: a malformed
+    /// direct request (missing <c>code_challenge</c>) declines the direct-authorization endpoint's own
+    /// acceptance test too, so no OTHER endpoint in the chain accepts this exact request, and the
+    /// missing-<c>request_uri</c> refusal answers it — never the host-generic 404 a chain with no
+    /// matching endpoint would otherwise produce.
+    /// </summary>
+    [TestMethod]
+    public async Task MissingRequestUriIsRefusedInvalidRequestEvenWithDirectAuthorizationRegistered()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A well-formed GET for direct authorization EXCEPT for code_challenge, so the registered
+        //direct-authorization endpoint's own matcher declines this exact request on its own terms.
+        Dictionary<string, string> fields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        using HttpResponseMessage response = await SendAuthorizeGetAsync(host, hosted, segment, fields)
+            .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.IsNull(response.Headers.Location);
         using JsonDocument error = JsonDocument.Parse(body);
         Assert.AreEqual(OAuthErrors.InvalidRequest, error.RootElement.GetProperty("error").GetString());
         Assert.AreEqual("Missing request_uri.", error.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>'s server "will
+    /// refuse, using the "invalid_request" error code, to process any request to the authorization
+    /// endpoint that does not have a "request_uri" parameter with a value obtained from the PAR
+    /// endpoint." A GET carrying a JAR-by-value <c>request</c> object and no <c>request_uri</c> under a
+    /// policy requiring pushed authorization requests is claimed by the JAR-by-value endpoint itself
+    /// (RFC 9101 §6.1 governs its ownership of this request's shape) and refused by that endpoint's own
+    /// PAR-mandating message, never by the authorize endpoint's missing-<c>request_uri</c> fallback.
+    /// </summary>
+    [TestMethod]
+    public async Task JarByValueAuthorizeIsRefusedByItsOwnMessageWhenParIsRequired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20,
+            capabilities: Capabilities
+                .Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
+                .Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //RegisterDpopClientAsync provisions AccessTokenIssuance/IdTokenIssuance signing keys only;
+        //this row also signs a request object, so the registration's own signing key is extended
+        //into the JarSigning slot the JAR-by-value endpoint verifies against.
+        _ = await host.UpdateAsync(material, previous =>
+        {
+            Dictionary<KeyUsageContext, SigningKeySet> signingKeys = new(previous.SigningKeys)
+            {
+                [KeyUsageContext.JarSigning] = new SigningKeySet { Current = [material.SigningKeyId] }
+            };
+
+            return previous with { SigningKeys = signingKeys };
+        }, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RedirectUri, "jar-owner-state", "jar-owner-nonce"),
+            TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Dictionary<string, string> fields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.Request] = compactJar
+        };
+
+        using HttpResponseMessage response = await SendAuthorizeGetAsync(host, hosted, segment, fields)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, error.RootElement.GetProperty("error").GetString());
+        Assert.Contains("a JAR-by-value authorization request is not accepted", body, StringComparison.Ordinal,
+            $"The refusal must be JAR-by-value's own PAR-mandating message, not the missing-request_uri "
+            + $"fallback's \"Missing request_uri.\" Got: {body}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>'s server "will
+    /// refuse, using the "invalid_request" error code, to process any request to the authorization
+    /// endpoint that does not have a "request_uri" parameter with a value obtained from the PAR
+    /// endpoint." An otherwise well-formed direct-authorization (PKCE S256) GET under a policy
+    /// requiring pushed authorization requests is claimed by the direct-authorization endpoint itself,
+    /// which declines the request under its own PAR-mandating policy, never by the authorize endpoint's
+    /// missing-<c>request_uri</c> fallback.
+    /// </summary>
+    [TestMethod]
+    public async Task DirectAuthorizeIsRefusedByItsOwnMessageWhenParIsRequired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> fields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        using HttpResponseMessage response = await SendAuthorizeGetAsync(host, hosted, segment, fields)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, error.RootElement.GetProperty("error").GetString());
+        Assert.Contains("a direct authorization request is not accepted", body, StringComparison.Ordinal,
+            $"The refusal must be direct authorization's own PAR-mandating message, not the missing-request_uri "
+            + $"fallback's \"Missing request_uri.\" Got: {body}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." An empty
+    /// <c>request_uri</c> alongside an otherwise-complete direct-authorization (PKCE) request is
+    /// therefore not a reference to complete and not a missing-parameter refusal: it is the SAME
+    /// request as one with no <c>request_uri</c> at all, routed to direct authorization and answered
+    /// with a redirect carrying a redeemable authorization code, exactly like the omitted case.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyRequestUriIsTreatedAsOmittedAtDirectAuthorization()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        async Task<string> AuthorizeAndRedeemAsync(bool includeEmptyRequestUri)
+        {
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            Dictionary<string, string> fields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+            };
+            if(includeEmptyRequestUri)
+            {
+                fields[OAuthRequestParameterNames.RequestUri] = string.Empty;
+            }
+
+            using HttpResponseMessage response = await SendAuthorizeGetAsync(host, hosted, segment, fields)
+                .ConfigureAwait(false);
+            Assert.AreEqual(302, (int)response.StatusCode,
+                await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false));
+            string code = TestBrowser.ExtractQueryParam(
+                response.Headers.Location!.ToString(), OAuthRequestParameterNames.Code)!;
+
+            (int tokenStatusCode, string tokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment,
+                RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(200, tokenStatusCode, tokenBody);
+
+            return code;
+        }
+
+        string omittedCode = await AuthorizeAndRedeemAsync(includeEmptyRequestUri: false).ConfigureAwait(false);
+        string emptyCode = await AuthorizeAndRedeemAsync(includeEmptyRequestUri: true).ConfigureAwait(false);
+        Assert.AreNotEqual(omittedCode, emptyCode,
+            "Each authorization redirects and redeems its own, independently issued code.");
     }
 
 
@@ -6114,6 +6522,36 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         using JsonDocument response = JsonDocument.Parse(body);
 
         return response.RootElement.GetProperty("request_uri").GetString()!;
+    }
+
+
+    /// <summary>Builds a direct-authorization URL so the PKCE-shaped requests in this class share one route and parameter encoding.</summary>
+    private static Uri BuildDirectAuthorizeUrl(HostedAuthorizationServer hosted, string segment, string clientId, PkceParameters pkce) =>
+        new(hosted.HttpBaseAddress!,
+            $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeDirectAuthorize, segment)}" +
+            $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}" +
+            $"&{OAuthRequestParameterNames.CodeChallenge}={Uri.EscapeDataString(pkce.EncodedChallenge)}" +
+            $"&{OAuthRequestParameterNames.CodeChallengeMethod}={WellKnownCodeChallengeMethods.S256}" +
+            $"&{OAuthRequestParameterNames.RedirectUri}={Uri.EscapeDataString(RedirectUri.OriginalString)}" +
+            $"&{OAuthRequestParameterNames.Scope}={Uri.EscapeDataString(WellKnownScopes.OpenId)}" +
+            $"&{OAuthRequestParameterNames.ResponseType}={WellKnownResponseTypes.Code}");
+
+
+    /// <summary>
+    /// Sends a pinned, non-redirecting GET to the authorization endpoint carrying exactly
+    /// <paramref name="fields"/> — the general-field-map form for requests <see cref="BuildRequestUriAuthorizationUrl"/>
+    /// cannot express, such as an empty <c>request_uri</c> or a bare <c>request</c> parameter.
+    /// </summary>
+    private Task<HttpResponseMessage> SendAuthorizeGetAsync(
+        TestHostShell host, HostedAuthorizationServer hosted, string segment, IReadOnlyDictionary<string, string> fields)
+    {
+        string query = string.Join("&", fields.Select(pair =>
+            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        Uri uri = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment) + "?" + query);
+
+        return RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, SubjectId, TestContext.CancellationToken);
     }
 
 

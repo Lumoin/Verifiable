@@ -13,6 +13,12 @@ namespace Verifiable.Core.Outbound;
     Justification = "C# extension blocks are surfaced as nested types by the analyzer but are not nested types in the language sense.")]
 public static class OutboundFetchPolicyExchangeContextExtensions
 {
+    /// <summary>
+    /// The <see cref="ExchangeContext"/> bag key under which the current call's
+    /// <see cref="OutboundFetchPolicy"/> is stored, read by <see cref="ResolveOutboundFetchPolicy"/> and
+    /// written by <see cref="SetOutboundFetchPolicy"/>. A private key keeps the policy readable only
+    /// through these typed accessors, never as a raw bag lookup by callers.
+    /// </summary>
     private const string OutboundFetchPolicyKey = "exchange.outboundFetchPolicy";
 
 

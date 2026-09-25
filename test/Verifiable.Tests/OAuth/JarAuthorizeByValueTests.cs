@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Net;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -808,10 +809,52 @@ internal sealed class JarAuthorizeByValueTests
 
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode,
             $"PAR-mandating profile must refuse direct authorize. Body: {response.Body}");
-        Assert.Contains(OAuthErrors.InvalidRequest, response.Body, StringComparison.Ordinal,
-            $"Refusal must carry invalid_request. Got: {response.Body}");
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+
+        //A literal comparison, not a substring match: "invalid_request" is itself a substring of
+        //"invalid_request_uri", so a regression that answered the unresolved-reference vocabulary
+        //instead of this missing-parameter refusal would still satisfy a Contains check.
+        Assert.AreEqual(OAuthErrors.InvalidRequest,
+            body.RootElement.GetProperty("error").GetString(),
+            $"Refusal must carry exactly invalid_request, not a code that merely contains it. Got: {response.Body}");
         Assert.Contains("Pushed Authorization Requests", response.Body, StringComparison.Ordinal,
             $"Refusal must name the PAR requirement. Got: {response.Body}");
+    }
+
+
+    /// <summary>
+    /// FAPI 2.0 §5.2.2: under a PAR-mandating profile, a GET carrying <c>request</c> and no
+    /// <c>request_uri</c> is claimed by the JAR-by-value matcher (RFC 9101 §6.1 — it is the endpoint
+    /// that owns this request's shape) and refused by JAR-by-value's own acceptance test, never by
+    /// <c>BuildAuthorize</c>'s missing-<c>request_uri</c> fallback, which claims a request only when no
+    /// other chained endpoint would already accept it.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsJarByValueAuthorizeWhenProfileRequiresPushedAuthorizationRequests()
+    {
+        //The default profile (Fapi20) mandates PAR; JarDirectCapabilities registers both the
+        //JAR-by-value and direct-authorization owners so the ownership decision has two candidates
+        //to distinguish between, not merely their absence.
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchAuthorizeAsync(
+            host, material, compactJar, ClientId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        AssertErrorCode(response, OAuthErrors.InvalidRequest);
+        Assert.Contains("a JAR-by-value authorization request is not accepted", response.Body, StringComparison.Ordinal,
+            $"The refusal must be JAR-by-value's own PAR-mandating message, not the missing-request_uri "
+            + $"fallback's \"Missing request_uri.\" Got: {response.Body}");
     }
 
 

@@ -1160,9 +1160,11 @@ public sealed class EndpointServer: IDisposable
                 ? endpoint.ExtractCorrelationKey(string.Empty, fields, context) ?? string.Empty
                 : context.CorrelationKey ?? string.Empty;
 
-            //RFC 6749 §3.1: "Parameters sent without a value MUST be treated as if they were omitted from the request."
-            //Only null/empty is omitted. Any other value, including whitespace, is judged by
-            //the endpoint's own correlation resolution.
+            //RFC 6749 §3.1: "Parameters sent without a value MUST be treated as if they were omitted from
+            //the request." Only null/empty is omitted and answers the endpoint's missing-parameter
+            //refusal below. Any other value, including whitespace, is present and is judged further
+            //down: a whitespace-only value never resolves and is refused immediately, and every other
+            //value is carried to the correlation resolver and the flow-state store.
             if(string.IsNullOrEmpty(externalHandle))
             {
 
@@ -1181,29 +1183,43 @@ public sealed class EndpointServer: IDisposable
                 return continuingBeforeCorrelationRefusal;
             }
 
+            //A present handle carrying only whitespace is judged, not omitted (RFC 6749 §3.1 treats
+            //only the empty value as omitted), and it can never identify a live flow. Refusing it here
+            //— before any resolver or store call, and never by letting it reach SetFlowId's own
+            //validation — keeps this refusal a Result-shaped outcome whether or not a correlation
+            //resolver is wired.
+            if(string.IsNullOrWhiteSpace(externalHandle))
+            {
+                _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.CorrelationNotFound)));
+                _ = (activity?.SetTag(ServerTagNames.CorrelationResolved, false));
+
+                return UnresolvedHandleRefusal(endpoint);
+            }
+
+            bool isHandleResolved;
             if(Integration.ResolveCorrelationKeyAsync is not null)
             {
                 string? resolved = await Integration.ResolveCorrelationKeyAsync(
                     context.TenantId!.Value, endpoint.Kind, externalHandle, context, cancellationToken)
                     .ConfigureAwait(false);
 
-                if(resolved is null)
+                if(string.IsNullOrWhiteSpace(resolved))
                 {
                     _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.CorrelationNotFound)));
                     _ = (activity?.SetTag(ServerTagNames.CorrelationResolved, false));
 
-                    return ServerHttpResponse.BadRequest(
-                        endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
-                        endpoint.HandleNotFoundErrorDescription ?? "Flow not found or expired.");
+                    return UnresolvedHandleRefusal(endpoint);
                 }
 
                 flowId = resolved;
+                isHandleResolved = true;
                 _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.CorrelationResolved)));
                 _ = (activity?.SetTag(ServerTagNames.CorrelationResolved, true));
             }
             else
             {
                 flowId = externalHandle;
+                isHandleResolved = false;
             }
 
             context.SetFlowId(flowId);
@@ -1215,18 +1231,14 @@ public sealed class EndpointServer: IDisposable
             if(savedState is null)
             {
 
-                return ServerHttpResponse.BadRequest(
-                    endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
-                    endpoint.HandleNotFoundErrorDescription ?? "Flow not found or expired.");
+                return isHandleResolved ? HandleNotFoundRefusal(endpoint) : UnresolvedHandleRefusal(endpoint);
             }
 
             DateTimeOffset now = TimeProvider.GetUtcNow();
             if(savedState.ExpiresAt <= now)
             {
 
-                return ServerHttpResponse.BadRequest(
-                    endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
-                    endpoint.HandleNotFoundErrorDescription ?? "Flow not found or expired.");
+                return HandleNotFoundRefusal(endpoint);
             }
 
             currentState = savedState;
@@ -1277,6 +1289,52 @@ public sealed class EndpointServer: IDisposable
 
         return response;
     }
+
+
+    /// <summary>
+    /// The <c>error_description</c> a correlation-handle refusal falls back to when the matched endpoint
+    /// sets neither <see cref="ServerEndpoint.UnresolvedHandleErrorDescription"/> nor
+    /// <see cref="ServerEndpoint.HandleNotFoundErrorDescription"/>. Both <see cref="UnresolvedHandleRefusal"/>
+    /// and <see cref="HandleNotFoundRefusal"/> end their fallback chain at this same text, so a policy that
+    /// sets neither description answers byte-identically whether the handle never resolved or resolved and
+    /// became unusable.
+    /// </summary>
+    private static string DefaultCorrelationHandleErrorDescription { get; } =
+        "Flow not found or expired.";
+
+
+    /// <summary>
+    /// Builds the refusal for a correlation handle that never resolved to a live flow at all — a
+    /// whitespace-only value, one the correlation resolver answered with <see langword="null"/> or a
+    /// blank value, or one answered by no resolver at all whose load then finds no record. Chooses
+    /// <see cref="ServerEndpoint.UnresolvedHandleError"/> when the endpoint set one, then
+    /// <see cref="ServerEndpoint.HandleNotFoundError"/>, then the host-generic vocabulary; the paired
+    /// description falls back through the same chain, ending at
+    /// <see cref="DefaultCorrelationHandleErrorDescription"/>.
+    /// </summary>
+    /// <param name="endpoint">The matched endpoint whose refusal vocabulary this refusal reads.</param>
+    /// <returns>A <c>400 Bad Request</c> response carrying the resolved error and description.</returns>
+    private static ServerHttpResponse UnresolvedHandleRefusal(ServerEndpoint endpoint) =>
+        ServerHttpResponse.BadRequest(
+            endpoint.UnresolvedHandleError ?? endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
+            endpoint.UnresolvedHandleErrorDescription
+                ?? endpoint.HandleNotFoundErrorDescription
+                ?? DefaultCorrelationHandleErrorDescription);
+
+
+    /// <summary>
+    /// Builds the refusal for a correlation handle that resolved but is no longer usable: expired,
+    /// already consumed, or missing at load after a resolver found it. Chooses
+    /// <see cref="ServerEndpoint.HandleNotFoundError"/> when the endpoint set one, then the host-generic
+    /// vocabulary; the paired description falls back the same way, ending at
+    /// <see cref="DefaultCorrelationHandleErrorDescription"/>.
+    /// </summary>
+    /// <param name="endpoint">The matched endpoint whose refusal vocabulary this refusal reads.</param>
+    /// <returns>A <c>400 Bad Request</c> response carrying the resolved error and description.</returns>
+    private static ServerHttpResponse HandleNotFoundRefusal(ServerEndpoint endpoint) =>
+        ServerHttpResponse.BadRequest(
+            endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
+            endpoint.HandleNotFoundErrorDescription ?? DefaultCorrelationHandleErrorDescription);
 
 
     /// <summary>Creates the unpersisted state required by a stateless endpoint's input signature.</summary>

@@ -253,6 +253,8 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
                     DiscoveryMetadataKey = candidate.DiscoveryMetadataKey,
                     HandleNotFoundError = candidate.HandleNotFoundError,
                     HandleNotFoundErrorDescription = candidate.HandleNotFoundErrorDescription,
+                    UnresolvedHandleError = candidate.UnresolvedHandleError,
+                    UnresolvedHandleErrorDescription = candidate.UnresolvedHandleErrorDescription,
                     MissingCorrelationKeyErrorDescription = candidate.MissingCorrelationKeyErrorDescription,
                     ResolvedUri = uri
                 });

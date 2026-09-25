@@ -93,11 +93,14 @@ public sealed record EndpointCandidate
 
     /// <summary>
     /// The OAuth 2.0 error code this endpoint's handler returns when its correlation handle — a
-    /// <c>code</c>, <c>request_uri</c>, or similar continuation token — resolves to no live flow:
-    /// unknown, expired, or already consumed. Read by <see cref="EndpointServer"/> at every
-    /// "handle not found" refusal site in <c>HandleCoreAsync</c>. <see langword="null"/> falls back
-    /// to the host-generic <see cref="ServerErrors.InvalidRequest"/> vocabulary — correct for an
-    /// endpoint whose handle carries no protocol-specific error semantics of its own.
+    /// <c>code</c>, <c>request_uri</c>, or similar continuation token — resolved to a record that is
+    /// no longer usable: expired, already consumed, or missing at load after a resolver found it.
+    /// Read by <see cref="EndpointServer"/> at every "handle not found" refusal site in
+    /// <c>HandleCoreAsync</c>. <see langword="null"/> falls back to the host-generic
+    /// <see cref="ServerErrors.InvalidRequest"/> vocabulary — correct for an endpoint whose handle
+    /// carries no protocol-specific error semantics of its own. A handle that never resolved at all —
+    /// blank, unknown, or answered by no resolver — is governed by <see cref="UnresolvedHandleError"/>
+    /// instead.
     /// </summary>
     /// <remarks>
     /// The token endpoint's authorization code is the motivating case:
@@ -112,6 +115,35 @@ public sealed record EndpointCandidate
     /// <see langword="null"/> falls back to the host-generic description.
     /// </summary>
     public string? HandleNotFoundErrorDescription { get; init; }
+
+    /// <summary>
+    /// The OAuth 2.0 error code this endpoint's handler returns when its correlation handle is present
+    /// but never resolves to a live flow at all: a whitespace-only value, one the correlation resolver
+    /// answers with <see langword="null"/> or a blank value, or one answered by no resolver at all
+    /// (<see cref="ServerIntegration.ResolveCorrelationKeyAsync"/> unset). Read by
+    /// <see cref="EndpointServer"/> at every "handle unresolved" refusal site in
+    /// <c>HandleCoreAsync</c>. <see langword="null"/> falls back to <see cref="HandleNotFoundError"/>,
+    /// then to the host-generic <see cref="ServerErrors.InvalidRequest"/> vocabulary.
+    /// </summary>
+    /// <remarks>
+    /// The pushed-authorization-request completion endpoint is the motivating case: under a policy
+    /// requiring pushed authorization requests,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>'s server "will
+    /// refuse, using the "invalid_request" error code, to process any request ... that does not have a
+    /// "request_uri" parameter with a value obtained from the PAR endpoint" — a reference that never
+    /// resolved was never obtained from that endpoint. Under a policy where pushing is optional, the
+    /// same unresolved reference is instead <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">
+    /// RFC 9101 §7</see>'s <c>invalid_request_uri</c>. The endpoint's builder chooses between the two by
+    /// the resolved per-request policy at chain-build time.
+    /// </remarks>
+    public string? UnresolvedHandleError { get; init; }
+
+    /// <summary>
+    /// The <c>error_description</c> paired with <see cref="UnresolvedHandleError"/>.
+    /// <see langword="null"/> falls back to <see cref="HandleNotFoundErrorDescription"/>, then to the
+    /// host-generic description.
+    /// </summary>
+    public string? UnresolvedHandleErrorDescription { get; init; }
 
     /// <summary>
     /// The <c>invalid_request</c> description this endpoint's handler answers when

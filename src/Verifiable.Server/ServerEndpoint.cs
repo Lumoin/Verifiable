@@ -201,12 +201,12 @@ public sealed record ServerEndpoint
     public string? DiscoveryMetadataKey { get; init; }
 
     /// <summary>
-    /// The OAuth 2.0 error code this endpoint's handler returns when its correlation handle — a
-    /// <c>code</c>, <c>request_uri</c>, or similar continuation token — resolves to no live flow:
-    /// unknown, expired, or already consumed. See <see cref="EndpointCandidate.HandleNotFoundError"/>
-    /// for the full remarks; this is that value carried onto the resolved endpoint.
-    /// <see langword="null"/> falls back to the host-generic <see cref="ServerErrors.InvalidRequest"/>
-    /// vocabulary.
+    /// The OAuth 2.0 error code this endpoint's handler returns when its correlation handle resolved to
+    /// a record that is no longer usable: expired, already consumed, or missing at load after a
+    /// resolver found it. See <see cref="EndpointCandidate.HandleNotFoundError"/> for the full remarks;
+    /// this is that value carried onto the resolved endpoint. <see langword="null"/> falls back to the
+    /// host-generic <see cref="ServerErrors.InvalidRequest"/> vocabulary. A handle that never resolved
+    /// at all is governed by <see cref="UnresolvedHandleError"/> instead.
     /// </summary>
     public string? HandleNotFoundError { get; init; }
 
@@ -215,6 +215,22 @@ public sealed record ServerEndpoint
     /// <see langword="null"/> falls back to the host-generic description.
     /// </summary>
     public string? HandleNotFoundErrorDescription { get; init; }
+
+    /// <summary>
+    /// The OAuth 2.0 error code this endpoint's handler returns when its correlation handle never
+    /// resolves to a live flow at all. See <see cref="EndpointCandidate.UnresolvedHandleError"/> for the
+    /// full remarks; this is that value carried onto the resolved endpoint. <see langword="null"/> falls
+    /// back to <see cref="HandleNotFoundError"/>, then to the host-generic
+    /// <see cref="ServerErrors.InvalidRequest"/> vocabulary.
+    /// </summary>
+    public string? UnresolvedHandleError { get; init; }
+
+    /// <summary>
+    /// The <c>error_description</c> paired with <see cref="UnresolvedHandleError"/>.
+    /// <see langword="null"/> falls back to <see cref="HandleNotFoundErrorDescription"/>, then to the
+    /// host-generic description.
+    /// </summary>
+    public string? UnresolvedHandleErrorDescription { get; init; }
 
     /// <summary>
     /// The <c>invalid_request</c> description naming this endpoint's missing correlation

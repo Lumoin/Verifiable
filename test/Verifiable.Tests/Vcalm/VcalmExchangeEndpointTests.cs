@@ -13,6 +13,7 @@ using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
@@ -582,6 +583,80 @@ internal sealed class VcalmExchangeEndpointTests
 
         Assert.AreEqual(400, response.StatusCode,
             "A participate POST after the exchange expires is rejected by the flow-expiry gate.");
+    }
+
+
+    /// <summary>
+    /// §3.6.5 participate route: a whitespace-only exchange id in the path — decoded by
+    /// <c>ExtractExchangeId</c> from a percent-escaped space — is a present value under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>'s presence
+    /// rule ("Parameters sent without a value MUST be treated as if they were omitted"; whitespace is a
+    /// value, not the empty string). It is refused before any flow-state load or save, never carried
+    /// into flow-id validation.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithBlankExchangeIdIsRefusedBeforeAnyStoreCall()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        int loadCount = 0;
+        int saveCount = 0;
+        LoadServerFlowStateDelegate originalLoad = app.Server.Integration.LoadFlowStateAsync!;
+        SaveServerFlowStateDelegate originalSave = app.Server.Integration.SaveFlowStateAsync!;
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref loadCount);
+
+                return await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+            };
+
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref saveCount);
+                await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
+
+        //The raw path segment is the percent-escaped space; ExtractExchangeId Uri.UnescapeDataString's
+        //it back to a whitespace-only value, exercising the same site VcalmExchangeEndpoints shares
+        //with EndpointServer's blank-handle refusal.
+        string collectionPath = TestHostShell.ComposeEndpointPath(
+            WellKnownVcalmEndpointNames.VcalmParticipateInExchange, segment);
+        IncomingRequest request = new(
+            Path: $"{collectionPath}/%20",
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = new RequestBody
+            {
+                Bytes = Encoding.UTF8.GetBytes("{}"),
+                ContentType = WellKnownMediaTypes.Application.Json
+            }
+        };
+
+        ExchangeContext context = new();
+        context.SetTenantId(segment);
+        await TestHostShell.PrepareServingAsync(app.Server, TestContext.CancellationToken).ConfigureAwait(false);
+
+        ServerHttpResponse response = await app.Server.DispatchAsync(request, context, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.LoadFlowStateAsync = originalLoad;
+            candidateIntegration.SaveFlowStateAsync = originalSave;
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode,
+            "A whitespace-only exchange id is a present, unresolvable value; refused, not carried into flow-id validation.");
+        Assert.AreEqual(0, loadCount, "A blank exchange id is refused before any flow-state load.");
+        Assert.AreEqual(0, saveCount, "A blank exchange id is refused before any flow-state save.");
     }
 
 

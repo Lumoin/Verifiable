@@ -87,7 +87,7 @@ public static class AuthCodeEndpoints
 
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
         {
-            candidates.Add(BuildAuthorize());
+            candidates.Add(BuildAuthorize(context.RequirePushedAuthorizationRequests));
             //RFC 9101 §5 — explicit both-present (request + request_uri) rejection on the
             //authorize URL; the routing matchers decline that case, this one owns it.
             candidates.Add(BuildAuthorizeRequestObjectConflict());
@@ -329,8 +329,10 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                //Disjointness vs JAR-PAR per RFC 9101 §6.1.
-                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
+                //Disjointness vs JAR-PAR per RFC 9101 §6.1. RFC 6749 §3.1 treats an empty request
+                //the same as an omitted one, so a blank value here does not divert this request to
+                //the JAR-PAR endpoint's own acceptance test.
+                if(fields.HasParameter(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -346,6 +348,16 @@ public static class AuthCodeEndpoints
             {
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
+
+                //RFC 9126 §2.1: "request_uri ... MUST NOT be provided" on a pushed authorization
+                //request; a PAR request presenting one is malformed independent of every other
+                //field, so it is refused before client identification or authentication runs.
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
+                {
+
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "request_uri must not be provided to the PAR endpoint."));
+                }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || string.IsNullOrWhiteSpace(clientId))
@@ -638,20 +650,52 @@ public static class AuthCodeEndpoints
 
     /// <summary>Builds authorization of a pushed request using the admitted host seams.</summary>
     /// <remarks>
-    /// Unknown mappings, missing records, and expired references use
-    /// <see cref="EndpointCandidate.HandleNotFoundError"/> to answer
-    /// <see cref="OAuthErrors.InvalidRequestUri"/> under
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see>.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see> requires
-    /// expired references to be rejected as invalid.
+    /// <para>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see> states:
     /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
     /// Only a null or empty <c>request_uri</c> is omitted, answering <c>invalid_request</c> with a
-    /// description naming <c>request_uri</c>. A whitespace-only value is a present invalid reference
-    /// and must be preserved for resolution to answer <c>invalid_request_uri</c>.
+    /// description naming <c>request_uri</c>. A whitespace-only value is present and is judged as
+    /// an unresolved reference, refused before any resolver or store call — see the third paragraph
+    /// below. <see cref="EndpointCandidate.HandleNotFoundError"/> answers
+    /// <see cref="OAuthErrors.InvalidRequestUri"/> under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 §7</see> only for a
+    /// reference that a resolver found and that is now unusable: expired, already consumed, or
+    /// missing its record at load. <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC
+    /// 9126 §4</see>: "An expired "request_uri" MUST be rejected as invalid."
+    /// </para>
+    /// <para>
+    /// A reference that is present but never resolves — unknown, blank, or answered by no resolver —
+    /// answers <see cref="EndpointCandidate.UnresolvedHandleError"/>, chosen by
+    /// <paramref name="requirePushedAuthorizationRequests"/>: under a policy requiring pushed
+    /// authorization requests, <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126
+    /// §4</see>'s server "will refuse, using the "invalid_request" error code, to process any request
+    /// ... that does not have a "request_uri" parameter with a value obtained from the PAR endpoint" —
+    /// such a reference was never obtained from it. Under a policy where pushing is optional, the same
+    /// unresolved reference answers <c>invalid_request_uri</c> instead.
+    /// </para>
+    /// <para>
+    /// When <paramref name="requirePushedAuthorizationRequests"/> is set and the request carries no
+    /// usable <c>request_uri</c> at all, this endpoint's matcher also claims the GET unless some
+    /// other endpoint in the same chain — this registration's own JAR-by-value or direct-authorization
+    /// candidate, or a request-object endpoint contributed by a different, composed protocol module —
+    /// already accepts the exact request under its own acceptance test. A registration with nothing
+    /// else to answer it gets <c>invalid_request</c> "Missing request_uri.", not the
+    /// unresolved-reference vocabulary above, because no reference was ever present to resolve.
+    /// </para>
     /// </remarks>
-    private static EndpointCandidate BuildAuthorize() =>
-        new()
+    /// <param name="requirePushedAuthorizationRequests">
+    /// The per-request policy's pushed-authorization-request requirement, resolved once at chain-build
+    /// time and baked into this candidate's matcher and unresolved-handle vocabulary.
+    /// </param>
+    private static EndpointCandidate BuildAuthorize(bool requirePushedAuthorizationRequests)
+    {
+        string unresolvedHandleError = requirePushedAuthorizationRequests switch
+        {
+            true => OAuthErrors.InvalidRequest,
+            false => OAuthErrors.InvalidRequestUri
+        };
+
+        return new()
         {
             Name = WellKnownEndpointNames.AuthCodeAuthorize,
             HttpMethod = WellKnownHttpMethods.Get,
@@ -662,6 +706,7 @@ public static class AuthCodeEndpoints
 
             MissingCorrelationKeyErrorDescription = "Missing request_uri.",
             HandleNotFoundError = OAuthErrors.InvalidRequestUri,
+            UnresolvedHandleError = unresolvedHandleError,
 
             BeforeCorrelationAsync = BeforeAuthorizeCompletionCorrelationAsync,
 
@@ -677,7 +722,7 @@ public static class AuthCodeEndpoints
 
                     //A nonempty URN with no usable token is an invalid reference (RFC 9126
                     //§2.2 / RFC 9101 §7), not an omitted parameter. Preserve it for resolution
-                    //so the host answers HandleNotFoundError rather than its missing-field error.
+                    //so the host answers UnresolvedHandleError rather than its missing-field error.
 
                     return string.IsNullOrWhiteSpace(correlationKey) ? requestUri : correlationKey;
                 }
@@ -685,7 +730,7 @@ public static class AuthCodeEndpoints
                 return null;
             },
 
-            MatchesRequest = static (fields, context, endpoint, ct) =>
+            MatchesRequest = async (fields, context, endpoint, ct) =>
             {
                 //GET to /authorize with request_uri selects PAR completion. The direct PKCE
                 //matcher requires request_uri to be absent, keeping the endpoints disjoint.
@@ -693,38 +738,74 @@ public static class AuthCodeEndpoints
                 if(req is null)
                 {
 
-                    return ValueTask.FromResult<MatchPayload?>(null);
+                    return null;
                 }
 
                 if(!WellKnownHttpMethods.IsGet(req.Method))
                 {
 
-                    return ValueTask.FromResult<MatchPayload?>(null);
+                    return null;
                 }
 
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
 
-                    return ValueTask.FromResult<MatchPayload?>(null);
+                    return null;
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
+                {
+                    //RFC 9101 §5 — request and request_uri MUST NOT both be present. The
+                    //both-present case is owned by BuildAuthorizeRequestObjectConflict, which
+                    //rejects it explicitly; decline here so it doesn't route through PAR-flow
+                    //correlation (which would surface a misleading "flow not found").
+                    if(fields.HasParameter(OAuthRequestParameterNames.Request))
+                    {
+
+                        return null;
+                    }
+
+                    return MatchPayload.Empty;
+                }
+
+                //No usable request_uri at all (RFC 6749 §3.1 treats an empty value the same as an
+                //omitted one). Under a policy requiring pushed authorization requests, this GET has
+                //no reference to complete, but it may still need answering here: claim it unless
+                //some OTHER endpoint in this same chain would already accept the exact request —
+                //JAR by value, direct authorization, or any endpoint from a composed builder set
+                //(for example a request-object endpoint contributed by another protocol module)
+                //mounted at this same path — which then answers it under its own acceptance test
+                //instead. Probing every other chained matcher, rather than checking two fixed
+                //endpoint names, keeps this claim correct as builder sets are composed.
+                if(!requirePushedAuthorizationRequests)
                 {
 
-                    return ValueTask.FromResult<MatchPayload?>(null);
+                    return null;
                 }
 
-                //RFC 9101 §5 — request and request_uri MUST NOT both be present. The
-                //both-present case is owned by BuildAuthorizeRequestObjectConflict, which
-                //rejects it explicitly; decline here so it doesn't route through PAR-flow
-                //correlation (which would surface a misleading "flow not found").
-                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
+                EndpointChain? chain = context.EndpointChain;
+                if(chain is not null)
                 {
+                    for(int i = 0; i < chain.Count; i++)
+                    {
+                        ServerEndpoint other = chain[i];
+                        if(string.Equals(other.Name, endpoint.Name, StringComparison.Ordinal))
+                        {
 
-                    return ValueTask.FromResult<MatchPayload?>(null);
+                            continue;
+                        }
+
+                        MatchPayload? otherPayload = await other.MatchesRequest(fields, context, other, ct)
+                            .ConfigureAwait(false);
+                        if(otherPayload is not null)
+                        {
+
+                            return null;
+                        }
+                    }
                 }
 
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+                return MatchPayload.Empty;
             },
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
@@ -914,6 +995,7 @@ public static class AuthCodeEndpoints
                 return BuildAuthorizeCompletedResponse(code, context);
             }
         };
+    }
 
 
     /// <summary>
@@ -954,12 +1036,14 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                //RFC 6749 §3.1 treats an empty request_uri the same as an omitted one: it does not
+                //divert this GET to the PAR-completed Authorize's own acceptance test.
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                //Disjointness vs JAR-by-value Authorize.
-                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
+                //Disjointness vs JAR-by-value Authorize; the same omitted/empty equivalence applies.
+                if(fields.HasParameter(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1295,8 +1379,10 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 //Matches only when BOTH are present — the case every routing matcher declines.
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Request)
-                    || !fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                //RFC 6749 §3.1 treats an empty value the same as an omitted one, so
+                //request=X&request_uri= is one present parameter, not two.
+                if(!fields.HasParameter(OAuthRequestParameterNames.Request)
+                    || !fields.HasParameter(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1504,7 +1590,9 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
+                //RFC 6749 §3.1: an empty request is an omitted one, so a blank body value falls
+                //through to the plain PAR endpoint's own acceptance test instead of matching here.
+                if(!fields.HasParameter(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1678,15 +1766,16 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                //RFC 9101 §5/§6.1 — request and request_uri MUST NOT both be present.
+                //RFC 9101 §5/§6.1 — request and request_uri MUST NOT both be present. RFC 6749
+                //§3.1 treats an empty value the same as an omitted one for both parameters.
                 //This JAR-by-value matcher declines when request_uri is also present; the
                 //both-present case is matched by the PAR-completed BuildAuthorize, whose
                 //BuildInputAsync rejects it with an explicit invalid_request.
-                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
+                if(!fields.HasParameter(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }

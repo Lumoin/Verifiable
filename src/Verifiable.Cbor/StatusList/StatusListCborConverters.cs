@@ -21,6 +21,11 @@ namespace Verifiable.Cbor.StatusList;
 /// </remarks>
 public sealed class StatusListCborConverter: CborConverter<Core.StatusLists.StatusList>
 {
+    /// <summary>
+    /// The pool this converter allocates decompressed status-list bytes from, supplied by the caller
+    /// at construction so every buffer this converter reads into is pool-owned rather than a bare
+    /// heap allocation.
+    /// </summary>
     private BaseMemoryPool Pool { get; }
 
     /// <summary>
@@ -208,6 +213,11 @@ public sealed class StatusListReferenceCborConverter: CborConverter<StatusListRe
 /// </summary>
 public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
 {
+    /// <summary>
+    /// The nested <see cref="Core.StatusLists.StatusList"/> converter this token converter delegates
+    /// its <c>status_list</c> claim to, sharing this converter's memory pool rather than constructing
+    /// its own.
+    /// </summary>
     private StatusListCborConverter StatusListConverter { get; }
 
     /// <summary>
