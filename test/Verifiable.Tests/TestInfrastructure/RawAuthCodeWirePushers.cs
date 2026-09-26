@@ -120,6 +120,21 @@ internal static class RawAuthCodeWirePushers
     }
 
 
+    /// <summary>POSTs raw RFC 7009 revocation-endpoint form fields over the real wire.</summary>
+    public static async Task<(int StatusCode, string Body)> PushRawRevocationFieldsAsync(
+        TestHostShell host, string segment, IReadOnlyCollection<KeyValuePair<string, string>> fields,
+        CancellationToken cancellationToken)
+    {
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri endpoint = new(hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeRevoke, segment));
+
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, endpoint, fields, OutgoingHeaders.Empty, cancellationToken).ConfigureAwait(false);
+
+        return (response.StatusCode, response.Body);
+    }
+
+
     /// <summary>Builds the token-endpoint form fields, omitting <c>code_verifier</c> / <c>code</c> / <c>redirect_uri</c> when their argument is <see langword="null"/>.</summary>
     public static Dictionary<string, string> BuildTokenFields(
         string clientId, string? code, string? codeVerifier, string? redirectUri)

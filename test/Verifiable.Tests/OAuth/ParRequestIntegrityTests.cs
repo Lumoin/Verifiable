@@ -175,9 +175,21 @@ internal sealed class ParRequestIntegrityTests
     }
 
 
-    /// <summary>A conformant <c>request_uri</c> + <c>client_id</c> authorize emits no such event.</summary>
+    /// <summary>
+    /// A conformant <c>request_uri</c> + <c>client_id</c> authorize emits no such event, and neither
+    /// does one carrying an empty <c>scope</c> alongside them:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request" — an
+    /// empty-valued front-channel field is not extraneous data, since it is not data at all. This
+    /// class dispatches through <see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>
+    /// directly, sharing every other test in this class; the HTTP skin's own decoding of an
+    /// empty-valued query key is covered separately, over the real transport, by
+    /// <see cref="AuthCodeParPkceRealWireFlowTests.CleanReferencedAuthorizeWithEmptyScopeEmitsNoTamperingEventOverTheWire"/>.
+    /// </summary>
     [TestMethod]
-    public async Task CleanReferencedAuthorizeEmitsNoTamperingEvent()
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task CleanReferencedAuthorizeEmitsNoTamperingEvent(bool includeEmptyScope)
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
@@ -191,6 +203,10 @@ internal sealed class ParRequestIntegrityTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
+        if(includeEmptyScope)
+        {
+            authorizeFields[OAuthRequestParameterNames.Scope] = string.Empty;
+        }
 
         IReadOnlyList<Activity> activities = await CaptureAuthorizeActivitiesAsync(
             material.Registration.TenantHandle!.Value.Value,
@@ -208,9 +224,11 @@ internal sealed class ParRequestIntegrityTests
     /// Runs <paramref name="drive"/> under a process-wide <see cref="ActivityListener"/> on the
     /// OAuth source and returns the stopped activities for <paramref name="tenantHandle"/>. The
     /// per-tenant filter isolates this test from any running in parallel (the handle is a fresh
-    /// value per registration) — see the ActivityListener cross-contamination guidance.
+    /// value per registration) — see the ActivityListener cross-contamination guidance. Internal so
+    /// <see cref="AuthCodeParPkceRealWireFlowTests"/>'s real-wire tampering coverage shares this
+    /// capture wiring rather than duplicating it.
     /// </summary>
-    private static async Task<IReadOnlyList<Activity>> CaptureAuthorizeActivitiesAsync(
+    internal static async Task<IReadOnlyList<Activity>> CaptureAuthorizeActivitiesAsync(
         string tenantHandle, Func<Task> drive)
     {
         List<Activity> captured = [];

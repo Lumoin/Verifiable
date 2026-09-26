@@ -77,6 +77,43 @@ internal sealed class JarParTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>: "the
+    /// "request_uri" authorization request parameter defined in Section 4 of [RFC9101] ... MUST NOT
+    /// be provided" on a pushed authorization request. An otherwise valid, fully signed JAR-PAR body
+    /// is refused for presenting one alongside the request object, before that object is ever
+    /// verified — the JAR-PAR body must not be able to reach a signature check, let alone mint a
+    /// <c>request_uri</c> handle, by carrying one of its own.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsJarParPresentingRequestUri()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, DefaultState, DefaultNonce),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.Request] = compactJar,
+                [OAuthRequestParameterNames.RequestUri] = "urn:ietf:params:oauth:request_uri:arbitrary"
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        AssertErrorCode(body, OAuthErrors.InvalidRequest);
+        Assert.DoesNotContain("\"request_uri\":", body, StringComparison.Ordinal,
+            "A pushed request presenting request_uri must never itself mint one.");
+    }
+
+
     [TestMethod]
     public async Task RejectsJarWithMissingOuterClientId()
     {

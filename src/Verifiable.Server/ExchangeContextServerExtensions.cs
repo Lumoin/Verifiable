@@ -260,5 +260,33 @@ public static class ExchangeContextServerExtensions
             ArgumentNullException.ThrowIfNull(capabilities);
             context[ServerContextKeys.ResolvedCapabilitiesKey] = capabilities;
         }
+
+
+        /// <summary>
+        /// Gets whether a matcher is currently deciding its own FALLBACK claim by invoking other
+        /// chained endpoints' <see cref="MatchRequestDelegate"/>. This mark gates only that
+        /// fallback claim; it is never consulted by a matcher's own primary acceptance test,
+        /// which answers from the request shape alone. A matcher that itself would probe siblings
+        /// checks this mark first and declines its own fallback claim instead when it is already
+        /// <see langword="true"/>, so of two matchers that would each probe the other, the one
+        /// ordered first in the chain runs its probe to completion and may claim, while the other,
+        /// entered under the first one's still-active mark, declines without probing.
+        /// </summary>
+        public bool IsOwnershipProbeInProgress =>
+            context.TryGetValue(ServerContextKeys.OwnershipProbeInProgressKey, out object? v)
+                && v is bool inProgress && inProgress;
+
+        /// <summary>
+        /// Marks or clears the ownership-probe-in-progress state. A probing matcher checks
+        /// <c>IsOwnershipProbeInProgress</c> before calling this method, so it only ever
+        /// sets the mark from its unmarked (<see langword="false"/>) state; it clears the mark
+        /// back to <see langword="false"/> in a <c>finally</c> block once its own probe completes,
+        /// which restores the value the mark held immediately before this matcher's own probe
+        /// began.
+        /// </summary>
+        public void SetOwnershipProbeInProgress(bool inProgress)
+        {
+            context[ServerContextKeys.OwnershipProbeInProgressKey] = inProgress;
+        }
     }
 }

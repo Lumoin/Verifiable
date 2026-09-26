@@ -592,7 +592,10 @@ internal sealed class VcalmExchangeEndpointTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>'s presence
     /// rule ("Parameters sent without a value MUST be treated as if they were omitted"; whitespace is a
     /// value, not the empty string). It is refused before any flow-state load or save, never carried
-    /// into flow-id validation.
+    /// into flow-id validation. Driven over the real transport
+    /// (<see cref="VcalmWireFixtures.SendWireAsync"/>) so Kestrel's own decoding of the percent-escaped
+    /// path segment into a space is what this test observes, and the literal refusal body is asserted,
+    /// not only its status.
     /// </summary>
     [TestMethod]
     public async Task ParticipateWithBlankExchangeIdIsRefusedBeforeAnyStoreCall()
@@ -626,25 +629,9 @@ internal sealed class VcalmExchangeEndpointTests
         //with EndpointServer's blank-handle refusal.
         string collectionPath = TestHostShell.ComposeEndpointPath(
             WellKnownVcalmEndpointNames.VcalmParticipateInExchange, segment);
-        IncomingRequest request = new(
-            Path: $"{collectionPath}/%20",
-            Method: "POST",
-            Fields: new RequestFields(),
-            Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty)
-        {
-            Body = new RequestBody
-            {
-                Bytes = Encoding.UTF8.GetBytes("{}"),
-                ContentType = WellKnownMediaTypes.Application.Json
-            }
-        };
 
-        ExchangeContext context = new();
-        context.SetTenantId(segment);
-        await TestHostShell.PrepareServingAsync(app.Server, TestContext.CancellationToken).ConfigureAwait(false);
-
-        ServerHttpResponse response = await app.Server.DispatchAsync(request, context, TestContext.CancellationToken)
+        (int statusCode, _, string body) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", $"{collectionPath}/%20", "{}", authorizationHeader: null, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
@@ -653,8 +640,76 @@ internal sealed class VcalmExchangeEndpointTests
             candidateIntegration.SaveFlowStateAsync = originalSave;
         }).ConfigureAwait(false);
 
-        Assert.AreEqual(400, response.StatusCode,
+        Assert.AreEqual(400, statusCode,
             "A whitespace-only exchange id is a present, unresolvable value; refused, not carried into flow-id validation.");
+        Assert.Contains($"\"error\":\"{ServerErrors.InvalidRequest}\"", body, StringComparison.Ordinal, body);
+        Assert.Contains("\"error_description\":\"Flow not found or expired.\"", body, StringComparison.Ordinal, body);
+        Assert.AreEqual(0, loadCount, "A blank exchange id is refused before any flow-state load.");
+        Assert.AreEqual(0, saveCount, "A blank exchange id is refused before any flow-state save.");
+    }
+
+
+    /// <summary>
+    /// The same route as <see cref="ParticipateWithBlankExchangeIdIsRefusedBeforeAnyStoreCall"/>, with
+    /// the correlation resolver <c>EndpointServer.HandleCoreAsync</c> reads for every flow kind —
+    /// <see cref="ServerIntegration.ResolveCorrelationKeyAsync"/> on the host's primary integration,
+    /// the same seam the exchange id normally resolves through
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/">VCALM 1.0</see> §3.6.5) — cleared entirely, a
+    /// configuration this class's other tests never exercise. The refusal per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>'s presence
+    /// rule ("Parameters sent without a value MUST be treated as if they were omitted") does not depend
+    /// on whether a resolver is wired: a present, whitespace-only handle is refused before any resolver
+    /// call and before any flow-state load or save either way. Driven over the real transport for the
+    /// same reason as <see cref="ParticipateWithBlankExchangeIdIsRefusedBeforeAnyStoreCall"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithBlankExchangeIdIsRefusedBeforeAnyStoreCallWithNoResolverWired()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        int loadCount = 0;
+        int saveCount = 0;
+        LoadServerFlowStateDelegate originalLoad = app.Server.Integration.LoadFlowStateAsync!;
+        SaveServerFlowStateDelegate originalSave = app.Server.Integration.SaveFlowStateAsync!;
+        ResolveCorrelationKeyDelegate? originalResolve = app.Server.Integration.ResolveCorrelationKeyAsync;
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCorrelationKeyAsync = null;
+
+            candidateIntegration.LoadFlowStateAsync = async (tenantId, key, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref loadCount);
+
+                return await originalLoad(tenantId, key, ctx, ct).ConfigureAwait(false);
+            };
+
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref saveCount);
+                await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
+            };
+        }).ConfigureAwait(false);
+
+        string collectionPath = TestHostShell.ComposeEndpointPath(
+            WellKnownVcalmEndpointNames.VcalmParticipateInExchange, segment);
+
+        (int statusCode, _, string body) = await VcalmWireFixtures.SendWireAsync(
+            app, "POST", $"{collectionPath}/%20", "{}", authorizationHeader: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCorrelationKeyAsync = originalResolve;
+            candidateIntegration.LoadFlowStateAsync = originalLoad;
+            candidateIntegration.SaveFlowStateAsync = originalSave;
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode,
+            "A whitespace-only exchange id is refused the same way whether or not a resolver is wired.");
+        Assert.Contains($"\"error\":\"{ServerErrors.InvalidRequest}\"", body, StringComparison.Ordinal, body);
+        Assert.Contains("\"error_description\":\"Flow not found or expired.\"", body, StringComparison.Ordinal, body);
         Assert.AreEqual(0, loadCount, "A blank exchange id is refused before any flow-state load.");
         Assert.AreEqual(0, saveCount, "A blank exchange id is refused before any flow-state save.");
     }

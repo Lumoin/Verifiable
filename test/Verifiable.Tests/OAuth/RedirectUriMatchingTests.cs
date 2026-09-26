@@ -1167,12 +1167,13 @@ internal sealed class RedirectUriMatchingTests
     /// <summary>
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
     /// §10.2</see>: "the authorization server MUST allow clients to send the redirect_uri parameter
-    /// in the token request ... and MUST enforce the parameter as described in [RFC6749]" — the
-    /// converse, a client that omits it, is accepted over the real wire when the code carries a
-    /// PKCE challenge (which this library requires unconditionally), since
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see> only
-    /// requires the parameter "if the redirect_uri parameter was included in the authorization
-    /// request."
+    /// in the token request ... and MUST enforce the parameter as described in [RFC6749]" — a sent
+    /// value is enforced exactly as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see> states.
+    /// Accepting an OMITTED redirect_uri over the real wire when the code carries a PKCE challenge,
+    /// which this library requires unconditionally, is this library's deliberate posture for a
+    /// PKCE-bound code, since every authorization request this server accepts already includes
+    /// redirect_uri, so RFC 6749 §4.1.3's own conditional on the parameter's presence always holds.
     /// </summary>
     [TestMethod]
     public async Task RealWireTokenRedirectUriAbsentWithPkceBoundCodeIsAccepted()

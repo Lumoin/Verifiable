@@ -309,10 +309,12 @@ public static class AuthCodeEndpoints
             Kind = FlowKind.AuthCodeServer,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint,
 
-            //Acceptance test: POST to /par with PKCE body fields, no JAR request
-            //parameter, and no TransactionNonce on context. Disjointness vs
-            //JarPar (Request present) and vs OID4VP PAR (TransactionNonce
-            //present).
+            //Acceptance test: POST to /par with no JAR request parameter and no
+            //TransactionNonce on context. Disjointness vs JarPar (Request
+            //present) and vs OID4VP PAR (TransactionNonce present); an absent
+            //or empty code_challenge is left to this endpoint's own
+            //"Missing code_challenge." refusal (RFC 6749 §3.1), never a
+            //routing decline.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -325,14 +327,13 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
                 //Disjointness vs JAR-PAR per RFC 9101 §6.1. RFC 6749 §3.1 treats an empty request
                 //the same as an omitted one, so a blank value here does not divert this request to
-                //the JAR-PAR endpoint's own acceptance test.
-                if(fields.HasParameter(OAuthRequestParameterNames.Request))
+                //the JAR-PAR endpoint's own acceptance test — but a REPEATED request, even an
+                //all-empty repeat, is still a request per §3.1's separate repetition rule, so it
+                //is left to that endpoint's own acceptance test rather than silently matched here.
+                if(fields.HasParameter(OAuthRequestParameterNames.Request)
+                    || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -753,13 +754,17 @@ public static class AuthCodeEndpoints
                     return null;
                 }
 
-                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri)
+                    || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.RequestUri))
                 {
                     //RFC 9101 §5 — request and request_uri MUST NOT both be present. The
                     //both-present case is owned by BuildAuthorizeRequestObjectConflict, which
                     //rejects it explicitly; decline here so it doesn't route through PAR-flow
-                    //correlation (which would surface a misleading "flow not found").
-                    if(fields.HasParameter(OAuthRequestParameterNames.Request))
+                    //correlation (which would surface a misleading "flow not found"). A REPEATED
+                    //request, even an all-empty repeat, still counts as present for this check
+                    //(RFC 6749 §3.1's repetition rule), so the both-present guard sees it too.
+                    if(fields.HasParameter(OAuthRequestParameterNames.Request)
+                        || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.Request))
                     {
 
                         return null;
@@ -783,25 +788,48 @@ public static class AuthCodeEndpoints
                     return null;
                 }
 
+                //A sibling matcher from a composed builder set could decide ITS OWN fallback claim
+                //the same way — by probing every other chained matcher, this one included. Two
+                //matchers that each probe the other would then recurse without bound: this matcher
+                //probes the sibling, the sibling probes back into this matcher, which probes the
+                //sibling again. The mark on ExchangeContext breaks that cycle and gates only this
+                //fallback claim, never a matcher's own primary acceptance test: of the two, the one
+                //ordered first in the chain runs its probe to completion and may claim; the other,
+                //entered under the first one's still-active mark, declines its own fallback claim
+                //instead of starting a nested probe.
+                if(context.IsOwnershipProbeInProgress)
+                {
+
+                    return null;
+                }
+
                 EndpointChain? chain = context.EndpointChain;
                 if(chain is not null)
                 {
-                    for(int i = 0; i < chain.Count; i++)
+                    context.SetOwnershipProbeInProgress(true);
+                    try
                     {
-                        ServerEndpoint other = chain[i];
-                        if(string.Equals(other.Name, endpoint.Name, StringComparison.Ordinal))
+                        for(int i = 0; i < chain.Count; i++)
                         {
+                            ServerEndpoint other = chain[i];
+                            if(string.Equals(other.Name, endpoint.Name, StringComparison.Ordinal))
+                            {
 
-                            continue;
+                                continue;
+                            }
+
+                            MatchPayload? otherPayload = await other.MatchesRequest(fields, context, other, ct)
+                                .ConfigureAwait(false);
+                            if(otherPayload is not null)
+                            {
+
+                                return null;
+                            }
                         }
-
-                        MatchPayload? otherPayload = await other.MatchesRequest(fields, context, other, ct)
-                            .ConfigureAwait(false);
-                        if(otherPayload is not null)
-                        {
-
-                            return null;
-                        }
+                    }
+                    finally
+                    {
+                        context.SetOwnershipProbeInProgress(false);
                     }
                 }
 
@@ -1020,10 +1048,10 @@ public static class AuthCodeEndpoints
             //AuthCodeAuthorize which is advertised; emitting twice would be
             //wrong.
 
-            //Acceptance test: GET to /authorize with code_challenge in the
-            //query (direct PKCE) and no request_uri (which would route to the
-            //PAR-completed Authorize) and no Request (which would route to
-            //JAR-by-value).
+            //Acceptance test: GET to /authorize with no request_uri (which would route to the
+            //PAR-completed Authorize) and no request (which would route to JAR-by-value);
+            //code_challenge is not part of this test, so an absent or empty one still matches and
+            //is refused by the handler's own "Missing code_challenge." check further down.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -1037,20 +1065,25 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 //RFC 6749 §3.1 treats an empty request_uri the same as an omitted one: it does not
-                //divert this GET to the PAR-completed Authorize's own acceptance test.
-                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
+                //divert this GET to the PAR-completed Authorize's own acceptance test — but a
+                //REPEATED request_uri, even an all-empty repeat, is still present under §3.1's
+                //separate repetition rule, so it is left to that endpoint's own handling too.
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri)
+                    || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 //Disjointness vs JAR-by-value Authorize; the same omitted/empty equivalence applies.
-                if(fields.HasParameter(OAuthRequestParameterNames.Request))
+                if(fields.HasParameter(OAuthRequestParameterNames.Request)
+                    || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                //code_challenge is not part of this matcher's acceptance test: a GET with neither
+                //request_uri nor request is direct authorization's exact shape regardless of whether
+                //code_challenge is present, so an absent or empty value is left to the handler's own
+                //"Missing code_challenge." refusal (RFC 6749 §3.1 treats the two the same), run in the
+                //handler's existing order before the PAR-required policy check.
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
@@ -1380,9 +1413,13 @@ public static class AuthCodeEndpoints
                 }
                 //Matches only when BOTH are present — the case every routing matcher declines.
                 //RFC 6749 §3.1 treats an empty value the same as an omitted one, so
-                //request=X&request_uri= is one present parameter, not two.
-                if(!fields.HasParameter(OAuthRequestParameterNames.Request)
-                    || !fields.HasParameter(OAuthRequestParameterNames.RequestUri))
+                //request=X&request_uri= is one present parameter, not two; the same clause's
+                //repetition rule still counts a wholly empty repeat of either as present.
+                bool hasRequest = fields.HasParameter(OAuthRequestParameterNames.Request)
+                    || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.Request);
+                bool hasRequestUri = fields.HasParameter(OAuthRequestParameterNames.RequestUri)
+                    || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.RequestUri);
+                if(!hasRequest || !hasRequestUri)
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1591,8 +1628,11 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 //RFC 6749 §3.1: an empty request is an omitted one, so a blank body value falls
-                //through to the plain PAR endpoint's own acceptance test instead of matching here.
-                if(!fields.HasParameter(OAuthRequestParameterNames.Request))
+                //through to the plain PAR endpoint's own acceptance test instead of matching here —
+                //unless request repeats, even as an all-empty repeat, which §3.1's separate
+                //repetition rule still counts as a request present on this shape.
+                if(!fields.HasParameter(OAuthRequestParameterNames.Request)
+                    && !fields.HasRepeatedOccurrence(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1603,6 +1643,17 @@ public static class AuthCodeEndpoints
             {
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
+
+                //RFC 9126 §2.1: "request_uri ... MUST NOT be provided" on a pushed authorization
+                //request; a JAR-PAR request presenting one is malformed independent of every other
+                //field, including a signed request object, so it is refused before that object is
+                //ever verified.
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
+                {
+
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "request_uri must not be provided to the PAR endpoint."));
+                }
 
                 (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
                     await VerifyAndValidateAuthCodeJarAsync(
@@ -1771,11 +1822,15 @@ public static class AuthCodeEndpoints
                 //This JAR-by-value matcher declines when request_uri is also present; the
                 //both-present case is matched by the PAR-completed BuildAuthorize, whose
                 //BuildInputAsync rejects it with an explicit invalid_request.
-                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri))
+                //A REPEATED request_uri, even an all-empty repeat, still counts as present under
+                //RFC 6749 §3.1's separate repetition rule, so it declines here too.
+                if(fields.HasParameter(OAuthRequestParameterNames.RequestUri)
+                    || fields.HasRepeatedOccurrence(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(!fields.HasParameter(OAuthRequestParameterNames.Request))
+                if(!fields.HasParameter(OAuthRequestParameterNames.Request)
+                    && !fields.HasRepeatedOccurrence(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -2807,6 +2862,17 @@ public static class AuthCodeEndpoints
             return ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, "PKCE verification failed.");
         }
 
+        //RFC 6749 §5.2: "invalid_request ... repeats a parameter" — a repeated redirect_uri is a
+        //request-shape defect the endpoint can name from the wire alone, before the code record is
+        //ever loaded, so it answers invalid_request here rather than falling through to the
+        //record-dependent invalid_grant VerifyCodeGrantPresentation answers for an omitted, empty,
+        //or mismatched single occurrence.
+        if(fields.HasRepeatedOccurrence(OAuthRequestParameterNames.RedirectUri))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "redirect_uri must not be repeated.");
+        }
+
         ServerHttpResponse? clientAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
             oauth, context.IncomingRequest, fields, registration, context, cancellationToken).ConfigureAwait(false);
         if(clientAuthFailure is not null)
@@ -2875,12 +2941,28 @@ public static class AuthCodeEndpoints
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>
     /// dispatches on <paramref name="codeChallengeMethod"/> — the method PERSISTED at
     /// authorization time, never one named on the token request itself, which carries no
-    /// <c>code_challenge_method</c> parameter at all. The <c>redirect_uri</c> check is
-    /// CONDITIONAL per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see>:
-    /// present -> must equal <paramref name="boundRedirectUri"/>'s <see cref="Uri.OriginalString"/>
-    /// exactly; absent -> accepted without re-validation against the registered set. Returns the
-    /// authenticated client registration alongside a <see langword="null"/> failure on success.
+    /// <c>code_challenge_method</c> parameter at all. The <c>redirect_uri</c> comparison is
+    /// CONDITIONAL, not required, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see>'s
+    /// "REQUIRED, if the "redirect_uri" parameter was included in the authorization request ... and
+    /// their values MUST be identical": every authorization endpoint this library accepts a request
+    /// through also requires a PKCE <c>code_challenge</c> unconditionally
+    /// (<see cref="BuildPar"/>, <see cref="BuildDirectAuthorize"/> and
+    /// <see cref="BuildAuthorizeJarByValue"/> all refuse a request that lacks one), and that
+    /// challenge alone already proves the presenter's possession of the authorization, so an
+    /// omitted or empty occurrence here — treated alike under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>'s omission
+    /// rule — is accepted without a comparison. A PRESENT, non-empty occurrence must still be
+    /// ordinal-identical to <paramref name="boundRedirectUri"/>'s <see cref="Uri.OriginalString"/>,
+    /// and a mismatch answers the SAME <c>invalid_grant</c> constant as every other redemption
+    /// mismatch below, a deliberate choice that keeps a credential-less presenter from
+    /// distinguishing which check failed. A repeated occurrence never reaches this method:
+    /// <see cref="BeforeCodeRedemptionCorrelationAsync"/> refuses
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>'s "repeats
+    /// a parameter" <c>invalid_request</c> before the code record is ever loaded, so this method
+    /// only ever observes zero or one occurrence. Returns the authenticated client registration
+    /// alongside a
+    /// <see langword="null"/> failure on success.
     /// </para>
     /// </remarks>
     private static (ClientRecord? Registration, ServerHttpResponse? Failure)
@@ -2960,8 +3042,26 @@ public static class AuthCodeEndpoints
                 OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
         }
 
-        if(fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? tokenRedirectUri)
-            && !string.Equals(tokenRedirectUri, boundRedirectUri.OriginalString, StringComparison.Ordinal))
+        //RFC 6749 §4.1.3: "redirect_uri: REQUIRED, if the "redirect_uri" parameter was included in
+        //the authorization request as described in Section 4.1.1, and their values MUST be
+        //identical." Every authorization endpoint this library accepts a request through also
+        //requires a PKCE code_challenge unconditionally, and that challenge alone already proves the
+        //presenter's possession of the authorization, so an omitted or empty redirect_uri here — RFC
+        //6749 §3.1's omission rule treats the two alike — is accepted without a comparison rather
+        //than refused as missing. A PRESENT, non-empty occurrence must still be ordinal-identical to
+        //the bound value. BeforeCodeRedemptionCorrelationAsync's own repetition refusal already
+        //answers RFC 6749 §5.2's "repeats a parameter" before the code record is loaded, so a
+        //repeated occurrence never reaches this comparison; the count is still matched exhaustively,
+        //defensively, rather than assumed.
+        IReadOnlyList<string> tokenRedirectUriValues = fields.GetValues(OAuthRequestParameterNames.RedirectUri);
+        bool isRedirectUriValid = tokenRedirectUriValues.Count switch
+        {
+            0 => true,
+            1 => string.IsNullOrEmpty(tokenRedirectUriValues[0])
+                || string.Equals(tokenRedirectUriValues[0], boundRedirectUri.OriginalString, StringComparison.Ordinal),
+            _ => false
+        };
+        if(!isRedirectUriValid)
         {
             //A refusal that reads the record answers the endpoint's constant so the answer never
             //tells whether the record exists — RFC 6749 §4.1.3's redirect_uri comparison.
@@ -3822,11 +3922,11 @@ public static class AuthCodeEndpoints
                 //BEFORE any token is minted — the authorized details ride the code state (the
                 //pushed value), a token-request value may narrow them to a subset, and the
                 //application's seam mints the credential_identifiers the response advertises.
-                _ = fields.TryGetValue(OAuthRequestParameterNames.AuthorizationDetails, out string? tokenRequestDetails);
+                //RFC 6749 §3.2 treats an empty value the same as an omitted one at the token endpoint.
                 (string? grantedDetailsJson, IReadOnlyList<object>? grantedDetailsClaim, ServerHttpResponse? detailsFailure) =
                     await ResolveGrantedAuthorizationDetailsAsync(
                         server,
-                        string.IsNullOrWhiteSpace(tokenRequestDetails) ? null : tokenRequestDetails,
+                        ReadAuthorizationDetails(fields),
                         codeState.AuthorizationDetails,
                         codeState.SubjectId,
                         registration,
@@ -7668,17 +7768,19 @@ public static class AuthCodeEndpoints
             HandleNotFoundError = OAuthErrors.InvalidGrant,
             HandleNotFoundErrorDescription = RefreshTokenNotFoundDescription,
 
-            //A present-but-blank refresh_token matches (the acceptance test below only requires the
-            //field's presence) then falls through here to null — the parameter this endpoint keys
-            //its continuing flow on is known, so the refusal names it rather than falling back to
-            //the host's generic "Cannot determine correlation key."
+            //An omitted or blank refresh_token matches (grant_type=refresh_token alone owns this
+            //endpoint's shape on /token) then falls through here to null — the parameter this
+            //endpoint keys its continuing flow on is known, so the refusal names it rather than
+            //falling back to the host's generic "Cannot determine correlation key."
             MissingCorrelationKeyErrorDescription = "Missing refresh_token.",
 
             BeforeCorrelationAsync = BeforeRefreshCorrelationAsync,
 
-            //Acceptance test: POST to /token with grant_type=refresh_token and
-            //a refresh_token parameter. Disjointness vs the code-grant matcher
-            //is enforced by the grant_type filter here.
+            //Acceptance test: POST to /token with grant_type=refresh_token.
+            //Disjointness vs the code-grant matcher is enforced by the
+            //grant_type filter here; an absent or empty refresh_token is left
+            //to this endpoint's own "Missing refresh_token." refusal above
+            //(RFC 6749 §3.2, the token endpoint's parameter clause), never a routing decline.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -7693,10 +7795,6 @@ public static class AuthCodeEndpoints
                 }
                 if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
                     || !string.Equals(grantType, WellKnownGrantTypes.RefreshToken, StringComparison.Ordinal))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.RefreshToken))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -7807,12 +7905,12 @@ public static class AuthCodeEndpoints
                 //and re-mints the §6.2 credential_identifiers (each token response carries them
                 //fresh). A grant with no stored details and no request parameter resolves to a
                 //(null, null, null) no-op, leaving the response byte-identical to a detail-less
-                //refresh.
-                _ = fields.TryGetValue(OAuthRequestParameterNames.AuthorizationDetails, out string? refreshRequestDetails);
+                //refresh. RFC 6749 §3.2 treats an empty value the same as an omitted one at the
+                //token endpoint.
                 (string? grantedDetailsJson, IReadOnlyList<object>? grantedDetailsClaim, ServerHttpResponse? detailsFailure) =
                     await ResolveGrantedAuthorizationDetailsAsync(
                         server,
-                        string.IsNullOrWhiteSpace(refreshRequestDetails) ? null : refreshRequestDetails,
+                        ReadAuthorizationDetails(fields),
                         storedRefresh.AuthorizationDetails,
                         storedRefresh.SubjectId,
                         registration,
@@ -8171,8 +8269,10 @@ public static class AuthCodeEndpoints
             Kind = FlowKind.Stateless,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.RevocationEndpoint,
 
-            //Acceptance test: POST to /revoke with a token body parameter per
-            //RFC 7009 §2.1.
+            //Acceptance test: POST to /revoke. An absent or empty token
+            //(RFC 7009 §2.1: "REQUIRED") is left to this endpoint's own
+            //"Missing token parameter." refusal below (RFC 6749 §3.1), never
+            //a routing decline.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -8182,10 +8282,6 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -8224,8 +8320,10 @@ public static class AuthCodeEndpoints
                         context.IncomingRequest, "Client authentication failed."));
                 }
 
-                //RFC 7009 §2.1: token is REQUIRED. The matcher already guaranteed
-                //its presence; the guard keeps the contract explicit and local.
+                //RFC 7009 §2.1: token is REQUIRED. The matcher claims every POST to this path
+                //regardless of token's presence (RFC 6749 §3.1 treats an omitted and an empty
+                //occurrence alike), so an absent or empty value reaches this handler after client
+                //authentication, and this check is its only refusal for it.
                 if(!fields.TryGetValue(OAuthRequestParameterNames.Token, out string? token)
                     || string.IsNullOrEmpty(token))
                 {
@@ -8268,8 +8366,10 @@ public static class AuthCodeEndpoints
             Kind = FlowKind.Stateless,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.IntrospectionEndpoint,
 
-            //Acceptance test: POST to /introspect with a token body parameter
-            //per RFC 7662 §2.1.
+            //Acceptance test: POST to /introspect. An absent or empty token
+            //(RFC 7662 §2.1: "REQUIRED") is left to this endpoint's own
+            //"Missing token parameter." refusal below (RFC 6749 §3.1), never
+            //a routing decline.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -8279,10 +8379,6 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -8321,8 +8417,10 @@ public static class AuthCodeEndpoints
                         context.IncomingRequest, "Client authentication failed."));
                 }
 
-                //RFC 7662 §2.1: token is REQUIRED. The matcher already guaranteed its
-                //presence; the guard keeps the contract explicit and local.
+                //RFC 7662 §2.1: token is REQUIRED. The matcher claims every POST to this path
+                //regardless of token's presence (RFC 6749 §3.1 treats an omitted and an empty
+                //occurrence alike), so an absent or empty value reaches this handler after client
+                //authentication, and this check is its only refusal for it.
                 if(!fields.TryGetValue(OAuthRequestParameterNames.Token, out string? token)
                     || string.IsNullOrEmpty(token))
                 {
@@ -8837,8 +8935,10 @@ public static class AuthCodeEndpoints
     private static (string? ResponseMode, ServerHttpResponse? Failure) ReadResponseMode(
         RequestFields fields, EndpointServer server, ExchangeContext context)
     {
+        //RFC 6749 §3.1: "Parameters sent without a value MUST be treated as if they were omitted
+        //from the request" — an empty response_mode is read exactly as an absent one.
         _ = fields.TryGetValue(OAuthRequestParameterNames.ResponseMode, out string? responseMode);
-        if(responseMode is null)
+        if(string.IsNullOrEmpty(responseMode))
         {
             return (null, null);
         }
@@ -9099,14 +9199,21 @@ public static class AuthCodeEndpoints
     /// Returns whether a <c>request_uri</c>-referenced authorize request carries any front-channel
     /// parameter beyond <c>request_uri</c> and <c>client_id</c>. Per RFC 9126 §4 / RFC 9101 §6.3
     /// such a request carries only those two; anything else is ignored (the pushed request is
-    /// authoritative) and is a signal worth surfacing for observability.
+    /// authoritative) and is a signal worth surfacing for observability. Per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>, a key
+    /// present with no non-empty value is treated as if it were omitted, so a SINGLE empty
+    /// occurrence is never counted as an extraneous parameter — but the same clause forbids a
+    /// parameter from repeating at all, so a key repeated on the wire counts as extraneous even
+    /// when every occurrence is empty; neither <c>request_uri</c> nor <c>client_id</c> is exempt
+    /// from ITS OWN repetition rule elsewhere, so no key is excluded from this check by name.
     /// </summary>
     private static bool HasExtraneousReferencedRequestParameters(RequestFields fields)
     {
         foreach(string key in fields.Keys)
         {
             if(!string.Equals(key, OAuthRequestParameterNames.RequestUri, StringComparison.Ordinal)
-                && !string.Equals(key, OAuthRequestParameterNames.ClientId, StringComparison.Ordinal))
+                && !string.Equals(key, OAuthRequestParameterNames.ClientId, StringComparison.Ordinal)
+                && (fields.HasParameter(key) || fields.HasRepeatedOccurrence(key)))
             {
                 return true;
             }

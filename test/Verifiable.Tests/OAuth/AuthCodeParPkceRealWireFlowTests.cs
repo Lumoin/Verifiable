@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
@@ -18,6 +20,8 @@ using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Pipeline;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -1329,6 +1333,43 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." A pushed
+    /// authorization request carrying an empty <c>request</c> alongside an otherwise-complete PKCE
+    /// body is therefore the SAME request as one naming no <c>request</c> at all
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see> carries
+    /// "any of the parameters applicable for use at the authorization endpoint"), accepted and pushed.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyRequestIsTreatedAsOmittedAtPushedAuthorization()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.Request] = string.Empty
+        };
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.IsFalse(string.IsNullOrEmpty(response.RootElement.GetProperty("request_uri").GetString()));
+    }
+
+
+    /// <summary>
     /// An absent method requests the refused plain transformation per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
     /// "OPTIONAL, defaults to "plain" if not present in the request".
@@ -1705,6 +1746,244 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             "RFC 6749 §5.2's invalid_request names the missing required parameter, in the style of "
             + "this endpoint's own 'Missing grant_type.' refusal, rather than the host-generic "
             + "'Cannot determine correlation key.'");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see>:
+    /// "redirect_uri: REQUIRED, if the "redirect_uri" parameter was included in the authorization
+    /// request as described in Section 4.1.1, and their values MUST be identical." A
+    /// <c>redirect_uri</c> that IS sent at redemption must therefore be the single value bound to
+    /// the code. A PRESENT value naming anything other than the bound one answers the same
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>
+    /// <c>invalid_grant</c> body as a redemption whose code is unknown, so a credential-less
+    /// presenter cannot distinguish which check failed. A REPEATED <c>redirect_uri</c> — bound
+    /// alongside a foreign value, or the bound value sent twice — is a malformed request under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>, which
+    /// answers <c>invalid_request</c> for a request that "repeats a parameter", refused before the
+    /// code record is ever loaded, naming the repetition. An OMITTED or EMPTY <c>redirect_uri</c> —
+    /// RFC 6749 §3.1 treats the two alike — is accepted on the code's PKCE binding, the posture
+    /// <see cref="RedirectUriMatchingTests.RealWireTokenRedirectUriAbsentWithPkceBoundCodeIsAccepted"/>
+    /// pins under <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §10.2</see>'s "the authorization server MUST allow clients to send the
+    /// redirect_uri parameter in the token request ... and MUST enforce the parameter as described
+    /// in [RFC6749]".
+    /// </summary>
+    [TestMethod]
+    [DataRow("omitted")]
+    [DataRow("empty")]
+    [DataRow("repeated bound+foreign")]
+    [DataRow("repeated bound+bound")]
+    [DataRow("mismatch")]
+    [DataRow("correct")]
+    public async Task PresentRedirectUriMustBeTheBoundValueAtCodeRedemption(string shape)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> authorizeFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        using HttpResponseMessage authorizeResponse = await SendAuthorizeGetAsync(host, hosted, segment, authorizeFields)
+            .ConfigureAwait(false);
+        Assert.AreEqual(302, (int)authorizeResponse.StatusCode,
+            await authorizeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false));
+        string code = TestBrowser.ExtractQueryParam(
+            authorizeResponse.Headers.Location!.ToString(), OAuthRequestParameterNames.Code)!;
+
+        Dictionary<string, string> baseTokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, redirectUri: null);
+        List<KeyValuePair<string, string>> wireFields = new(baseTokenFields);
+        switch(shape)
+        {
+            case "empty":
+                wireFields.Add(KeyValuePair.Create(OAuthRequestParameterNames.RedirectUri, string.Empty));
+                break;
+            case "repeated bound+foreign":
+                //A code bound to a leaky redirect_uri, repeated alongside a second, foreign value:
+                //the shape an attacker who steals a code sent to a registered-but-leaky URI would
+                //present while injecting their own callback.
+                wireFields.Add(KeyValuePair.Create(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString));
+                wireFields.Add(KeyValuePair.Create(OAuthRequestParameterNames.RedirectUri, "https://attacker.example/cb"));
+                break;
+            case "repeated bound+bound":
+                //The SAME bound value sent twice is still a repetition RFC 6749 §5.2 refuses —
+                //value-equality among the occurrences does not make the parameter singular.
+                wireFields.Add(KeyValuePair.Create(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString));
+                wireFields.Add(KeyValuePair.Create(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString));
+                break;
+            case "mismatch":
+                wireFields.Add(KeyValuePair.Create(OAuthRequestParameterNames.RedirectUri, "https://attacker.example/cb"));
+                break;
+            case "correct":
+                wireFields.Add(KeyValuePair.Create(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString));
+                break;
+            case "omitted":
+                break;
+        }
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, wireFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(shape is "correct" or "omitted" or "empty")
+        {
+            Assert.AreEqual(200, statusCode, body);
+
+            return;
+        }
+
+        using JsonDocument error = JsonDocument.Parse(body);
+        if(shape is "repeated bound+foreign" or "repeated bound+bound")
+        {
+            Assert.AreEqual(400, statusCode, body);
+            Assert.AreEqual(OAuthErrors.InvalidRequest, error.RootElement.GetProperty("error").GetString());
+            Assert.AreEqual(
+                "redirect_uri must not be repeated.",
+                error.RootElement.GetProperty("error_description").GetString(),
+                "A repeated redirect_uri names the repetition rather than answering the same body as an unknown code.");
+
+            return;
+        }
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(OAuthErrors.InvalidGrant, error.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "The authorization code is unknown, expired, or already used.",
+            error.RootElement.GetProperty("error_description").GetString(),
+            "A mismatched redirect_uri must answer the SAME body as an unknown code.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 §3.2</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// applied at the token endpoint to <c>authorization_details</c>: an empty occurrence reads as
+    /// no narrowing request, exactly as an omitted occurrence would, both before and after this
+    /// read moved onto the endpoint's shared <c>ReadAuthorizationDetails</c> helper — so
+    /// this assertion holds regardless of which of those two equivalent implementations answers it,
+    /// and exists to keep that equivalence from silently drifting.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyAuthorizationDetailsAtCodeRedemptionMatchesOmittedBehavior()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        async Task<(int StatusCode, string Body)> RedeemAsync(bool includeEmptyAuthorizationDetails)
+        {
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            Dictionary<string, string> authorizeFields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+            };
+            using HttpResponseMessage authorizeResponse = await SendAuthorizeGetAsync(host, hosted, segment, authorizeFields)
+                .ConfigureAwait(false);
+            Assert.AreEqual(302, (int)authorizeResponse.StatusCode,
+                await authorizeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false));
+            string code = TestBrowser.ExtractQueryParam(
+                authorizeResponse.Headers.Location!.ToString(), OAuthRequestParameterNames.Code)!;
+
+            Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+            if(includeEmptyAuthorizationDetails)
+            {
+                tokenFields[OAuthRequestParameterNames.AuthorizationDetails] = string.Empty;
+            }
+
+            return await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        (int omittedStatusCode, string omittedBody) = await RedeemAsync(includeEmptyAuthorizationDetails: false).ConfigureAwait(false);
+        (int emptyStatusCode, string emptyBody) = await RedeemAsync(includeEmptyAuthorizationDetails: true).ConfigureAwait(false);
+
+        Assert.AreEqual(200, omittedStatusCode, omittedBody);
+        Assert.AreEqual(200, emptyStatusCode, emptyBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." Applied to the
+    /// OPTIONAL <c>response_mode</c> parameter at direct authorization: a GET naming
+    /// <c>response_mode=</c> produces the same RFC 6749 §4.1.2 redirect shape as one that omits the
+    /// parameter entirely — both read as no request for a JWT-secured response, so both take the
+    /// plain-redirect branch to the SAME registered <c>redirect_uri</c> with the SAME set of query
+    /// parameter names, the one-time <c>code</c> value aside.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResponseModeAtDirectAuthorizationMatchesOmittedBehavior()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        static IEnumerable<string> QueryParamNames(Uri location) =>
+            location.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => Uri.UnescapeDataString(part[..part.IndexOf('=', StringComparison.Ordinal)]))
+                .OrderBy(name => name, StringComparer.Ordinal);
+
+        async Task<HttpResponseMessage> AuthorizeAsync(bool includeEmptyResponseMode)
+        {
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            Dictionary<string, string> fields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+            };
+            if(includeEmptyResponseMode)
+            {
+                fields[OAuthRequestParameterNames.ResponseMode] = string.Empty;
+            }
+
+            return await SendAuthorizeGetAsync(host, hosted, segment, fields).ConfigureAwait(false);
+        }
+
+        using HttpResponseMessage omittedResponse = await AuthorizeAsync(includeEmptyResponseMode: false).ConfigureAwait(false);
+        using HttpResponseMessage emptyResponse = await AuthorizeAsync(includeEmptyResponseMode: true).ConfigureAwait(false);
+
+        Assert.AreEqual(302, (int)omittedResponse.StatusCode,
+            await omittedResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.AreEqual((int)omittedResponse.StatusCode, (int)emptyResponse.StatusCode);
+
+        Uri omittedLocation = omittedResponse.Headers.Location!;
+        Uri emptyLocation = emptyResponse.Headers.Location!;
+        Assert.AreEqual(omittedLocation.GetLeftPart(UriPartial.Path), emptyLocation.GetLeftPart(UriPartial.Path),
+            "An omitted response_mode and an empty one must redirect to the same registered redirect_uri.");
+        Assert.AreSequenceEqual(QueryParamNames(omittedLocation).ToList(), QueryParamNames(emptyLocation).ToList(),
+            "An omitted response_mode and an empty one must redirect with the same set of query parameters.");
+        Assert.IsNotNull(TestBrowser.ExtractQueryParam(omittedLocation.ToString(), OAuthRequestParameterNames.Code));
+        Assert.IsNotNull(TestBrowser.ExtractQueryParam(emptyLocation.ToString(), OAuthRequestParameterNames.Code));
     }
 
 
@@ -5883,14 +6162,19 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: "...will refuse,
-    /// using the "invalid_request" error code, to process any request to the authorization endpoint
-    /// that does not have a "request_uri" parameter with a value obtained from the PAR endpoint." This
-    /// holds even when the registration also carries direct-authorization capability: a malformed
-    /// direct request (missing <c>code_challenge</c>) declines the direct-authorization endpoint's own
-    /// acceptance test too, so no OTHER endpoint in the chain accepts this exact request, and the
-    /// missing-<c>request_uri</c> refusal answers it — never the host-generic 404 a chain with no
-    /// matching endpoint would otherwise produce.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>'s PAR-required
+    /// refusal ("will refuse ... to process any request to the authorization endpoint that does not
+    /// have a "request_uri" parameter") applies only when no OTHER endpoint already owns the exact
+    /// request — this library's own routing design, not a rule RFC 6749 §3.1 states: a GET naming
+    /// neither <c>request_uri</c> nor <c>request</c> is direct authorization's exact shape whenever
+    /// the registration carries that capability, so the direct-authorization endpoint owns and
+    /// answers it under its own acceptance test, never the authorize endpoint's
+    /// missing-<c>request_uri</c> fallback. The direct endpoint's handler runs its request-shape
+    /// checks before its PAR-required policy check
+    /// (<see cref="PlainPkceRefusedAtDirectAuthorizeBeforeParPolicy"/> pins the same order), so a
+    /// request missing <c>code_challenge</c> is refused by that check first, answering that
+    /// endpoint's own "Missing code_challenge." — this test does not exercise RFC 7636 §4.4.1's
+    /// redirect-shaped answer, since this handler's check order answers directly instead.
     /// </summary>
     [TestMethod]
     public async Task MissingRequestUriIsRefusedInvalidRequestEvenWithDirectAuthorizationRegistered()
@@ -5905,7 +6189,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //A well-formed GET for direct authorization EXCEPT for code_challenge, so the registered
-        //direct-authorization endpoint's own matcher declines this exact request on its own terms.
+        //direct-authorization endpoint's own matcher accepts this exact request and its handler
+        //answers with its own "Missing code_challenge." refusal.
         Dictionary<string, string> fields = new(StringComparer.Ordinal)
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -5922,7 +6207,192 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.IsNull(response.Headers.Location);
         using JsonDocument error = JsonDocument.Parse(body);
         Assert.AreEqual(OAuthErrors.InvalidRequest, error.RootElement.GetProperty("error").GetString());
-        Assert.AreEqual("Missing request_uri.", error.RootElement.GetProperty("error_description").GetString());
+        Assert.AreEqual("Missing code_challenge.", error.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// The authorize endpoint's fallback matcher decides its own claim on a reference-less GET by
+    /// invoking every other chained endpoint's own matcher
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 §4</see>: the server
+    /// answers <c>invalid_request</c> only when no other endpoint already owns the exact request — a
+    /// rule this library's own routing design applies through a probe, not text §4 itself states). A
+    /// sibling matcher from a composed builder set could decide its own claim the same way, and a
+    /// probe that in turn probes back into this one would recurse without bound. This test composes a
+    /// sibling that DOES probe back into the real production matcher — the exact mutual-recursion
+    /// shape the mark on <see cref="ExchangeContext"/> defends against — capped at a small depth so a
+    /// broken guard fails an assertion here instead of overflowing the process stack. With the guard
+    /// present, the authorize matcher sets the mark before probing, the sibling observes it set and
+    /// declines immediately, and the whole exchange runs to a nesting depth of exactly one.
+    /// </summary>
+    [TestMethod]
+    public async Task OwnershipProbeBoundedReentrantSiblingIsConsultedExactlyOnce()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities)
+            .ConfigureAwait(false);
+
+        ExchangeContext context = new();
+        context.SetServer(host.Server);
+        context.SetRequestServer(host.Server);
+        context.SetRequirePushedAuthorizationRequests(true);
+
+        IReadOnlyList<EndpointCandidate> candidates = await AuthCodeEndpoints.Builder(
+            material.Registration, context, TestContext.CancellationToken).ConfigureAwait(false);
+        EndpointCandidate authorizeCandidate = candidates.Single(
+            candidate => candidate.Name == WellKnownEndpointNames.AuthCodeAuthorize);
+        Uri resolvedUri = new("https://issuer.test.example/connect/x/authorize");
+        ServerEndpoint authorizeEndpoint = new()
+        {
+            Name = authorizeCandidate.Name,
+            Capability = authorizeCandidate.Capability,
+            HttpMethod = authorizeCandidate.HttpMethod,
+            Kind = authorizeCandidate.Kind,
+            StartsNewFlow = authorizeCandidate.StartsNewFlow,
+            MatchesRequest = authorizeCandidate.MatchesRequest,
+            BuildInputAsync = authorizeCandidate.BuildInputAsync,
+            BuildResponse = authorizeCandidate.BuildResponse,
+            ResolvedUri = resolvedUri
+        };
+
+        int siblingProbeCount = 0;
+        const int siblingProbeDepthCap = 4;
+        ServerEndpoint siblingEndpoint = new()
+        {
+            Name = "test.probing-sibling-authorize",
+            Capability = WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Kind = FlowKind.AuthCodeServer,
+            StartsNewFlow = true,
+            //Stands in for a sibling endpoint from a composed builder set that decides its own claim
+            //by probing every other chained matcher too, INCLUDING one already probing it — the
+            //shape that recurses without bound unless the authorize matcher's own guard breaks the
+            //cycle. The depth cap is this test's own safety valve, not a stand-in for the guard: it
+            //keeps an unguarded run from overflowing the stack so the assertions below can observe
+            //the difference instead.
+            MatchesRequest = async (siblingFields, siblingContext, _, ct) =>
+            {
+                int depth = ++siblingProbeCount;
+                if(depth > siblingProbeDepthCap)
+                {
+
+                    return null;
+                }
+
+                if(siblingContext.IsOwnershipProbeInProgress)
+                {
+
+                    return null;
+                }
+
+                return await authorizeEndpoint.MatchesRequest(siblingFields, siblingContext, authorizeEndpoint, ct)
+                    .ConfigureAwait(false);
+            },
+            BuildInputAsync = static (_, _, _, _) =>
+                throw new InvalidOperationException("Never invoked: this synthetic endpoint never matches."),
+            BuildResponse = static (_, _, _) =>
+                throw new InvalidOperationException("Never invoked: this synthetic endpoint never matches."),
+            ResolvedUri = resolvedUri
+        };
+
+        context.SetEndpointChain(new EndpointChain([authorizeEndpoint, siblingEndpoint]));
+        context.SetIncomingRequest(new IncomingRequest(
+            Path: resolvedUri.AbsolutePath,
+            Method: WellKnownHttpMethods.Get,
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty));
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
+
+        MatchPayload? result = await authorizeEndpoint.MatchesRequest(
+            fields, context, authorizeEndpoint, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(result,
+            "With the sibling declining once probed, the authorize endpoint's own fallback claims the reference-less GET.");
+        Assert.AreEqual(1, siblingProbeCount,
+            "A sibling that cooperates with the mark is consulted exactly once, never probed back into.");
+        Assert.IsFalse(context.IsOwnershipProbeInProgress,
+            "The mark is restored once the authorize matcher's own probe completes.");
+    }
+
+
+    /// <summary>
+    /// The mark <see cref="OwnershipProbeBoundedReentrantSiblingIsConsultedExactlyOnce"/> proves
+    /// is set and cleared around a completed probe is cleared the same way when a probed sibling
+    /// FAULTS instead of returning: the authorize matcher's own <c>try</c>/<c>finally</c> around the
+    /// chain walk restores <c>ExchangeContext.IsOwnershipProbeInProgress</c> to
+    /// <see langword="false"/> even though the exception propagates past it uncaught, so the next
+    /// request on this context never inherits a mark a failed probe left behind.
+    /// </summary>
+    [TestMethod]
+    public async Task OwnershipProbeMarkIsClearedWhenAProbedSiblingFaults()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities)
+            .ConfigureAwait(false);
+
+        ExchangeContext context = new();
+        context.SetServer(host.Server);
+        context.SetRequestServer(host.Server);
+        context.SetRequirePushedAuthorizationRequests(true);
+
+        IReadOnlyList<EndpointCandidate> candidates = await AuthCodeEndpoints.Builder(
+            material.Registration, context, TestContext.CancellationToken).ConfigureAwait(false);
+        EndpointCandidate authorizeCandidate = candidates.Single(
+            candidate => candidate.Name == WellKnownEndpointNames.AuthCodeAuthorize);
+        Uri resolvedUri = new("https://issuer.test.example/connect/x/authorize");
+        ServerEndpoint authorizeEndpoint = new()
+        {
+            Name = authorizeCandidate.Name,
+            Capability = authorizeCandidate.Capability,
+            HttpMethod = authorizeCandidate.HttpMethod,
+            Kind = authorizeCandidate.Kind,
+            StartsNewFlow = authorizeCandidate.StartsNewFlow,
+            MatchesRequest = authorizeCandidate.MatchesRequest,
+            BuildInputAsync = authorizeCandidate.BuildInputAsync,
+            BuildResponse = authorizeCandidate.BuildResponse,
+            ResolvedUri = resolvedUri
+        };
+
+        ServerEndpoint faultingSibling = new()
+        {
+            Name = "test.faulting-sibling-authorize",
+            Capability = WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Kind = FlowKind.AuthCodeServer,
+            StartsNewFlow = true,
+            MatchesRequest = static (_, _, _, _) =>
+                throw new InvalidOperationException("A composed sibling's own matcher fails during the probe."),
+            BuildInputAsync = static (_, _, _, _) =>
+                throw new InvalidOperationException("Never invoked: this synthetic endpoint never matches."),
+            BuildResponse = static (_, _, _) =>
+                throw new InvalidOperationException("Never invoked: this synthetic endpoint never matches."),
+            ResolvedUri = resolvedUri
+        };
+
+        context.SetEndpointChain(new EndpointChain([authorizeEndpoint, faultingSibling]));
+        context.SetIncomingRequest(new IncomingRequest(
+            Path: resolvedUri.AbsolutePath,
+            Method: WellKnownHttpMethods.Get,
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty));
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
+
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => authorizeEndpoint.MatchesRequest(fields, context, authorizeEndpoint, TestContext.CancellationToken).AsTask())
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(context.IsOwnershipProbeInProgress,
+            "A probed sibling that faults must not leave the mark set for the next request on this context.");
     }
 
 
@@ -6092,6 +6562,207 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string emptyCode = await AuthorizeAndRedeemAsync(includeEmptyRequestUri: true).ConfigureAwait(false);
         Assert.AreNotEqual(omittedCode, emptyCode,
             "Each authorization redirects and redeems its own, independently issued code.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see> (PAR and
+    /// direct authorization) and its restatement at the token endpoint,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 §3.2</see> (the
+    /// refresh grant): "Parameters sent without a value MUST be treated as if they were omitted from
+    /// the request." Each endpoint below REQUIRES the named parameter — PAR's and direct
+    /// authorization's <c>code_challenge</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.4.1">RFC 7636 §4.4.1</see>: a
+    /// public client's absent <c>code_challenge</c> "MUST return the authorization error response
+    /// with the "error" value set to "invalid_request"" — PAR answers this directly, having no
+    /// front channel of its own; direct authorization's handler answers the same code and message
+    /// as a bare 400 here rather than the redirect §4.4.1 names, an existing ordering this test does
+    /// not itself prove conformant), the refresh grant's <c>refresh_token</c>,
+    /// revocation's and introspection's <c>token</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.1">RFC 7009 §2.1</see> /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.1">RFC 7662 §2.1</see>: both
+    /// "REQUIRED") — an omitted occurrence and one present with an empty value answer
+    /// byte-identically, each endpoint's own literal <c>error_description</c> included, so two
+    /// endpoints that both answer <c>invalid_request</c> cannot be mistaken for one another.
+    /// </summary>
+    [TestMethod]
+    [DataRow("PAR code_challenge", "Missing code_challenge.")]
+    [DataRow("direct code_challenge", "Missing code_challenge.")]
+    [DataRow("refresh_token", "Missing refresh_token.")]
+    [DataRow("revoke token", "Missing token parameter.")]
+    [DataRow("introspect token", "Missing token parameter.")]
+    public async Task RequiredParameterSentWithoutAValueIsRefusedLikeAnOmittedOne(
+        string parameter, string expectedDescription)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: CapabilitiesWithIntrospection.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+            candidateIntegration.RevokeTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.CompletedTask;
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        static Dictionary<string, string> WithOptionalEmptyValue(
+            Dictionary<string, string> fields, string key, bool includeEmptyValue)
+        {
+            if(includeEmptyValue)
+            {
+                fields[key] = string.Empty;
+            }
+            else
+            {
+                _ = fields.Remove(key);
+            }
+
+            return fields;
+        }
+
+        async Task<(int StatusCode, string Body)> SendDirectAuthorizeAsync(Dictionary<string, string> fields)
+        {
+            using HttpResponseMessage response = await SendAuthorizeGetAsync(host, hosted, segment, fields)
+                .ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            return ((int)response.StatusCode, body);
+        }
+
+        Task<(int StatusCode, string Body)> PushAsync(bool includeEmptyValue) => parameter switch
+        {
+            "PAR code_challenge" => RawAuthCodeWirePushers.PushRawParFieldsAsync(
+                host, segment,
+                WithOptionalEmptyValue(
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                        [OAuthRequestParameterNames.ClientId] = ClientId,
+                        [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                        [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                        [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+                        [OAuthRequestParameterNames.CodeChallenge] = "unused"
+                    },
+                    OAuthRequestParameterNames.CodeChallenge, includeEmptyValue),
+                TestContext.CancellationToken),
+            "direct code_challenge" => SendDirectAuthorizeAsync(
+                WithOptionalEmptyValue(
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                        [OAuthRequestParameterNames.ClientId] = ClientId,
+                        [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                        [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                        [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+                        [OAuthRequestParameterNames.CodeChallenge] = "unused"
+                    },
+                    OAuthRequestParameterNames.CodeChallenge, includeEmptyValue)),
+            "refresh_token" => RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment,
+                WithOptionalEmptyValue(
+                    RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken: "unused"),
+                    OAuthRequestParameterNames.RefreshToken, includeEmptyValue),
+                TestContext.CancellationToken),
+            "revoke token" => RawAuthCodeWirePushers.PushRawRevocationFieldsAsync(
+                host, segment,
+                WithOptionalEmptyValue(
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [OAuthRequestParameterNames.ClientId] = ClientId,
+                        [OAuthRequestParameterNames.Token] = "unused"
+                    },
+                    OAuthRequestParameterNames.Token, includeEmptyValue),
+                TestContext.CancellationToken),
+            "introspect token" => RawAuthCodeWirePushers.PushRawIntrospectionFieldsAsync(
+                host, segment,
+                WithOptionalEmptyValue(
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [OAuthRequestParameterNames.ClientId] = ClientId,
+                        [OAuthRequestParameterNames.Token] = "unused"
+                    },
+                    OAuthRequestParameterNames.Token, includeEmptyValue),
+                TestContext.CancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, "Unrecognized case name.")
+        };
+
+        (int omittedStatusCode, string omittedBody) = await PushAsync(includeEmptyValue: false).ConfigureAwait(false);
+        (int emptyStatusCode, string emptyBody) = await PushAsync(includeEmptyValue: true).ConfigureAwait(false);
+
+        Assert.AreEqual(400, omittedStatusCode, omittedBody);
+        using JsonDocument omittedError = JsonDocument.Parse(omittedBody);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, omittedError.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(expectedDescription, omittedError.RootElement.GetProperty("error_description").GetString(),
+            "Each endpoint's own literal refusal, not merely a shared invalid_request code, must be the answer.");
+        Assert.AreEqual(omittedStatusCode, emptyStatusCode);
+        Assert.AreEqual(omittedBody, emptyBody,
+            "An omitted required parameter and one sent with an empty value must answer byte-identically.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." Driven over
+    /// the real transport so the HTTP skin's own decoding of an empty-valued query key
+    /// (<c>scope=</c>) is what this assertion observes, not a hand-built <c>RequestFields</c>
+    /// standing in for it: a clean <c>request_uri</c> + <c>client_id</c> authorize GET carrying an
+    /// empty <c>scope</c> alongside them emits no tampering signal
+    /// (<c>oauth.authorize.extraneous_parameters_ignored</c>).
+    /// </summary>
+    [TestMethod]
+    public async Task CleanReferencedAuthorizeWithEmptyScopeEmitsNoTamperingEventOverTheWire()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        (int parStatusCode, string parBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        using JsonDocument parJson = JsonDocument.Parse(parBody);
+        string requestUri = parJson.RootElement.GetProperty("request_uri").GetString()!;
+
+        Dictionary<string, string> authorizeFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri,
+            [OAuthRequestParameterNames.Scope] = string.Empty
+        };
+
+        IReadOnlyList<Activity> activities = await ParRequestIntegrityTests.CaptureAuthorizeActivitiesAsync(
+            material.Registration.TenantHandle!.Value.Value,
+            async () =>
+            {
+                using HttpResponseMessage response = await SendAuthorizeGetAsync(host, hosted, segment, authorizeFields)
+                    .ConfigureAwait(false);
+                Assert.AreEqual(302, (int)response.StatusCode,
+                    await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false));
+            }).ConfigureAwait(false);
+
+        List<string> eventNames = activities.SelectMany(a => a.Events).Select(e => e.Name).ToList();
+        Assert.DoesNotContain(OAuthEventNames.ExtraneousAuthorizeParameters, eventNames,
+            "A conformant request_uri + client_id authorize with an empty scope must emit no tampering "
+            + "signal, with the empty value crossing a real HTTP query string.");
     }
 
 

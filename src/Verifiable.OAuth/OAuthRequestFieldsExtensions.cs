@@ -40,12 +40,27 @@ internal static class OAuthRequestFieldsExtensions
             {
                 if(!string.IsNullOrEmpty(values[i]))
                 {
-
                     return true;
                 }
             }
 
             return false;
         }
+
+        /// <summary>
+        /// Whether <paramref name="name"/> was repeated on the wire, independent of whether any
+        /// occurrence carries a non-empty value. <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">
+        /// RFC 6749 §3.1</see>: "Request and response parameters MUST NOT be included more than
+        /// once" holds even when every repeated occurrence is itself empty, so a wholly empty
+        /// repeat is not silently normalized away by <see cref="HasParameter"/>'s omission rule —
+        /// a caller that needs that rule for a singleton parameter checks this alongside it.
+        /// </summary>
+        /// <param name="name">The parameter name.</param>
+        /// <returns>
+        /// <see langword="true"/> when <paramref name="name"/> carries more than one occurrence on
+        /// the wire; otherwise <see langword="false"/>.
+        /// </returns>
+        public bool HasRepeatedOccurrence(string name) =>
+            fields.GetValues(name).Count > 1;
     }
 }

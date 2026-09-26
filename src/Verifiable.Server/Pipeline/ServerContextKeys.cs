@@ -68,4 +68,12 @@ internal static class ServerContextKeys
 
     /// <summary>Key for the per-request set of allowed capabilities returned by the capability resolver.</summary>
     public const string ResolvedCapabilitiesKey = "server.resolvedCapabilities";
+
+    /// <summary>
+    /// Key for the in-progress mark a matcher sets while it decides its own FALLBACK claim by
+    /// invoking other chained endpoints' <see cref="Routing.MatchRequestDelegate"/>. The mark
+    /// gates only that fallback claim, never a matcher's own primary acceptance test. Value type:
+    /// <see cref="bool"/>.
+    /// </summary>
+    public const string OwnershipProbeInProgressKey = "server.ownershipProbeInProgress";
 }
