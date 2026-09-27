@@ -168,6 +168,10 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     internal X509Certificate2 ServerCertificate => serverCertificate ??= LoopbackTls.CreateServerCertificate("oauth-loopback-test-host");
 
+    /// <summary>
+    /// The lazily loaded backing store of <see cref="ServerCertificate"/>: a field because the
+    /// <c>??=</c> cache assigns it on first read, which a get-only property cannot.
+    /// </summary>
     private X509Certificate2? serverCertificate;
 
     /// <summary>
@@ -4580,6 +4584,15 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// The tenant and instance audience each host's VCALM conformance listener was started with,
+    /// keyed by host name, so <see cref="StartVcalmConformanceHostAsync"/> can tell a repeated call
+    /// for the same binding from one that names another.
+    /// </summary>
+    private Dictionary<string, (string TenantId, string InstanceAudience)> VcalmConformanceBindings { get; } =
+        new(StringComparer.Ordinal);
+
+
+    /// <summary>
     /// Starts an in-process HTTPS listener for the W3C VCALM 1.0 conformance bridge:
     /// the same ephemeral-port loopback bootstrap as <see cref="StartHttpHostAsync(string, CancellationToken)"/>,
     /// but mounting <see cref="Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication"/> so the VCALM
@@ -4588,18 +4601,52 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// HTTPS behind an OAuth2 client-credentials bearer gate, with the AS token endpoint reachable at
     /// <c>/token</c>. The external <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c>
     /// JS suites POST to those flat paths; this is the in-repo bridge those suites can be pointed at.
-    /// Idempotent per host. The supplied <paramref name="registration"/> is the conformance
-    /// tenant whose VCALM endpoints the skin fronts.
+    /// Idempotent per host for the same tenant and audience: a repeated call naming the tenant and
+    /// the audience the listener already serves returns without rebinding. A call against a host
+    /// whose listener serves another tenant, another audience, or another application throws, so a
+    /// test never runs against a binding it did not ask for. The application is constructed before
+    /// the listener is built, so an audience the application refuses leaves nothing bound.
     /// </summary>
+    /// <param name="hostName">The shell-level host name this listener runs under.</param>
+    /// <param name="registration">The conformance tenant whose VCALM endpoints the skin fronts.</param>
+    /// <param name="instanceAudience">
+    /// This bridge instance's own absolute URI, passed straight to
+    /// <see cref="Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication"/>'s constructor as the
+    /// RFC 9068 §4 <c>aud</c> requirement every admitted access token must carry and as the
+    /// challenge realm: a fixed resource identifier the test chooses, never derived from the
+    /// ephemeral loopback port this call binds.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task that completes when the listener is serving.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The host already serves a listener bound to another tenant, audience or application.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="instanceAudience"/> is not an absolute URI or cannot be carried as a realm.
+    /// </exception>
     public async Task StartVcalmConformanceHostAsync(
-        string hostName, ClientRecord registration, CancellationToken cancellationToken = default)
+        string hostName,
+        ClientRecord registration,
+        string instanceAudience,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceAudience);
 
         HostedAuthorizationServer host = Host(hostName);
         if(host.HttpHost is not null)
         {
+            bool isSameBinding = VcalmConformanceBindings.TryGetValue(
+                    hostName, out (string TenantId, string InstanceAudience) binding)
+                && string.Equals(binding.TenantId, registration.TenantId.Value, StringComparison.Ordinal)
+                && string.Equals(binding.InstanceAudience, instanceAudience, StringComparison.Ordinal);
+            if(!isSameBinding)
+            {
+                throw new InvalidOperationException(
+                    $"Host '{hostName}' already serves a listener bound to another tenant, audience or application.");
+            }
+
             return;
         }
 
@@ -4607,6 +4654,9 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             await PrepareServingAsync(host.Server, cancellationToken).ConfigureAwait(false);
         }
+
+        Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication application = new(
+            host.Server, registration, instanceAudience);
 
         X509Certificate2 hostCertificate = HostCertificate(hostName);
 
@@ -4618,8 +4668,6 @@ internal sealed class TestHostShell: IAsyncDisposable
             LoopbackKestrel.ConfigureLoopbackListener(options, hostCertificate));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
-
-        Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication application = new(host.Server, registration);
         app.Run(application.ProcessRequestAsync);
 
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -4636,6 +4684,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         host.HttpHost = app;
         host.HttpBaseAddress = new Uri(boundAddress);
         host.SharedHttpClient = LoopbackTls.CreatePinnedHttpClient(hostCertificate, host.HttpBaseAddress);
+        VcalmConformanceBindings[hostName] = (registration.TenantId.Value, instanceAudience);
     }
 
 

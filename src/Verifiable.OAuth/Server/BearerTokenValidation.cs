@@ -23,10 +23,15 @@ namespace Verifiable.OAuth.Server;
 /// per §5.3.1).
 /// </para>
 /// <para>
-/// Audience is deliberately not validated — a protected resource accepts any AS-issued access
-/// token whose <c>iss</c> matches the resolved issuer; deployments that need stricter audience
-/// binding install a custom <see cref="ResolveAccessTokenAudienceDelegate"/> and add the check
-/// at the resource server.
+/// The overload without <c>expectedAudience</c>
+/// (<see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>)
+/// does not check the <c>aud</c> claim: a protected resource that accepts any AS-issued access token
+/// whose <c>iss</c> matches the resolved issuer calls it directly. A resource server that fronts one
+/// identified resource calls the
+/// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
+/// overload instead, which additionally requires the token's <c>aud</c> claim to contain that
+/// resource's identifier per
+/// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>.
 /// </para>
 /// </remarks>
 public static class BearerTokenValidation
@@ -117,7 +122,9 @@ public static class BearerTokenValidation
     /// against <see cref="JwsParsing.ParseCompact"/>,
     /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>,
     /// and the AS's wired <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/> /
-    /// <see cref="AuthorizationServerCodecs.JwtPayloadDeserializer"/>.
+    /// <see cref="AuthorizationServerCodecs.JwtPayloadDeserializer"/>. Does not check the audience;
+    /// see the <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
+    /// overload for a caller that must bind the token to one resource identifier.
     /// </summary>
     /// <param name="bearerToken">The compact-JWS access token, exactly as presented on the wire.</param>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
@@ -128,8 +135,89 @@ public static class BearerTokenValidation
     /// The validated <see cref="JwtPayload"/> and a <see langword="null"/> failure on success;
     /// a <see langword="null"/> payload and the RFC 6750 error response on failure.
     /// </returns>
-    public static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateAsync(
+    public static ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateAsync(
         string bearerToken,
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        ValidateCoreAsync(bearerToken, expectedAudience: null, server, registration, context, cancellationToken);
+
+
+    /// <summary>
+    /// Validates a bearer access token exactly as
+    /// <see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
+    /// does, and additionally requires the token's <c>aud</c> claim to contain
+    /// <paramref name="expectedAudience"/>, the resource-indicator binding
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see> requires: "The
+    /// resource server MUST validate that the "aud" claim contains a resource indicator value
+    /// corresponding to an identifier the resource server expects for itself. The JWT access token
+    /// MUST be rejected if "aud" does not contain a resource indicator of the current resource server
+    /// as a valid audience." A refusal is reported as the same section requires: "The resource server
+    /// MUST handle errors as described in Section 3.1 of [RFC6750]. In particular, in case of any
+    /// failure in the validation checks listed above, the authorization server response MUST include
+    /// the error code "invalid_token"." A resource server that fronts one identified resource calls
+    /// this overload, so a token minted for another resource is refused before the caller judges any
+    /// scope.
+    /// </summary>
+    /// <param name="bearerToken">The compact-JWS access token, exactly as presented on the wire.</param>
+    /// <param name="expectedAudience">
+    /// The identifier of the resource the caller fronts; the token is admitted only when its
+    /// well-formed <c>aud</c> claim, a string or an array of strings, holds an entry equal to it under
+    /// ordinal comparison.
+    /// </param>
+    /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context bag.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The validated <see cref="JwtPayload"/> and a <see langword="null"/> failure on success;
+    /// a <see langword="null"/> payload and the RFC 6750 / RFC 9068 error response on failure.
+    /// </returns>
+    /// <remarks>
+    /// The comparison is exact-string: each <c>aud</c> entry is compared with
+    /// <paramref name="expectedAudience"/> ordinally, with no case folding and no URI normalisation, so
+    /// an identifier that differs only in the letter case of its host, in a trailing slash or in a
+    /// written-out default port is another audience and the token is refused. RFC 9068 §4 asks for
+    /// "an identifier the resource server expects for itself"; that identifier is the one string the
+    /// resource server is configured with, and the <c>aud</c> entry is the string the client presented
+    /// as its resource indicator, so the two are compared as those strings.
+    /// </remarks>
+    public static ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateAsync(
+        string bearerToken,
+        string expectedAudience,
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(expectedAudience);
+
+        return ValidateCoreAsync(bearerToken, expectedAudience, server, registration, context, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// The shared validation body both <see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
+    /// and its audience-checking overload run, so the structural-parse → signature → <c>iss</c> →
+    /// (optional) <c>aud</c> → <c>exp</c> sequence cannot drift between the two call shapes.
+    /// </summary>
+    /// <param name="bearerToken">The compact-JWS access token, exactly as presented on the wire.</param>
+    /// <param name="expectedAudience">
+    /// The resource identifier the <c>aud</c> claim must contain, or <see langword="null"/> to skip
+    /// the audience check (the plain <see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/> shape).
+    /// </param>
+    /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context bag.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The validated <see cref="JwtPayload"/> and a <see langword="null"/> failure on success;
+    /// a <see langword="null"/> payload and the RFC 6750 / RFC 9068 error response on failure.
+    /// </returns>
+    private static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateCoreAsync(
+        string bearerToken,
+        string? expectedAudience,
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
@@ -304,6 +392,29 @@ public static class BearerTokenValidation
                     "Access token iss claim does not match this Authorization Server."));
             }
 
+            //6a. aud claim must contain the caller's expected resource identifier, when the caller
+            //    asked for that binding. RFC 9068 §4: "The resource server MUST validate that the
+            //    "aud" claim contains a resource indicator value corresponding to an identifier the
+            //    resource server expects for itself. The JWT access token MUST be rejected if "aud"
+            //    does not contain a resource indicator of the current resource server as a valid
+            //    audience." and "in case of any failure in the validation checks listed above, the
+            //    authorization server response MUST include the error code "invalid_token"." The
+            //    claim's shape is read strictly (TryReadWellFormedAudience): an array holding anything
+            //    other than non-empty strings is refused outright, never narrowed to its string
+            //    entries, so a malformed aud is never admitted on the entries beside the malformed one.
+            if(expectedAudience is not null)
+            {
+                bool isAudienceMatched = TryReadWellFormedAudience(payload, out IReadOnlyList<string> audience)
+                    && ContainsOrdinal(audience, expectedAudience);
+
+                if(!isAudienceMatched)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidToken,
+                        "Access token aud claim does not contain the expected resource identifier."));
+                }
+            }
+
             //7. exp claim must be in the future. JwtClaimReaders.TryToInt64
             //   handles the broad set of integer types JSON deserializers may
             //   produce for Unix-seconds values (long, int, decimal, ulong, …).
@@ -325,5 +436,86 @@ public static class BearerTokenValidation
 
             return (payload, null);
         }
+    }
+
+
+    /// <summary>
+    /// Whether <paramref name="expected"/> appears in <paramref name="audience"/> under ordinal
+    /// equality: the <c>aud</c> comparison is exact-string, with no case folding or URI normalisation,
+    /// against an identifier the caller supplies rather than one derived from the inbound request.
+    /// </summary>
+    /// <param name="audience">The token's <c>aud</c> claim, normalised to a list of strings.</param>
+    /// <param name="expected">The resource identifier the caller expects to find.</param>
+    /// <returns><see langword="true"/> when <paramref name="expected"/> is one of <paramref name="audience"/>'s entries.</returns>
+    private static bool ContainsOrdinal(IReadOnlyList<string> audience, string expected)
+    {
+        for(int i = 0; i < audience.Count; i++)
+        {
+            if(string.Equals(audience[i], expected, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /// <summary>
+    /// Reads the <c>aud</c> claim of <paramref name="payload"/> in the two shapes
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 §4.1.3</see> defines,
+    /// an array of strings or a single string, and refuses every other shape outright: an empty
+    /// string, an empty array, an array holding a non-string or empty element, or a value of another
+    /// type. A malformed claim is never narrowed to its well-formed part, so a token is never admitted
+    /// on the strength of the entries that happened to be strings beside the ones that made the claim
+    /// malformed.
+    /// </summary>
+    /// <param name="payload">The access-token payload whose <c>aud</c> claim is read.</param>
+    /// <param name="audience">The audience values when the claim is well formed; otherwise empty.</param>
+    /// <returns><see langword="true"/> when the claim is present and well formed.</returns>
+    private static bool TryReadWellFormedAudience(JwtPayload payload, out IReadOnlyList<string> audience)
+    {
+        audience = [];
+        if(!payload.TryGetValue(WellKnownJwtClaimNames.Aud, out object? raw))
+        {
+            return false;
+        }
+
+        if(raw is string single)
+        {
+            if(string.IsNullOrEmpty(single))
+            {
+                return false;
+            }
+
+            audience = [single];
+
+            return true;
+        }
+
+        if(raw is not IEnumerable<object> items)
+        {
+            return false;
+        }
+
+        List<string> values = [];
+        foreach(object item in items)
+        {
+            if(item is not string value || string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            values.Add(value);
+        }
+
+        if(values.Count == 0)
+        {
+            return false;
+        }
+
+        audience = values;
+
+        return true;
     }
 }

@@ -21,9 +21,9 @@ namespace Verifiable.Core.Transport;
 /// and cache-freshness headers alike — is named here: <see cref="Authorization"/>,
 /// <see cref="Accept"/>, <see cref="AcceptLanguage"/>, <see cref="ContentLanguage"/>,
 /// <see cref="ContentType"/>, <see cref="DPoP"/>, <see cref="DPoPNonce"/>,
-/// <see cref="CacheControl"/>, <see cref="WwwAuthenticate"/>, <see cref="Location"/>,
-/// <see cref="Date"/>, <see cref="Age"/>, and <see cref="Expires"/>. Each carries its
-/// own <c>IsXxx</c> predicate and a row in <see cref="GetCanonicalizedValue"/>. This
+/// <see cref="CacheControl"/>, <see cref="WwwAuthenticate"/>, <see cref="Allow"/>,
+/// <see cref="Location"/>, <see cref="Date"/>, <see cref="Age"/>, and <see cref="Expires"/>.
+/// Each carries its own <c>IsXxx</c> predicate and a row in <see cref="GetCanonicalizedValue"/>. This
 /// type lives in <c>Verifiable.Core.Transport</c> beside <see cref="HttpHeaderSet"/> —
 /// a transport vocabulary the OAuth, Server, DIDComm, VCALM, and did:webvh surfaces
 /// all read, not an OAuth-only one.
@@ -139,6 +139,18 @@ public static class WellKnownHttpHeaderNames
     /// </summary>
     public static string WwwAuthenticate { get; } = Utf8Constants.ToInternedString(WwwAuthenticateUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Allow"/>.</summary>
+    public static ReadOnlySpan<byte> AllowUtf8 => "Allow"u8;
+
+    /// <summary>
+    /// The <c>Allow</c> response header
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.1">RFC 9110 §10.2.1</see>),
+    /// which lists the methods the target resource supports. A <c>405 (Method Not Allowed)</c>
+    /// response carries it (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.6">RFC 9110
+    /// §15.5.6</see>) to name the methods the known resource does accept.
+    /// </summary>
+    public static string Allow { get; } = Utf8Constants.ToInternedString(AllowUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Location"/>.</summary>
     public static ReadOnlySpan<byte> LocationUtf8 => "Location"u8;
 
@@ -248,6 +260,12 @@ public static class WellKnownHttpHeaderNames
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="name"/> is the
+    /// <c>Allow</c> header.
+    /// </summary>
+    public static bool IsAllow(string name) => Equals(name, Allow);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="name"/> is the
     /// <c>Location</c> header.
     /// </summary>
     public static bool IsLocation(string name) => Equals(name, Location);
@@ -286,6 +304,7 @@ public static class WellKnownHttpHeaderNames
         var n when IsDPoPNonce(n) => DPoPNonce,
         var n when IsCacheControl(n) => CacheControl,
         var n when IsWwwAuthenticate(n) => WwwAuthenticate,
+        var n when IsAllow(n) => Allow,
         var n when IsLocation(n) => Location,
         var n when IsDate(n) => Date,
         var n when IsAge(n) => Age,
