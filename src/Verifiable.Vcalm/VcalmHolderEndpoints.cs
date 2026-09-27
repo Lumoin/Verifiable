@@ -202,11 +202,22 @@ public static class VcalmHolderEndpoints
                     return (null, MalformedRequest());
                 }
 
+                //§2.4: "Implementations MUST throw an error if an endpoint receives data, options, or option
+                //values that it does not understand or know how to process." The §3.5.2 presentation schema says
+                //"The document MAY include an embedded proof.", and this holder processes none: an embedded proof
+                //would be signed over and then replaced by the new proof, which then never verifies. A presentation
+                //carrying a proof member is refused before any signing, through the same check the holder service
+                //itself enforces.
+                if(VcalmHolderService.HasEmbeddedProof(request.Presentation))
+                {
+                    return (null, EmbeddedProofRequest());
+                }
+
                 //§2.4: "Implementations MUST throw an error if an endpoint receives data ... that it does not
-                //understand or know how to process." The presentation proof covers the presentation's existing
-                //proofs and every contained credential's proofs, so an input proof lacking a Data Integrity §4.4
-                //mandatory member is refused before any signing instead of being re-serialized and signed over,
-                //through the same check the holder service itself enforces.
+                //understand or know how to process." The presentation proof covers every contained credential's
+                //proofs, so a contained proof lacking a Data Integrity §4.4 mandatory member is refused before any
+                //signing instead of being re-serialized and signed over, through the same check the holder service
+                //itself enforces.
                 if(!VcalmHolderService.HasCompleteInputProofs(request.Presentation))
                 {
                     return (null, IncompleteInputProofRequest());
@@ -795,6 +806,27 @@ public static class VcalmHolderEndpoints
             VcalmProblemTypes.MalformedValueError,
             "MALFORMED_VALUE_ERROR",
             VcalmVerificationService.IncompleteInputProofDetail);
+
+        return ServerHttpResponse.Json(
+            400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
+    }
+
+
+    /// <summary>
+    /// The §3.5.2 embedded-proof 400: the input presentation carries its own <c>proof</c> member, which this holder does
+    /// not process, so it is refused before any signing under the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> rule that an endpoint MUST throw an error on data it
+    /// does not understand or know how to process. It answers the way the issuer's
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#issue-credential">§3.2.1</see> Error Handling configuration answers a
+    /// credential that already carries proofs: with the <see cref="VcalmProblemTypes.MalformedValueError"/> type and the
+    /// <see cref="VcalmHolderService.EmbeddedProofDetail"/> detail.
+    /// </summary>
+    private static ServerHttpResponse EmbeddedProofRequest()
+    {
+        VcalmProblemDetail problem = VcalmProblemDetail.Error(
+            VcalmProblemTypes.MalformedValueError,
+            "MALFORMED_VALUE_ERROR",
+            VcalmHolderService.EmbeddedProofDetail);
 
         return ServerHttpResponse.Json(
             400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);

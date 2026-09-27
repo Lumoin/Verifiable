@@ -105,12 +105,15 @@ public static class VcalmHolderService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <remarks>
     /// <para>
-    /// The presentation proof covers the presentation's existing proofs and every contained credential's proofs, so each
-    /// must carry the <c>type</c>, <c>verificationMethod</c> and <c>proofPurpose</c>
+    /// A presentation that carries its own proof is refused before any signing (<see cref="HasEmbeddedProof"/>): this
+    /// holder processes no embedded presentation proof, since signing over one and then replacing it yields a proof that
+    /// never verifies. The presentation proof covers each contained credential's proofs, so each must carry the
+    /// <c>type</c>, <c>verificationMethod</c> and <c>proofPurpose</c>
     /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of every
-    /// proof (<see cref="HasCompleteInputProofs"/>). The §3.5.2 endpoint refuses an input that does not with a 400 through
-    /// that same predicate before it calls this method; any other caller that passes one breaks this method's precondition
-    /// and is refused before any signing, so no presentation proof ever signs over a defective input proof.
+    /// proof (<see cref="HasCompleteInputProofs"/>). The §3.5.2 endpoint refuses an input that fails either check with a
+    /// 400 through the same predicates before it calls this method; any other caller that passes one breaks this method's
+    /// precondition and is refused before any signing, so no presentation proof ever signs over an embedded proof or a
+    /// defective contained proof.
     /// </para>
     /// <para>
     /// This method performs NO <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-response-format">
@@ -122,7 +125,10 @@ public static class VcalmHolderService
     /// before calling.
     /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentException">An input proof of <paramref name="presentation"/> lacks a Data Integrity §4.4 mandatory member.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="presentation"/> carries its own proof, or a proof of a credential it contains lacks a Data
+    /// Integrity §4.4 mandatory member.
+    /// </exception>
     public static async ValueTask<DataIntegritySecuredPresentation> CreatePresentationAsync(
         VerifiablePresentation presentation,
         string challenge,
@@ -136,6 +142,11 @@ public static class VcalmHolderService
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(signing);
         ArgumentNullException.ThrowIfNull(context);
+
+        if(HasEmbeddedProof(presentation))
+        {
+            throw new ArgumentException(EmbeddedProofDetail, nameof(presentation));
+        }
 
         if(!HasCompleteInputProofs(presentation))
         {
@@ -174,16 +185,39 @@ public static class VcalmHolderService
 
 
     /// <summary>
-    /// Whether every proof the §3.5.2 input carries — the presentation's own existing proofs and each contained
-    /// credential's proofs — has the members <see cref="VcalmVerificationService.HasMandatoryProofOptions"/> checks,
-    /// so the presentation proof never signs over a defective input proof. The create-presentation endpoint and
-    /// <see cref="CreatePresentationAsync"/> share this one check.
+    /// Whether the §3.5.2 input presentation carries its own <c>proof</c> member. The JSON leaf reads a non-null
+    /// <c>proof</c> member of any kind (a proof object, a list, an empty list, a string or a number) as a
+    /// <see cref="DataIntegritySecuredPresentation"/>, so the type answers for every such shape. This holder processes no
+    /// embedded presentation proof: the §3.5.2 schema's "The document MAY include an embedded proof." leaves the handling
+    /// to the instance, and signing over an embedded proof and then replacing it yields a proof that never verifies, so
+    /// such an input is refused under the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> rule that an endpoint MUST throw an error on data
+    /// it does not know how to process. The create-presentation endpoint and <see cref="CreatePresentationAsync"/> share
+    /// this one check.
+    /// </summary>
+    /// <param name="presentation">The presentation the holder is asked to secure.</param>
+    internal static bool HasEmbeddedProof(VerifiablePresentation presentation) =>
+        presentation is DataIntegritySecuredPresentation;
+
+
+    /// <summary>
+    /// The problem detail stated when an input presentation carries its own proof: the create-presentation endpoint's
+    /// 400 carries it, and <see cref="CreatePresentationAsync"/> throws its <see cref="ArgumentException"/> with it.
+    /// </summary>
+    internal static string EmbeddedProofDetail { get; } =
+        "The presentation to secure already carries a proof; this holder secures only a presentation that carries none.";
+
+
+    /// <summary>
+    /// Whether every proof of each credential the §3.5.2 input presentation contains has the members
+    /// <see cref="VcalmVerificationService.HasMandatoryProofOptions"/> checks, so the presentation proof never signs over
+    /// a defective contained proof. A presentation carrying its own proof is refused before this check through
+    /// <see cref="HasEmbeddedProof"/>. The create-presentation endpoint and <see cref="CreatePresentationAsync"/> share
+    /// this one check.
     /// </summary>
     /// <param name="presentation">The presentation the holder is asked to secure.</param>
     internal static bool HasCompleteInputProofs(VerifiablePresentation presentation) =>
-        (presentation is not DataIntegritySecuredPresentation { Proof: { } presentationProofs }
-            || presentationProofs.All(VcalmVerificationService.HasMandatoryProofOptions))
-        && (presentation.VerifiableCredential is not { } credentials
-            || credentials.All(credential => credential is not DataIntegritySecuredCredential { Proof: { } credentialProofs }
-                || credentialProofs.All(VcalmVerificationService.HasMandatoryProofOptions)));
+        presentation.VerifiableCredential is not { } credentials
+        || credentials.All(credential => credential is not DataIntegritySecuredCredential { Proof: { } credentialProofs }
+            || credentialProofs.All(VcalmVerificationService.HasMandatoryProofOptions));
 }

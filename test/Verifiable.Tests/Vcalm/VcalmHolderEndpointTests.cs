@@ -620,6 +620,123 @@ internal sealed class VcalmHolderEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> input presentation's schema says
+    /// "The document MAY include an embedded proof.", and this holder processes no embedded presentation proof: a
+    /// presentation it secured itself, sent back as the input of a second <c>POST /presentations</c>, is refused with
+    /// HTTP 400 and <c>https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR</c> before any signing, and the store
+    /// keeps only the first presentation.
+    /// </summary>
+    [TestMethod]
+    public async Task CreatePresentationWithAnEmbeddedProofIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
+        string firstBody = "{\"presentation\":" + presentationJson
+            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\"}}";
+        using JsonDocument created = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, firstBody, 201, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string securedPresentationJson = created.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentation).GetRawText();
+        string secondBody = "{\"presentation\":" + securedPresentationJson
+            + ",\"options\":{\"challenge\":\"c-2\",\"domain\":\"verifier.example\"}}";
+        using JsonDocument refused = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, secondBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A presentation that already carries a proof is a malformed-value 400.");
+        Assert.Contains("already carries a proof",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemDetail).GetString()!,
+            "The detail names the embedded proof as the refused input.");
+        Assert.HasCount(1, PresentationStore,
+            "The refused request signs and stores nothing; only the first presentation is stored.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> input presentation's schema says
+    /// "The document MAY include an embedded proof.", and this holder processes no embedded presentation proof: a
+    /// <c>proof</c> member that is an empty list or a string is refused with HTTP 400 and
+    /// <c>https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR</c> exactly like a proof object, never signed over
+    /// and never dropped, and nothing is stored.
+    /// </summary>
+    /// <param name="proofJson">The JSON text of the <c>proof</c> member the input presentation carries.</param>
+    [TestMethod]
+    [DataRow("[]")]
+    [DataRow("\"x\"")]
+    public async Task CreatePresentationWithAProofMemberOfAnotherShapeIsRefused(string proofJson)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+
+        string presentationJson = "{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],"
+            + "\"type\":[\"VerifiablePresentation\"],\"holder\":\"" + holder.HolderDid + "\","
+            + "\"proof\":" + proofJson + "}";
+        string createBody = "{\"presentation\":" + presentationJson
+            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\"}}";
+
+        using JsonDocument refused = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            $"A presentation whose proof member is {proofJson} is a malformed-value 400.");
+        Assert.Contains("already carries a proof",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemDetail).GetString()!,
+            "The detail names the embedded proof as the refused input.");
+        Assert.IsTrue(PresentationStore.IsEmpty, "The refused request signs and stores nothing.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> input presentation's schema says
+    /// "The document MAY include an embedded proof.", and the holder service processes no embedded presentation proof:
+    /// a presentation it secured itself, passed back to it, is refused whoever calls it and before any signing.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderServicePresentationRefusesAnEmbeddedProof()
+    {
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        VerifiablePresentation unproofed = new()
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            Holder = holder.HolderDid
+        };
+
+        DataIntegritySecuredPresentation secured = await VcalmHolderService.CreatePresentationAsync(
+            unproofed,
+            "challenge-service-first",
+            "verifier.example",
+            holder.Signing.DefaultVerificationMethodId,
+            TimeProvider.GetUtcNow().UtcDateTime,
+            holder.Signing,
+            EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await VcalmHolderService.CreatePresentationAsync(
+            secured,
+            "challenge-service-second",
+            "verifier.example",
+            holder.Signing.DefaultVerificationMethodId,
+            TimeProvider.GetUtcNow().UtcDateTime,
+            holder.Signing,
+            EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// §3.5.3 / §3.5.4 / §3.5.5 CRUD round-trip: create a presentation (stored), list it (§3.5.3),
     /// retrieve it by id (§3.5.4 200), delete it (§3.5.5 202), then a §3.5.4 GET is 410 Gone.
     /// </summary>
