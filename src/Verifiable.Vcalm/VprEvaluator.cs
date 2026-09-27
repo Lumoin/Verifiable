@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
@@ -21,8 +22,9 @@ namespace Verifiable.Vcalm;
 /// <see cref="DigitalCredentialQueryLanguageQuery"/> evaluates through the existing
 /// <see cref="DcqlEvaluator"/> (via the VC-DM 2.0 <see cref="VcalmDcqlAdapters"/>); a
 /// <see cref="QueryByExampleQuery"/> matches the §3.4.2 example fields against the credential's
-/// <c>type</c> / <c>@context</c> / <c>credentialSubject</c> and the <c>acceptedIssuers</c> against the
-/// credential's issuer; a <see cref="DidAuthenticationQuery"/> is a holder-DID-plus-cryptosuite
+/// <c>type</c> / <c>@context</c> / <c>credentialSubject</c>, the <c>acceptedIssuers</c> against the
+/// credential's issuer, and the <c>acceptedCryptosuites</c> / <c>acceptedEnvelopes</c> against the way
+/// the credential is secured; a <see cref="DidAuthenticationQuery"/> is a holder-DID-plus-cryptosuite
 /// predicate (the holder must control an accepted-method DID and be able to sign with an accepted
 /// cryptosuite), not a credential match.
 /// </para>
@@ -48,8 +50,10 @@ public static class VprEvaluator
     /// The Data Integrity cryptosuites the holder can sign a §3.4.3 authentication proof with (e.g.
     /// <c>ecdsa-rdfc-2019</c>), or <see langword="null"/> when the holder advertises none. A DID
     /// Authentication query that constrains <c>acceptedCryptosuites</c> is satisfiable only when the
-    /// holder can produce one of the accepted cryptosuites — §3.4.3: "the holder MUST choose [from
-    /// acceptedCryptosuites] when generating the authentication proof."
+    /// holder can produce one of the accepted cryptosuites: acceptedCryptosuites conveys "the cryptography
+    /// suites among which the holder MUST choose when generating a cryptographic proof to be submitted to
+    /// this verifier" (<see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-query-format">VCALM
+    /// §3.4.3.1</see>).
     /// </param>
     /// <returns>The §3.4.5-grouped satisfaction outcome.</returns>
     public static VprEvaluationResult Evaluate(
@@ -83,8 +87,10 @@ public static class VprEvaluator
     /// The Data Integrity cryptosuites the holder can sign a §3.4.3 authentication proof with (e.g.
     /// <c>ecdsa-rdfc-2019</c>), or <see langword="null"/> when the holder advertises none. A DID
     /// Authentication query that constrains <c>acceptedCryptosuites</c> is satisfiable only when the
-    /// holder can produce one of the accepted cryptosuites — §3.4.3: "the holder MUST choose [from
-    /// acceptedCryptosuites] when generating the authentication proof."
+    /// holder can produce one of the accepted cryptosuites: acceptedCryptosuites conveys "the cryptography
+    /// suites among which the holder MUST choose when generating a cryptographic proof to be submitted to
+    /// this verifier" (<see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-query-format">VCALM
+    /// §3.4.3.1</see>).
     /// </param>
     /// <returns>The §3.4.5-grouped satisfaction outcome.</returns>
     public static VprEvaluationResult Evaluate(
@@ -159,6 +165,18 @@ public static class VprEvaluator
     }
 
 
+    /// <summary>
+    /// Evaluates one query entry by its type: a Query By Example against the held credentials, a DCQL
+    /// query through the <see cref="DcqlEvaluator"/>, a DID Authentication query against the holder's
+    /// DIDs and cryptosuites; any other type is reported unsatisfied.
+    /// </summary>
+    /// <param name="entry">The query entry.</param>
+    /// <param name="heldCredentials">The credentials the holder holds.</param>
+    /// <param name="metadataExtractor">The DCQL metadata extractor for the held credentials.</param>
+    /// <param name="claimExtractor">The DCQL claim extractor for the held credentials.</param>
+    /// <param name="holderDids">The holder's DIDs, or <see langword="null"/> when it offers none.</param>
+    /// <param name="holderCryptosuites">The holder's cryptosuites, or <see langword="null"/> when it advertises none.</param>
+    /// <returns>The entry's match.</returns>
     private static VprQueryMatch EvaluateEntry(
         VcalmPresentationQuery entry,
         IReadOnlyList<VerifiableCredential> heldCredentials,
@@ -178,17 +196,35 @@ public static class VprEvaluator
         };
 
 
-    //§3.4.2: a held credential matches when its type / @context cover the example's requested values,
-    //every requested credentialSubject field is present (and, when the requested value is non-empty,
-    //equal), and the issuer is one of acceptedIssuers (when constrained). Any requested field is a
-    //required field — the §3.4.2 selective-disclosure note — so the requested fields ARE the minimal
-    //disclosure.
+    /// <summary>
+    /// Evaluates a Query By Example
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>): a held
+    /// credential matches when its type / @context cover the example's requested values, every
+    /// requested credentialSubject field is present (and, when the requested value is non-empty,
+    /// equal), its issuer is one of acceptedIssuers (when constrained), and it is secured the way the
+    /// verifier "will accept" (<see cref="IsSecuredAsAccepted"/>, when acceptedCryptosuites or
+    /// acceptedEnvelopes constrain it). "Any field included in a Query By Example is a required field",
+    /// so the requested fields ARE the minimal disclosure.
+    /// </summary>
+    /// <remarks>
+    /// The accepted issuers and cryptosuites are gathered into ordinal sets once per query, so each held
+    /// credential costs one lookup however many issuers or recognized issuers the query names.
+    /// </remarks>
+    /// <param name="query">The Query By Example entry.</param>
+    /// <param name="heldCredentials">The credentials the holder holds.</param>
+    /// <returns>The entry's match with every matching credential.</returns>
     private static VprQueryMatch EvaluateQueryByExample(
         QueryByExampleQuery query,
         IReadOnlyList<VerifiableCredential> heldCredentials)
     {
         QueryByExampleCredentialQuery credentialQuery = query.CredentialQuery;
         ImmutableArray<VprCredentialMatch>.Builder matches = ImmutableArray.CreateBuilder<VprCredentialMatch>();
+        HashSet<string>? acceptedIssuerIds = CollectAcceptedIssuerIds(credentialQuery.AcceptedIssuers);
+        bool isSecuringConstrained = !credentialQuery.AcceptedCryptosuites.IsDefaultOrEmpty
+            || !credentialQuery.AcceptedEnvelopes.IsDefaultOrEmpty;
+        HashSet<string>? acceptedCryptosuites = credentialQuery.AcceptedCryptosuites.IsDefaultOrEmpty
+            ? null
+            : new HashSet<string>(credentialQuery.AcceptedCryptosuites, StringComparer.Ordinal);
 
         foreach(VerifiableCredential credential in heldCredentials)
         {
@@ -197,7 +233,12 @@ public static class VprEvaluator
                 continue;
             }
 
-            if(!MatchesAcceptedIssuers(credential, credentialQuery.AcceptedIssuers))
+            if(!MatchesAcceptedIssuers(credential, acceptedIssuerIds))
+            {
+                continue;
+            }
+
+            if(isSecuringConstrained && !IsSecuredAsAccepted(credential, acceptedCryptosuites))
             {
                 continue;
             }
@@ -218,12 +259,20 @@ public static class VprEvaluator
     }
 
 
+    /// <summary>
+    /// Whether <paramref name="credential"/> covers the §3.4.2 example: every requested type and
+    /// context present, every requested subject field present and, when its requested value is
+    /// non-empty, equal.
+    /// </summary>
+    /// <param name="credential">The held credential.</param>
+    /// <param name="example">The example, or <see langword="null"/> when the query carries none.</param>
+    /// <returns><see langword="true"/> when the credential covers the example.</returns>
     private static bool MatchesExample(VerifiableCredential credential, QueryByExampleCredential? example)
     {
         if(example is null)
         {
             //A credentialQuery with no example places no claim/type constraint — any held credential
-            //is a candidate (the issuer / cryptosuite / envelope constraints still apply).
+            //is a candidate, and the issuer, cryptosuite and envelope constraints still apply to it.
             return true;
         }
 
@@ -281,42 +330,113 @@ public static class VprEvaluator
     }
 
 
-    //§3.4.2 acceptedIssuers: when present, the credential's issuer MUST be one of the directly named
-    //issuers. A recognizedIn reference points to a VerifiableRecognitionCredential the holder cannot
-    //resolve here, so a query that constrains issuers SOLELY by recognizedIn is treated as accepting
-    //any issuer (the recognition resolution is a verifier/holder-flow concern, not this computation).
-    private static bool MatchesAcceptedIssuers(
-        VerifiableCredential credential,
-        ImmutableArray<QueryByExampleAcceptedIssuer> acceptedIssuers)
+    /// <summary>
+    /// Whether <paramref name="credential"/>'s issuer is one of the §3.4.2 <c>acceptedIssuers</c>, the
+    /// "entities that the verifier recognizes and accepts as issuers of the verifiable credential"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>).
+    /// </summary>
+    /// <remarks>
+    /// No accepted-issuer set (<see langword="null"/>, an empty list) places no issuer constraint.
+    /// Otherwise the credential matches when its issuer id is in the set
+    /// <see cref="CollectAcceptedIssuerIds"/> gathered from ANY item, compared exactly; a credential
+    /// without an issuer id matches none.
+    /// </remarks>
+    /// <param name="credential">The held credential.</param>
+    /// <param name="acceptedIssuerIds">The issuer ids the query's items accept, or <see langword="null"/> when unconstrained.</param>
+    /// <returns><see langword="true"/> when the issuer is accepted.</returns>
+    private static bool MatchesAcceptedIssuers(VerifiableCredential credential, HashSet<string>? acceptedIssuerIds) =>
+        acceptedIssuerIds is null
+        || (credential.Issuer?.Id is { } issuerId && acceptedIssuerIds.Contains(issuerId));
+
+
+    /// <summary>
+    /// Gathers the issuer ids the §3.4.2 accepted-issuer items name into one ordinal set: a direct item
+    /// (a URL string or an object's <c>id</c>) names its own id; a <c>recognizedIn</c> item names a
+    /// Recognized Entities list, not an issuer, so it contributes only the issuers the caller took from
+    /// that list once retrieved and verified (<see cref="QueryByExampleAcceptedIssuer.RecognizedIssuerIds"/>).
+    /// A constraint made only of such items accepts no issuer until the caller supplies them, failing
+    /// closed rather than treating an unresolved list as permission for every issuer.
+    /// </summary>
+    /// <param name="acceptedIssuers">The query's accepted-issuer items.</param>
+    /// <returns>The accepted issuer ids, or <see langword="null"/> when the query places no issuer constraint.</returns>
+    private static HashSet<string>? CollectAcceptedIssuerIds(ImmutableArray<QueryByExampleAcceptedIssuer> acceptedIssuers)
     {
-        if(acceptedIssuers.IsEmpty)
+        if(acceptedIssuers.IsDefaultOrEmpty)
+        {
+            return null;
+        }
+
+        HashSet<string> issuerIds = new(StringComparer.Ordinal);
+        foreach(QueryByExampleAcceptedIssuer accepted in acceptedIssuers)
+        {
+            if(accepted.Id is { } directId)
+            {
+                _ = issuerIds.Add(directId);
+
+                continue;
+            }
+
+            if(accepted.RecognizedInId is not null && !accepted.RecognizedIssuerIds.IsDefault)
+            {
+                issuerIds.UnionWith(accepted.RecognizedIssuerIds);
+            }
+        }
+
+        return issuerIds;
+    }
+
+
+    /// <summary>
+    /// Whether <paramref name="credential"/> is secured the way a Query By Example that constrains
+    /// acceptedCryptosuites or acceptedEnvelopes accepts: acceptedCryptosuites names "which
+    /// cryptographic proof suites the verifier will accept" and acceptedEnvelopes "which envelope
+    /// formats the verifier will accept", the latter being "only applicable to enveloped credentials"
+    /// and enabling "the holder to provide credentials in formats other than the default Data Integrity
+    /// format" (<see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>).
+    /// </summary>
+    /// <remarks>
+    /// A held <see cref="VerifiableCredential"/> is secured, if at all, by embedded Data Integrity
+    /// proofs; an enveloped credential is not one of them, so acceptedEnvelopes admits none of these
+    /// credentials by itself. A credential with no proof satisfies no securing constraint. A secured
+    /// credential is accepted when acceptedCryptosuites is absent (the default Data Integrity format
+    /// stays acceptable beside accepted envelopes), or when one of its proofs names an accepted suite:
+    /// its <c>cryptosuite</c>, or its proof <c>type</c> for a legacy suite such as
+    /// <c>Ed25519Signature2020</c> that carries no <c>cryptosuite</c>.
+    /// </remarks>
+    /// <param name="credential">The held credential.</param>
+    /// <param name="acceptedCryptosuites">The accepted suite names, or <see langword="null"/> when acceptedCryptosuites is absent.</param>
+    /// <returns><see langword="true"/> when the credential is secured as accepted.</returns>
+    private static bool IsSecuredAsAccepted(VerifiableCredential credential, HashSet<string>? acceptedCryptosuites)
+    {
+        if(credential is not DataIntegritySecuredCredential { Proof: { Count: > 0 } proofs })
+        {
+            return false;
+        }
+
+        if(acceptedCryptosuites is null)
         {
             return true;
         }
 
-        bool hasDirectConstraint = false;
-        string? issuerId = credential.Issuer?.Id;
-        foreach(QueryByExampleAcceptedIssuer accepted in acceptedIssuers)
+        foreach(DataIntegrityProof proof in proofs)
         {
-            if(accepted.Id is null)
-            {
-                continue;
-            }
-
-            hasDirectConstraint = true;
-            if(string.Equals(accepted.Id, issuerId, StringComparison.Ordinal))
+            if(acceptedCryptosuites.Contains(proof.Cryptosuite?.CryptosuiteName ?? proof.Type))
             {
                 return true;
             }
         }
 
-        return !hasDirectConstraint;
+        return false;
     }
 
 
-    //§3.4.2 selective-disclosure: any field included is required. The minimal disclosure for a QBE
-    //match is the requested credentialSubject field paths (a type-only example discloses nothing
-    //claim-specific).
+    /// <summary>
+    /// The minimal disclosure of a Query By Example match: the requested <c>credentialSubject</c> field
+    /// paths, since under the §3.4.2 selective-disclosure note "Any field included in a Query By Example
+    /// is a required field". A type-only example discloses nothing claim-specific.
+    /// </summary>
+    /// <param name="example">The query's example, or <see langword="null"/> when it carries none.</param>
+    /// <returns>The requested field paths.</returns>
     private static ImmutableArray<CredentialPath> RequestedDisclosurePaths(QueryByExampleCredential? example)
     {
         if(example is null || example.SubjectFields.IsEmpty)
@@ -337,8 +457,17 @@ public static class VprEvaluator
     }
 
 
-    //§3.4 DCQL co-equal type: evaluate through the existing DcqlEvaluator. A match's minimal
-    //disclosure is the matched claim patterns resolved to concrete credentialSubject paths.
+    /// <summary>
+    /// Evaluates a DigitalCredentialQueryLanguage entry, one of the query types of
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#requesting-a-presentation">VCALM §3.4</see>, through
+    /// the existing <see cref="DcqlEvaluator"/>. A match's minimal disclosure is the matched claim
+    /// patterns resolved to concrete credentialSubject paths.
+    /// </summary>
+    /// <param name="query">The DCQL entry.</param>
+    /// <param name="heldCredentials">The credentials the holder holds.</param>
+    /// <param name="metadataExtractor">The DCQL metadata extractor for the held credentials.</param>
+    /// <param name="claimExtractor">The DCQL claim extractor for the held credentials.</param>
+    /// <returns>The entry's match with every matching credential.</returns>
     private static VprQueryMatch EvaluateDcql(
         DigitalCredentialQueryLanguageQuery query,
         IReadOnlyList<VerifiableCredential> heldCredentials,
@@ -367,6 +496,9 @@ public static class VprEvaluator
     }
 
 
+    /// <summary>Resolves the DCQL claim patterns that name a concrete path into credential paths; a pattern that does not is skipped.</summary>
+    /// <param name="patterns">The matched claim patterns.</param>
+    /// <returns>The resolved paths.</returns>
     private static ImmutableArray<CredentialPath> ResolvePatterns(IReadOnlySet<DcqlClaimPattern> patterns)
     {
         ImmutableArray<CredentialPath>.Builder paths = ImmutableArray.CreateBuilder<CredentialPath>();
@@ -382,12 +514,20 @@ public static class VprEvaluator
     }
 
 
-    //§3.4.3: the holder satisfies the request when it controls a DID of an accepted method AND — when
-    //the query constrains acceptedCryptosuites — can sign the authentication proof with one of those
-    //cryptosuites ("the holder MUST choose [from acceptedCryptosuites] when generating the
-    //authentication proof"). The predicate is on the holder's DIDs and signing capability, not on held
-    //verifiable credentials. A constrained acceptedCryptosuites with no demonstrable holder cryptosuite
-    //fails closed: the holder cannot produce an acceptable proof, so the query is not satisfied.
+    /// <summary>
+    /// Evaluates a DID Authentication query
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-query-format">VCALM
+    /// §3.4.3.1</see>): the holder satisfies it when it controls a DID of an accepted method AND, when
+    /// the query constrains acceptedCryptosuites, can sign with one of "the cryptography suites among
+    /// which the holder MUST choose when generating a cryptographic proof to be submitted to this
+    /// verifier". The predicate is on the holder's DIDs and signing capability, not on held verifiable
+    /// credentials. A constrained acceptedCryptosuites with no demonstrable holder cryptosuite fails
+    /// closed: the holder cannot produce an acceptable proof, so the query is not satisfied.
+    /// </summary>
+    /// <param name="query">The DID Authentication entry.</param>
+    /// <param name="holderDids">The holder's DIDs, or <see langword="null"/> when it offers none.</param>
+    /// <param name="holderCryptosuites">The holder's cryptosuites, or <see langword="null"/> when it advertises none.</param>
+    /// <returns>The entry's match.</returns>
     private static VprQueryMatch EvaluateDidAuthentication(
         DidAuthenticationQuery query,
         IReadOnlyCollection<string>? holderDids,
@@ -417,10 +557,19 @@ public static class VprEvaluator
     }
 
 
-    //§3.4.3 acceptedCryptosuites: an empty array places no cryptosuite constraint (any suite is
-    //acceptable). When constrained, the holder must advertise at least one cryptosuite that is in the
-    //accepted set; a holder that advertises none (null/empty) cannot demonstrate an acceptable proof,
-    //so a constrained query fails closed.
+    /// <summary>
+    /// Whether the holder can produce a DID Authentication proof with one of the query's
+    /// acceptedCryptosuites, "the cryptography suites among which the holder MUST choose when generating
+    /// a cryptographic proof to be submitted to this verifier"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-query-format">VCALM
+    /// §3.4.3.1</see>). An empty array places no cryptosuite constraint (any suite is acceptable). When
+    /// constrained, the holder must advertise at least one cryptosuite that is in the accepted set; a
+    /// holder that advertises none (null/empty) cannot demonstrate an acceptable proof, so a constrained
+    /// query fails closed.
+    /// </summary>
+    /// <param name="query">The DID Authentication entry.</param>
+    /// <param name="holderCryptosuites">The holder's cryptosuites, or <see langword="null"/> when it advertises none.</param>
+    /// <returns><see langword="true"/> when the holder can produce an accepted cryptosuite.</returns>
     private static bool HolderCanProduceAcceptedCryptosuite(
         DidAuthenticationQuery query,
         IReadOnlyCollection<string>? holderCryptosuites)
@@ -449,6 +598,9 @@ public static class VprEvaluator
     }
 
 
+    /// <summary>Collects the IRI entries of the credential's <c>@context</c>; embedded context objects are not IRIs and are skipped.</summary>
+    /// <param name="credential">The held credential.</param>
+    /// <returns>The context IRIs.</returns>
     private static HashSet<string> CollectContexts(VerifiableCredential credential)
     {
         HashSet<string> contexts = new(StringComparer.Ordinal);
@@ -469,6 +621,11 @@ public static class VprEvaluator
     }
 
 
+    /// <summary>Reads the first value of <paramref name="fieldName"/> across the credential's subjects.</summary>
+    /// <param name="credential">The held credential.</param>
+    /// <param name="fieldName">The subject field name.</param>
+    /// <param name="value">The field's value when present.</param>
+    /// <returns><see langword="true"/> when a subject carries the field.</returns>
     private static bool TryReadSubjectField(VerifiableCredential credential, string fieldName, out object? value)
     {
         value = null;
@@ -490,6 +647,10 @@ public static class VprEvaluator
     }
 
 
+    /// <summary>Compares a subject field value with the requested example value as ordinal text.</summary>
+    /// <param name="actual">The credential's field value.</param>
+    /// <param name="requested">The requested value.</param>
+    /// <returns><see langword="true"/> when they are equal.</returns>
     private static bool ValueEquals(object? actual, string requested)
     {
         if(actual is string text)

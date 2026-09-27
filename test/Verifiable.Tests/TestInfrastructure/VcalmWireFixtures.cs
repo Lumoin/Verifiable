@@ -67,15 +67,39 @@ internal static class VcalmWireFixtures
     internal static async Task<string> PostWireAsync(
         TestHostShell app, string path, string body, int expectedStatus, CancellationToken cancellationToken)
     {
+        (int statusCode, _, string responseBody) = await PostWireResponseAsync(app, path, body, cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(expectedStatus, statusCode, responseBody);
+
+        return responseBody;
+    }
+
+
+    /// <summary>
+    /// POSTs <paramref name="body"/> as <c>application/json</c> over the real wire to <paramref name="path"/> on the
+    /// loopback HTTPS host of <paramref name="app"/>, starting the host when it is not yet listening, and returns the
+    /// response's status, the media type its <c>Content-Type</c> header names and its body text, unchecked: the
+    /// primitive every POST helper of this class sends through, and the form a refusal whose own media type is
+    /// asserted is proven through.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The request body JSON text.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>
+    /// The response status code, the media type its <c>Content-Type</c> header names (or <see langword="null"/> when it
+    /// carries none), and its body text.
+    /// </returns>
+    internal static async Task<(int StatusCode, string? MediaType, string Body)> PostWireResponseAsync(
+        TestHostShell app, string path, string body, CancellationToken cancellationToken)
+    {
         await app.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
         Uri url = new(host.HttpBaseAddress!, path);
         using StringContent content = new(body, Encoding.UTF8, "application/json");
         using HttpResponseMessage response = await host.SharedHttpClient!.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
         string responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(expectedStatus, (int)response.StatusCode, responseBody);
 
-        return responseBody;
+        return ((int)response.StatusCode, response.Content.Headers.ContentType?.MediaType, responseBody);
     }
 
 
@@ -169,6 +193,22 @@ internal static class VcalmWireFixtures
     internal static Task<JsonDocument> PostExchangeWireAsync(
         TestHostShell app, string segment, string exchangeId, string body, int expectedStatus, CancellationToken cancellationToken) =>
         PostJsonWireAsync(app, ComposeExchangePath(segment, exchangeId), body, expectedStatus, cancellationToken);
+
+
+    /// <summary>
+    /// POSTs a §3.6.5 participate message over the real wire to the exchange <paramref name="exchangeId"/> of the
+    /// tenant <paramref name="segment"/> through <see cref="PostWireResponseAsync"/>, returning the response unchecked
+    /// with the media type it carries, for a test that asserts a refusal's status, media type and body itself.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="segment">The exchange tenant segment.</param>
+    /// <param name="exchangeId">The exchange the message participates in.</param>
+    /// <param name="body">The message body JSON text.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The response status code, the media type its <c>Content-Type</c> header names, and its body text.</returns>
+    internal static Task<(int StatusCode, string? MediaType, string Body)> PostExchangeMessageWireAsync(
+        TestHostShell app, string segment, string exchangeId, string body, CancellationToken cancellationToken) =>
+        PostWireResponseAsync(app, ComposeExchangePath(segment, exchangeId), body, cancellationToken);
 
 
     /// <summary>

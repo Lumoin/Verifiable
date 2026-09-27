@@ -122,6 +122,16 @@ internal sealed class VcalmExchangeEndpointTests
     private const string DidAuthQueryJson =
         "[{\"type\":\"DIDAuthentication\",\"acceptedMethods\":[{\"method\":\"key\"}]}]";
 
+    /// <summary>The issuer of the unsecured credentials the holder-flow tests hold.</summary>
+    private const string HolderFlowIssuer = "did:web:authority.example";
+
+    /// <summary>An issuer that is not <see cref="HolderFlowIssuer"/>.</summary>
+    private const string OtherHolderFlowIssuer = "did:web:other.example";
+
+    /// <summary>The specification's own <c>recognizedIn</c> accepted-issuer example, word for word.</summary>
+    private const string RecognizedInExampleJson =
+        "{\"recognizedIn\": {\"id\": \"https://url.example/list.vc\", \"type\": \"RecognizedEntityCredential\"}}";
+
 
     /// <summary>Disposes the tenant registrations and holder keys the finished test created.</summary>
     [TestCleanup]
@@ -539,6 +549,355 @@ internal sealed class VcalmExchangeEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-query-format">VCALM
+    /// §3.4.3.1</see>: "Each object in the array MUST contain a property called method with a value that
+    /// is a DID Method name", the DID syntax rules being "method-name = 1*method-char" and "method-char =
+    /// %x61-7A / DIGIT" (<see href="https://www.w3.org/TR/did-core/#did-syntax">DID Core 1.0 §3.1</see>).
+    /// A participate message whose verifiable presentation request carries an <c>acceptedMethods</c>
+    /// value of another shape, or a <c>method</c> that is not a DID method name, is refused over the real
+    /// HTTPS wire as <see cref="AssertParticipateRefusesRequestAsync"/> states, and the exchange is left
+    /// exactly as it was.
+    /// </summary>
+    /// <param name="acceptedMethodsJson">The <c>acceptedMethods</c> member value.</param>
+    [TestMethod]
+    [DataRow("[{}]")]
+    [DataRow("[{\"method\":7}]")]
+    [DataRow("\"key\"")]
+    [DataRow("[{\"method\":\"did:key\"}]")]
+    [DataRow("[{\"method\":\"KEY\"}]")]
+    [DataRow("[{\"method\":\"k-y\"}]")]
+    public async Task ParticipateWithMalformedAcceptedMethodYields400(string acceptedMethodsJson)
+    {
+        await AssertParticipateRefusesRequestAsync(
+            "{\"query\":[{\"type\":\"DIDAuthentication\",\"acceptedMethods\":" + acceptedMethodsJson + "}]}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-query-format">VCALM
+    /// §3.4.3.1</see>: <c>acceptedCryptosuites</c> is "An optional array of objects" and "Each object in
+    /// the array MUST contain a property called cryptosuite with a value that is a Data Integrity
+    /// cryptosuite name (or Ed25519Signature2020 for legacy)". A participate message whose DID
+    /// Authentication query carries an element that is not such an object is refused over the real
+    /// HTTPS wire as <see cref="AssertParticipateRefusesRequestAsync"/> states.
+    /// </summary>
+    /// <param name="acceptedCryptosuitesJson">The <c>acceptedCryptosuites</c> member value.</param>
+    [TestMethod]
+    [DataRow("[{}]")]
+    [DataRow("[\"ecdsa-rdfc-2019\"]")]
+    public async Task ParticipateWithMalformedDidAuthenticationCryptosuiteYields400(string acceptedCryptosuitesJson)
+    {
+        await AssertParticipateRefusesRequestAsync(
+            "{\"query\":[{\"type\":\"DIDAuthentication\",\"acceptedCryptosuites\":" + acceptedCryptosuitesJson + "}]}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
+    /// <c>acceptedIssuers</c> is "An OPTIONAL array of items, or lists that contain items", and "Each
+    /// item MUST be either 1) a [URL] that identifies an issuer in the issuer property of the received
+    /// verifiable credential, or 2) an object that contains an id property whose value is a [URL] that
+    /// identifies an issuer in the issuer property of the received verifiable credential, or 3) an
+    /// object that contains a recognizedIn property that is associated with an object with a type
+    /// property that is set to RecognizedEntityCredential and an id property with a [URL] value", [URL]
+    /// being the <see href="https://url.spec.whatwg.org/#url-writing">URL Standard</see>, under which
+    /// "A valid URL string defines what input would not trigger a validation error or failure when
+    /// parsed by the URL parser", and whose URL code points outside ASCII are "code points in the range
+    /// U+00A0 to U+10FFFD, inclusive, excluding surrogates and noncharacters". A participate message whose
+    /// Query By Example carries an item of none of the three shapes, a URL the URL Standard refuses in any
+    /// of the three forms (a C1 control code point below U+00A0 among them), or the type name
+    /// <c>VerifiableRecognitionCredential</c> is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states.
+    /// </summary>
+    /// <param name="acceptedIssuersJson">The <c>acceptedIssuers</c> member value.</param>
+    [TestMethod]
+    [DataRow("[{}]")]
+    [DataRow("\"did:web:authority.example\"")]
+    [DataRow("[[]]")]
+    [DataRow("[\"https://test.42/\"]")]
+    [DataRow("[{\"id\": \"https://test.42/\"}]")]
+    [DataRow("[{\"recognizedIn\": {\"id\": \"https://test.42/\", \"type\": \"RecognizedEntityCredential\"}}]")]
+    [DataRow("[{\"recognizedIn\": {\"id\": \"https://url.example/list.vc\", \"type\": \"VerifiableRecognitionCredential\"}}]")]
+    [DataRow("[\"https://a.example/a\\u0085b\"]")]
+    public async Task ParticipateWithMalformedAcceptedIssuerYields400(string acceptedIssuersJson)
+    {
+        await AssertParticipateRefusesRequestAsync(QueryByExampleRequestJson("acceptedIssuers", acceptedIssuersJson)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
+    /// <c>acceptedCryptosuites</c> is "An OPTIONAL array specifying which cryptographic proof suites the
+    /// verifier will accept. Each element SHOULD be an object with a cryptosuite property referencing a
+    /// Data Integrity cryptosuite name or Ed25519Signature2020 for legacy (for backwards compatibility,
+    /// string values MAY also be used and are to be interpreted as the cryptosuite name)". A participate
+    /// message whose Query By Example carries a value that is not an array, or an element that names no
+    /// cryptosuite, is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states.
+    /// </summary>
+    /// <param name="acceptedCryptosuitesJson">The <c>acceptedCryptosuites</c> member value.</param>
+    [TestMethod]
+    [DataRow("[{}]")]
+    [DataRow("[\"\"]")]
+    [DataRow("\"eddsa-rdfc-2022\"")]
+    public async Task ParticipateWithMalformedQueryByExampleCryptosuiteYields400(string acceptedCryptosuitesJson)
+    {
+        await AssertParticipateRefusesRequestAsync(QueryByExampleRequestJson("acceptedCryptosuites", acceptedCryptosuitesJson)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
+    /// <c>acceptedEnvelopes</c> is "An OPTIONAL array specifying which envelope formats the verifier will
+    /// accept. Each element SHOULD be an object with a mediaType property referencing the media type for
+    /// the envelope (for backwards compatibility, string values MAY also be used and are to be
+    /// interpreted as the media type)". A participate message whose Query By Example carries an element
+    /// that names no media type is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states.
+    /// </summary>
+    /// <param name="acceptedEnvelopesJson">The <c>acceptedEnvelopes</c> member value.</param>
+    [TestMethod]
+    [DataRow("[{}]")]
+    [DataRow("[{\"mediaType\": \"\"}]")]
+    public async Task ParticipateWithMalformedAcceptedEnvelopeYields400(string acceptedEnvelopesJson)
+    {
+        await AssertParticipateRefusesRequestAsync(QueryByExampleRequestJson("acceptedEnvelopes", acceptedEnvelopesJson)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>: <c>example</c>
+    /// is "An OPTIONAL object that provides an example of the credential being requested, including its
+    /// @context, type, and optionally credentialSubject fields to indicate which claims are needed". A
+    /// participate message whose Query By Example carries an example that is not an object, or whose
+    /// <c>type</c> or <c>credentialSubject</c> is of another shape, is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states; read as absent it would ask for any
+    /// credential at all.
+    /// </summary>
+    /// <param name="exampleJson">The <c>example</c> member value.</param>
+    [TestMethod]
+    [DataRow("42")]
+    [DataRow("[]")]
+    [DataRow("{\"type\": 7}")]
+    [DataRow("{\"credentialSubject\": \"Alumni\"}")]
+    public async Task ParticipateWithMalformedExampleYields400(string exampleJson)
+    {
+        await AssertParticipateRefusesRequestAsync(QueryByExampleRequestJson("example", exampleJson)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>: "Multiple
+    /// queries with the same group value are processed as "AND" operations, while queries with different
+    /// or missing group values are processed as "OR" operations." A participate message whose query
+    /// entry carries a <c>group</c> that is not a string is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states, never read as a missing group that
+    /// would turn the verifier's AND into an OR.
+    /// </summary>
+    /// <param name="groupJson">The <c>group</c> member value.</param>
+    [TestMethod]
+    [DataRow("1")]
+    [DataRow("null")]
+    public async Task ParticipateWithNonStringGroupYields400(string groupJson)
+    {
+        await AssertParticipateRefusesRequestAsync(
+            "{\"query\":[{\"type\":\"QueryByExample\",\"group\":" + groupJson + ",\"credentialQuery\":{\"example\":{\"type\":\"ExampleAlumniCredential\"}}},"
+            + "{\"type\":\"QueryByExample\",\"group\":" + groupJson + ",\"credentialQuery\":{\"example\":{\"type\":\"MembershipCredential\"}}}]}")
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verifiable-presentation-request">VCALM §3.4.1</see>:
+    /// <c>domain</c> is "An OPTIONAL string that a verifier provides to a holder during a presentation
+    /// request". A participate message whose verifiable presentation request carries a <c>domain</c> that
+    /// is not a string is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithNonStringDomainYields400()
+    {
+        await AssertParticipateRefusesRequestAsync(
+            "{\"query\":[{\"type\":\"DIDAuthentication\"}],\"domain\":[\"reunion.example\"]}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verifiable-presentation-request">VCALM §3.4.1</see>:
+    /// <c>challenge</c> is "An OPTIONAL, unique string that is provided by a verifier to a holder during a
+    /// specific presentation request". A participate message whose verifiable presentation request carries
+    /// a <c>challenge</c> that is not a string is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithNonStringChallengeYields400()
+    {
+        await AssertParticipateRefusesRequestAsync(
+            "{\"query\":[{\"type\":\"DIDAuthentication\"}],\"challenge\":42}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>: <c>reason</c> is
+    /// "An OPTIONAL string that provides a human-readable explanation for why the credential is being
+    /// requested". A participate message whose Query By Example carries a <c>reason</c> that is not a
+    /// string is refused over the real HTTPS wire as <see cref="AssertParticipateRefusesRequestAsync"/>
+    /// states.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithNonStringReasonYields400()
+    {
+        await AssertParticipateRefusesRequestAsync(QueryByExampleRequestJson("reason", "{\"text\":\"alumni\"}")).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw
+    /// an error if an endpoint receives data, options, or option values that it does not understand or
+    /// know how to process." A member name repeated inside one object of the verifiable presentation
+    /// request, whichever occurrence is malformed or narrower, is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesRequestAsync"/> states, never resolved to one occurrence that
+    /// leaves an acceptance constraint empty or drops a malformed one.
+    /// </summary>
+    /// <param name="presentationRequestJson">The verifiable presentation request JSON text.</param>
+    [TestMethod]
+    [DataRow("{\"query\":[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedIssuers\":42,\"acceptedIssuers\":[]}}]}")]
+    [DataRow("{\"query\":[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedIssuers\":[\"https://a.example\"],\"acceptedIssuers\":[]}}]}")]
+    [DataRow("{\"query\":[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedCryptosuites\":[{}],\"acceptedCryptosuites\":[]}}]}")]
+    [DataRow("{\"query\":[{\"type\":\"DIDAuthentication\",\"acceptedMethods\":[{}],\"acceptedMethods\":[]}]}")]
+    [DataRow("{\"query\":[{\"type\":\"DIDAuthentication\",\"acceptedMethods\":7,\"acceptedMethods\":[{\"method\":\"key\"}]}]}")]
+    [DataRow("{\"query\":[{\"type\":\"DIDAuthentication\",\"acceptedMethods\":[{\"method\":7,\"method\":\"key\"}]}]}")]
+    [DataRow("{\"query\":[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedIssuers\":[\"https://a.example\"]},\"credentialQuery\":{}}]}")]
+    public async Task ParticipateWithRepeatedRequestMemberYields400(string presentationRequestJson)
+    {
+        await AssertParticipateRefusesRequestAsync(presentationRequestJson).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
+    /// <c>acceptedCryptosuites</c> specifies "which cryptographic proof suites the verifier will accept".
+    /// A holder that receives the verifier's Query By Example over the real HTTPS wire and parses it
+    /// selects, of a credential secured with an accepted cryptosuite and an unsecured credential that
+    /// matches the query otherwise, only the secured one.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderFlowAcceptedCryptosuitesSelectCredentialSecuredWithAcceptedSuite()
+    {
+        VerifiablePresentationRequest request = await ReceivePresentationRequestOverWireAsync(
+            "[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedCryptosuites\":[{\"cryptosuite\":\"eddsa-jcs-2022\"}]}}]")
+            .ConfigureAwait(false);
+        DataIntegritySecuredCredential secured = await SignContainedCredentialAsync().ConfigureAwait(false);
+        VerifiableCredential unsecured = VcalmWireFixtures.BuildCredential(HolderFlowIssuer, credentialId: null);
+
+        VprEvaluationResult result = VprEvaluator.Evaluate(request, [unsecured, secured]);
+
+        VprQueryMatch match = result.Groups[0].QueryMatches[0];
+        Assert.HasCount(1, match.Matches, "Only a credential secured with an accepted cryptosuite is selected.");
+        Assert.AreSame(secured, match.Matches[0].Credential);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
+    /// <c>acceptedCryptosuites</c> specifies "which cryptographic proof suites the verifier will accept".
+    /// A holder that receives a Query By Example accepting only <c>bbs-2023</c> over the real HTTPS wire,
+    /// and holds an unsecured credential and one secured with another cryptosuite, cannot satisfy it.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderFlowAcceptedCryptosuitesRefuseCredentialOfOtherSuite()
+    {
+        VerifiablePresentationRequest request = await ReceivePresentationRequestOverWireAsync(
+            "[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedCryptosuites\":[{\"cryptosuite\":\"bbs-2023\"}]}}]")
+            .ConfigureAwait(false);
+        DataIntegritySecuredCredential secured = await SignContainedCredentialAsync().ConfigureAwait(false);
+        VerifiableCredential unsecured = VcalmWireFixtures.BuildCredential(HolderFlowIssuer, credentialId: null);
+
+        Assert.IsFalse(VprEvaluator.Evaluate(request, [unsecured, secured]).IsSatisfiable,
+            "No held credential is secured with a cryptosuite the verifier will accept.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
+    /// <c>acceptedEnvelopes</c> specifies "which envelope formats the verifier will accept". A holder that
+    /// receives a Query By Example accepting only the <c>application/jwt</c> envelope over the real HTTPS
+    /// wire cannot satisfy it with an unsecured credential, which is secured by no envelope at all.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderFlowAcceptedEnvelopesRefuseUnsecuredCredential()
+    {
+        VerifiablePresentationRequest request = await ReceivePresentationRequestOverWireAsync(
+            "[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedEnvelopes\":[{\"mediaType\":\"application/jwt\"}]}}]")
+            .ConfigureAwait(false);
+        VerifiableCredential unsecured = VcalmWireFixtures.BuildCredential(HolderFlowIssuer, credentialId: null);
+
+        Assert.IsFalse(VprEvaluator.Evaluate(request, [unsecured]).IsSatisfiable,
+            "An unsecured credential is in no envelope format the verifier will accept.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>: a
+    /// <c>recognizedIn</c> item points to a <c>RecognizedEntityCredential</c> and "the list contains
+    /// recognized issuers that are acceptable to the verifier". A holder that receives the
+    /// specification's own <c>recognizedIn</c> example as the only accepted-issuer item over the real
+    /// HTTPS wire, and has not retrieved and verified that list, accepts no issuer from it.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderFlowRecognizedInWithoutRetrievedListAcceptsNoIssuer()
+    {
+        VerifiablePresentationRequest request = await ReceivePresentationRequestOverWireAsync(
+            QueryByExampleWithIssuersQueryJson(RecognizedInExampleJson)).ConfigureAwait(false);
+        VerifiableCredential credential = VcalmWireFixtures.BuildCredential(HolderFlowIssuer, credentialId: null);
+
+        Assert.IsFalse(VprEvaluator.Evaluate(request, [credential]).IsSatisfiable,
+            "A list the holder has not retrieved names no issuer.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>: "the list
+    /// contains recognized issuers that are acceptable to the verifier". A holder that receives a
+    /// <c>recognizedIn</c>-only Query By Example over the real HTTPS wire, and whose retrieved and
+    /// verified list names another issuer, cannot satisfy it with a credential from an issuer off the
+    /// list.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderFlowRecognizedInRefusesIssuerOffTheRetrievedList()
+    {
+        VerifiablePresentationRequest received = await ReceivePresentationRequestOverWireAsync(
+            QueryByExampleWithIssuersQueryJson(RecognizedInExampleJson)).ConfigureAwait(false);
+        VerifiablePresentationRequest request = WithRecognizedIssuers(received, OtherHolderFlowIssuer);
+        VerifiableCredential credential = VcalmWireFixtures.BuildCredential(HolderFlowIssuer, credentialId: null);
+
+        Assert.IsFalse(VprEvaluator.Evaluate(request, [credential]).IsSatisfiable,
+            "An issuer absent from the retrieved list is not accepted.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
+    /// <c>acceptedIssuers</c> identifies "entities that the verifier recognizes and accepts as issuers",
+    /// and for a <c>recognizedIn</c> item "the list contains recognized issuers that are acceptable to the
+    /// verifier". A holder that receives, over the real HTTPS wire, a direct item naming another issuer
+    /// beside the specification's <c>recognizedIn</c> example, and whose retrieved list names the
+    /// credential's issuer, satisfies the query with that credential.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderFlowRecognizedInAcceptsListedIssuerBesideUnmatchedDirectItem()
+    {
+        VerifiablePresentationRequest received = await ReceivePresentationRequestOverWireAsync(
+            QueryByExampleWithIssuersQueryJson("{\"id\":\"" + OtherHolderFlowIssuer + "\"}," + RecognizedInExampleJson)).ConfigureAwait(false);
+        VerifiablePresentationRequest request = WithRecognizedIssuers(received, HolderFlowIssuer);
+        VerifiableCredential credential = VcalmWireFixtures.BuildCredential(HolderFlowIssuer, credentialId: null);
+
+        Assert.IsTrue(VprEvaluator.Evaluate(request, [credential]).IsSatisfiable,
+            "Any accepted-issuer item that names the issuer accepts it.");
+    }
+
+
+    /// <summary>
     /// §2.4 content-serialization MUST: a §3.6.3 create with a non-application/json Content-Type is
     /// rejected with HTTP 400 before parsing.
     /// </summary>
@@ -721,12 +1080,22 @@ internal sealed class VcalmExchangeEndpointTests
     /// </summary>
     /// <param name="app">The host the tenant is registered on.</param>
     /// <returns>The tenant's path segment.</returns>
-    private async Task<string> RegisterExchangeAsync(TestHostShell app)
+    private Task<string> RegisterExchangeAsync(TestHostShell app) => RegisterExchangeAsync(app, DidAuthQueryJson);
+
+
+    /// <summary>
+    /// Registers a tenant with the exchange capability and wires the exchange seams, the step decisions
+    /// requesting a presentation for <paramref name="queryJson"/> on the initiating message.
+    /// </summary>
+    /// <param name="app">The host the tenant is registered on.</param>
+    /// <param name="queryJson">The §3.4 query array the engine's presentation request carries.</param>
+    /// <returns>The tenant's path segment.</returns>
+    private async Task<string> RegisterExchangeAsync(TestHostShell app, string queryJson)
     {
         VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, ExchangeCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        await WireExchangeSeamsAsync(app, holder: null).ConfigureAwait(false);
+        await WireExchangeSeamsAsync(app, holder: null, queryJson).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }
@@ -745,7 +1114,7 @@ internal sealed class VcalmExchangeEndpointTests
         VerifierKeyMaterial material = await app.RegisterClientAsync(ClientId, ClientBaseUri, ExchangeAndHolderCapabilities).ConfigureAwait(false);
         RegisteredMaterials.Add(material);
 
-        await WireExchangeSeamsAsync(app, holder).ConfigureAwait(false);
+        await WireExchangeSeamsAsync(app, holder, DidAuthQueryJson).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }
@@ -754,7 +1123,10 @@ internal sealed class VcalmExchangeEndpointTests
     /// <summary>
     /// Installs the workflow and exchange delegates used by the endpoint cases.
     /// </summary>
-    private static async Task WireExchangeSeamsAsync(TestHostShell app, HolderSigningContext? holder)
+    /// <param name="app">The host whose integration is altered.</param>
+    /// <param name="holder">The holder whose presentation the engine verifies, or <see langword="null"/> for none.</param>
+    /// <param name="queryJson">The §3.4 query array the engine's presentation request carries.</param>
+    private static async Task WireExchangeSeamsAsync(TestHostShell app, HolderSigningContext? holder, string queryJson)
     {
         await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
         {
@@ -794,7 +1166,7 @@ internal sealed class VcalmExchangeEndpointTests
                 }
 
                 return ValueTask.FromResult(
-                    VcalmExchangeStepDecision.RequestPresentation("did-auth", DidAuthQueryJson, domain: "exchange.verifier.test"));
+                    VcalmExchangeStepDecision.RequestPresentation("did-auth", queryJson, domain: "exchange.verifier.test"));
             };
         }).ConfigureAwait(false);
 
@@ -1050,6 +1422,127 @@ internal sealed class VcalmExchangeEndpointTests
 
         return JsonDocument.Parse(response.Body);
     }
+
+
+    /// <summary>
+    /// Posts a participate message carrying <paramref name="presentationRequestJson"/> as its
+    /// <c>verifiablePresentationRequest</c> over the real HTTPS wire to a freshly created exchange and
+    /// asserts the refusal the draft gives such a message: the participate interface lists "400 Invalid
+    /// input" (<see href="https://www.w3.org/TR/vcalm-1.0/#participate-in-an-exchange">VCALM §3.6.6</see>:
+    /// "Posting a Verifiable Presentation Request will result in either a 4xx error or one of the
+    /// following"), under "Implementations MUST throw an error if an endpoint receives data, options, or
+    /// option values that it does not understand or know how to process"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>); the body is a
+    /// ProblemDetails of the malformed-value type, and it is "serialized as JSON" with "the Content-Type
+    /// header with a media type value of application/json"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">VCALM §2.4</see>). The
+    /// exchange's state read before and after the refusal is identical, its sequence included: the
+    /// refused message neither advances nor alters the exchange.
+    /// </summary>
+    /// <param name="presentationRequestJson">The verifiable presentation request JSON text the message carries.</param>
+    /// <returns>A task completing when the assertions have run.</returns>
+    private async Task AssertParticipateRefusesRequestAsync(string presentationRequestJson)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+        string exchangeId = await CreateExchangeAndGetIdOverWireAsync(app, segment).ConfigureAwait(false);
+        using JsonDocument before = await VcalmWireFixtures.GetExchangeWireAsync(
+            app, segment, exchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string? mediaType, string body) = await VcalmWireFixtures.PostExchangeMessageWireAsync(
+            app, segment, exchangeId, "{\"verifiablePresentationRequest\":" + presentationRequestJson + "}",
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual("application/json", mediaType, body);
+        using JsonDocument problem = JsonDocument.Parse(body);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            problem.RootElement.GetProperty("type").GetString(), body);
+
+        using JsonDocument after = await VcalmWireFixtures.GetExchangeWireAsync(
+            app, segment, exchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(before.RootElement.GetRawText(), after.RootElement.GetRawText(),
+            "A message refused as malformed leaves the exchange exactly as it was.");
+    }
+
+
+    /// <summary>
+    /// Runs the holder's side of an exchange over the real HTTPS wire: registers an exchange whose step
+    /// requests a presentation for <paramref name="queryJson"/>, POSTs the empty initiating message, and
+    /// parses the verifiable presentation request the engine answers with, as the holder receives it.
+    /// </summary>
+    /// <param name="queryJson">The §3.4 query array the verifier's request carries.</param>
+    /// <returns>The request the holder parsed.</returns>
+    private async Task<VerifiablePresentationRequest> ReceivePresentationRequestOverWireAsync(string queryJson)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app, queryJson).ConfigureAwait(false);
+        string exchangeId = await CreateExchangeAndGetIdOverWireAsync(app, segment).ConfigureAwait(false);
+
+        using JsonDocument initiated = await VcalmWireFixtures.PostExchangeWireAsync(
+            app, segment, exchangeId, "{}", 200, TestContext.CancellationToken).ConfigureAwait(false);
+        string presentationRequestJson = initiated.RootElement
+            .GetProperty(VcalmParameterNames.VerifiablePresentationRequest).GetRawText();
+
+        VerifiablePresentationRequest request = VcalmPresentationRequestJsonParsing.Parse(presentationRequestJson, JsonOptions);
+        Assert.AreEqual(VcalmParseFailure.None, request.Failure, presentationRequestJson);
+
+        return request;
+    }
+
+
+    /// <summary>
+    /// The holder's own step after retrieving and verifying the Recognized Entities list every
+    /// <c>recognizedIn</c> item of <paramref name="request"/> points to: the request with those items
+    /// carrying <paramref name="recognizedIssuerIds"/>, the issuers the list names.
+    /// </summary>
+    /// <param name="request">The request the holder parsed.</param>
+    /// <param name="recognizedIssuerIds">The issuer ids the retrieved list names.</param>
+    /// <returns>The request with the recognized issuers supplied.</returns>
+    private static VerifiablePresentationRequest WithRecognizedIssuers(
+        VerifiablePresentationRequest request, params string[] recognizedIssuerIds) =>
+        request with
+        {
+            Query =
+            [
+                .. request.Query.Select(query => query is QueryByExampleQuery qbe
+                    ? qbe with
+                    {
+                        CredentialQuery = qbe.CredentialQuery with
+                        {
+                            AcceptedIssuers =
+                            [
+                                .. qbe.CredentialQuery.AcceptedIssuers.Select(accepted => accepted.RecognizedInId is null
+                                    ? accepted
+                                    : accepted with { RecognizedIssuerIds = [.. recognizedIssuerIds] })
+                            ]
+                        }
+                    }
+                    : query)
+            ]
+        };
+
+
+    /// <summary>
+    /// A verifiable presentation request with one Query By Example whose <c>credentialQuery</c> carries
+    /// the single member <paramref name="memberName"/> with the JSON value <paramref name="valueJson"/>.
+    /// </summary>
+    /// <param name="memberName">The <c>credentialQuery</c> member name.</param>
+    /// <param name="valueJson">The member's JSON value text.</param>
+    /// <returns>The request JSON text.</returns>
+    private static string QueryByExampleRequestJson(string memberName, string valueJson) =>
+        "{\"query\":[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"" + memberName + "\":" + valueJson + "}}]}";
+
+
+    /// <summary>
+    /// A §3.4 query array with one Query By Example asking for an <c>ExampleAlumniCredential</c> from the
+    /// accepted-issuer items <paramref name="acceptedIssuerItemsJson"/>.
+    /// </summary>
+    /// <param name="acceptedIssuerItemsJson">The accepted-issuer items, comma-separated JSON text.</param>
+    /// <returns>The query array JSON text.</returns>
+    private static string QueryByExampleWithIssuersQueryJson(string acceptedIssuerItemsJson) =>
+        "[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"example\":{\"type\":\"ExampleAlumniCredential\"},"
+        + "\"acceptedIssuers\":[" + acceptedIssuerItemsJson + "]}}]";
 
 
     /// <summary>The holder's presentation signing and DID for the §3.6.5 round trip.</summary>

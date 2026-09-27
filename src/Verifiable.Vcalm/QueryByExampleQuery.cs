@@ -95,9 +95,18 @@ public sealed record QueryByExampleCredential
 /// <summary>
 /// A single §3.4.2 <c>acceptedIssuers</c> item. The §3.4.2 wire allows three shapes: a bare URL
 /// string, an object with an <c>id</c>, or an object with a <c>recognizedIn</c> reference to a
-/// <c>VerifiableRecognitionCredential</c>. The neutral model carries whichever was present.
+/// <c>RecognizedEntityCredential</c> (<see cref="VcalmParameterNames.RecognizedEntityCredential"/>).
+/// The neutral model carries whichever was present.
 /// </summary>
-[DebuggerDisplay("AcceptedIssuer Id={Id} RecognizedInId={RecognizedInId}")]
+/// <remarks>
+/// A <c>recognizedIn</c> item names a list, not an issuer: "the list contains recognized issuers that
+/// are acceptable to the verifier"
+/// (<see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>). The issuers on
+/// that list are known only once the caller has retrieved and verified the referenced credential, so
+/// the caller supplies them in <see cref="RecognizedIssuerIds"/>; until it does, the item accepts no
+/// issuer.
+/// </remarks>
+[DebuggerDisplay("AcceptedIssuer Id={Id} RecognizedInId={RecognizedInId} RecognizedIssuerIds={RecognizedIssuerIds.Length}")]
 public sealed record QueryByExampleAcceptedIssuer
 {
     /// <summary>
@@ -107,9 +116,24 @@ public sealed record QueryByExampleAcceptedIssuer
     public string? Id { get; init; }
 
     /// <summary>
-    /// The §3.4.2 <c>recognizedIn.id</c> — the URL of a <c>VerifiableRecognitionCredential</c>
+    /// The §3.4.2 <c>recognizedIn.id</c> — the URL of a <c>RecognizedEntityCredential</c>
     /// listing the issuers the verifier accepts. <see langword="null"/> when the item used the direct
     /// <c>id</c> / URL form instead.
     /// </summary>
+    /// <remarks>
+    /// The request's author chose this URL, and any valid URL string passes the parser, whatever its
+    /// scheme or host. A caller that retrieves the list does so only through its own outbound-fetch
+    /// policy (the schemes and hosts it allows), never by dereferencing this value directly.
+    /// </remarks>
     public string? RecognizedInId { get; init; }
+
+    /// <summary>
+    /// The issuer identifiers the caller took from the retrieved and verified
+    /// <c>RecognizedEntityCredential</c> that <see cref="RecognizedInId"/> points to. Empty by default:
+    /// the request parser never sets it, because the request carries only the list's URL, not its
+    /// verified content. A <c>recognizedIn</c> item matches a credential only when the credential's
+    /// issuer id is among these identifiers, compared exactly; with none supplied (an empty or a
+    /// <see langword="default"/> array) it matches no issuer. Ignored on a direct <see cref="Id"/> item.
+    /// </summary>
+    public ImmutableArray<string> RecognizedIssuerIds { get; init; } = ImmutableArray<string>.Empty;
 }

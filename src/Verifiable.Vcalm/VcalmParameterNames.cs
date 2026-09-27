@@ -423,11 +423,24 @@ public static class VcalmParameterNames
     public static ReadOnlySpan<byte> RecognizedInUtf8 => "recognizedIn"u8;
 
     /// <summary>
-    /// The §3.4.2 <c>acceptedIssuers[].recognizedIn</c> member — an object with an <see cref="Id"/>
-    /// URL and a <see cref="Type"/> of <c>VerifiableRecognitionCredential</c> pointing to a
-    /// recognition credential listing the acceptable issuers.
+    /// The §3.4.2 <c>acceptedIssuers[].recognizedIn</c> member — an object with a <see cref="Type"/>
+    /// "set to RecognizedEntityCredential" (<see cref="RecognizedEntityCredential"/>) and an
+    /// <see cref="Id"/> "with a [URL] value that points to such a credential"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>), whose list
+    /// names the issuers the verifier accepts.
     /// </summary>
     public static string RecognizedIn { get; } = Utf8Constants.ToInternedString(RecognizedInUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RecognizedEntityCredential"/>.</summary>
+    public static ReadOnlySpan<byte> RecognizedEntityCredentialUtf8 => "RecognizedEntityCredential"u8;
+
+    /// <summary>
+    /// The value the §3.4.2 <c>acceptedIssuers[].recognizedIn.type</c> member MUST carry: the credential
+    /// type of the Recognized Entities list the <c>recognizedIn.id</c> URL points to. A value, not a
+    /// member name, kept beside <see cref="RecognizedIn"/> because it is the one value that member's
+    /// shape admits.
+    /// </summary>
+    public static string RecognizedEntityCredential { get; } = Utf8Constants.ToInternedString(RecognizedEntityCredentialUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AcceptedCryptosuites"/>.</summary>
     public static ReadOnlySpan<byte> AcceptedCryptosuitesUtf8 => "acceptedCryptosuites"u8;

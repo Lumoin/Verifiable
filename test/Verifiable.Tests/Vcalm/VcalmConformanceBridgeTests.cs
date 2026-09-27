@@ -189,11 +189,19 @@ internal sealed class VcalmConformanceBridgeTests
     private const int OversizePaddingLength = 10 * 1024 * 1024;
 
     /// <summary>
-    /// The octets of JSON whitespace the above-host-cap row appends: 11 × 2^20, the issuer's
-    /// 10 × 2^20 default plus the one mebibyte the instance buffers beyond it, so the padding alone
-    /// exceeds the instance's own bound.
+    /// The payload cap, in octets, the above-host-cap row configures the issuer with while the instance
+    /// serves traffic: 64 × 2^10, far below the issuer's 10 × 2^20 default, so the instance's own bound
+    /// (this cap plus one mebibyte) sits far below the default as well.
     /// </summary>
-    private const int AboveHostCapPaddingLength = 11 * 1024 * 1024;
+    private const long LoweredIssuerPayloadCap = 64 * 1024;
+
+    /// <summary>
+    /// The octets of JSON whitespace the above-host-cap row appends: 9 × 2^17 (1.125 mebibytes), above
+    /// <see cref="LoweredIssuerPayloadCap"/> plus the one mebibyte the instance buffers beyond it, and
+    /// below the issuer's 10 × 2^20 default, so only a bound that follows the configured cap refuses it
+    /// before the issuer sees it.
+    /// </summary>
+    private const int AboveHostCapPaddingLength = 9 * 128 * 1024;
 
     /// <summary>The media type of the issuer's ProblemDetails body.</summary>
     private const string JsonMediaType = "application/json";
@@ -1160,12 +1168,14 @@ internal sealed class VcalmConformanceBridgeTests
 
 
     /// <summary>
-    /// A validly authorized issuance whose body exceeds even this instance's own buffering bound, one
-    /// mebibyte above the issuer's 10MB default, is refused by the instance before the issuer sees it:
-    /// 413 with an empty body, no challenge, and nothing stored.
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#payload-sizes">VCALM 1.0 Payload Sizes</see>:
     /// "Larger transactions can trigger DoS incidents. It's recommended to configure the payload size
-    /// accepted by endpoints at an instance level."
+    /// accepted by endpoints at an instance level." With the issuer's payload cap configured down to
+    /// 64 KiB while the instance serves traffic, a validly authorized issuance whose body exceeds that
+    /// cap plus the one mebibyte this instance buffers beyond it, though it is well under the issuer's
+    /// 10MB default, is refused by the instance before the issuer sees it: 413 with an empty body, no
+    /// challenge, and nothing stored. The instance's bound follows the configured cap instead of the
+    /// default.
     /// </summary>
     [TestMethod]
     public async Task BodyAboveHostCapAtMappedPathIsRefusedByHost()
@@ -1174,6 +1184,10 @@ internal sealed class VcalmConformanceBridgeTests
         ConformanceContext ctx = await StartConformanceHostAsync(app).ConfigureAwait(false);
         HttpClient http = app.Host("default").SharedHttpClient!;
         Uri baseAddress = app.Host("default").HttpBaseAddress!;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmMaxRequestBytes = LoweredIssuerPayloadCap;
+        }).ConfigureAwait(false);
 
         string token = await ObtainClientCredentialsTokenAsync(http, baseAddress, scope: IssueScope)
             .ConfigureAwait(false);
