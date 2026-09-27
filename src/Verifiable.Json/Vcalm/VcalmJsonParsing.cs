@@ -2163,9 +2163,25 @@ public static class VcalmJsonParsing
     }
 
 
-    //§3.6.5 vcapi message: {verifiablePresentation?, verifiablePresentationRequest?, redirectUrl?,
-    //referenceId?}. The empty object is the valid initiating message. §3.6: an unrecognized top-level
-    //member triggers an error in implementations that do not recognize it (§2.4 strict-parse).
+    /// <summary>
+    /// Parses the message a client posts to the participate interface
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#participate-in-an-exchange">VCALM §3.6.6</see>), "a
+    /// simple JSON object that includes zero or more of the following properties and values"
+    /// <c>{verifiablePresentation?, verifiablePresentationRequest?, redirectUrl?, referenceId?}</c>, the empty
+    /// object being the initiating message; "Custom properties and values might also be included, but are
+    /// expected to trigger errors in implementations that do not recognize them"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#workflows-and-exchanges">VCALM §3.6</see>), and
+    /// "Implementations MUST throw an error if an endpoint receives data, options, or option values that it
+    /// does not understand or know how to process"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>). An unrecognized or repeated
+    /// member, a <c>verifiablePresentation</c> or <c>verifiablePresentationRequest</c> that is not an object,
+    /// and a <c>redirectUrl</c> or <c>referenceId</c> that is not a string ("redirectUrl [string]",
+    /// "referenceId [string]") each make the message <see cref="VcalmParseFailure.Malformed"/>, never a message
+    /// read as if the member were absent.
+    /// </summary>
+    /// <param name="requestBody">The request body JSON text.</param>
+    /// <param name="options">The serializer options the presentation and the presentation request are read with.</param>
+    /// <returns>The parsed message, or one carrying its <see cref="VcalmParseFailure"/>.</returns>
     private static VcalmExchangeMessage ParseExchangeMessage(string requestBody, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(requestBody);
@@ -2204,12 +2220,21 @@ public static class VcalmJsonParsing
                 }
             }
 
+            //§2.4: a present member of a shape this parser cannot process refuses the message rather than
+            //reading as absent, which would turn it into the empty initiating message.
+            if(!TryReadOptionalMember(root, VcalmParameterNames.VerifiablePresentation, JsonValueKind.Object, out JsonElement? vpElement)
+                || !TryReadOptionalMember(root, VcalmParameterNames.VerifiablePresentationRequest, JsonValueKind.Object, out JsonElement? vprElement)
+                || !TryReadOptionalMember(root, VcalmParameterNames.RedirectUrl, JsonValueKind.String, out JsonElement? redirectElement)
+                || !TryReadOptionalMember(root, VcalmParameterNames.ReferenceId, JsonValueKind.String, out JsonElement? referenceElement))
+            {
+                return VcalmExchangeMessage.Malformed();
+            }
+
             DataIntegritySecuredPresentation? presentation = null;
             string? presentationJson = null;
-            if(root.TryGetProperty(VcalmParameterNames.VerifiablePresentation, out JsonElement vpElement)
-                && vpElement.ValueKind == JsonValueKind.Object)
+            if(vpElement is JsonElement presentationElement)
             {
-                presentationJson = vpElement.GetRawText();
+                presentationJson = presentationElement.GetRawText();
                 VerifiablePresentation? parsed = TryDeserialize<VerifiablePresentation>(presentationJson, options);
 
                 //§3.6.5: a presented verifiablePresentation must be a proofed presentation for the
@@ -2225,37 +2250,61 @@ public static class VcalmJsonParsing
             }
 
             VerifiablePresentationRequest? vpr = null;
-            if(root.TryGetProperty(VcalmParameterNames.VerifiablePresentationRequest, out JsonElement vprElement)
-                && vprElement.ValueKind == JsonValueKind.Object)
+            if(vprElement is JsonElement presentationRequestElement)
             {
-                vpr = VcalmPresentationRequestJsonParsing.Parse(vprElement.GetRawText(), options);
+                vpr = VcalmPresentationRequestJsonParsing.Parse(presentationRequestElement.GetRawText(), options);
                 if(vpr.Failure != VcalmParseFailure.None)
                 {
-                    return vpr.Failure == VcalmParseFailure.UnknownOption
-                        ? VcalmExchangeMessage.UnknownOption()
-                        : VcalmExchangeMessage.Malformed();
+                    return vpr.Failure switch
+                    {
+                        VcalmParseFailure.UnknownOption => VcalmExchangeMessage.UnknownOption(),
+                        _ => VcalmExchangeMessage.Malformed()
+                    };
                 }
             }
-
-            string? redirectUrl = root.TryGetProperty(VcalmParameterNames.RedirectUrl, out JsonElement redirectElement)
-                && redirectElement.ValueKind == JsonValueKind.String
-                ? redirectElement.GetString()
-                : null;
-
-            string? referenceId = root.TryGetProperty(VcalmParameterNames.ReferenceId, out JsonElement referenceElement)
-                && referenceElement.ValueKind == JsonValueKind.String
-                ? referenceElement.GetString()
-                : null;
 
             return new VcalmExchangeMessage
             {
                 VerifiablePresentation = presentation,
                 VerifiablePresentationJson = presentationJson,
                 VerifiablePresentationRequest = vpr,
-                RedirectUrl = redirectUrl,
-                ReferenceId = referenceId
+                RedirectUrl = redirectElement?.GetString(),
+                ReferenceId = referenceElement?.GetString()
             };
         }
+    }
+
+
+    /// <summary>
+    /// Reads an OPTIONAL top-level member of the participate message whose value the message format fixes
+    /// to one JSON kind: <c>verifiablePresentation</c> and <c>verifiablePresentationRequest</c> objects,
+    /// <c>redirectUrl</c> and <c>referenceId</c> strings. A present value of another kind is not understood,
+    /// and "Implementations MUST throw an error if an endpoint receives data, options, or option values that
+    /// it does not understand or know how to process"
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>), so it is reported rather than
+    /// read as absent.
+    /// </summary>
+    /// <param name="element">The message object carrying the member.</param>
+    /// <param name="memberName">The member name.</param>
+    /// <param name="expectedKind">The one JSON kind the member's value takes.</param>
+    /// <param name="member">The member's value, or <see langword="null"/> when the member is absent.</param>
+    /// <returns><see langword="false"/> when the member is present with a value of another kind.</returns>
+    private static bool TryReadOptionalMember(JsonElement element, string memberName, JsonValueKind expectedKind, out JsonElement? member)
+    {
+        member = null;
+        if(!element.TryGetProperty(memberName, out JsonElement memberElement))
+        {
+            return true;
+        }
+
+        if(memberElement.ValueKind != expectedKind)
+        {
+            return false;
+        }
+
+        member = memberElement;
+
+        return true;
     }
 
 

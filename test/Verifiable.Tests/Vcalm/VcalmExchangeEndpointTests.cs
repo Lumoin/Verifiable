@@ -775,6 +775,73 @@ internal sealed class VcalmExchangeEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#workflows-and-exchanges">VCALM §3.6</see>: the message's
+    /// "verifiablePresentation: A Verifiable Presentation or an array of Verifiable Presentations", and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how
+    /// to process." A participate message whose <c>verifiablePresentation</c> is a number or a string, neither
+    /// a presentation nor an array of them, is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesMessageAsync"/> states, never read as a message without a
+    /// presentation.
+    /// </summary>
+    /// <param name="presentationJson">The <c>verifiablePresentation</c> member value.</param>
+    [TestMethod]
+    [DataRow("42")]
+    [DataRow("\"x\"")]
+    public async Task ParticipateWithNonObjectPresentationYields400(string presentationJson)
+    {
+        await AssertParticipateRefusesMessageAsync("{\"verifiablePresentation\":" + presentationJson + "}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#workflows-and-exchanges">VCALM §3.6</see>: the message's
+    /// "verifiablePresentationRequest: A Verifiable Presentation Request", and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how
+    /// to process." A participate message whose <c>verifiablePresentationRequest</c> is an array rather than a
+    /// request object is refused over the real HTTPS wire as <see cref="AssertParticipateRefusesRequestAsync"/>
+    /// states, never read as the empty initiating message.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithNonObjectPresentationRequestYields400()
+    {
+        await AssertParticipateRefusesRequestAsync("[]").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#participate-in-an-exchange">VCALM §3.6.6</see>: "redirectUrl
+    /// [string]A client MAY send an interaction URL to the server as a redirectUrl", and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how
+    /// to process." A participate message whose <c>redirectUrl</c> is a number is refused over the real HTTPS
+    /// wire as <see cref="AssertParticipateRefusesMessageAsync"/> states, never read as a message without one.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithNonStringRedirectUrlYields400()
+    {
+        await AssertParticipateRefusesMessageAsync("{\"redirectUrl\":42}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#participate-in-an-exchange">VCALM §3.6.6</see>: "referenceId
+    /// [string]When the server previously sent a referenceId, the client SHOULD include it here to aid
+    /// debugging and message correlation", and <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM
+    /// §2.4</see>: "Implementations MUST throw an error if an endpoint receives data, options, or option
+    /// values that it does not understand or know how to process." A participate message whose
+    /// <c>referenceId</c> is an object is refused over the real HTTPS wire as
+    /// <see cref="AssertParticipateRefusesMessageAsync"/> states, never read as a message without one.
+    /// </summary>
+    [TestMethod]
+    public async Task ParticipateWithNonStringReferenceIdYields400()
+    {
+        await AssertParticipateRefusesMessageAsync("{\"referenceId\":{}}").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#query-by-example">VCALM §3.4.2</see>:
     /// <c>acceptedCryptosuites</c> specifies "which cryptographic proof suites the verifier will accept".
     /// A holder that receives the verifier's Query By Example over the real HTTPS wire and parses it
@@ -1426,8 +1493,18 @@ internal sealed class VcalmExchangeEndpointTests
 
     /// <summary>
     /// Posts a participate message carrying <paramref name="presentationRequestJson"/> as its
-    /// <c>verifiablePresentationRequest</c> over the real HTTPS wire to a freshly created exchange and
-    /// asserts the refusal the draft gives such a message: the participate interface lists "400 Invalid
+    /// <c>verifiablePresentationRequest</c> and asserts its refusal through
+    /// <see cref="AssertParticipateRefusesMessageAsync"/>.
+    /// </summary>
+    /// <param name="presentationRequestJson">The verifiable presentation request JSON text the message carries.</param>
+    /// <returns>A task completing when the assertions have run.</returns>
+    private Task AssertParticipateRefusesRequestAsync(string presentationRequestJson) =>
+        AssertParticipateRefusesMessageAsync("{\"verifiablePresentationRequest\":" + presentationRequestJson + "}");
+
+
+    /// <summary>
+    /// Posts the participate message <paramref name="messageJson"/> over the real HTTPS wire to a freshly
+    /// created exchange and asserts the refusal the draft gives such a message: the participate interface lists "400 Invalid
     /// input" (<see href="https://www.w3.org/TR/vcalm-1.0/#participate-in-an-exchange">VCALM §3.6.6</see>:
     /// "Posting a Verifiable Presentation Request will result in either a 4xx error or one of the
     /// following"), under "Implementations MUST throw an error if an endpoint receives data, options, or
@@ -1439,9 +1516,9 @@ internal sealed class VcalmExchangeEndpointTests
     /// exchange's state read before and after the refusal is identical, its sequence included: the
     /// refused message neither advances nor alters the exchange.
     /// </summary>
-    /// <param name="presentationRequestJson">The verifiable presentation request JSON text the message carries.</param>
+    /// <param name="messageJson">The participate message JSON text.</param>
     /// <returns>A task completing when the assertions have run.</returns>
-    private async Task AssertParticipateRefusesRequestAsync(string presentationRequestJson)
+    private async Task AssertParticipateRefusesMessageAsync(string messageJson)
     {
         await using TestHostShell app = new(TimeProvider);
         string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
@@ -1450,8 +1527,7 @@ internal sealed class VcalmExchangeEndpointTests
             app, segment, exchangeId, 200, TestContext.CancellationToken).ConfigureAwait(false);
 
         (int statusCode, string? mediaType, string body) = await VcalmWireFixtures.PostExchangeMessageWireAsync(
-            app, segment, exchangeId, "{\"verifiablePresentationRequest\":" + presentationRequestJson + "}",
-            TestContext.CancellationToken).ConfigureAwait(false);
+            app, segment, exchangeId, messageJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, statusCode, body);
         Assert.AreEqual("application/json", mediaType, body);
