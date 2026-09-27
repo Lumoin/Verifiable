@@ -621,9 +621,22 @@ internal sealed class VcalmIssuerEndpointTests
         string credentialJson = BuildCredentialJson(ctx.IssuerDid, credentialId: "urn:uuid:mp-surrogate");
         string body = "{\"credential\":" + credentialJson + ",\"options\":{\"mandatoryPointers\":[\"\\ud800\"]}}";
 
-        using JsonDocument response = await VcalmWireFixtures.PostIssueWireAsync(
-            app, ctx.Segment, body, 400, TestContext.CancellationToken).ConfigureAwait(false);
+        //SendWireAsync asserts no status itself, so the captured fault is consumed here — before an
+        //await using teardown could replace a status-mismatch failure with its own unrelated assertion —
+        //and the specific status this exact scenario produced is still the one this test reports.
+        (int statusCode, _, string responseBody) = await VcalmWireFixtures.SendWireAsync(
+            app,
+            "POST",
+            TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsIssue, ctx.Segment),
+            body,
+            authorizationHeader: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = app.Host("default").ConsumeHttpFaults();
 
+        Assert.IsEmpty(faults,
+            $"An unpaired surrogate mandatoryPointers item must not escape the parser as an unhandled fault. Response: {responseBody}");
+        Assert.AreEqual(400, statusCode, responseBody);
+        using JsonDocument response = JsonDocument.Parse(responseBody);
         Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             "An unreadable mandatoryPointers item is an option value this issuer cannot process.");

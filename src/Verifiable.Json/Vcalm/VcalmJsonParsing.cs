@@ -1066,9 +1066,10 @@ public static class VcalmJsonParsing
 
 
     /// <summary>
-    /// Reads the §3.5.2 body <c>{presentation, options{type?, cryptosuite?, verificationMethod?, proofPurpose?,
-    /// created?, challenge?, domain?}}</c>. STRICT per §2.4: a non-object body, a missing REQUIRED
-    /// <c>presentation</c>, or an unrecognized or repeated top-level member is
+    /// Reads the <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> body
+    /// <c>{presentation, options{type?, cryptosuite?, verificationMethod?, proofPurpose?, created?, challenge?,
+    /// domain?}}</c>. STRICT per <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>: a non-object body, a
+    /// missing REQUIRED <c>presentation</c>, or an unrecognized or repeated top-level member is
     /// <see cref="VcalmParseFailure.Malformed"/>; an options member or value the holder cannot process is
     /// <see cref="VcalmParseFailure.UnknownOption"/>. A <c>proof</c> member on the presentation, of any JSON kind, is
     /// recorded on <see cref="VcalmCreatePresentationRequest.HasProofMember"/> for the endpoint to refuse.
@@ -1149,12 +1150,14 @@ public static class VcalmJsonParsing
 
 
     /// <summary>
-    /// Reads the §3.5.1 <c>options</c> object, whose only member is <c>selectivePointers</c>: "An array of JSON
-    /// pointers specifying the selectively disclosed information. Each item in the selectivePointers array MUST be a
-    /// string." §2.4: a non-object options value, a non-array <c>selectivePointers</c>, an item that is not a readable
-    /// string (<see cref="TryReadString"/>), a repeated member or any other options member is
-    /// <see cref="VcalmParseFailure.UnknownOption"/>. An absent options object yields an empty pointer set. The JSON
-    /// pointer grammar of each item is checked by the library, not here, so a replaced parse seam cannot skip it.
+    /// Reads the <see href="https://www.w3.org/TR/vcalm-1.0/#derive-credential">§3.5.1</see> <c>options</c> object,
+    /// whose only member is <c>selectivePointers</c>: "An array of JSON pointers specifying the selectively disclosed
+    /// information. Each item in the selectivePointers array MUST be a string."
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>: a non-object options value, a non-array
+    /// <c>selectivePointers</c>, an item that is not a readable string (<see cref="TryReadString"/>), a repeated member
+    /// or any other options member is <see cref="VcalmParseFailure.UnknownOption"/>. An absent options object yields an
+    /// empty pointer set. The JSON pointer grammar of each item is checked by the library, not here, so a replaced parse
+    /// seam cannot skip it.
     /// </summary>
     /// <param name="root">The derive request's top-level JSON object.</param>
     /// <param name="selectivePointers">The pointer strings; valid only when the result is <see cref="VcalmParseFailure.None"/>.</param>
@@ -1221,11 +1224,12 @@ public static class VcalmJsonParsing
 
 
     /// <summary>
-    /// Reads the §3.5.2 <c>options</c> object, the members shaping the produced proof: <c>type</c>,
-    /// <c>cryptosuite</c>, <c>verificationMethod</c>, <c>proofPurpose</c>, <c>created</c>, <c>challenge</c> and
-    /// <c>domain</c>, each named "[string]" by §3.5.2. §2.4: "Implementations MUST throw an error if an endpoint
-    /// receives data, options, or option values that it does not understand or know how to process." So a non-object
-    /// options value, an unrecognized or repeated member, or a member whose value is not a readable string
+    /// Reads the <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> <c>options</c> object,
+    /// the members shaping the produced proof: <c>type</c>, <c>cryptosuite</c>, <c>verificationMethod</c>,
+    /// <c>proofPurpose</c>, <c>created</c>, <c>challenge</c> and <c>domain</c>, each named "[string]" by §3.5.2.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>: "Implementations MUST throw an error if an
+    /// endpoint receives data, options, or option values that it does not understand or know how to process." So a
+    /// non-object options value, an unrecognized or repeated member, or a member whose value is not a readable string
     /// (<see cref="TryReadString"/>, an explicit JSON <c>null</c> included) is <see cref="VcalmParseFailure.UnknownOption"/>.
     /// Every value is carried into the parsed options as read; whether the instance can produce it is the endpoint's
     /// check against its own signing configuration.

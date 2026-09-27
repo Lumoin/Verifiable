@@ -35,9 +35,10 @@ public sealed record VcalmCreatePresentationRequest
     /// Whether the wire <c>presentation</c> object carries a <c>proof</c> member of any JSON kind, <c>null</c>
     /// included. The typed <see cref="Presentation"/> cannot say so for every shape, because a JSON <c>null</c>
     /// member is dropped when the presentation is read, so the parser records the member's presence from the raw
-    /// JSON. This holder processes no embedded presentation proof (the §3.5.2 schema: "The document MAY include
-    /// an embedded proof."), so the endpoint refuses a request carrying one before any signing. A parse seam that
-    /// leaves this <see langword="false"/> still meets the endpoint's check of the typed presentation.
+    /// JSON. This holder processes no embedded presentation proof (the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> schema: "The document MAY
+    /// include an embedded proof."), so the endpoint refuses a request carrying one before any signing. A parse
+    /// seam that leaves this <see langword="false"/> still meets the endpoint's check of the typed presentation.
     /// </summary>
     public bool HasProofMember { get; init; }
 
@@ -57,9 +58,10 @@ public sealed record VcalmCreatePresentationRequest
 
 
 /// <summary>
-/// The parsed §3.5.2 <c>options</c> object of a <c>POST /presentations</c> request — the members that
-/// shape the produced Data Integrity proof. §2.4: every option is OPTIONAL; an absent member takes its
-/// §3.5.2 default. <see cref="Challenge"/> and <see cref="Domain"/> are required by the Core presentation
+/// The parsed <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> <c>options</c> object of a
+/// <c>POST /presentations</c> request — the members that shape the produced Data Integrity proof.
+/// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>: every option is OPTIONAL; an absent member takes
+/// its §3.5.2 default. <see cref="Challenge"/> and <see cref="Domain"/> are required by the Core presentation
 /// signer (a presentation proof binds an anti-replay challenge + domain, VC-DM 2.0 §4.13); the §3.5.2
 /// endpoint maps an absent challenge / domain to a 400. A present value the instance cannot produce is
 /// refused under §2.4 ("Implementations MUST throw an error if an endpoint receives data, options, or
@@ -70,13 +72,18 @@ public sealed record VcalmCreatePresentationOptions
 {
     /// <summary>
     /// §3.5.2 <c>options.challenge</c>: "A challenge provided by the requesting party of the proof."
-    /// <see langword="null"/> when absent — a §3.5.2 400, because a presentation proof binds a challenge.
+    /// <see langword="null"/> when absent — a §3.5.2 400, because a presentation proof binds a challenge. A
+    /// present value made only of whitespace names a challenge this instance cannot bind a proof to, and is
+    /// refused as an unusable option value rather than reaching the Core signer, which requires a non-blank
+    /// challenge.
     /// </summary>
     public string? Challenge { get; init; }
 
     /// <summary>
     /// §3.5.2 <c>options.domain</c>: "The intended domain of validity for the proof." <see langword="null"/>
-    /// when absent — a §3.5.2 400, because a presentation proof binds a domain.
+    /// when absent — a §3.5.2 400, because a presentation proof binds a domain. A present value made only of
+    /// whitespace names a domain this instance cannot bind a proof to, and is refused as an unusable option
+    /// value rather than reaching the Core signer, which requires a non-blank domain.
     /// </summary>
     public string? Domain { get; init; }
 
@@ -99,24 +106,24 @@ public sealed record VcalmCreatePresentationOptions
     public string? Created { get; init; }
 
     /// <summary>
-    /// §3.5.2 <c>options.type</c>: "The type of the proof. Default 'DataIntegrityProof'."
-    /// <see langword="null"/> when absent. The instance produces a <c>DataIntegrityProof</c> only, so the
-    /// endpoint refuses any other value.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> <c>options.type</c>: "The type
+    /// of the proof. Default 'DataIntegrityProof'." <see langword="null"/> when absent. The instance produces a
+    /// <c>DataIntegrityProof</c> only, so the endpoint refuses any other value.
     /// </summary>
     public string? Type { get; init; }
 
     /// <summary>
-    /// §3.5.2 <c>options.cryptosuite</c>: "The cryptosuite of the proof." <see langword="null"/> when
-    /// absent. The instance signs under its configured cryptosuite only, so the endpoint refuses any other
-    /// value.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> <c>options.cryptosuite</c>:
+    /// "The cryptosuite of the proof." <see langword="null"/> when absent. The instance signs under its configured
+    /// cryptosuite only, so the endpoint refuses any other value.
     /// </summary>
     public string? Cryptosuite { get; init; }
 
     /// <summary>
-    /// §3.5.2 <c>options.proofPurpose</c>: "The purpose of the proof. Default 'assertionMethod'."
-    /// <see langword="null"/> when absent. The instance signs a presentation proof for
-    /// <c>authentication</c> only, the purpose a presentation proof is verified under, so the endpoint
-    /// refuses any other value.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> <c>options.proofPurpose</c>:
+    /// "The purpose of the proof. Default 'assertionMethod'." <see langword="null"/> when absent. The instance
+    /// signs a presentation proof for <c>authentication</c> only, the purpose a presentation proof is verified
+    /// under, so the endpoint refuses any other value.
     /// </summary>
     public string? ProofPurpose { get; init; }
 }

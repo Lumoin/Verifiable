@@ -1,4 +1,3 @@
-using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
@@ -216,13 +215,23 @@ public static class VcalmHolderEndpoints
                     return (null, MalformedRequest());
                 }
 
+                //VC Data Model 2.0 §4.13: a presentation document carries its own @context and a type naming
+                //VerifiablePresentation. A body shaped as a response envelope around a presentation (rather than
+                //the presentation itself) fails this structural check and is data this holder does not know how
+                //to process (§2.4), refused before any signing rather than signed as if it were a presentation.
+                if(!VcalmHolderService.HasRequiredPresentationStructure(request.Presentation))
+                {
+                    return (null, MissingPresentationStructureRequest());
+                }
+
                 //§2.4: "Implementations MUST throw an error if an endpoint receives data, options, or option
                 //values that it does not understand or know how to process." The §3.5.2 presentation schema says
                 //"The document MAY include an embedded proof.", and this holder processes none: an embedded proof
                 //would be signed over and then replaced by the new proof, which then never verifies. A presentation
                 //carrying a proof member is refused before any signing, through the same check the holder service
                 //itself enforces. The parser records a proof member of any JSON kind, null included, which the
-                //typed presentation cannot show once a null member has been dropped.
+                //typed presentation cannot show once a null member has been dropped; a proof entry a caller placed
+                //directly into the presentation's AdditionalData bucket is checked the same way.
                 if(request.HasProofMember || VcalmHolderService.HasEmbeddedProof(request.Presentation))
                 {
                     return (null, EmbeddedProofRequest());
@@ -240,9 +249,18 @@ public static class VcalmHolderEndpoints
 
                 //§3.5.2: a presentation proof binds an anti-replay challenge and a domain (VC-DM 2.0
                 //§4.13). A request that omits either cannot produce a valid presentation proof — a 400.
-                if(string.IsNullOrEmpty(request.Options.Challenge) || string.IsNullOrEmpty(request.Options.Domain))
+                if(request.Options.Challenge is null || request.Options.Domain is null)
                 {
                     return (null, MissingChallengeOrDomainRequest());
+                }
+
+                //§2.4: a present challenge or domain this instance cannot use — empty or made only of
+                //whitespace — is an option value it does not know how to process, refused as an unknown
+                //option before it can reach the Core signer's own ArgumentException.ThrowIfNullOrWhiteSpace
+                //precondition (which would otherwise escape as an unhandled server fault).
+                if(string.IsNullOrWhiteSpace(request.Options.Challenge) || string.IsNullOrWhiteSpace(request.Options.Domain))
+                {
+                    return (null, UnknownOptionRequest());
                 }
 
                 //§3.4.3.2 holder anti-replay: "Holder implementations MUST ensure that the domain
@@ -563,8 +581,10 @@ public static class VcalmHolderEndpoints
     /// <see cref="CryptosuiteInfo.CryptosuiteName"/>, a <c>proofPurpose</c> of <see cref="AuthenticationMethod.Purpose"/>
     /// (the purpose the presentation signer writes and a presentation proof is verified under) and the configured
     /// <see cref="VcalmPresentationSigning.DefaultVerificationMethodId"/> (the method whose key signs the proof). An
-    /// absent option is always processable; a present one naming anything else is an option value the holder cannot
-    /// process (<see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>), compared ordinally.
+    /// absent option is always processable; a present one naming anything else is data this instance does not know how
+    /// to process: <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> "Implementations MUST throw an error
+    /// if an endpoint receives data, options, or option values that it does not understand or know how to process.",
+    /// compared ordinally.
     /// </summary>
     /// <param name="options">The parsed create-presentation options.</param>
     /// <param name="signing">The presentation-signing configuration resolved for the request's tenant.</param>
@@ -753,7 +773,15 @@ public static class VcalmHolderEndpoints
             return MalformedRequest();
         }
 
-        requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
+        //RFC 8259 §8.1 requires JSON text to be UTF-8 encoded for interoperable transmission; bytes that are
+        //not valid UTF-8 are data this holder cannot process (§2.4), refused rather than silently repaired
+        //into the Unicode replacement character and then read as if the client had sent that character.
+        if(!VcalmJsonShape.TryDecodeStrictUtf8(req.Body.Bytes.Span, out string? decodedBody))
+        {
+            return MalformedRequest();
+        }
+
+        requestBody = decodedBody;
 
         return null;
     }
@@ -841,9 +869,10 @@ public static class VcalmHolderEndpoints
 
     /// <summary>
     /// The §3.5.2 embedded-proof 400: the input presentation carries its own <c>proof</c> member, which this holder does
-    /// not process, so it is refused before any signing under the
-    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> rule that an endpoint MUST throw an error on data it
-    /// does not understand or know how to process. It answers the way the issuer's
+    /// not process, so it is refused before any signing under
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>: "Implementations MUST throw an error if an
+    /// endpoint receives data, options, or option values that it does not understand or know how to process." It
+    /// answers the way the issuer's
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#issue-credential">§3.2.1</see> Error Handling configuration answers a
     /// credential that already carries proofs: with the <see cref="VcalmProblemTypes.MalformedValueError"/> type and the
     /// <see cref="VcalmHolderService.EmbeddedProofDetail"/> detail.
@@ -854,6 +883,24 @@ public static class VcalmHolderEndpoints
             VcalmProblemTypes.MalformedValueError,
             "MALFORMED_VALUE_ERROR",
             VcalmHolderService.EmbeddedProofDetail);
+
+        return ServerHttpResponse.Json(
+            400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
+    }
+
+
+    /// <summary>
+    /// The §3.5.2 missing-presentation-structure 400: the input does not have the VC Data Model 2.0 §4.13
+    /// structure a presentation document must carry (a response envelope wrapping one, for instance), refused
+    /// before any signing under the <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> rule that an
+    /// endpoint MUST throw an error on data it does not understand or know how to process.
+    /// </summary>
+    private static ServerHttpResponse MissingPresentationStructureRequest()
+    {
+        VcalmProblemDetail problem = VcalmProblemDetail.Error(
+            VcalmProblemTypes.MalformedValueError,
+            "MALFORMED_VALUE_ERROR",
+            VcalmHolderService.MissingPresentationStructureDetail);
 
         return ServerHttpResponse.Json(
             400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);

@@ -117,13 +117,18 @@ public static class VcalmHolderService
     /// <para>
     /// A presentation that carries its own proof is refused before any signing (<see cref="HasEmbeddedProof"/>): this
     /// holder processes no embedded presentation proof, since signing over one and then replacing it yields a proof that
-    /// never verifies. The presentation proof covers each contained credential's proofs, so each must carry the
+    /// never verifies; the check reads both the typed presentation and its
+    /// <see cref="VerifiablePresentation.AdditionalData"/> bucket, so a caller cannot smuggle a <c>proof</c> entry past it
+    /// by constructing the presentation directly rather than through the JSON leaf. A presentation lacking the VC Data
+    /// Model 2.0 §4.13 structure a presentation document must carry is refused the same way
+    /// (<see cref="HasRequiredPresentationStructure"/>), so a response-envelope shape wrapping a presentation is never
+    /// signed as if it were one. The presentation proof covers each contained credential's proofs, so each must carry the
     /// <c>type</c>, <c>verificationMethod</c> and <c>proofPurpose</c>
     /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of every
-    /// proof (<see cref="HasCompleteInputProofs"/>). The §3.5.2 endpoint refuses an input that fails either check with a
-    /// 400 through the same predicates before it calls this method; any other caller that passes one breaks this method's
-    /// precondition and is refused before any signing, so no presentation proof ever signs over an embedded proof or a
-    /// defective contained proof.
+    /// proof (<see cref="HasCompleteInputProofs"/>). The §3.5.2 endpoint refuses an input that fails any of these checks
+    /// with a 400 through the same predicates before it calls this method; any other caller that passes one breaks this
+    /// method's precondition and is refused before any signing, so no presentation proof ever signs over an embedded
+    /// proof, a malshaped document, or a defective contained proof.
     /// </para>
     /// <para>
     /// This method performs NO <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-response-format">
@@ -136,8 +141,9 @@ public static class VcalmHolderService
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException">
-    /// <paramref name="presentation"/> carries its own proof, or a proof of a credential it contains lacks a Data
-    /// Integrity §4.4 mandatory member.
+    /// <paramref name="presentation"/> carries its own proof (typed or in <see cref="VerifiablePresentation.AdditionalData"/>),
+    /// lacks the required VC Data Model 2.0 §4.13 presentation structure, or a proof of a credential it contains lacks a
+    /// Data Integrity §4.4 mandatory member.
     /// </exception>
     public static async ValueTask<DataIntegritySecuredPresentation> CreatePresentationAsync(
         VerifiablePresentation presentation,
@@ -156,6 +162,11 @@ public static class VcalmHolderService
         if(HasEmbeddedProof(presentation))
         {
             throw new ArgumentException(EmbeddedProofDetail, nameof(presentation));
+        }
+
+        if(!HasRequiredPresentationStructure(presentation))
+        {
+            throw new ArgumentException(MissingPresentationStructureDetail, nameof(presentation));
         }
 
         if(!HasCompleteInputProofs(presentation))
@@ -209,8 +220,8 @@ public static class VcalmHolderService
 
 
     /// <summary>
-    /// The problem detail stated when a selective pointer is not a JSON pointer: <see cref="DeriveAsync"/> throws its
-    /// <see cref="ArgumentException"/> with it.
+    /// The message stated when a selective pointer is not a JSON pointer: the text <see cref="DeriveAsync"/>'s
+    /// <see cref="ArgumentException"/> carries when <see cref="AreAllJsonPointers"/> refuses one.
     /// </summary>
     internal static string UnparseablePointerDetail { get; } =
         "A selectivePointers item is not a JSON pointer; this holder derives only from the JSON pointers it can resolve.";
@@ -219,17 +230,51 @@ public static class VcalmHolderService
     /// <summary>
     /// Whether the §3.5.2 input presentation carries its own <c>proof</c> member. The JSON leaf reads a non-null
     /// <c>proof</c> member of any kind (a proof object, a list, an empty list, a string or a number) as a
-    /// <see cref="DataIntegritySecuredPresentation"/>, so the type answers for every such shape. This holder processes no
-    /// embedded presentation proof: the §3.5.2 schema's "The document MAY include an embedded proof." leaves the handling
-    /// to the instance, and signing over an embedded proof and then replacing it yields a proof that never verifies, so
-    /// such an input is refused under the
+    /// <see cref="DataIntegritySecuredPresentation"/>, so the type answers for every such shape reaching this method
+    /// through the wire. A caller that builds a plain <see cref="VerifiablePresentation"/> directly (bypassing the JSON
+    /// leaf) can still carry a <c>proof</c> entry in <see cref="VerifiablePresentation.AdditionalData"/>, which the
+    /// presentation serializer writes back out at the document root
+    /// (<see cref="WellKnownCredentialMemberNames.Proof"/>) regardless of the runtime type, so that entry is
+    /// checked too. This holder processes no embedded presentation proof: the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> schema's "The document MAY include
+    /// an embedded proof." leaves the handling to the instance, and signing over an embedded proof and then replacing it
+    /// yields a proof that never verifies, so such an input is refused under the
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> rule that an endpoint MUST throw an error on data
     /// it does not know how to process. The create-presentation endpoint and <see cref="CreatePresentationAsync"/> share
     /// this one check.
     /// </summary>
     /// <param name="presentation">The presentation the holder is asked to secure.</param>
     internal static bool HasEmbeddedProof(VerifiablePresentation presentation) =>
-        presentation is DataIntegritySecuredPresentation;
+        presentation is DataIntegritySecuredPresentation
+        || presentation.AdditionalData?.ContainsKey(WellKnownCredentialMemberNames.Proof) == true;
+
+
+    /// <summary>
+    /// Whether the §3.5.2 input presentation has the VC Data Model 2.0 §4.13 structure a presentation this holder
+    /// signs must carry: a <see cref="VerifiablePresentation.Context"/> and a <see cref="VerifiablePresentation.Type"/>
+    /// naming <see cref="CredentialConstants.VerifiablePresentationType"/>. A JSON body shaped as a response envelope
+    /// (for instance <c>{"verifiablePresentation": …, "extra": 1}</c>) parses to a <see cref="VerifiablePresentation"/>
+    /// whose own members are all empty and whose wrapper keys land in <see cref="VerifiablePresentation.AdditionalData"/>,
+    /// so it fails this check and is refused under the same
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> rule <see cref="HasEmbeddedProof"/> enforces,
+    /// before any signing. The create-presentation endpoint and <see cref="CreatePresentationAsync"/> share this one
+    /// check.
+    /// </summary>
+    /// <param name="presentation">The presentation the holder is asked to secure.</param>
+    internal static bool HasRequiredPresentationStructure(VerifiablePresentation presentation) =>
+        presentation.Context is not null
+        && presentation.Type is { } types
+        && types.Contains(CredentialConstants.VerifiablePresentationType, StringComparer.Ordinal);
+
+
+    /// <summary>
+    /// The problem detail stated when an input presentation lacks the VC Data Model 2.0 §4.13 structure
+    /// <see cref="HasRequiredPresentationStructure"/> checks: the create-presentation endpoint's 400 carries it, and
+    /// <see cref="CreatePresentationAsync"/> throws its <see cref="ArgumentException"/> with it.
+    /// </summary>
+    internal static string MissingPresentationStructureDetail { get; } =
+        "The presentation to secure is not a VC Data Model 2.0 §4.13 presentation document: it must carry a "
+        + "@context and a type naming VerifiablePresentation.";
 
 
     /// <summary>

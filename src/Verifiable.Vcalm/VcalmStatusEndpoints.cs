@@ -1,4 +1,3 @@
-using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.JCose;
@@ -457,7 +456,15 @@ public static class VcalmStatusEndpoints
             return MalformedRequest();
         }
 
-        requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
+        //RFC 8259 §8.1 requires JSON text to be UTF-8 encoded; bytes that are not valid UTF-8 are data this
+        //endpoint cannot process (§2.4), refused rather than silently repaired into the Unicode replacement
+        //character and parsed as if the client had sent that character.
+        if(!VcalmJsonShape.TryDecodeStrictUtf8(req.Body.Bytes.Span, out string? decodedBody))
+        {
+            return MalformedRequest();
+        }
+
+        requestBody = decodedBody;
 
         return null;
     }

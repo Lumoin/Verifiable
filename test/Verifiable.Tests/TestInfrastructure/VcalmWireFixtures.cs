@@ -1,12 +1,18 @@
 using System.Collections.Concurrent;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.CryptographicSuites;
+using Verifiable.Cryptography;
 using Verifiable.Server.Routing;
 using Verifiable.Tests.OAuth;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Vcalm;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -368,6 +374,80 @@ internal static class VcalmWireFixtures
     }
 
 
+    /// <summary>
+    /// Sends an HTTP request of <paramref name="method"/> to <paramref name="path"/> on the loopback HTTPS host of
+    /// <paramref name="app"/> over the real wire, with raw <paramref name="bytes"/> labelled <paramref name="mediaType"/>
+    /// — the primitive a test proves a byte-level body refusal through, since a <see cref="string"/> body cannot carry
+    /// bytes that are not valid UTF-8 (every C# string re-encodes to valid UTF-8 when sent).
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="bytes">The raw request body bytes.</param>
+    /// <param name="mediaType">The media type the <c>Content-Type</c> header names.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The response status code and its body text.</returns>
+    internal static async Task<(int StatusCode, string Body)> SendRawBytesWireAsync(
+        TestHostShell app, string method, string path, byte[] bytes, string mediaType, CancellationToken cancellationToken)
+    {
+        (int statusCode, _, string responseBody) = await SendRawBytesWireAsync(
+            app, method, path, bytes, mediaType, authorizationHeader: null, cancellationToken).ConfigureAwait(false);
+
+        return (statusCode, responseBody);
+    }
+
+
+    /// <summary>
+    /// Sends an HTTP request of <paramref name="method"/> to <paramref name="path"/> on the loopback HTTPS host of
+    /// <paramref name="app"/> over the real wire, with raw <paramref name="bytes"/> labelled <paramref name="mediaType"/>
+    /// and an optional <paramref name="authorizationHeader"/> value on the request's <c>Authorization</c> header, and
+    /// returns the media type the response's <c>Content-Type</c> header names beside its status and body: the form a
+    /// byte-level body refusal is proven through on a route authorized before its body is read, and wherever the
+    /// refusal's own media type is asserted.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="bytes">The raw request body bytes.</param>
+    /// <param name="mediaType">The media type the <c>Content-Type</c> header names.</param>
+    /// <param name="authorizationHeader">
+    /// The <c>Authorization</c> header value to send, or <see langword="null"/> to send no <c>Authorization</c> header.
+    /// </param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>
+    /// The response status code, the media type its <c>Content-Type</c> header names (or <see langword="null"/> when it
+    /// carries none), and its body text.
+    /// </returns>
+    internal static async Task<(int StatusCode, string? MediaType, string Body)> SendRawBytesWireAsync(
+        TestHostShell app,
+        string method,
+        string path,
+        byte[] bytes,
+        string mediaType,
+        string? authorizationHeader,
+        CancellationToken cancellationToken)
+    {
+        await app.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri url = new(host.HttpBaseAddress!, path);
+
+        using HttpRequestMessage request = new(new HttpMethod(method), url)
+        {
+            Content = new ByteArrayContent(bytes)
+        };
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+        if(authorizationHeader is not null)
+        {
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, authorizationHeader);
+        }
+
+        using HttpResponseMessage response = await host.SharedHttpClient!.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        string responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, response.Content.Headers.ContentType?.MediaType, responseBody);
+    }
+
+
     /// <summary>The bearer token <see cref="AuthorizeTestCoordinator"/> permits a §3.6 coordinator operation for.</summary>
     internal static string CoordinatorToken { get; } = "vcalm-test-coordinator-token";
 
@@ -671,4 +751,70 @@ internal static class VcalmWireFixtures
             Type = ["VerifiablePresentation"],
             Holder = holderDid
         });
+
+
+    /// <summary>Builds the did:key documents of the holders <see cref="CreateHolderPresentationSigningAsync"/> creates.</summary>
+    private static KeyDidBuilder HolderKeyDidBuilder { get; } = new();
+
+
+    /// <summary>
+    /// Builds a holder's eddsa-jcs-2022 presentation-signing configuration, the VCALM §3.5.2 presentation-signing
+    /// seam, under a fresh did:key holder a did:key resolver resolves locally, and returns it with the holder DID the
+    /// presentations it signs claim. The public half is not retained on the configuration and is disposed here; the
+    /// private key lives on the configuration for the host's lifetime and is added to <paramref name="ownedKeys"/> so
+    /// the caller disposes it at cleanup, after the host that holds the configuration is torn down.
+    /// </summary>
+    /// <param name="canonicalize">The JCS canonicalizer the presentations are signed over.</param>
+    /// <param name="serializePresentation">The caller's own presentation serialization delegate.</param>
+    /// <param name="deserializePresentation">The caller's own presentation deserialization delegate.</param>
+    /// <param name="serializeProofOptions">The caller's own proof options serialization delegate.</param>
+    /// <param name="pool">The memory pool the key material and the signing rent from.</param>
+    /// <param name="ownedKeys">Receives the private key the caller disposes at cleanup.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The presentation-signing configuration and the holder DID.</returns>
+    internal static async Task<(VcalmPresentationSigning Signing, string HolderDid)> CreateHolderPresentationSigningAsync(
+        CanonicalizationDelegate canonicalize,
+        PresentationSerializeDelegate serializePresentation,
+        PresentationDeserializeDelegate deserializePresentation,
+        ProofOptionsSerializeDelegate serializeProofOptions,
+        BaseMemoryPool pool,
+        ICollection<IDisposable> ownedKeys,
+        CancellationToken cancellationToken)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
+            TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+
+        DidDocument holderDidDocument = await HolderKeyDidBuilder.BuildAsync(
+            keyPair.PublicKey,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            pool,
+            includeDefaultContext: false,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        string verificationMethodId = holderDidDocument.VerificationMethod![0].Id!;
+        string holderDid = holderDidDocument.Id!.ToString();
+
+        //The public half is not retained on the signing configuration; dispose it. The private key lives on
+        //the signing configuration for the host's lifetime and is disposed by the caller at cleanup.
+        keyPair.PublicKey.Dispose();
+        ownedKeys.Add(keyPair.PrivateKey);
+
+        VcalmPresentationSigning signing = new()
+        {
+            PrivateKey = keyPair.PrivateKey,
+            DefaultVerificationMethodId = verificationMethodId,
+            Cryptosuite = EddsaJcs2022CryptosuiteInfo.Instance,
+            Canonicalize = canonicalize,
+            ContextResolver = null,
+            EncodeProofValue = ProofValueCodecs.EncodeBase58Btc,
+            SerializePresentation = serializePresentation,
+            DeserializePresentation = deserializePresentation,
+            SerializeProofOptions = serializeProofOptions,
+            Encoder = TestSetup.Base58Encoder,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            MemoryPool = pool
+        };
+
+        return (signing, holderDid);
+    }
 }
