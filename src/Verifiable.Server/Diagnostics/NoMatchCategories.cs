@@ -31,7 +31,9 @@ public static class NoMatchCategories
     /// <summary>
     /// Every candidate a builder produced for this request was removed because the registration's
     /// active capability set — <see cref="Verifiable.Server.ServerIntegration.ResolveCapabilitiesAsync"/> —
-    /// did not allow it, leaving the chain <see cref="EndpointChain.MatchAsync"/> walks empty.
+    /// did not allow it, or because the composition's
+    /// <see cref="Verifiable.Server.ServerConfiguration.DeclaredCapabilities"/> does not name it,
+    /// leaving the chain <see cref="EndpointChain.MatchAsync"/> walks empty.
     /// </summary>
     public static string CapabilityFiltered { get; } = "capability_filtered";
 

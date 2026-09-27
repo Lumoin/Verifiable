@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Immutable;
 using System.Diagnostics;
 
 using Verifiable.Core;
@@ -72,7 +73,9 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <summary>
     /// The <see cref="EndpointCandidate.Name"/> of every candidate a builder produced for the
     /// request this chain was built for, that the per-request capability filter in
-    /// <see cref="BuildForRequestAsync"/> then removed. Empty for a chain built by the public
+    /// <see cref="BuildForRequestAsync"/> then removed, either because the registration's resolved
+    /// capability set or because a present <see cref="ServerConfiguration.DeclaredCapabilities"/> does
+    /// not name its capability. Empty for a chain built by the public
     /// constructor, which takes endpoints already filtered by its caller.
     /// </summary>
     public IReadOnlyList<string> CapabilityFilteredCandidateNames { get; }
@@ -129,7 +132,8 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <see cref="EndpointBuilderDelegate"/> on
     /// <see cref="ServerConfiguration.EndpointBuilders"/>, filters the
     /// produced <see cref="EndpointCandidate"/> instances by capability
-    /// membership, and asks
+    /// membership in that set and, when the composition declares its capabilities, in
+    /// <see cref="ServerConfiguration.DeclaredCapabilities"/>, and asks
     /// the endpoint-URI resolution seam
     /// for each survivor's absolute URL. A candidate with no resolvable URL is dropped from the
     /// chain and its name recorded in <see cref="UnresolvedUriCandidateNames"/>. Surviving
@@ -198,6 +202,10 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
         EndpointBuilderSet builders = server.Configuration.EndpointBuilders;
         if(builders.Count == 0) { return Empty; }
 
+        //A composition that declares its capabilities was validated only for those capabilities'
+        //dependencies, so a candidate outside the declaration never reaches the chain.
+        ImmutableHashSet<CapabilityIdentifier>? declaredCapabilities = server.Configuration.DeclaredCapabilities;
+
         //Per-call capability set — CAEP/RISC attenuation point. The library
         //default returns registration.AllowedCapabilities unchanged; custom
         //wirings narrow the set in response to per-request signals.
@@ -220,7 +228,8 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
 
             foreach(EndpointCandidate candidate in candidates)
             {
-                if(!allowedCapabilities.Contains(candidate.Capability))
+                if(!allowedCapabilities.Contains(candidate.Capability)
+                    || (declaredCapabilities is not null && !declaredCapabilities.Contains(candidate.Capability)))
                 {
                     capabilityFiltered.Add(candidate.Name);
 

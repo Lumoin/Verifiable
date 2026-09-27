@@ -2730,6 +2730,10 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// </para>
     /// <para>
     /// Checks required host seams, nested groups, authentication declarations and enabled feature dependencies.
+    /// This is the check of a composition that declares no capabilities; a composition declaring them
+    /// is checked by <see cref="ValidateDeclaredCapabilities"/>, which keeps the host seams, the
+    /// containers, the authentication declarations and the feature dependencies and scopes the
+    /// remaining delegates to the declared capabilities.
     /// Success describes the current wiring only. It cannot validate application storage atomicity,
     /// cryptographic behavior, policy correctness, or mutable delegate targets.
     /// </para>
@@ -2746,6 +2750,23 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         if(ResolveSubjectIdentifierAsync is null) { missing.Add(nameof(ResolveSubjectIdentifierAsync)); }
         if(LoadGrantFlowStatesAsync is null) { missing.Add(nameof(LoadGrantFlowStatesAsync)); }
 
+        ThrowForMissingDelegates(missing);
+        ValidateRequiredContainers();
+        Cryptography.Validate();
+        Codecs.Validate();
+        ValidateCoherence();
+
+        IsValidated = true;
+    }
+
+
+    /// <summary>
+    /// Refuses the integration with the named fault listing every missing delegate, when any is missing.
+    /// </summary>
+    /// <param name="missing">The accumulated names of missing delegates.</param>
+    /// <exception cref="InvalidOperationException">At least one delegate is missing.</exception>
+    private static void ThrowForMissingDelegates(List<string> missing)
+    {
         if(missing.Count > 0)
         {
             var sb = new StringBuilder(
@@ -2754,7 +2775,19 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
             _ = sb.Append('.');
             throw new InvalidOperationException(sb.ToString());
         }
+    }
 
+
+    /// <summary>
+    /// Requires the seven containers every authorization integration supplies whatever its composition
+    /// declares: <see cref="Cryptography"/>, <see cref="Codecs"/>, <see cref="MemoryPool"/>,
+    /// <see cref="Timings"/>, <see cref="TokenProducers"/>, <see cref="ClientAuthenticationMethodsSupported"/>
+    /// and <see cref="ClientAssertionSigningAlgorithmsSupported"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">At least one container is absent.</exception>
+    private void ValidateRequiredContainers()
+    {
+        var missing = new List<string>();
         if(Cryptography is null)
         {
             missing.Add(nameof(Cryptography));
@@ -2788,14 +2821,20 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         {
             throw new InvalidOperationException($"AuthorizationServerIntegration requires {string.Join(", ", missing)}.");
         }
+    }
 
-        Cryptography!.Validate();
-        Codecs!.Validate();
+
+    /// <summary>
+    /// Checks the declarations and coupled operations every composition keeps coherent whatever it
+    /// declares: the client-authentication declaration pair, the wired feature dependencies and the
+    /// authorization details type registry.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A declaration or a wired feature is incoherent.</exception>
+    private void ValidateCoherence()
+    {
         ValidateClientAuthenticationDeclaration();
         ValidateFeatureDependencies();
         AuthorizationDetailTypes.Validate();
-
-        IsValidated = true;
     }
 
 
@@ -2803,13 +2842,187 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <param name="primaryIntegration">The composition's validated shared host operations.</param>
     public override void ValidateFamily(ServerIntegration primaryIntegration)
     {
+        ThrowUnlessPrimary(primaryIntegration);
+        Validate();
+    }
+
+
+    /// <summary>
+    /// Validates this integration for a composition declaring its capabilities, requiring only the
+    /// declared capabilities' protocol dependencies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The primary/family identity, the host seams, the seven containers
+    /// (<see cref="ValidateRequiredContainers"/>), the client-authentication declaration, the wired
+    /// feature dependencies and the authorization details type registry are checked exactly as
+    /// <see cref="Validate"/> checks them and throw the same named <see cref="InvalidOperationException"/>.
+    /// Subject resolution, the grant-family loader, the key resolvers, the codec delegates and the
+    /// key-set builder are required only by the declared capabilities that use them; each one missing is
+    /// returned as a <see cref="CompositionDependencyFailure"/>.
+    /// </para>
+    /// <para>
+    /// Discovery (<see cref="WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint"/>) reads only the
+    /// required containers and the verification key resolver when present, so it needs nothing beyond
+    /// the host seams. The key set (<see cref="WellKnownCapabilityIdentifiers.OAuthJwksEndpoint"/>) reads
+    /// only <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>. Every other capability,
+    /// well-known or application-defined, needs subject resolution, the grant-family loader, both key
+    /// resolvers and every codec delegate: the members <see cref="Validate"/> requires of a composition
+    /// that declares nothing.
+    /// </para>
+    /// </remarks>
+    /// <param name="primaryIntegration">The composition's shared host operations; this integration itself.</param>
+    /// <param name="declaredCapabilities">The capabilities the composition declares it serves.</param>
+    /// <returns>The declared capabilities' missing dependencies, in no particular order; empty when none is missing.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// This integration is not the primary integration, or wiring every composition needs is absent or incoherent.
+    /// </exception>
+    public override IReadOnlyList<CompositionDependencyFailure> ValidateDeclaredCapabilities(
+        ServerIntegration primaryIntegration, ImmutableHashSet<CapabilityIdentifier> declaredCapabilities)
+    {
+        ArgumentNullException.ThrowIfNull(primaryIntegration);
+        ArgumentNullException.ThrowIfNull(declaredCapabilities);
+        ThrowUnlessPrimary(primaryIntegration);
+        IsValidated = false;
+        var missing = new List<string>();
+
+        CollectMissingHostSeams(missing);
+        ThrowForMissingDelegates(missing);
+        ValidateRequiredContainers();
+        ValidateCoherence();
+
+        List<CompositionDependencyFailure> failures = [];
+        foreach(CapabilityIdentifier capability in declaredCapabilities)
+        {
+            foreach(CompositionDependency dependency in CollectMissingDependencies(capability))
+            {
+                failures.Add(new CompositionDependencyFailure(capability, dependency));
+            }
+        }
+
+        IsValidated = failures.Count == 0;
+
+        return failures;
+    }
+
+
+    /// <summary>
+    /// Refuses an authorization integration registered as a secondary family: the authorization family
+    /// must be the primary integration so dispatch and protocol handlers use the same validated host seams.
+    /// </summary>
+    /// <param name="primaryIntegration">The composition's primary integration.</param>
+    /// <exception cref="InvalidOperationException">This integration is not the primary integration.</exception>
+    private void ThrowUnlessPrimary(ServerIntegration primaryIntegration)
+    {
         if(!ReferenceEquals(this, primaryIntegration))
         {
             throw new InvalidOperationException("AuthorizationServerIntegration must be EndpointServer.Integration and its registered authorization family together.");
         }
-
-        Validate();
     }
+
+
+    /// <summary>
+    /// Maps a declared capability to the dependencies it needs and returns those this integration lacks.
+    /// </summary>
+    /// <param name="capability">One declared capability.</param>
+    /// <returns>The capability's missing dependencies; empty when it needs none or all are wired.</returns>
+    private IEnumerable<CompositionDependency> CollectMissingDependencies(CapabilityIdentifier capability)
+    {
+        (CompositionDependency Dependency, bool IsWired)[] required = capability switch
+        {
+            _ when capability == WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint => [],
+            _ when capability == WellKnownCapabilityIdentifiers.OAuthJwksEndpoint =>
+                [(JwksBuilderDependency, Cryptography.BuildJwksDocumentAsync is not null)],
+            _ => DescribeProtocolDependencies()
+        };
+
+        return required.Where(entry => !entry.IsWired).Select(entry => entry.Dependency);
+    }
+
+
+    /// <summary>
+    /// Pairs each member a capability outside the narrowed set needs with whether it is wired: the
+    /// members <see cref="Validate"/> requires of a composition that declares nothing.
+    /// </summary>
+    /// <returns>Subject resolution, the grant-family loader, both key resolvers and every codec delegate.</returns>
+    private (CompositionDependency Dependency, bool IsWired)[] DescribeProtocolDependencies()
+    {
+
+        return
+        [
+            (SubjectResolverDependency, ResolveSubjectIdentifierAsync is not null),
+            (GrantFlowStatesLoaderDependency, LoadGrantFlowStatesAsync is not null),
+            (SigningKeyResolverDependency, Cryptography.SigningKeyResolver is not null),
+            (VerificationKeyResolverDependency, Cryptography.VerificationKeyResolver is not null),
+            (EncoderDependency, Codecs.Encoder is not null),
+            (DecoderDependency, Codecs.Decoder is not null),
+            (ComputeDigestDependency, Codecs.ComputeDigest is not null),
+            (JwtHeaderSerializerDependency, Codecs.JwtHeaderSerializer is not null),
+            (JwtPayloadSerializerDependency, Codecs.JwtPayloadSerializer is not null),
+            (JwtHeaderDeserializerDependency, Codecs.JwtHeaderDeserializer is not null),
+            (JwtPayloadDeserializerDependency, Codecs.JwtPayloadDeserializer is not null)
+        ];
+    }
+
+
+    /// <summary>The key-set builder the declared JWKS endpoint needs.</summary>
+    private static CompositionDependency JwksBuilderDependency { get; } =
+        new(nameof(Cryptography), nameof(AuthorizationServerCryptography.BuildJwksDocumentAsync));
+
+
+    /// <summary>Subject resolution, a member of the integration itself.</summary>
+    private static CompositionDependency SubjectResolverDependency { get; } =
+        new(string.Empty, nameof(ResolveSubjectIdentifierAsync));
+
+
+    /// <summary>The grant-family loader, a member of the integration itself.</summary>
+    private static CompositionDependency GrantFlowStatesLoaderDependency { get; } =
+        new(string.Empty, nameof(LoadGrantFlowStatesAsync));
+
+
+    /// <summary>The private signing key resolver of the cryptography group.</summary>
+    private static CompositionDependency SigningKeyResolverDependency { get; } =
+        new(nameof(Cryptography), nameof(AuthorizationServerCryptography.SigningKeyResolver));
+
+
+    /// <summary>The public verification key resolver of the cryptography group.</summary>
+    private static CompositionDependency VerificationKeyResolverDependency { get; } =
+        new(nameof(Cryptography), nameof(AuthorizationServerCryptography.VerificationKeyResolver));
+
+
+    /// <summary>The Base64url encoder of the codec group.</summary>
+    private static CompositionDependency EncoderDependency { get; } =
+        new(nameof(Codecs), nameof(AuthorizationServerCodecs.Encoder));
+
+
+    /// <summary>The Base64url decoder of the codec group.</summary>
+    private static CompositionDependency DecoderDependency { get; } =
+        new(nameof(Codecs), nameof(AuthorizationServerCodecs.Decoder));
+
+
+    /// <summary>The digest computation of the codec group.</summary>
+    private static CompositionDependency ComputeDigestDependency { get; } =
+        new(nameof(Codecs), nameof(AuthorizationServerCodecs.ComputeDigest));
+
+
+    /// <summary>The JWT header serializer of the codec group.</summary>
+    private static CompositionDependency JwtHeaderSerializerDependency { get; } =
+        new(nameof(Codecs), nameof(AuthorizationServerCodecs.JwtHeaderSerializer));
+
+
+    /// <summary>The JWT payload serializer of the codec group.</summary>
+    private static CompositionDependency JwtPayloadSerializerDependency { get; } =
+        new(nameof(Codecs), nameof(AuthorizationServerCodecs.JwtPayloadSerializer));
+
+
+    /// <summary>The JWT header deserializer of the codec group.</summary>
+    private static CompositionDependency JwtHeaderDeserializerDependency { get; } =
+        new(nameof(Codecs), nameof(AuthorizationServerCodecs.JwtHeaderDeserializer));
+
+
+    /// <summary>The JWT payload deserializer of the codec group.</summary>
+    private static CompositionDependency JwtPayloadDeserializerDependency { get; } =
+        new(nameof(Codecs), nameof(AuthorizationServerCodecs.JwtPayloadDeserializer));
 
 
     /// <summary>

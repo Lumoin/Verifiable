@@ -1165,8 +1165,15 @@ countingMetadataBuilder
     /// Incoherent candidates leave the accepted response byte-identical under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
     /// "An incoherent candidate is discarded and only its requester faults."
+    /// The subject-resolution, grant-loader and key-resolver rows name the members an undeclared
+    /// composition supplies under the same section:
+    /// "Without a declaration, every `AuthorizationServerIntegration` also supplies subject resolution, the grant-family loader, both key resolvers and every codec delegate."
     /// </summary>
     [TestMethod]
+    [DataRow("ResolveSubjectIdentifierAsync")]
+    [DataRow("LoadGrantFlowStatesAsync")]
+    [DataRow("SigningKeyResolver")]
+    [DataRow("VerificationKeyResolver")]
     [DataRow("ResolveEndpointUriAsync")]
     [DataRow("DeleteFlowStateAsync")]
     [DataRow("Cryptography")]
@@ -1202,6 +1209,10 @@ countingMetadataBuilder
         ServerConfiguration configuration = app.Server.Configuration;
         Action<AlterationCandidate> invalidate = missing switch
         {
+            "ResolveSubjectIdentifierAsync" => candidate => candidate.Family<AuthorizationServerIntegration>().ResolveSubjectIdentifierAsync = null,
+            "LoadGrantFlowStatesAsync" => candidate => candidate.Family<AuthorizationServerIntegration>().LoadGrantFlowStatesAsync = null,
+            "SigningKeyResolver" => candidate => candidate.Family<AuthorizationServerIntegration>().Cryptography.SigningKeyResolver = null,
+            "VerificationKeyResolver" => candidate => candidate.Family<AuthorizationServerIntegration>().Cryptography.VerificationKeyResolver = null,
             "ResolveEndpointUriAsync" => candidate => candidate.Integration.ResolveEndpointUriAsync = null,
             "DeleteFlowStateAsync" => candidate => candidate.Integration.DeleteFlowStateAsync = null,
             "Cryptography" => candidate => candidate.Family<AuthorizationServerIntegration>().Cryptography = null!,
@@ -1242,6 +1253,19 @@ countingMetadataBuilder
 
         Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
         Assert.Contains(missing, fault.Message, StringComparison.Ordinal);
+        string? exactMessage = missing switch
+        {
+            "ResolveSubjectIdentifierAsync" => "AuthorizationServerIntegration is missing required delegates: ResolveSubjectIdentifierAsync.",
+            "LoadGrantFlowStatesAsync" => "AuthorizationServerIntegration is missing required delegates: LoadGrantFlowStatesAsync.",
+            "SigningKeyResolver" => "AuthorizationServerCryptography is missing required delegates: SigningKeyResolver.",
+            "VerificationKeyResolver" => "AuthorizationServerCryptography is missing required delegates: VerificationKeyResolver.",
+            _ => null
+        };
+        if(exactMessage is not null)
+        {
+            Assert.AreEqual(exactMessage, fault.Message, "An undeclared composition keeps the named fault of its full dependency check.");
+        }
+
         Assert.AreSame(integration, app.Server.Integration);
         Assert.AreSame(configuration, app.Server.Configuration);
         Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration).ConfigureAwait(false));
@@ -1267,6 +1291,375 @@ countingMetadataBuilder
         await app.Server.RequestAlterationAsync(candidate =>
             candidate.Family<AuthorizationServerIntegration>().ContributeDiscoveryFieldsAsync = (_, _, _) => ValueTask.FromResult(Marker("accepted")), deadline.Token).ConfigureAwait(false);
         Assert.AreEqual("accepted", ReadMarker(await ReadDiscoveryAsync(app, keys.Registration).ConfigureAwait(false)));
+    }
+
+
+    /// <summary>
+    /// A composition declaring only discovery validates without the protocol dependencies and serves
+    /// only its metadata under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate."
+    /// and "Dispatch builds the endpoint chain only from candidates whose capability the declaration names, so no request reaches a handler whose dependencies validation did not check."
+    /// The served document keeps the member
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see> defines as
+    /// "REQUIRED.  The authorization server's issuer identifier".
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredDiscoveryOnlyCompositionServesMetadataAndNothingElseAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri,
+            Oid4VpCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
+
+        //The host's own per-grant ordering gate hashes a presented code with the codec encoder before
+        //dispatch; a composition serving no grant orders none, so the host runs without that gate.
+        app.Host("default").IsOrderingRequestsPerGrant = false;
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string segment = keys.Registration.TenantId;
+        using JsonDocument before = JsonDocument.Parse(await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+        Assert.IsTrue(before.RootElement.TryGetProperty("token_endpoint", out _), "The undeclared composition advertises its token endpoint.");
+        Assert.IsTrue(before.RootElement.TryGetProperty("jwks_uri", out _), "The undeclared composition advertises its key set.");
+        await app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with { DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint] };
+            AuthorizationServerIntegration family = candidate.Family<AuthorizationServerIntegration>();
+            family.Cryptography = new AuthorizationServerCryptography();
+            family.Codecs = new AuthorizationServerCodecs();
+            family.ResolveSubjectIdentifierAsync = null;
+            family.LoadGrantFlowStatesAsync = null;
+        }, deadline.Token).ConfigureAwait(false);
+        Assert.IsTrue(app.Server.IsValidated);
+        using JsonDocument after = JsonDocument.Parse(await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+        Assert.AreEqual(before.RootElement.GetProperty("issuer").GetString(), after.RootElement.GetProperty("issuer").GetString());
+        Assert.IsFalse(after.RootElement.TryGetProperty("token_endpoint", out _), "An undeclared token endpoint is not advertised.");
+        Assert.IsFalse(after.RootElement.TryGetProperty("authorization_endpoint", out _), "An undeclared authorization endpoint is not advertised.");
+        Assert.IsFalse(after.RootElement.TryGetProperty("jwks_uri", out _), "An undeclared key set is not advertised.");
+        ServerHttpResponse jwks = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
+            WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(404, jwks.StatusCode, "An undeclared key set is not served.");
+        Assert.AreEqual(string.Empty, jwks.Body);
+        ServerHttpResponse token = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
+            WellKnownEndpointNames.AuthCodeToken, "POST",
+            new RequestFields { ["grant_type"] = "authorization_code", ["code"] = "unknown-code" }, [], deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(404, token.StatusCode, "An undeclared token endpoint never reaches a handler whose dependencies were not validated.");
+        Assert.AreEqual(string.Empty, token.Body);
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "A declared composition answers every request without a host fault.");
+    }
+
+
+    /// <summary>
+    /// A composition declaring only the key set serves it with nothing but its builder under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate."
+    /// The key set is the document
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see> describes as
+    /// "The referenced document contains the signing key(s) the client uses to validate signatures from the authorization server."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredJwksOnlyCompositionServesTheKeySetWithoutKeyResolversAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string segment = keys.Registration.TenantId;
+        BuildJwksDocumentDelegate builder = app.Server.OAuth().Cryptography.BuildJwksDocumentAsync!;
+        await app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with { DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthJwksEndpoint] };
+            AuthorizationServerIntegration family = candidate.Family<AuthorizationServerIntegration>();
+            family.Cryptography = new AuthorizationServerCryptography { BuildJwksDocumentAsync = builder };
+            family.Codecs = new AuthorizationServerCodecs();
+        }, deadline.Token).ConfigureAwait(false);
+        ServerHttpResponse jwks = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
+            WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(200, jwks.StatusCode, jwks.Body);
+        Assert.Contains(keys.SigningKeyId.Value, ReadJwksKeyIds(jwks.Body), "The declared key set publishes the registration's signing key.");
+        using HttpResponseMessage discovery = await SendDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(404, (int)discovery.StatusCode, "Undeclared discovery is not served.");
+        Assert.AreEqual(string.Empty, await discovery.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false));
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "A declared composition answers every request without a host fault.");
+    }
+
+
+    /// <summary>
+    /// A declared key set without its builder is refused at construction and on alteration under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "A missing dependency of a declared capability is refused with `CompositionDependencyException`, whose failures name each declared capability and the dependency it lacks."
+    /// The advertised key-set location follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see>:
+    /// "This URL MUST use the "https" scheme."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredJwksWithoutItsBuilderIsRefusedAtConstructionAndOnAlterationAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        string segment = keys.Registration.TenantId;
+        string[] expected =
+        ["urn:verifiable:capability:oauth:jwks requires Cryptography.BuildJwksDocumentAsync"];
+        app.Server.ApplyConfiguration(app.Server.Configuration with
+        {
+            DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthJwksEndpoint, WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint]
+        });
+        AuthorizationServerCryptography cryptography = app.Server.OAuth().Cryptography;
+        BuildJwksDocumentDelegate builder = cryptography.BuildJwksDocumentAsync!;
+        cryptography.BuildJwksDocumentAsync = null;
+        CompositionDependencyException construction = Assert.ThrowsExactly<CompositionDependencyException>(app.Server.Validate);
+        Assert.AreSequenceEqual(expected, DescribeFailures(construction));
+        Assert.IsFalse(app.Server.IsValidated, "A refused construction is not admitted.");
+        cryptography.BuildJwksDocumentAsync = builder;
+        app.Server.Validate();
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        using JsonDocument discovery = JsonDocument.Parse(await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+        string jwksUri = discovery.RootElement.GetProperty("jwks_uri").GetString()!;
+        Assert.IsTrue(jwksUri.StartsWith("https://", StringComparison.Ordinal), jwksUri);
+        Uri listenerJwks = new(app.Host("default").HttpBaseAddress!, new Uri(jwksUri).AbsolutePath);
+        using(HttpResponseMessage served = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(app, listenerJwks, "alteration-subject", deadline.Token).ConfigureAwait(false))
+        {
+            string servedBody = await served.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false);
+            Assert.AreEqual(200, (int)served.StatusCode, servedBody);
+            Assert.Contains(keys.SigningKeyId.Value, ReadJwksKeyIds(servedBody), "The advertised key set publishes the registration's signing key.");
+        }
+
+        ServerConfiguration configuration = app.Server.Configuration;
+        CompositionDependencyException alteration = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() => app.Server.RequestAlterationAsync(candidate =>
+            candidate.Family<AuthorizationServerIntegration>().Cryptography.BuildJwksDocumentAsync = null, deadline.Token));
+        Assert.AreSequenceEqual(expected, DescribeFailures(alteration));
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreSame(configuration, app.Server.Configuration);
+        ServerHttpResponse retained = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
+            WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(200, retained.StatusCode, retained.Body);
+        Assert.Contains(keys.SigningKeyId.Value, ReadJwksKeyIds(retained.Body), "The accepted composition keeps serving its key set.");
+    }
+
+
+    /// <summary>
+    /// A declared grant capability reports every dependency it lacks as a typed failure under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "A missing dependency of a declared capability is refused with `CompositionDependencyException`, whose failures name each declared capability and the dependency it lacks."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredGrantCapabilityReportsEachMissingDependencyAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri,
+            Oid4VpCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        CompositionDependencyException fault = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() => app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with
+            {
+                DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint, WellKnownCapabilityIdentifiers.OAuthAuthorizationCode]
+            };
+            AuthorizationServerIntegration family = candidate.Family<AuthorizationServerIntegration>();
+            family.Cryptography.SigningKeyResolver = null;
+            family.LoadGrantFlowStatesAsync = null;
+        }, deadline.Token));
+        string[] expected =
+        [
+            "urn:verifiable:capability:oauth:authorization_code requires Cryptography.SigningKeyResolver",
+            "urn:verifiable:capability:oauth:authorization_code requires LoadGrantFlowStatesAsync"
+        ];
+        Assert.AreSequenceEqual(expected, DescribeFailures(fault));
+        Assert.Contains("urn:verifiable:capability:oauth:authorization_code requires LoadGrantFlowStatesAsync", fault.Message, StringComparison.Ordinal);
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// A declared capability outside the narrowed set needs the full protocol dependency set under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredUnknownCapabilityRequiresEveryProtocolDependencyAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        CompositionDependencyException fault = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() => app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with
+            {
+                DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint, CapabilityIdentifier.Create("urn:example:capability:application:custom_flow")]
+            };
+            AuthorizationServerIntegration family = candidate.Family<AuthorizationServerIntegration>();
+            family.Cryptography = new AuthorizationServerCryptography();
+            family.Codecs = new AuthorizationServerCodecs();
+            family.ResolveSubjectIdentifierAsync = null;
+            family.LoadGrantFlowStatesAsync = null;
+        }, deadline.Token));
+        string[] expected =
+        [
+            "urn:example:capability:application:custom_flow requires Codecs.ComputeDigest",
+            "urn:example:capability:application:custom_flow requires Codecs.Decoder",
+            "urn:example:capability:application:custom_flow requires Codecs.Encoder",
+            "urn:example:capability:application:custom_flow requires Codecs.JwtHeaderDeserializer",
+            "urn:example:capability:application:custom_flow requires Codecs.JwtHeaderSerializer",
+            "urn:example:capability:application:custom_flow requires Codecs.JwtPayloadDeserializer",
+            "urn:example:capability:application:custom_flow requires Codecs.JwtPayloadSerializer",
+            "urn:example:capability:application:custom_flow requires Cryptography.SigningKeyResolver",
+            "urn:example:capability:application:custom_flow requires Cryptography.VerificationKeyResolver",
+            "urn:example:capability:application:custom_flow requires LoadGrantFlowStatesAsync",
+            "urn:example:capability:application:custom_flow requires ResolveSubjectIdentifierAsync"
+        ];
+        Assert.AreSequenceEqual(expected, DescribeFailures(fault));
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// Two declared capabilities lacking dependencies at once are each named with what they lack under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "A missing dependency of a declared capability is refused with `CompositionDependencyException`, whose failures name each declared capability and the dependency it lacks."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredCapabilitiesFailingTogetherAreEachNamedWithTheirDependenciesAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri,
+            Oid4VpCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        CompositionDependencyException fault = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() => app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with
+            {
+                DeclaredCapabilities =
+                [
+                    WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
+                    WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                    WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint
+                ]
+            };
+            AuthorizationServerIntegration family = candidate.Family<AuthorizationServerIntegration>();
+            family.Cryptography.BuildJwksDocumentAsync = null;
+            family.Cryptography.VerificationKeyResolver = null;
+            family.LoadGrantFlowStatesAsync = null;
+        }, deadline.Token));
+
+        //Ordered by capability URN before dependency path: the key set's dependency sorts first
+        //by path, so a path-first order would list it before the grant capability's two.
+        string[] expected =
+        [
+            "urn:verifiable:capability:oauth:authorization_code requires Cryptography.VerificationKeyResolver",
+            "urn:verifiable:capability:oauth:authorization_code requires LoadGrantFlowStatesAsync",
+            "urn:verifiable:capability:oauth:jwks requires Cryptography.BuildJwksDocumentAsync"
+        ];
+        Assert.AreSequenceEqual(expected, DescribeFailures(fault));
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// A declaration never switches off the checks every composition passes under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "Validation checks required host seams, including `DeleteFlowStateAsync` and `ResolveEndpointUriAsync`, the primary/family identity, declaration coherence and wired feature dependencies whatever the composition declares."
+    /// and "Every `AuthorizationServerIntegration` supplies the `Cryptography`, `Codecs`, `MemoryPool`, `Timings`, `TokenProducers`, `ClientAuthenticationMethodsSupported` and `ClientAssertionSigningAlgorithmsSupported` containers."
+    /// </summary>
+    [TestMethod]
+    [DataRow("DeleteFlowStateAsync")]
+    [DataRow("ResolveEndpointUriAsync")]
+    [DataRow("registered authorization family")]
+    [DataRow("Cryptography")]
+    [DataRow("ClientAuthenticationMethodsSupported")]
+    [DataRow("AuthorizeTokenExchangeAsync")]
+    [DataRow("AuthorizationDetailTypes")]
+    public async Task DeclaredCompositionStillRequiresTheHostSeamsContainersAndCoherenceAsync(string missing)
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        Action<AlterationCandidate> invalidate = missing switch
+        {
+            "DeleteFlowStateAsync" => candidate => candidate.Integration.DeleteFlowStateAsync = null,
+            "ResolveEndpointUriAsync" => candidate => candidate.Integration.ResolveEndpointUriAsync = null,
+            "registered authorization family" => candidate => candidate.AddIntegration<ServerIntegration>((AuthorizationServerIntegration)candidate.Family<AuthorizationServerIntegration>().CreateCandidateCopy()),
+            "Cryptography" => candidate => candidate.Family<AuthorizationServerIntegration>().Cryptography = null!,
+            "ClientAuthenticationMethodsSupported" => candidate => candidate.Family<AuthorizationServerIntegration>().ClientAuthenticationMethodsSupported = [],
+            "AuthorizeTokenExchangeAsync" => candidate => candidate.Family<AuthorizationServerIntegration>().AuthorizeTokenExchangeAsync = (_, _, _, _, _, _) => throw new InvalidOperationException("Uninvoked candidate operation."),
+            "AuthorizationDetailTypes" => candidate => candidate.Family<AuthorizationServerIntegration>().AuthorizationDetailTypes.Register(new AuthorizationDetailHandler { Type = "invalid", ValidateShape = null! }),
+            _ => throw new ArgumentOutOfRangeException(nameof(missing))
+        };
+        InvalidOperationException fault = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with { DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint] };
+            invalidate(candidate);
+        }, deadline.Token));
+        Assert.Contains(missing, fault.Message, StringComparison.Ordinal);
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// A declaration never replaces the endpoint builders a serving composition needs under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "An empty builder set is refused unless `ServerConfiguration.IsMaintenanceMode` is explicitly true."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredCompositionStillRequiresEndpointBuildersOrMaintenanceModeAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        InvalidOperationException fault = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => app.Server.RequestAlterationAsync(candidate =>
+            candidate.Configuration = ServerConfiguration.Empty with { DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint] }, deadline.Token));
+        Assert.Contains(nameof(ServerConfiguration.EndpointBuilders), fault.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(ServerConfiguration.IsMaintenanceMode), fault.Message, StringComparison.Ordinal);
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// An empty capability declaration serves nothing and needs explicit maintenance mode under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "An empty declaration is refused unless `IsMaintenanceMode` is explicitly true, and then every request receives the ordinary unmatched-endpoint response."
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task EmptyCapabilityDeclarationRequiresMaintenanceModeAsync(bool isMaintenanceMode)
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        Task alteration = app.Server.RequestAlterationAsync(candidate =>
+            candidate.Configuration = candidate.Configuration with { DeclaredCapabilities = [], IsMaintenanceMode = isMaintenanceMode }, deadline.Token);
+        if(!isMaintenanceMode)
+        {
+            InvalidOperationException fault = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => alteration);
+            Assert.Contains(nameof(ServerConfiguration.DeclaredCapabilities), fault.Message, StringComparison.Ordinal);
+            Assert.Contains(nameof(ServerConfiguration.IsMaintenanceMode), fault.Message, StringComparison.Ordinal);
+            Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+            Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+
+            return;
+        }
+
+        await alteration.ConfigureAwait(false);
+        using HttpResponseMessage discovery = await SendDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(404, (int)discovery.StatusCode, "A maintenance composition declaring nothing answers with the ordinary unmatched-endpoint response.");
+        Assert.AreEqual(string.Empty, await discovery.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false));
     }
 
 
@@ -4077,6 +4470,30 @@ countingMetadataBuilder
         using JsonDocument document = JsonDocument.Parse(body);
 
         return document.RootElement.GetProperty("wiring_marker").GetString()!;
+    }
+
+
+    /// <summary>Reads every published key identifier from a key-set response body obtained over the listener.</summary>
+    /// <param name="body">The JWK Set JSON body.</param>
+    private static string[] ReadJwksKeyIds(string body)
+    {
+        using JsonDocument document = JsonDocument.Parse(body);
+
+        return [.. document.RootElement.GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray()
+            .Where(jwk => jwk.TryGetProperty(WellKnownJwkMemberNames.Kid, out _))
+            .Select(jwk => jwk.GetProperty(WellKnownJwkMemberNames.Kid).GetString()!)];
+    }
+
+
+    /// <summary>
+    /// Renders each typed refusal failure as its capability URN and the member path it requires, in
+    /// the order the refusal reports them.
+    /// </summary>
+    /// <param name="refusal">The capability-scoped validation refusal.</param>
+    private static string[] DescribeFailures(CompositionDependencyException refusal)
+    {
+
+        return [.. refusal.Failures.Select(failure => $"{failure.Capability.Urn} requires {failure.Dependency}")];
     }
 
 

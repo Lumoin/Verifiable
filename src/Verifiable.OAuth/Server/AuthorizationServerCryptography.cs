@@ -20,7 +20,8 @@ namespace Verifiable.OAuth.Server;
 public sealed class AuthorizationServerCryptography: WiringComponent
 {
     /// <summary>
-    /// Resolves a private signing key by identifier. Required.
+    /// Resolves a private signing key by identifier. Required when the composition declares no
+    /// capabilities, or declares one other than discovery and the key set.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws
@@ -70,7 +71,8 @@ public sealed class AuthorizationServerCryptography: WiringComponent
 
 
     /// <summary>
-    /// Resolves a public verification key by identifier. Required.
+    /// Resolves a public verification key by identifier. Required when the composition declares no
+    /// capabilities, or declares one other than discovery and the key set; discovery reads it only when present.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws
@@ -132,7 +134,9 @@ public sealed class AuthorizationServerCryptography: WiringComponent
     /// <summary>
     /// Builds the <see cref="Verifiable.JCose.JwksDocument"/> to serve at the JWKS endpoint.
     /// Required when <see cref="WellKnownCapabilityIdentifiers.OAuthJwksEndpoint"/> is enabled
-    /// for any registration, otherwise optional.
+    /// for any registration, otherwise optional. Validation requires it when the composition's
+    /// <see cref="ServerConfiguration.DeclaredCapabilities"/> names the key set; without a declaration a
+    /// request to the key set without it receives a server error.
     /// </summary>
     /// <remarks>
     /// <para>

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
 
@@ -488,6 +489,49 @@ public class ServerIntegration: WiringComponent
     public virtual void ValidateFamily(ServerIntegration primaryIntegration)
     {
         ArgumentNullException.ThrowIfNull(primaryIntegration);
+    }
+
+
+    /// <summary>
+    /// Validates this integration for a composition that declares its capabilities through
+    /// <see cref="ServerConfiguration.DeclaredCapabilities"/>, returning each declared capability's
+    /// missing dependency instead of throwing for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The dispatch host calls this in place of <see cref="Validate"/> for the primary integration and
+    /// <see cref="ValidateFamily"/> for every secondary family when the composition declares its
+    /// capabilities. Missing or incoherent wiring every composition needs still throws the named
+    /// <see cref="InvalidOperationException"/>; only a dependency the declaration makes necessary is
+    /// reported as a <see cref="CompositionDependencyFailure"/>, and the host refuses the composition with
+    /// every reported failure together in a <see cref="CompositionDependencyException"/>.
+    /// </para>
+    /// <para>
+    /// This default runs the full check (<see cref="Validate"/> for the primary integration,
+    /// <see cref="ValidateFamily"/> for a secondary family) and reports no failures, so a family that
+    /// does not scope its dependencies by capability validates as it does without a declaration. A
+    /// family that scopes them overrides this method.
+    /// </para>
+    /// </remarks>
+    /// <param name="primaryIntegration">The composition's shared host operations.</param>
+    /// <param name="declaredCapabilities">The capabilities the composition declares it serves.</param>
+    /// <returns>The declared capabilities' missing dependencies, in no particular order; empty when none is missing.</returns>
+    /// <exception cref="InvalidOperationException">Wiring every composition needs is absent or incoherent.</exception>
+    public virtual IReadOnlyList<CompositionDependencyFailure> ValidateDeclaredCapabilities(
+        ServerIntegration primaryIntegration, ImmutableHashSet<CapabilityIdentifier> declaredCapabilities)
+    {
+        ArgumentNullException.ThrowIfNull(primaryIntegration);
+        ArgumentNullException.ThrowIfNull(declaredCapabilities);
+        if(ReferenceEquals(this, primaryIntegration))
+        {
+            Validate();
+        }
+        else
+        {
+            ValidateFamily(primaryIntegration);
+        }
+
+        return [];
     }
 
 

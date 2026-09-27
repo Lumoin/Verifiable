@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -245,7 +246,10 @@ public sealed class EndpointServer: IDisposable
     /// Checks the complete current composition for fail-fast hosting. Admission requires this
     /// explicit check or a successful alteration; dispatch performs no lazy validation.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Required wiring is absent or incoherent, or an alteration window owns admission.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Required wiring is absent or incoherent, or an alteration window owns admission. A declared
+    /// capability lacking a dependency raises the derived <see cref="CompositionDependencyException"/>.
+    /// </exception>
     /// <exception cref="ObjectDisposedException">This server or its serving owner has been disposed.</exception>
     public void Validate()
     {
@@ -275,7 +279,15 @@ public sealed class EndpointServer: IDisposable
 
 
     /// <summary>Validates the primary/family relationship, nested groups and configuration policy.</summary>
+    /// <remarks>
+    /// Without <see cref="ServerConfiguration.DeclaredCapabilities"/> every family runs its full check.
+    /// With a declaration every family runs <see cref="ServerIntegration.ValidateDeclaredCapabilities"/>,
+    /// an empty declaration needs explicit maintenance mode, and the declared capabilities' missing
+    /// dependencies are refused together, ordered by capability URN and then dependency path, after every
+    /// other check has passed.
+    /// </remarks>
     /// <param name="onValidated">Updates the serving owner while all composition locks remain held.</param>
+    /// <exception cref="CompositionDependencyException">A declared capability lacks a dependency.</exception>
     private void ValidateComposition(Action? onValidated = null)
     {
         WiringComponent.WithComponentLocks([InitialIntegration, .. Integrations.Values], () =>
@@ -285,8 +297,18 @@ public sealed class EndpointServer: IDisposable
                 throw new InvalidOperationException("EndpointServer requires TimeProvider.");
             }
 
+            ImmutableHashSet<CapabilityIdentifier>? declaredCapabilities = InitialConfiguration?.DeclaredCapabilities;
+            List<CompositionDependencyFailure> failures = [];
             InitialIntegration.Attach(this, InvalidateValidation);
-            InitialIntegration.Validate();
+            if(declaredCapabilities is null)
+            {
+                InitialIntegration.Validate();
+            }
+            else
+            {
+                failures.AddRange(InitialIntegration.ValidateDeclaredCapabilities(InitialIntegration, declaredCapabilities));
+            }
+
             if(InitialIntegration.GetType() != typeof(ServerIntegration)
                 && (!Integrations.TryGetValue(InitialIntegration.GetType(), out ServerIntegration? family)
                     || !ReferenceEquals(InitialIntegration, family)))
@@ -299,7 +321,14 @@ public sealed class EndpointServer: IDisposable
                 integration.Attach(this, InvalidateValidation);
                 if(!ReferenceEquals(integration, InitialIntegration))
                 {
-                    integration.ValidateFamily(InitialIntegration);
+                    if(declaredCapabilities is null)
+                    {
+                        integration.ValidateFamily(InitialIntegration);
+                    }
+                    else
+                    {
+                        failures.AddRange(integration.ValidateDeclaredCapabilities(InitialIntegration, declaredCapabilities));
+                    }
                 }
             }
 
@@ -309,7 +338,18 @@ public sealed class EndpointServer: IDisposable
                 throw new InvalidOperationException("EndpointServer requires ServerConfiguration.EndpointBuilders or explicit IsMaintenanceMode.");
             }
 
+            if(declaredCapabilities is { Count: 0 } && !InitialConfiguration.IsMaintenanceMode)
+            {
+                throw new InvalidOperationException("EndpointServer requires ServerConfiguration.DeclaredCapabilities to name a capability or explicit IsMaintenanceMode.");
+            }
+
             InitialConfiguration.ValidatePolicy();
+            if(failures.Count > 0)
+            {
+                throw new CompositionDependencyException(failures
+                    .OrderBy(failure => failure.Capability.Urn, StringComparer.Ordinal)
+                    .ThenBy(failure => failure.Dependency.ToString(), StringComparer.Ordinal));
+            }
 
             HasValidatedWiring = true;
             onValidated?.Invoke();
@@ -347,7 +387,10 @@ public sealed class EndpointServer: IDisposable
     /// together with <see cref="ServerConfiguration.DrainTimeout"/>; checked again before the callback
     /// and after it returns.
     /// </param>
-    /// <returns>Completion of publication, or the named candidate validation or drain-abandonment fault.</returns>
+    /// <returns>
+    /// Completion of publication, or the named candidate validation or drain-abandonment fault; a
+    /// candidate whose declared capability lacks a dependency faults with <see cref="CompositionDependencyException"/>.
+    /// </returns>
     /// <exception cref="ArgumentNullException">The callback is null; thrown synchronously.</exception>
     /// <exception cref="ObjectDisposedException">The serving owner is disposed; thrown synchronously.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The admission or drain policy is outside its permitted bounds; thrown synchronously.</exception>

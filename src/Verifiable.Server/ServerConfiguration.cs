@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 
 namespace Verifiable.Server;
@@ -18,10 +19,12 @@ namespace Verifiable.Server;
 /// around a reference to that set. Each protocol family carries its own family-scoped
 /// configuration (token producers, claim issuers, action executors, cryptography) on
 /// its family integration, registered through the host's integration registry — the
-/// neutral configuration carries nothing any single family owns.
+/// neutral configuration carries nothing any single family owns. The optional capability
+/// declaration is likewise an immutable set: it scopes validation and dispatch to the capabilities a
+/// composition serves without naming any family's wiring.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ServerConfiguration EndpointBuilders={EndpointBuilders.Count}")]
+[DebuggerDisplay("ServerConfiguration EndpointBuilders={EndpointBuilders.Count} DeclaredCapabilities={DeclaredCapabilities?.Count}")]
 public sealed record ServerConfiguration
 {
     /// <summary>
@@ -45,6 +48,30 @@ public sealed record ServerConfiguration
 
     /// <summary>Explicitly permits an empty endpoint set during a maintenance deployment.</summary>
     public bool IsMaintenanceMode { get; init; }
+
+
+    /// <summary>
+    /// The capabilities this composition serves, or <see langword="null"/> when the composition
+    /// declares nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without a declaration, validation requires every dependency a protocol family can need and
+    /// dispatch filters endpoint candidates by the per-request capability set alone. With a
+    /// declaration, validation requires only the dependencies of the declared capabilities, reports a
+    /// missing one as a <see cref="CompositionDependencyFailure"/> inside a
+    /// <see cref="CompositionDependencyException"/>, and dispatch builds the endpoint chain only from
+    /// candidates whose capability the declaration names, so no request reaches a handler whose
+    /// dependencies validation did not check.
+    /// </para>
+    /// <para>
+    /// An empty declaration is refused unless <see cref="IsMaintenanceMode"/> is explicitly true, and
+    /// then every request receives the ordinary unmatched-endpoint response. The declaration filters
+    /// endpoint candidates only: the per-request capability set a registration resolves and the
+    /// builders' own registration checks are unchanged by it.
+    /// </para>
+    /// </remarks>
+    public ImmutableHashSet<CapabilityIdentifier>? DeclaredCapabilities { get; init; }
 
 
     /// <summary>
