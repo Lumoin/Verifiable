@@ -2,7 +2,9 @@ namespace Verifiable.Vcalm;
 
 /// <summary>
 /// Byte-level JSON shape checks for the credential-template evaluation path: whether a JSON fragment is an object,
-/// decided from its first non-whitespace character without parsing the fragment into a value model.
+/// decided from its first non-whitespace character without parsing the fragment into a value model; and for the
+/// §3.3.3 <c>POST /challenges</c> body check: whether a body is exactly the empty JSON object, the one body besides
+/// none that endpoint accepts.
 /// <c>Verifiable.Vcalm</c> carries no JSON parser (<c>System.Text.Json</c> is banned in this library, the serialization
 /// firewall); a fact about a member of an object, such as whether it carries one of a given name, is read through the
 /// JSON leaf's <see cref="FindVcalmJsonMemberDelegate"/>, which decodes member names as a parser does.
@@ -31,6 +33,52 @@ public static class VcalmJsonShape
         }
 
         return false;
+    }
+
+
+    /// <summary>
+    /// Whether <paramref name="json"/> is exactly the empty JSON object: optional RFC 8259 §2 whitespace, <c>{</c>
+    /// (U+007B), optional whitespace, <c>}</c> (U+007D), optional whitespace, and nothing else. The
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM §3.3.3</see> <c>POST /challenges</c>
+    /// endpoint creates a challenge from an empty body, and the empty object is the empty body an API whose entity
+    /// bodies MUST be serialized as JSON can carry; any other bytes (a member, an array, a scalar, text that is not JSON)
+    /// are refused. The bytes are scanned once, with no parser and no allocation.
+    /// </summary>
+    /// <param name="json">The UTF-8 bytes to inspect.</param>
+    /// <returns><see langword="true"/> when the bytes are the empty JSON object, surrounding whitespace allowed.</returns>
+    public static bool IsEmptyObject(ReadOnlySpan<byte> json)
+    {
+        ReadOnlySpan<byte> remaining = SkipJsonWhitespace(json);
+        if(remaining.IsEmpty || remaining[0] != (byte)'{')
+        {
+            return false;
+        }
+
+        remaining = SkipJsonWhitespace(remaining[1..]);
+        if(remaining.IsEmpty || remaining[0] != (byte)'}')
+        {
+            return false;
+        }
+
+        return SkipJsonWhitespace(remaining[1..]).IsEmpty;
+    }
+
+
+    /// <summary>
+    /// The part of <paramref name="json"/> that follows its leading RFC 8259 §2 whitespace, the step
+    /// <see cref="IsEmptyObject(ReadOnlySpan{byte})"/> takes before and after each of its two structural characters.
+    /// </summary>
+    /// <param name="json">The UTF-8 bytes to trim.</param>
+    /// <returns>The bytes from the first non-whitespace byte on; empty when every byte is whitespace.</returns>
+    private static ReadOnlySpan<byte> SkipJsonWhitespace(ReadOnlySpan<byte> json)
+    {
+        int start = 0;
+        while(start < json.Length && IsJsonWhitespace(json[start]))
+        {
+            ++start;
+        }
+
+        return json[start..];
     }
 
 

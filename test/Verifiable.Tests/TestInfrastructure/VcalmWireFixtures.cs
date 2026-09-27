@@ -275,8 +275,59 @@ internal static class VcalmWireFixtures
     /// </param>
     /// <param name="cancellationToken">The test's own cancellation token.</param>
     /// <returns>The response status code, its <c>WWW-Authenticate</c> header value (or <see langword="null"/> when absent), and its body text.</returns>
-    internal static async Task<(int StatusCode, string? WwwAuthenticate, string Body)> SendWireAsync(
-        TestHostShell app, string method, string path, string? body, string? authorizationHeader, CancellationToken cancellationToken)
+    internal static Task<(int StatusCode, string? WwwAuthenticate, string Body)> SendWireAsync(
+        TestHostShell app, string method, string path, string? body, string? authorizationHeader, CancellationToken cancellationToken) =>
+        SendWireCoreAsync(app, method, path, body, "application/json", authorizationHeader, cancellationToken);
+
+
+    /// <summary>
+    /// Sends an HTTP request of <paramref name="method"/> to <paramref name="path"/> on the loopback HTTPS host of
+    /// <paramref name="app"/> over the real wire, starting the host when it is not yet listening, with the body text
+    /// <paramref name="body"/> labelled <paramref name="mediaType"/> — the primitive a test proves a body-shape or
+    /// media-type refusal through, since it can send a body the <c>application/json</c> helpers never would: a body
+    /// labelled with any media type, or a body carrying no <c>Content-Type</c> header at all.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The request body text, sent as UTF-8, or <see langword="null"/> to send no body.</param>
+    /// <param name="mediaType">
+    /// The media type the <c>Content-Type</c> header names, or <see langword="null"/> to send the body with no
+    /// <c>Content-Type</c> header.
+    /// </param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The response status code, its <c>WWW-Authenticate</c> header value (or <see langword="null"/> when absent), and its body text.</returns>
+    internal static Task<(int StatusCode, string? WwwAuthenticate, string Body)> SendBodyWireAsync(
+        TestHostShell app, string method, string path, string? body, string? mediaType, CancellationToken cancellationToken) =>
+        SendWireCoreAsync(app, method, path, body, mediaType, authorizationHeader: null, cancellationToken);
+
+
+    /// <summary>
+    /// The shared send of <see cref="SendWireAsync"/> and <see cref="SendBodyWireAsync"/>: one HTTP request over the
+    /// real wire to the loopback HTTPS host of <paramref name="app"/>, with an optional body, the media type its
+    /// <c>Content-Type</c> header names, and an optional <c>Authorization</c> header value.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The request body text, sent as UTF-8, or <see langword="null"/> to send no body.</param>
+    /// <param name="mediaType">
+    /// The media type the <c>Content-Type</c> header names, or <see langword="null"/> to send the body with no
+    /// <c>Content-Type</c> header: the content's own default header is cleared, so none reaches the wire.
+    /// </param>
+    /// <param name="authorizationHeader">
+    /// The <c>Authorization</c> header value to send, or <see langword="null"/> to send no <c>Authorization</c> header.
+    /// </param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The response status code, its <c>WWW-Authenticate</c> header value (or <see langword="null"/> when absent), and its body text.</returns>
+    private static async Task<(int StatusCode, string? WwwAuthenticate, string Body)> SendWireCoreAsync(
+        TestHostShell app,
+        string method,
+        string path,
+        string? body,
+        string? mediaType,
+        string? authorizationHeader,
+        CancellationToken cancellationToken)
     {
         await app.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -285,7 +336,14 @@ internal static class VcalmWireFixtures
         using HttpRequestMessage request = new(new HttpMethod(method), url);
         if(body is not null)
         {
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            request.Content = new StringContent(body, Encoding.UTF8, mediaType);
+
+            //A StringContent labels itself text/plain when given no media type; clearing the header sends the body
+            //with no Content-Type at all.
+            if(mediaType is null)
+            {
+                request.Content.Headers.ContentType = null;
+            }
         }
 
         if(authorizationHeader is not null)

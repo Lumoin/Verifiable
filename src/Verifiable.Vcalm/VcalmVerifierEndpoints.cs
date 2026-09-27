@@ -213,12 +213,17 @@ public static class VcalmVerifierEndpoints
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.Vcalm();
 
-                //§3.3.3 takes an empty body. A body that is PRESENT MUST still be within the configured
-                //§2.4 / B.4 payload cap (else 413) and be application/json (else 400) — the same DoS and
-                //content-type gates every other body-bearing endpoint enforces via CheckRequestBoundary;
-                //an empty body carries no content type and is the expected shape.
+                //§3.3.3: "Passing an empty body to this endpoint creates and returns a challenge string in the
+                //response body." §2.4 Content Serialization: "All entity bodies in requests and responses sent to
+                //or received from the API endpoints defined by this specification MUST be serialized as JSON and
+                //include the Content-Type header with a media type value of application/json." So no body bytes
+                //mint a challenge, and present bytes pass, in order, the B.4 payload cap (else 413), the
+                //application/json media type (else 400) and the empty-object shape, the one empty body JSON can
+                //carry (else 400). The gate keys on the bytes, not on RequestBody.IsEmpty, which says only that no
+                //content type was declared: a body sent without a Content-Type header is refused like any other
+                //body that is not application/json.
                 IncomingRequest? req = context.IncomingRequest;
-                if(req is not null && !req.Body.IsEmpty)
+                if(req is not null && !req.Body.Bytes.IsEmpty)
                 {
                     if(req.Body.Bytes.Length > oauth.VcalmMaxRequestBytes)
                     {
@@ -232,6 +237,11 @@ public static class VcalmVerifierEndpoints
                     }
 
                     if(!IsJsonContentType(req.Body.ContentType))
+                    {
+                        return (null, MalformedRequest());
+                    }
+
+                    if(!VcalmJsonShape.IsEmptyObject(req.Body.Bytes.Span))
                     {
                         return (null, MalformedRequest());
                     }

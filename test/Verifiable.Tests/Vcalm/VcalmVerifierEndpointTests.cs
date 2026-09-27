@@ -4023,6 +4023,146 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM §3.3.3</see>: "Passing an empty body to this
+    /// endpoint creates and returns a challenge string in the response body." A request carrying no body mints a
+    /// challenge, and so does the empty JSON object, the empty body an API whose
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">Content Serialization</see> requires that "All
+    /// entity bodies in requests and responses sent to or received from the API endpoints defined by this specification
+    /// MUST be serialized as JSON and include the Content-Type header with a media type value of application/json." can
+    /// carry, JSON white space around it included: HTTP 200 with a non-empty <c>challenge</c> string, persisted as issued.
+    /// </summary>
+    /// <param name="body">The request body text, or <see langword="null"/> to send no body.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> when no body is sent.</param>
+    [TestMethod]
+    [DataRow(null, null, DisplayName = "no body")]
+    [DataRow("{}", "application/json", DisplayName = "{} as application/json")]
+    [DataRow("\t{ }\r\n", "application/json", DisplayName = "{} wrapped in JSON white space as application/json")]
+    public async Task ChallengeWithAnEmptyBodyOrAnEmptyObjectIsMinted(string? body, string? mediaType)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        ConcurrentQueue<string> persisted = new();
+        string segment = await RegisterVerifierAsync(app, persistChallenge: RecordPersistedChallenge(persisted)).ConfigureAwait(false);
+
+        (int statusCode, _, string responseBody) = await PostChallengeWireAsync(app, segment, body, mediaType).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, responseBody);
+        using JsonDocument response = JsonDocument.Parse(responseBody);
+        string? challenge = response.RootElement.GetProperty("challenge").GetString();
+        Assert.IsFalse(string.IsNullOrEmpty(challenge), "The challenge endpoint returns a challenge string.");
+        Assert.HasCount(1, persisted, "Exactly one challenge is minted and persisted as issued.");
+        Assert.IsTrue(persisted.TryPeek(out string? issued) && string.Equals(issued, challenge, StringComparison.Ordinal),
+            "The challenge persisted as issued is the one returned.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">Content Serialization</see>: "All entity
+    /// bodies in requests and responses sent to or received from the API endpoints defined by this specification MUST be
+    /// serialized as JSON and include the Content-Type header with a media type value of application/json."
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM §3.3.3</see> answers "Invalid or malformed
+    /// input" with HTTP 400. A body that is not JSON, though labelled <c>application/json</c>, and an empty JSON object
+    /// sent without the Content-Type header are each refused with HTTP 400 and the MALFORMED_VALUE_ERROR problem type,
+    /// and no challenge is minted.
+    /// </summary>
+    /// <param name="body">The request body text.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no Content-Type header.</param>
+    [TestMethod]
+    [DataRow("not-json", "application/json", DisplayName = "not-json as application/json")]
+    [DataRow("{", "application/json", DisplayName = "{ as application/json")]
+    [DataRow("{}", null, DisplayName = "{} with no Content-Type header")]
+    public async Task ChallengeBodyThatIsNotJsonYields400(string body, string? mediaType)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        ConcurrentQueue<string> persisted = new();
+        string segment = await RegisterVerifierAsync(app, persistChallenge: RecordPersistedChallenge(persisted)).ConfigureAwait(false);
+
+        (int statusCode, _, string responseBody) = await PostChallengeWireAsync(app, segment, body, mediaType).ConfigureAwait(false);
+
+        AssertChallengeRefusedAsMalformed(statusCode, responseBody, persisted);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM §3.3.3</see>: "Passing an empty body to this
+    /// endpoint creates and returns a challenge string in the response body."
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">Options</see>: "Implementations MUST throw an error if an
+    /// endpoint receives data, options, or option values that it does not understand or know how to process." A JSON body
+    /// carrying anything but the empty object (a member, an array, <c>null</c>, a string) is data this endpoint does not
+    /// process: HTTP 400, "Invalid or malformed input", with the MALFORMED_VALUE_ERROR problem type, and no challenge is
+    /// minted.
+    /// </summary>
+    /// <param name="body">The request body JSON text, sent as <c>application/json</c>.</param>
+    [TestMethod]
+    [DataRow("{\"x\":1}")]
+    [DataRow("{\"challenge\":\"c-1\"}")]
+    [DataRow("[]")]
+    [DataRow("null")]
+    [DataRow("\"x\"")]
+    public async Task ChallengeBodyCarryingDataYields400(string body)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        ConcurrentQueue<string> persisted = new();
+        string segment = await RegisterVerifierAsync(app, persistChallenge: RecordPersistedChallenge(persisted)).ConfigureAwait(false);
+
+        (int statusCode, _, string responseBody) = await PostChallengeWireAsync(app, segment, body, "application/json").ConfigureAwait(false);
+
+        AssertChallengeRefusedAsMalformed(statusCode, responseBody, persisted);
+    }
+
+
+    /// <summary>
+    /// POSTs <paramref name="body"/> labelled <paramref name="mediaType"/> over the real wire to the verifier tenant's
+    /// §3.3.3 <c>/challenges</c> endpoint through <see cref="VcalmWireFixtures.SendBodyWireAsync"/>, bounded by this
+    /// test's cancellation token.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="segment">The verifier tenant segment.</param>
+    /// <param name="body">The request body text, or <see langword="null"/> to send no body.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no Content-Type header.</param>
+    /// <returns>The response status code, its <c>WWW-Authenticate</c> header value, and its body text.</returns>
+    private Task<(int StatusCode, string? WwwAuthenticate, string Body)> PostChallengeWireAsync(
+        TestHostShell app, string segment, string? body, string? mediaType) =>
+        VcalmWireFixtures.SendBodyWireAsync(
+            app,
+            "POST",
+            TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateChallenge, segment),
+            body,
+            mediaType,
+            TestContext.CancellationToken);
+
+
+    /// <summary>
+    /// A <see cref="PersistVcalmChallengeDelegate"/> recording every challenge the endpoint persists as issued into
+    /// <paramref name="persisted"/>, so a test can count the challenges a request minted.
+    /// </summary>
+    /// <param name="persisted">Receives each persisted challenge, in order.</param>
+    /// <returns>The recording delegate.</returns>
+    private static PersistVcalmChallengeDelegate RecordPersistedChallenge(ConcurrentQueue<string> persisted) =>
+        (challenge, _, _) =>
+        {
+            persisted.Enqueue(challenge);
+
+            return ValueTask.CompletedTask;
+        };
+
+
+    /// <summary>
+    /// Asserts a §3.3.3 refusal: HTTP 400 whose ProblemDetails <c>type</c> is the literal MALFORMED_VALUE_ERROR URL, with
+    /// no challenge persisted as issued.
+    /// </summary>
+    /// <param name="statusCode">The response status code.</param>
+    /// <param name="responseBody">The response body text.</param>
+    /// <param name="persisted">The challenges the endpoint persisted as issued.</param>
+    private static void AssertChallengeRefusedAsMalformed(int statusCode, string responseBody, ConcurrentQueue<string> persisted)
+    {
+        Assert.AreEqual(400, statusCode, responseBody);
+        using JsonDocument refused = JsonDocument.Parse(responseBody);
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR", refused.RootElement.GetProperty("type").GetString());
+        Assert.IsEmpty(persisted, "A refused request mints no challenge.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "If an
     /// error is included, the verified property of the VerificationResponse object MUST be set to false".
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-presentation">VCALM §3.3.2</see> gives the presentation
