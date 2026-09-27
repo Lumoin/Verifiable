@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
@@ -582,6 +583,221 @@ internal sealed class EndSessionLogoutTests
         Assert.AreEqual(SubjectId, delivered.Subject);
         Assert.AreEqual("session-BC", delivered.SessionId,
             "The verified sub/sid must reach the back-channel deliver seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 §2</see>: "When an id_token_hint parameter is present, the OP MUST validate that it
+    /// was the issuer of the ID Token." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "If more
+    /// than one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST
+    /// be written such that they are mutually exclusive, rejecting JWTs of the wrong kind." A hint
+    /// carrying an ID Token's claims and signed under the very key the registration lists for ID
+    /// Tokens, but explicitly typed as another kind of JWT this issuer produces, is not an ID Token:
+    /// the end-session request over the wire is refused with 400 <c>invalid_request</c> and the session
+    /// stays live. The rows are an access token's, a logout token's and an ID-JAG's <c>typ</c>.
+    /// </summary>
+    /// <param name="type">The explicit <c>typ</c> the hint's protected header carries.</param>
+    [TestMethod]
+    [DataRow("at+jwt")]
+    [DataRow("logout+jwt")]
+    [DataRow("oauth-id-jag+jwt")]
+    public async Task EndSessionRefusesAHintThatIsNotAnIdTokenAsync(string type)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-T").ConfigureAwait(false);
+        string hint = await SignHintAsync(host, idToken, material.SigningKeyId, type).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "t1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertHintRefused(response, body);
+        Assert.IsEmpty(terminated, "A hint that is not an ID Token must not end the session.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 §2</see>: "id_token_hint RECOMMENDED. ID Token previously issued by the OP to the RP
+    /// passed to the Logout Endpoint as a hint about the End-User's current authenticated session with
+    /// the Client." An ID Token this server issued, whose header carries no <c>typ</c> or the plain
+    /// <c>JWT</c> an ID Token header carries, signed under the registration's ID Token key, is accepted
+    /// over the wire: the end-session request redirects to the registered post-logout URI with the
+    /// <c>state</c> and ends the session.
+    /// </summary>
+    /// <param name="isTypedJwt">Whether the hint's header carries <c>typ</c> <c>JWT</c> (otherwise no <c>typ</c> at all).</param>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task EndSessionAcceptsAnUntypedOrJwtTypedHintAsync(bool isTypedJwt)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-U").ConfigureAwait(false);
+        string hint = await SignHintAsync(host, idToken, material.SigningKeyId, isTypedJwt ? "JWT" : null).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "u1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Found, response.StatusCode, body);
+        Assert.AreEqual("https://client.example.com/post-logout?state=u1", response.Headers.Location?.OriginalString);
+        Assert.HasCount(1, terminated, "An ID Token hint ends the session exactly once.");
+        Assert.AreEqual(SubjectId, terminated[0]);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 §2</see>: "When an id_token_hint parameter is present, the OP MUST validate that it
+    /// was the issuer of the ID Token." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
+    /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
+    /// fail to validate other kinds of JWTs." A hint carrying this registration's ID Token claims and
+    /// typed <c>JWT</c>, but signed under a key the registration does not list for ID Tokens (another
+    /// registration's signing key on the same server, which the server can resolve by its <c>kid</c>),
+    /// is refused over the wire with 400 <c>invalid_request</c> and the session stays live.
+    /// </summary>
+    [TestMethod]
+    public async Task EndSessionRefusesAHintSignedUnderAKeyNotListedForIdTokensAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+        using VerifierKeyMaterial otherMaterial = await host.RegisterDpopClientAsync(
+            OtherClientId, OtherClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-K").ConfigureAwait(false);
+        string hint = await SignHintAsync(host, idToken, otherMaterial.SigningKeyId, "JWT").ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "k1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertHintRefused(response, body);
+        Assert.IsEmpty(terminated, "A hint signed under a key not listed for ID Tokens must not end the session.");
+    }
+
+
+    /// <summary>The client identifier of the second registration whose signing key the foreign-key hint borrows.</summary>
+    private const string OtherClientId = "https://other.client.example.com";
+
+    /// <summary>The base URI of the second registration.</summary>
+    private static Uri OtherClientBaseUri { get; } = new("https://other.client.example.com");
+
+
+    /// <summary>
+    /// Wires the application's terminate seam to record each ended session's subject, so a test can
+    /// tell a live session (nothing recorded) from an ended one.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <returns>The list the seam appends each ended session's subject to.</returns>
+    private static async Task<List<string>> WireTerminateSeamAsync(TestHostShell host)
+    {
+        List<string> terminated = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.TerminateSessionAsync = (sub, _, _, _, _) =>
+            {
+                terminated.Add(sub);
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        return terminated;
+    }
+
+
+    /// <summary>
+    /// Asserts the end-session refusal of a hint that is not an ID Token this server issued: 400, no
+    /// redirect, and the fixed <c>invalid_request</c> body.
+    /// </summary>
+    /// <param name="response">The wire response.</param>
+    /// <param name="body">The response body text.</param>
+    private static void AssertHintRefused(HttpResponseMessage response, string body)
+    {
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "A refused hint must not redirect.");
+
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "id_token_hint is not an ID Token issued by this server.",
+            document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// Rebuilds <paramref name="idToken"/> with a protected header of the token's <c>alg</c>, the
+    /// given <c>typ</c> (none when <paramref name="type"/> is <see langword="null"/>) and a <c>kid</c>
+    /// naming <paramref name="keyId"/>, the payload segment unchanged, and signs it with the private
+    /// half the host holds for that key, so the hint carries a real ID Token's claims and differs only
+    /// in its header and in which key signed it.
+    /// </summary>
+    /// <param name="host">The host whose signing-key store holds the key's private half.</param>
+    /// <param name="idToken">The ID Token the server issued.</param>
+    /// <param name="keyId">The key the hint names and is signed under.</param>
+    /// <param name="type">The <c>typ</c> header value, or <see langword="null"/> for none.</param>
+    /// <returns>The re-signed compact JWS.</returns>
+    private static async Task<string> SignHintAsync(TestHostShell host, string idToken, KeyId keyId, string? type)
+    {
+        string[] parts = idToken.Split('.');
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
+        using JsonDocument headerDocument = JsonDocument.Parse(headerOwner.Memory);
+        string algorithm = headerDocument.RootElement.GetProperty("alg").GetString()!;
+
+        string typeMember = type is null ? string.Empty : $",\"typ\":\"{type}\"";
+        string headerJson = $"{{\"alg\":\"{algorithm}\"{typeMember},\"kid\":\"{keyId.Value}\"}}";
+        string headerSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+
+        PrivateKeyMemory signingKey = host.Host("default").SigningKeys[keyId];
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{parts[1]}");
+        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+
+        return $"{headerSegment}.{parts[1]}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+    }
+
+
+    /// <summary>
+    /// Sends the end-session GET over the host's loopback HTTPS listener with the hint, the registered
+    /// post-logout URI and <paramref name="state"/> in the query, through a client that does not follow
+    /// redirects, so the 302 and its <c>Location</c> are read as the server wrote them.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration whose end-session path is addressed.</param>
+    /// <param name="idTokenHint">The <c>id_token_hint</c> value.</param>
+    /// <param name="state">The <c>state</c> value.</param>
+    /// <returns>The wire response; the caller disposes it.</returns>
+    private async Task<HttpResponseMessage> EndSessionOverWireAsync(
+        TestHostShell host, VerifierKeyMaterial material, string idTokenHint, string state)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string query =
+            $"?{OAuthRequestParameterNames.IdTokenHint}={Uri.EscapeDataString(idTokenHint)}" +
+            $"&{OAuthRequestParameterNames.PostLogoutRedirectUri}={Uri.EscapeDataString(RegisteredPostLogout)}" +
+            $"&{OAuthRequestParameterNames.State}={Uri.EscapeDataString(state)}";
+        Uri endSessionUrl = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.EndSession, material.Registration.TenantId.Value) + query);
+
+        using HttpClient client = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        using HttpRequestMessage request = new(HttpMethod.Get, endSessionUrl);
+
+        return await client.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

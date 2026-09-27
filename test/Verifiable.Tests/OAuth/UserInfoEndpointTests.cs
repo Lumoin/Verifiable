@@ -1,13 +1,16 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -463,6 +466,195 @@ internal sealed class UserInfoEndpointTests
 
         Assert.AreEqual(401, response.StatusCode);
         Assert.Contains(OAuthErrors.InvalidToken, response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "If more
+    /// than one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST
+    /// be written such that they are mutually exclusive, rejecting JWTs of the wrong kind", and among
+    /// the strategies it names, "Use different keys for different kinds of JWTs. Then the keys used to
+    /// validate one kind of JWT will fail to validate other kinds of JWTs." An access token presented
+    /// at UserInfo over the wire whose header names a key the registration does not list for access
+    /// tokens, and which verifies under that key, is refused with 401 <c>invalid_token</c> and the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> challenge. The
+    /// rows are a key the registration lists for its client assertions and the access-token key of
+    /// another registration on the same server; both verify the signature, neither signs access tokens
+    /// for this registration.
+    /// </summary>
+    /// <param name="row">Which key the re-signed token names: <see cref="ClientAssertionKeyRow"/> or <see cref="OtherRegistrationKeyRow"/>.</param>
+    [TestMethod]
+    [DataRow(ClientAssertionKeyRow)]
+    [DataRow(OtherRegistrationKeyRow)]
+    public async Task UserInfoRefusesAnAccessTokenSignedUnderAKeyNotListedForAccessTokensAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        using VerifierKeyMaterial otherMaterial = await host.RegisterDpopClientAsync(
+            OtherClientId, OtherClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId)
+            .ConfigureAwait(false);
+
+        KeyId foreignKeyId = row switch
+        {
+            ClientAssertionKeyRow => await ListClientAssertionKeyAsync(host, material).ConfigureAwait(false),
+            _ => otherMaterial.SigningKeyId
+        };
+
+        string resignedAccessToken = await ResignUnderKeyAsync(host, accessToken, foreignKeyId).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await PostUserInfoOverWireAsync(host, material, resignedAccessToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues(WellKnownHttpHeaderNames.WwwAuthenticate, out IEnumerable<string>? challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        string challenge = challenges.Single();
+        Assert.IsTrue(challenge.StartsWith("Bearer ", StringComparison.Ordinal), challenge);
+        Assert.IsTrue(BearerTokenChallenge.TryParse(challenge, out BearerTokenChallengeParameters parameters), challenge);
+        Assert.AreEqual("invalid_token", parameters.Error, challenge);
+
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "Access token is not signed by a key this server issues access tokens with.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsFalse(document.RootElement.TryGetProperty("sub", out _), "A refused token reveals no subject.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys">OpenID Connect
+    /// Core 1.0 §10.1.1</see>: "The JWK Set document at the jwks_uri SHOULD retain recently
+    /// decommissioned signing keys for a reasonable period of time to facilitate a smooth transition."
+    /// An access token signed before its key was rotated out of signing, and still listed among the
+    /// registration's access-token keys as retiring, is served at UserInfo over the wire: the keys a
+    /// server issues access tokens with include those in rotation, not only the one currently signing.
+    /// </summary>
+    [TestMethod]
+    public async Task UserInfoServesATokenSignedUnderARetiringAccessTokenKeyAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId)
+            .ConfigureAwait(false);
+
+        KeyId newCurrentKeyId = host.AllocateSigningKey();
+        await host.UpdateSigningKeysAsync(material.Registration.TenantId.Value, new Dictionary<KeyUsageContext, SigningKeySet>
+        {
+            [KeyUsageContext.AccessTokenIssuance] = new SigningKeySet
+            {
+                Current = [newCurrentKeyId],
+                Retiring = [material.SigningKeyId]
+            },
+            [KeyUsageContext.IdTokenIssuance] = material.Registration.SigningKeys[KeyUsageContext.IdTokenIssuance]
+        }).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await PostUserInfoOverWireAsync(host, material, accessToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>The row of the key-listing test whose foreign key is one the registration lists for its client assertions.</summary>
+    private const string ClientAssertionKeyRow = "client-assertion-key";
+
+    /// <summary>The row of the key-listing test whose foreign key is another registration's access-token key.</summary>
+    private const string OtherRegistrationKeyRow = "other-registration-key";
+
+    /// <summary>The client identifier of the second registration whose signing key the foreign-key row borrows.</summary>
+    private const string OtherClientId = "https://other.userinfo.client.test";
+
+    /// <summary>The base URI of the second registration.</summary>
+    private static Uri OtherClientBaseUri { get; } = new("https://other.userinfo.client.test");
+
+
+    /// <summary>
+    /// Allocates a fresh signing key and lists it under the registration's
+    /// <see cref="KeyUsageContext.ClientAssertion"/> usage beside the access-token and ID Token sets
+    /// the registration already holds, so the server can resolve the key by its <c>kid</c> while the
+    /// registration does not list it for access tokens.
+    /// </summary>
+    /// <param name="host">The host holding the registration and its key stores.</param>
+    /// <param name="material">The registration to extend.</param>
+    /// <returns>The identifier of the key now listed for client assertions.</returns>
+    private static async Task<KeyId> ListClientAssertionKeyAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        KeyId assertionKeyId = host.AllocateSigningKey();
+        Dictionary<KeyUsageContext, SigningKeySet> signingKeys = new(material.Registration.SigningKeys)
+        {
+            [KeyUsageContext.ClientAssertion] = new SigningKeySet { Current = [assertionKeyId] }
+        };
+        await host.UpdateSigningKeysAsync(material.Registration.TenantId.Value, signingKeys).ConfigureAwait(false);
+
+        return assertionKeyId;
+    }
+
+
+    /// <summary>
+    /// Rebuilds <paramref name="accessToken"/> with a protected header naming <paramref name="keyId"/>
+    /// and keeping the token's <c>alg</c> and <c>typ</c>, the payload segment unchanged, and signs it
+    /// with the private half the host holds for that key, so the token verifies under the named key and
+    /// differs from the issued one only in which key signed it.
+    /// </summary>
+    /// <param name="host">The host whose signing-key store holds the key's private half.</param>
+    /// <param name="accessToken">The access token the server issued.</param>
+    /// <param name="keyId">The key the rebuilt token names and is signed under.</param>
+    /// <returns>The re-signed compact JWS.</returns>
+    private static async Task<string> ResignUnderKeyAsync(TestHostShell host, string accessToken, KeyId keyId)
+    {
+        string[] parts = accessToken.Split('.');
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
+        using JsonDocument headerDocument = JsonDocument.Parse(headerOwner.Memory);
+        string algorithm = headerDocument.RootElement.GetProperty("alg").GetString()!;
+        string type = headerDocument.RootElement.GetProperty("typ").GetString()!;
+
+        string headerJson = $"{{\"alg\":\"{algorithm}\",\"typ\":\"{type}\",\"kid\":\"{keyId.Value}\"}}";
+        string headerSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+
+        PrivateKeyMemory signingKey = host.Host("default").SigningKeys[keyId];
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{parts[1]}");
+        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+
+        return $"{headerSegment}.{parts[1]}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+    }
+
+
+    /// <summary>
+    /// POSTs to the registration's UserInfo endpoint over the host's loopback HTTPS listener with
+    /// <paramref name="accessToken"/> under the <c>Bearer</c> scheme, so the request, its
+    /// <c>Authorization</c> header and the response's headers cross the real transport.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration whose UserInfo path is addressed.</param>
+    /// <param name="accessToken">The access token presented.</param>
+    /// <returns>The wire response; the caller disposes it.</returns>
+    private async Task<HttpResponseMessage> PostUserInfoOverWireAsync(
+        TestHostShell host, VerifierKeyMaterial material, string accessToken)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri userInfoUrl = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, material.Registration.TenantId.Value));
+        using HttpRequestMessage request = new(HttpMethod.Post, userInfoUrl);
+        _ = request.Headers.TryAddWithoutValidation(
+            WellKnownHttpHeaderNames.Authorization, $"{WellKnownAuthenticationSchemes.Bearer} {accessToken}");
+
+        return await hosted.SharedHttpClient!.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

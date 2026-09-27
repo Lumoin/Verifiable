@@ -1,5 +1,6 @@
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
@@ -33,8 +34,8 @@ namespace Verifiable.OAuth.Logout;
 /// work for a session whose ID Token has already expired. (Hence this does not reuse
 /// <see cref="JwsAccessTokenValidator"/>, which rejects expired tokens.) In this
 /// per-tenant model <c>context.ClientRegistration</c> is the client, so the same
-/// record both verifies the hint (its signing key) and supplies the allowed post-logout
-/// redirect URIs.
+/// record both verifies the hint (the keys it lists for ID Token issuance) and supplies the
+/// allowed post-logout redirect URIs.
 /// </para>
 /// </remarks>
 public static class EndSessionEndpoints
@@ -196,11 +197,33 @@ public static class EndSessionEndpoints
 
 
     /// <summary>
-    /// Verifies the <c>id_token_hint</c> as an ID Token this AS issued — signature (via
-    /// the client's verification key) and <c>iss</c> — WITHOUT enforcing <c>exp</c>
+    /// Verifies the <c>id_token_hint</c> as an ID Token this AS issued — its kind, its signature
+    /// under the server's ID Token signing key, and <c>iss</c> — WITHOUT enforcing <c>exp</c>
     /// (RP-Initiated Logout §3 accepts an expired hint), and extracts <c>sub</c> (required)
     /// and <c>sid</c> (optional). Returns an error response when verification fails.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 §2</see>: "When an id_token_hint parameter is present, the OP MUST validate that it was
+    /// the issuer of the ID Token." The same issuer signs other kinds of JWT (access tokens, logout
+    /// tokens, ID-JAGs), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see> requires
+    /// "the validation rules for those JWTs MUST be written such that they are mutually exclusive,
+    /// rejecting JWTs of the wrong kind." Two rules make the hint an ID Token before any key is
+    /// resolved. Its <c>typ</c> is absent or <c>JWT</c>, the header the library's own ID Token carries
+    /// (<see cref="JwtHeaderExtensions"/>'s <c>ForIdToken</c>), so a hint explicitly typed as another
+    /// kind is refused. Its <c>kid</c> is one the registration lists for
+    /// <see cref="KeyUsageContext.IdTokenIssuance"/> (<see cref="IssuedKeyAdmission.IsListedFor"/>), so
+    /// a key the resolver holds for another purpose never verifies a hint.
+    /// </para>
+    /// <para>
+    /// The library signs an ID-JAG under the same <see cref="KeyUsageContext.IdTokenIssuance"/> key it
+    /// signs ID Tokens with, so the key rule alone admits an ID-JAG's key; the <c>typ</c> rule is what
+    /// separates an ID Token from an ID-JAG (typed <c>oauth-id-jag+jwt</c>). Both refusals answer one
+    /// fixed description that names neither the <c>typ</c> nor the key.
+    /// </para>
+    /// </remarks>
     private static async ValueTask<(string? Subject, string? SessionId, ServerHttpResponse? Error)> VerifyIdTokenHintAsync(
         EndpointServer server,
         ClientRecord registration,
@@ -243,6 +266,21 @@ public static class EndSessionEndpoints
             {
                 return (null, null, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidRequest, "id_token_hint header is missing kid."));
+            }
+
+            //RP-Initiated Logout 1.0 §2: the OP MUST validate that it was the issuer of the ID Token;
+            //RFC 8725 §3.12: the kinds of JWT one issuer signs are told apart. A hint is an ID Token
+            //only when its typ is absent or JWT (an access token, a logout token or an ID-JAG types
+            //itself otherwise) and its kid is listed for ID Token issuance. The ID-JAG shares the ID
+            //Token key, so the typ rule is what turns it away. Both rules run before the resolver,
+            //which answers any key it holds by kid, and share one description naming neither value.
+            bool isIdTokenType = !header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
+                || (typObj is string typ && WellKnownJwkValues.IsTypeJwt(typ));
+            if(!isIdTokenType
+                || !IssuedKeyAdmission.IsListedFor(registration, KeyUsageContext.IdTokenIssuance, new KeyId(kid)))
+            {
+                return (null, null, ServerHttpResponse.BadRequest(
+                    OAuthErrors.InvalidRequest, "id_token_hint is not an ID Token issued by this server."));
             }
 
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver!(

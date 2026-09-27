@@ -1,7 +1,9 @@
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Jar;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server.Pipeline;
 
 namespace Verifiable.OAuth.Server;
@@ -16,11 +18,30 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// Both the OIDC Core §5.3 UserInfo endpoint and the OID4VCI 1.0 §8 Credential Endpoint are
 /// protected resources that accept an AS-issued access token on the <c>Authorization</c>
-/// header; the structural-parse → <c>alg</c>/<c>typ</c>/<c>kid</c> → key-resolve →
+/// header; the structural-parse → <c>alg</c>/<c>typ</c>/<c>kid</c> → key admission → key-resolve →
 /// signature-verify → <c>iss</c> → <c>exp</c> sequence is identical and lives here once so the
 /// security-critical validation cannot drift between call sites. Scope and subject-claim
 /// requirements are endpoint-specific and stay at the caller (UserInfo enforces <c>openid</c>
 /// per §5.3.1).
+/// </para>
+/// <para>
+/// The token verifies only under a key the registration lists for
+/// <see cref="KeyUsageContext.AccessTokenIssuance"/>, the usage the library signs access tokens under
+/// (<see cref="IssuedKeyAdmission"/>), per
+/// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "If more than
+/// one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST be
+/// written such that they are mutually exclusive, rejecting JWTs of the wrong kind."
+/// </para>
+/// <para>
+/// Every refusal of a presented token is a 401 carrying the
+/// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> challenge: "If the
+/// protected resource request does not include authentication credentials or does not contain an
+/// access token that enables access to the protected resource, the resource server MUST include the
+/// HTTP "WWW-Authenticate" response header field". The challenge is
+/// <see cref="InvalidTokenChallenge"/>; a host that names a protection space replaces it with its own
+/// realm-bearing challenge through <see cref="ServerHttpResponse.WithHeader"/>, which sets a header by
+/// name. A 500 server fault carries no challenge: it answers a missing configuration, not a refused
+/// token.
 /// </para>
 /// <para>
 /// The overload without <c>expectedAudience</c>
@@ -215,6 +236,17 @@ public static class BearerTokenValidation
     /// The validated <see cref="JwtPayload"/> and a <see langword="null"/> failure on success;
     /// a <see langword="null"/> payload and the RFC 6750 / RFC 9068 error response on failure.
     /// </returns>
+    /// <remarks>
+    /// The header's <c>kid</c> is admitted only when <paramref name="registration"/> lists it for
+    /// <see cref="KeyUsageContext.AccessTokenIssuance"/> (<see cref="IssuedKeyAdmission.IsListedFor"/>),
+    /// before the <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/> is asked for
+    /// the key: <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>
+    /// names "Use different keys for different kinds of JWTs. Then the keys used to validate one kind of
+    /// JWT will fail to validate other kinds of JWTs." among the ways to keep the validation rules of the
+    /// kinds this issuer produces mutually exclusive. A key the resolver holds but the registration does
+    /// not list for access tokens is refused with a fixed description that names no key; a listed key the
+    /// resolver cannot produce is refused as unknown.
+    /// </remarks>
     private static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateCoreAsync(
         string bearerToken,
         string? expectedAudience,
@@ -259,8 +291,7 @@ public static class BearerTokenValidation
         }
         catch(Exception ex) when(ex is FormatException or InvalidOperationException)
         {
-            return (null, ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidToken,
+            return (null, RefuseToken(
                 $"Access token is malformed: {ex.Message}"));
         }
 
@@ -275,18 +306,16 @@ public static class BearerTokenValidation
                 || string.IsNullOrEmpty(alg)
                 || string.Equals(alg, "none", StringComparison.OrdinalIgnoreCase))
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token header is missing or carries a forbidden alg."));
+                return (null, RefuseToken(
+"Access token header is missing or carries a forbidden alg."));
             }
 
             if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
                 || kidObj is not string kid
                 || string.IsNullOrEmpty(kid))
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token header is missing kid."));
+                return (null, RefuseToken(
+"Access token header is missing kid."));
             }
 
             //RFC 9068 §4 requires the resource server to verify the header's typ is explicitly
@@ -299,9 +328,19 @@ public static class BearerTokenValidation
                 || string.IsNullOrEmpty(typ)
                 || !(WellKnownMediaTypes.Jwt.IsAtJwt(typ) || WellKnownMediaTypes.Application.IsAtJwt(typ)))
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068 §4."));
+                return (null, RefuseToken(
+"Access token header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068 §4."));
+            }
+
+            //RFC 8725 §3.12: an access token verifies as this server's own only under a key the
+            //registration lists for access-token issuance, in any rotation slot. The admission runs
+            //before the resolver, which answers any key it holds by kid, so a client's assertion key,
+            //another registration's key or another token kind's key never verifies an access token
+            //here. The description names no key.
+            if(!IssuedKeyAdmission.IsListedFor(registration, KeyUsageContext.AccessTokenIssuance, new KeyId(kid)))
+            {
+                return (null, RefuseToken(
+                    "Access token is not signed by a key this server issues access tokens with."));
             }
 
             //3. Resolve the verification key.
@@ -310,9 +349,8 @@ public static class BearerTokenValidation
 
             if(publicKey is null)
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    $"No verification key found for kid '{kid}'."));
+                return (null, RefuseToken(
+$"No verification key found for kid '{kid}'."));
             }
 
             //4. Verify signature via the algorithm-agnostic Jws.VerifyAsync
@@ -330,16 +368,14 @@ public static class BearerTokenValidation
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    $"Signature verification raised: {ex.Message}"));
+                return (null, RefuseToken(
+$"Signature verification raised: {ex.Message}"));
             }
 
             if(!signatureValid)
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token signature verification failed."));
+                return (null, RefuseToken(
+"Access token signature verification failed."));
             }
 
             //5. Parse the payload now that the signature is verified. RFC 7519 §4: the Claim
@@ -349,9 +385,8 @@ public static class BearerTokenValidation
             //   exception.
             if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token payload is not well-formed JSON, or carries a duplicate claim name."));
+                return (null, RefuseToken(
+"Access token payload is not well-formed JSON, or carries a duplicate claim name."));
             }
 
             JwtPayload payload;
@@ -361,9 +396,8 @@ public static class BearerTokenValidation
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    $"Access token payload could not be parsed: {ex.Message}"));
+                return (null, RefuseToken(
+$"Access token payload could not be parsed: {ex.Message}"));
             }
 
             //6. iss claim must match the resolved issuer for this request.
@@ -387,9 +421,8 @@ public static class BearerTokenValidation
                 || issObj is not string iss
                 || !string.Equals(iss, issuerUri.OriginalString, StringComparison.Ordinal))
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token iss claim does not match this Authorization Server."));
+                return (null, RefuseToken(
+"Access token iss claim does not match this Authorization Server."));
             }
 
             //6a. aud claim must contain the caller's expected resource identifier, when the caller
@@ -409,8 +442,7 @@ public static class BearerTokenValidation
 
                 if(!isAudienceMatched)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidToken,
+                    return (null, RefuseToken(
                         "Access token aud claim does not contain the expected resource identifier."));
                 }
             }
@@ -421,22 +453,50 @@ public static class BearerTokenValidation
             if(!payload.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expObj)
                 || !JwtClaimReaders.TryToInt64(expObj, out long expSeconds))
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token is missing the exp claim."));
+                return (null, RefuseToken(
+"Access token is missing the exp claim."));
             }
 
             DateTimeOffset now = server.TimeProvider.GetUtcNow();
             if(DateTimeOffset.FromUnixTimeSeconds(expSeconds) < now)
             {
-                return (null, ServerHttpResponse.Unauthorized(
-                    OAuthErrors.InvalidToken,
-                    "Access token has expired."));
+                return (null, RefuseToken(
+"Access token has expired."));
             }
 
             return (payload, null);
         }
     }
+
+
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> challenge a
+    /// refused token is answered with, <c>Bearer error="invalid_token"</c>: "All challenges defined by
+    /// this specification MUST use the auth-scheme value "Bearer". This scheme MUST be followed by one or
+    /// more auth-param values", and "If the protected resource request included an access token and
+    /// failed authentication, the resource server SHOULD include the "error" attribute". Composed once by
+    /// <see cref="BearerTokenChallenge.BuildChallenge"/>. It carries no <c>realm</c>, since the library
+    /// does not know the protection space a host names, and no <c>error_description</c>, since a
+    /// refusal's description can carry presented text outside the §3 attribute charset; the description
+    /// travels in the response body.
+    /// </summary>
+    private static string InvalidTokenChallenge { get; } =
+        BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InvalidToken);
+
+
+    /// <summary>
+    /// Builds the 401 refusal of a presented token: the <c>invalid_token</c> error body per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see> ("The access
+    /// token provided is expired, revoked, malformed, or invalid for other reasons. The resource SHOULD
+    /// respond with the HTTP 401 (Unauthorized) status code.") with
+    /// <see cref="InvalidTokenChallenge"/> as its <c>WWW-Authenticate</c> header, so no refusal of this
+    /// class leaves without the challenge §3 requires.
+    /// </summary>
+    /// <param name="description">The <c>error_description</c> the body carries.</param>
+    /// <returns>The 401 response.</returns>
+    private static ServerHttpResponse RefuseToken(string description) =>
+        ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, description)
+            .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InvalidTokenChallenge);
 
 
     /// <summary>

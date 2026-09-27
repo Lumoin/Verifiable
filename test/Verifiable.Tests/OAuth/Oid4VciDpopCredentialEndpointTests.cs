@@ -11,6 +11,7 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -146,6 +147,45 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, body);
         Assert.Contains(OAuthErrors.ServerError, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>: "If the
+    /// protected resource request does not include authentication credentials or does not contain an
+    /// access token that enables access to the protected resource, the resource server MUST include the
+    /// HTTP "WWW-Authenticate" response header field", and "If the protected resource request included
+    /// an access token and failed authentication, the resource server SHOULD include the "error"
+    /// attribute". An access token presented at the Credential Endpoint under the <c>Bearer</c> scheme
+    /// whose signature does not verify is refused over the wire with 401 and a <c>Bearer</c> challenge
+    /// carrying <c>error="invalid_token"</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialEndpointRefusalOfAnAccessTokenCarriesABearerChallengeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        //Flip a middle character of the signature segment: it stays base64url-valid, so the token
+        //parses and its signature deterministically fails to verify.
+        int signatureStart = ctx.AccessToken.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((ctx.AccessToken.Length - signatureStart) / 2);
+        char flipped = ctx.AccessToken[tamperIndex] == 'A' ? 'B' : 'A';
+        string tampered = string.Concat(
+            ctx.AccessToken.AsSpan(0, tamperIndex), flipped.ToString(), ctx.AccessToken.AsSpan(tamperIndex + 1));
+
+        using HttpResponseMessage response = await PostCredentialAsync(
+            ctx, tampered, dpopProof: null, scheme: WellKnownAuthenticationSchemes.Bearer).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues(WellKnownHttpHeaderNames.WwwAuthenticate, out IEnumerable<string>? challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        string challenge = challenges.Single();
+        Assert.IsTrue(challenge.StartsWith("Bearer ", StringComparison.Ordinal), challenge);
+        Assert.IsTrue(BearerTokenChallenge.TryParse(challenge, out BearerTokenChallengeParameters parameters), challenge);
+        Assert.AreEqual("invalid_token", parameters.Error, challenge);
     }
 
 
