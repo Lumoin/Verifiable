@@ -213,7 +213,12 @@ public static class EndSessionEndpoints
     /// rejecting JWTs of the wrong kind." Two rules make the hint an ID Token before any key is
     /// resolved. Its <c>typ</c> is absent or <c>JWT</c>, the header the library's own ID Token carries
     /// (<see cref="JwtHeaderExtensions"/>'s <c>ForIdToken</c>), so a hint explicitly typed as another
-    /// kind is refused. Its <c>kid</c> is one the registration lists for
+    /// kind is refused. The <c>typ</c> is compared as the media type
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see> makes it:
+    /// "A recipient using the media type value MUST treat it as if "application/" were prepended to any
+    /// "typ" value not containing a '/'.", and "Per RFC 2045 [RFC2045], all media type values, subtype
+    /// values, and parameter names are case insensitive.", so <c>JWT</c>, <c>jwt</c> and
+    /// <c>application/jwt</c> name the same type. Its <c>kid</c> is one the registration lists for
     /// <see cref="KeyUsageContext.IdTokenIssuance"/> (<see cref="IssuedKeyAdmission.IsListedFor"/>), so
     /// a key the resolver holds for another purpose never verifies a hint.
     /// </para>
@@ -260,9 +265,11 @@ public static class EndSessionEndpoints
                     OAuthErrors.InvalidRequest, "id_token_hint header is missing or carries a forbidden alg."));
             }
 
+            //A kid of only whitespace names no key: it is refused here as missing, so it never
+            //reaches the KeyId the admission and the resolver are asked with.
             if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
                 || kidObj is not string kid
-                || string.IsNullOrEmpty(kid))
+                || string.IsNullOrWhiteSpace(kid))
             {
                 return (null, null, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidRequest, "id_token_hint header is missing kid."));

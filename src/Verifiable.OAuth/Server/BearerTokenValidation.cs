@@ -25,12 +25,14 @@ namespace Verifiable.OAuth.Server;
 /// per §5.3.1).
 /// </para>
 /// <para>
-/// The token verifies only under a key the registration lists for
-/// <see cref="KeyUsageContext.AccessTokenIssuance"/>, the usage the library signs access tokens under
-/// (<see cref="IssuedKeyAdmission"/>), per
-/// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "If more than
-/// one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST be
-/// written such that they are mutually exclusive, rejecting JWTs of the wrong kind."
+/// By the library's key-admission policy (<see cref="IssuedKeyAdmission"/>), the token verifies only
+/// under a key the registration lists for <see cref="KeyUsageContext.AccessTokenIssuance"/>, the usage
+/// the library's access-token producer signs under, in any of that set's rotation slots. The policy is
+/// the key-separation strategy
+/// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see> names among
+/// several for its rule: "If more than one kind of JWT can be issued by the same issuer, the validation
+/// rules for those JWTs MUST be written such that they are mutually exclusive, rejecting JWTs of the
+/// wrong kind." Removing a key from the set is what ends its admission.
 /// </para>
 /// <para>
 /// Every refusal of a presented token is a 401 carrying the
@@ -307,15 +309,17 @@ public static class BearerTokenValidation
                 || string.Equals(alg, "none", StringComparison.OrdinalIgnoreCase))
             {
                 return (null, RefuseToken(
-"Access token header is missing or carries a forbidden alg."));
+                    "Access token header is missing or carries a forbidden alg."));
             }
 
+            //A kid of only whitespace names no key: it is refused here as missing, so it never
+            //reaches the KeyId the admission and the resolver are asked with.
             if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
                 || kidObj is not string kid
-                || string.IsNullOrEmpty(kid))
+                || string.IsNullOrWhiteSpace(kid))
             {
                 return (null, RefuseToken(
-"Access token header is missing kid."));
+                    "Access token header is missing kid."));
             }
 
             //RFC 9068 §4 requires the resource server to verify the header's typ is explicitly
@@ -329,7 +333,7 @@ public static class BearerTokenValidation
                 || !(WellKnownMediaTypes.Jwt.IsAtJwt(typ) || WellKnownMediaTypes.Application.IsAtJwt(typ)))
             {
                 return (null, RefuseToken(
-"Access token header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068 §4."));
+                    "Access token header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068 §4."));
             }
 
             //RFC 8725 §3.12: an access token verifies as this server's own only under a key the
@@ -350,7 +354,7 @@ public static class BearerTokenValidation
             if(publicKey is null)
             {
                 return (null, RefuseToken(
-$"No verification key found for kid '{kid}'."));
+                    $"No verification key found for kid '{kid}'."));
             }
 
             //4. Verify signature via the algorithm-agnostic Jws.VerifyAsync
@@ -369,13 +373,13 @@ $"No verification key found for kid '{kid}'."));
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {
                 return (null, RefuseToken(
-$"Signature verification raised: {ex.Message}"));
+                    $"Signature verification raised: {ex.Message}"));
             }
 
             if(!signatureValid)
             {
                 return (null, RefuseToken(
-"Access token signature verification failed."));
+                    "Access token signature verification failed."));
             }
 
             //5. Parse the payload now that the signature is verified. RFC 7519 §4: the Claim
@@ -386,7 +390,7 @@ $"Signature verification raised: {ex.Message}"));
             if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
             {
                 return (null, RefuseToken(
-"Access token payload is not well-formed JSON, or carries a duplicate claim name."));
+                    "Access token payload is not well-formed JSON, or carries a duplicate claim name."));
             }
 
             JwtPayload payload;
@@ -397,7 +401,7 @@ $"Signature verification raised: {ex.Message}"));
             catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
             {
                 return (null, RefuseToken(
-$"Access token payload could not be parsed: {ex.Message}"));
+                    $"Access token payload could not be parsed: {ex.Message}"));
             }
 
             //6. iss claim must match the resolved issuer for this request.
@@ -422,7 +426,7 @@ $"Access token payload could not be parsed: {ex.Message}"));
                 || !string.Equals(iss, issuerUri.OriginalString, StringComparison.Ordinal))
             {
                 return (null, RefuseToken(
-"Access token iss claim does not match this Authorization Server."));
+                    "Access token iss claim does not match this Authorization Server."));
             }
 
             //6a. aud claim must contain the caller's expected resource identifier, when the caller
@@ -454,14 +458,14 @@ $"Access token payload could not be parsed: {ex.Message}"));
                 || !JwtClaimReaders.TryToInt64(expObj, out long expSeconds))
             {
                 return (null, RefuseToken(
-"Access token is missing the exp claim."));
+                    "Access token is missing the exp claim."));
             }
 
             DateTimeOffset now = server.TimeProvider.GetUtcNow();
             if(DateTimeOffset.FromUnixTimeSeconds(expSeconds) < now)
             {
                 return (null, RefuseToken(
-"Access token has expired."));
+                    "Access token has expired."));
             }
 
             return (payload, null);

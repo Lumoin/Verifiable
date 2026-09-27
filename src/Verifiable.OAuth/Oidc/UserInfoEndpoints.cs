@@ -1,6 +1,8 @@
 using System.Text;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
+using Verifiable.OAuth.Oid4Vci;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oidc;
@@ -33,14 +35,17 @@ namespace Verifiable.OAuth.Oidc;
 /// resolves both to the same URL.
 /// </para>
 /// <para>
-/// Authentication uses a bearer access token presented in the
-/// <c>Authorization</c> header per
-/// <see href="https://www.rfc-editor.org/rfc/rfc6750">RFC 6750</see>. The
-/// access token must have been issued by this Authorization Server (the
-/// <c>iss</c> claim matches the resolved issuer URI) and must be
-/// unexpired. OIDC Core §5.3.1 requires the granted scope to include
-/// <c>openid</c>; the endpoint returns 403 <c>insufficient_scope</c> when
-/// that condition is not met.
+/// Authentication uses an access token presented in the <c>Authorization</c> header, under the
+/// <c>Bearer</c> scheme per <see href="https://www.rfc-editor.org/rfc/rfc6750">RFC 6750</see> or, for
+/// a token bound to the client's DPoP key, under the <c>DPoP</c> scheme with a proof per
+/// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7">RFC 9449 §7</see>. The access token
+/// must have been issued by this Authorization Server (the <c>iss</c> claim matches the resolved
+/// issuer URI) and must be unexpired. A token carrying a <c>cnf.jkt</c> binding is served only under
+/// the <c>DPoP</c> scheme with a proof from the bound key: RFC 9449 §7.2 "such a protected resource
+/// MUST reject a DPoP-bound access token received as a bearer token per [RFC6750]." OIDC Core §5.3.1
+/// requires the granted scope to include <c>openid</c>; the endpoint returns 403
+/// <c>insufficient_scope</c> when that condition is not met. The refusals of a token presented under
+/// the <c>Bearer</c> scheme carry the RFC 6750 §3 <c>WWW-Authenticate</c> challenge.
 /// </para>
 /// <para>
 /// The endpoint performs bearer validation, the <c>iss</c> / <c>exp</c> /
@@ -90,6 +95,32 @@ public static class UserInfoEndpoints
     };
 
 
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> challenge
+    /// UserInfo answers a presented token it refuses as invalid with, <c>Bearer error="invalid_token"</c>:
+    /// "If the protected resource request does not include authentication credentials or does not
+    /// contain an access token that enables access to the protected resource, the resource server MUST
+    /// include the HTTP "WWW-Authenticate" response header field". Composed by
+    /// <see cref="BearerTokenChallenge.BuildChallenge"/>, the same composition
+    /// <see cref="BearerTokenValidation"/> attaches to its own refusals.
+    /// </summary>
+    private static string InvalidTokenChallenge { get; } =
+        BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InvalidToken);
+
+
+    /// <summary>
+    /// The challenge UserInfo answers a token without the <c>openid</c> scope with,
+    /// <c>Bearer error="insufficient_scope", scope="openid"</c>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>
+    /// "insufficient_scope The request requires higher privileges than provided by the access token.
+    /// The resource server SHOULD respond with the HTTP 403 (Forbidden) status code and MAY include the
+    /// "scope" attribute with the scope necessary to access the protected resource." The scope named is
+    /// <see cref="WellKnownScopes.OpenId"/>, the one UserInfo requires.
+    /// </summary>
+    private static string InsufficientScopeChallenge { get; } =
+        BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InsufficientScope, scope: WellKnownScopes.OpenId);
+
+
     /// <summary>Builds the UserInfo endpoint using the admitted token validation and claim operations.</summary>
     private static EndpointCandidate BuildUserInfo(string httpMethod) =>
         new()
@@ -129,9 +160,11 @@ public static class UserInfoEndpoints
                 var oauth = server.OAuth();
                 ClientRecord registration = context.ClientRegistration!;
 
-                //RFC 6750 §2 — the bearer token rides on the Authorization
-                //header.
-                if(!BearerTokenValidation.TryExtractBearer(context, out string? bearerToken))
+                //RFC 6750 §2.1 and RFC 9449 §7.1 — the access token rides on the
+                //Authorization header under the Bearer scheme, or under the DPoP scheme when
+                //it is bound to the client's DPoP key.
+                if(!BearerTokenValidation.TryExtractAccessToken(
+                    context, out string? accessToken, out bool isDpopPresentation))
                 {
                     return (null, ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
@@ -139,7 +172,7 @@ public static class UserInfoEndpoints
                 }
 
                 (JwtPayload? validatedPayload, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAsync(bearerToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAsync(accessToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
 
                 if(validationFailure is not null)
@@ -147,16 +180,33 @@ public static class UserInfoEndpoints
                     return (null, validationFailure);
                 }
 
+                //RFC 9449 §7.1 and §7.2 — a token bound by cnf.jkt is served only under the
+                //DPoP scheme with a proof from the bound key; presented as a bearer token it is
+                //refused. The enforcement is the one the OID4VCI protected endpoints run. Under
+                //the Bearer scheme its only refusal is that downgrade, a 401 that carries the
+                //RFC 6750 §3 challenge.
+                ServerHttpResponse? dpopFailure = await CredentialEndpointDpopValidation.EnforceAsync(
+                    server, context, registration, validatedPayload!, accessToken!, isDpopPresentation,
+                    server.TimeProvider.GetUtcNow(), ct).ConfigureAwait(false);
+                if(dpopFailure is not null)
+                {
+                    return (null, isDpopPresentation
+                        ? dpopFailure
+                        : dpopFailure.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InvalidTokenChallenge));
+                }
+
                 //OIDC Core §5.3.1 — the access token MUST carry the openid
                 //scope. Tokens without it are valid for resource-server access
-                //but cannot reach UserInfo.
+                //but cannot reach UserInfo. RFC 6750 §3.1 — the 403 names the scope
+                //the endpoint requires in its challenge.
                 if(!validatedPayload!.TryGetValue(WellKnownJwtClaimNames.Scope, out object? scopeObj)
                     || scopeObj is not string scope
                     || !WellKnownScopes.ContainsOpenId(scope))
                 {
                     return (null, ServerHttpResponse.Forbidden(
                         OAuthErrors.InsufficientScope,
-                        "UserInfo requires the openid scope per OIDC Core §5.3.1."));
+                        "UserInfo requires the openid scope per OIDC Core §5.3.1.")
+                        .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InsufficientScopeChallenge));
                 }
 
                 if(!validatedPayload.TryGetValue(WellKnownJwtClaimNames.Sub, out object? subObj)
@@ -165,7 +215,8 @@ public static class UserInfoEndpoints
                 {
                     return (null, ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
-                        "Validated access token does not carry a sub claim."));
+                        "Validated access token does not carry a sub claim.")
+                        .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InvalidTokenChallenge));
                 }
 
                 //One-time OidcClaims resolution before the contributor walk —

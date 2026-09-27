@@ -7,14 +7,16 @@ using Verifiable.OAuth.Server.Pipeline;
 namespace Verifiable.OAuth.Oid4Vci;
 
 /// <summary>
-/// Enforces the RFC 9449 DPoP sender constraint at the protected OID4VCI endpoints (Credential,
-/// Deferred, Notification). When the validated Access Token carries a <c>cnf.jkt</c> binding, a
+/// Enforces the RFC 9449 DPoP sender constraint at the protected resource endpoints: the OID4VCI
+/// Credential, Deferred and Notification endpoints and the OpenID Connect UserInfo endpoint
+/// (<see cref="Oidc.UserInfoEndpoints"/>). When the validated Access Token carries a <c>cnf.jkt</c> binding, a
 /// DPoP proof bound to the SAME key MUST accompany it — the proof-of-possession the token
 /// endpoint minted is verified at the resource, not ignored. A bound token is never accepted as
 /// a plain bearer: presented under the <c>Bearer</c> scheme it is rejected (§7.1), and a missing
 /// DPoP delegate is a configuration error rather than a silent downgrade. The resource-server
 /// shape mirrors <c>DpopTokenEndpointValidation</c> but adds the <c>ath</c> binding and computes
-/// <c>htu</c> against this endpoint.
+/// <c>htm</c> and <c>htu</c> from the request being served, so one enforcement serves an endpoint
+/// that answers more than one HTTP method.
 /// </summary>
 internal static class CredentialEndpointDpopValidation
 {
@@ -76,12 +78,15 @@ internal static class CredentialEndpointDpopValidation
                 .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
         }
 
-        string htu = $"{issuerUri.GetLeftPart(UriPartial.Authority)}{context.IncomingRequest!.Path}";
+        //RFC 9449 §4.3: the htm claim matches the HTTP method of the current request, and the htu
+        //claim its target URI; both are read from the request this endpoint is serving.
+        IncomingRequest request = context.IncomingRequest!;
+        string htu = $"{issuerUri.GetLeftPart(UriPartial.Authority)}{request.Path}";
         DpopProofValidationResult proofResult = await oauth.ValidateDpopProofAsync(
             new DpopProofValidationRequest
             {
                 Proof = dpopProof,
-                HttpMethod = WellKnownHttpMethods.Post,
+                HttpMethod = request.Method,
                 HttpUrl = htu,
                 //ath binds the proof to THIS access token (RFC 9449 §4.2 / §7).
                 AccessToken = rawAccessToken,
@@ -156,6 +161,11 @@ internal static class CredentialEndpointDpopValidation
     }
 
 
+    /// <summary>
+    /// Resolves the issuer the request is served under, through the application's
+    /// <c>ResolveIssuerAsync</c> seam when wired and the default resolver otherwise; its authority is
+    /// the one the proof's <c>htu</c> is compared against.
+    /// </summary>
     private static async ValueTask<Uri> ResolveIssuerAsync(
         EndpointServer server,
         ClientRecord registration,

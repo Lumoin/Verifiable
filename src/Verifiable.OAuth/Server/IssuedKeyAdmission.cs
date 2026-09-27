@@ -4,9 +4,9 @@ using Verifiable.Cryptography.Context;
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
-/// Decides whether a key named by a presented token's <c>kid</c> is one the registration issues that
-/// kind of token with, so the server verifies a token as its own only under a key it signs that kind
-/// of token with.
+/// Decides whether a key named by a presented token's <c>kid</c> is one the registration lists for
+/// issuing that kind of token, so the server verifies a token as its own only under a key listed for
+/// that kind.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,16 +17,26 @@ namespace Verifiable.OAuth.Server;
 /// validate one kind of JWT will fail to validate other kinds of JWTs."
 /// </para>
 /// <para>
-/// The library signs each kind of token only under the key set the registration lists for that
-/// kind's <see cref="KeyUsageContext"/>: <see cref="SigningKeySelection"/> falls back to
-/// <see cref="ClientRecord.GetDefaultSigningKeyId"/>, which reads that usage's
-/// <see cref="SigningKeySet"/>. That set across its rotation slots
-/// (<see cref="SigningKeySet.AllKnownKeys"/>: incoming, current, retiring and historical) is therefore
-/// exactly the set the server's own verification of that kind may accept. The
-/// <see cref="ServerVerificationKeyResolverDelegate"/> resolves a key by its identifier alone and names
-/// no usage, so it can answer a key the application holds for another purpose (a client's assertion
-/// key, another registration's key, the key of another token kind); this admission runs before the
-/// resolver and refuses such a key whatever the resolver would answer.
+/// The admission is the library's security policy: a kind of token verifies as this server's own only
+/// under the keys the registration lists for issuing that kind, the <see cref="SigningKeySet"/> it
+/// holds for the kind's <see cref="KeyUsageContext"/>. RFC 8725 §3.12 names separate keys as one of
+/// several strategies for keeping the kinds' validation rules mutually exclusive; the library applies
+/// this one beside explicit typing. Every rotation slot of the set
+/// (<see cref="SigningKeySet.AllKnownKeys"/>) is admitted, each for its own reason. An incoming key is
+/// admitted because the server alone holds its private half and relying parties already cache its
+/// public half, so a token signed at a cutover observed elsewhere first is not refused. A current key
+/// is admitted because it is the key the server signs that kind with now. A retiring key is admitted
+/// for the grace window in which tokens signed just before the cutover are still in flight. A
+/// historical key is admitted because the application opted to keep it for tokens issued before an
+/// earlier rotation; an access token verified under it is still bounded by its <c>exp</c>. A
+/// withdrawn or compromised key is
+/// removed from the set, and that removal is what revokes its admission.
+/// </para>
+/// <para>
+/// The <see cref="ServerVerificationKeyResolverDelegate"/> resolves a key by its identifier alone and
+/// names no usage, so it can answer a key the application holds for another purpose (a client's
+/// assertion key, another registration's key, the key of another token kind); this admission runs
+/// before the resolver and refuses such a key whatever the resolver would answer.
 /// </para>
 /// </remarks>
 internal static class IssuedKeyAdmission

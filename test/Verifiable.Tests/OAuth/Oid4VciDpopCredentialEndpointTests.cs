@@ -2,7 +2,9 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -11,7 +13,6 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
-using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -180,18 +181,50 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
-        Assert.IsTrue(response.Headers.TryGetValues(WellKnownHttpHeaderNames.WwwAuthenticate, out IEnumerable<string>? challenges),
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        string challenge = challenges.Single();
-        Assert.IsTrue(challenge.StartsWith("Bearer ", StringComparison.Ordinal), challenge);
-        Assert.IsTrue(BearerTokenChallenge.TryParse(challenge, out BearerTokenChallengeParameters parameters), challenge);
-        Assert.AreEqual("invalid_token", parameters.Error, challenge);
+        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
     }
 
 
-    /// <summary>Carries the live host, fixture, and minted bound token through a credential-request variation.</summary>
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>:
+    /// "invalid_token The access token provided is expired, revoked, malformed, or invalid for other
+    /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
+    /// token whose protected header's <c>kid</c> is a single space names no key and is malformed: it is
+    /// refused at the Credential Endpoint over the wire with 401 <c>invalid_token</c> and the challenge
+    /// <c>Bearer error="invalid_token"</c>, never a server error.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialEndpointRefusesAnAccessTokenWhoseKidIsWhitespaceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        string whitespaceKidToken = await CompactJwsResigning.ResignWithHeaderAsync(
+            host, ctx.AccessToken, ctx.SigningKeyId, " ", "at+jwt").ConfigureAwait(false);
+
+        using HttpResponseMessage response = await PostCredentialAsync(
+            ctx, whitespaceKidToken, dpopProof: null, scheme: WellKnownAuthenticationSchemes.Bearer).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("Access token header is missing kid.", document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// Carries the live host, fixture, minted bound token and the key the registration signs access
+    /// tokens under through a credential-request variation.
+    /// </summary>
     private sealed record BoundTokenContext(
-        TestHostShell Host, DpopClientFixture Fixture, string AccessToken, Uri CredentialUrl, HttpClient Http);
+        TestHostShell Host, DpopClientFixture Fixture, string AccessToken, Uri CredentialUrl, HttpClient Http, KeyId SigningKeyId);
 
 
     /// <summary>
@@ -271,7 +304,8 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Uri credentialUrl = new(host.Host("default").HttpBaseAddress!,
             TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, segment));
 
-        return new BoundTokenContext(host, fixture, accessToken, credentialUrl, host.Host("default").SharedHttpClient!);
+        return new BoundTokenContext(
+            host, fixture, accessToken, credentialUrl, host.Host("default").SharedHttpClient!, material.SigningKeyId);
     }
 
 
