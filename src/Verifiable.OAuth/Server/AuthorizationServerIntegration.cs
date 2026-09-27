@@ -4,6 +4,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Server.Keys;
 
 namespace Verifiable.OAuth.Server;
@@ -2858,14 +2859,16 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// feature dependencies and the authorization details type registry are checked exactly as
     /// <see cref="Validate"/> checks them and throw the same named <see cref="InvalidOperationException"/>.
     /// Subject resolution, the grant-family loader, the key resolvers, the codec delegates and the
-    /// key-set builder are required only by the declared capabilities that use them; each one missing is
+    /// key-set builder and signing action are required only by the declared capabilities that use them; each one missing is
     /// returned as a <see cref="CompositionDependencyFailure"/>.
     /// </para>
     /// <para>
     /// Discovery (<see cref="WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint"/>) reads only the
     /// required containers and the verification key resolver when present, so it needs nothing beyond
     /// the host seams. The key set (<see cref="WellKnownCapabilityIdentifiers.OAuthJwksEndpoint"/>) reads
-    /// only <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>. Every other capability,
+    /// only <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>. Signed request objects
+    /// (<see cref="WellKnownCapabilityIdentifiers.VcSignedRequestObject"/>) require a registered
+    /// <see cref="SignJarAction"/> handler in <see cref="ActionExecutor"/>. Every other capability,
     /// well-known or application-defined, needs subject resolution, the grant-family loader, both key
     /// resolvers and every codec delegate: the members <see cref="Validate"/> requires of a composition
     /// that declares nothing.
@@ -2933,6 +2936,8 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
             _ when capability == WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint => [],
             _ when capability == WellKnownCapabilityIdentifiers.OAuthJwksEndpoint =>
                 [(JwksBuilderDependency, Cryptography.BuildJwksDocumentAsync is not null)],
+            _ when capability == WellKnownCapabilityIdentifiers.VcSignedRequestObject =>
+                [(SignJarActionDependency, ActionExecutor is not null && ActionExecutor.IsRegistered<SignJarAction>())],
             _ => DescribeProtocolDependencies()
         };
 
@@ -2968,6 +2973,14 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <summary>The key-set builder the declared JWKS endpoint needs.</summary>
     private static CompositionDependency JwksBuilderDependency { get; } =
         new(nameof(Cryptography), nameof(AuthorizationServerCryptography.BuildJwksDocumentAsync));
+
+
+    /// <summary>
+    /// The registered <see cref="SignJarAction"/> handler required by declared signed request objects under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>.
+    /// </summary>
+    private static CompositionDependency SignJarActionDependency { get; } =
+        new(nameof(ActionExecutor), nameof(SignJarAction));
 
 
     /// <summary>Subject resolution, a member of the integration itself.</summary>

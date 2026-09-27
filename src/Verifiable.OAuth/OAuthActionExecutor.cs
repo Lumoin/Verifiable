@@ -86,6 +86,9 @@ public sealed class OAuthActionExecutor: WiringComponent
     /// response before invoking <see cref="ExecuteAsync"/>, rather than letting its unhandled-action
     /// <see cref="InvalidOperationException"/> propagate out of a candidate composition that validated
     /// successfully but never wired this handler.
+    /// Composition validation also reads this registration for a declared capability, so a missing
+    /// required handler is refused before publication under
+    /// <see href="../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>.
     /// </remarks>
     /// <typeparam name="TAction">The concrete action type to check.</typeparam>
     public bool IsRegistered<TAction>() where TAction : OAuthAction

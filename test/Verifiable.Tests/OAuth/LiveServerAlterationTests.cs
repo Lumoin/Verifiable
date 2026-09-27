@@ -1793,15 +1793,22 @@ countingMetadataBuilder
     /// <summary>
     /// Proves the stated publication rule under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
-    /// "A signed OID4VP request_uri request needing an unregistered signing action receives a neutral server error without an internal type name."
+    /// "Unless the declaration names signed request objects, a signed OID4VP request_uri request needing an unregistered signing action receives a neutral server error without an internal type name."
     /// </summary>
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task AlteredExecutorMissingSignJarActionAnswersTheJarRequestGracefullyAsync(bool isPost)
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public async Task AlteredExecutorMissingSignJarActionAnswersTheJarRequestGracefullyAsync(bool isPost, bool isPresentationDeclared)
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        if(isPresentationDeclared)
+        {
+            app.Server.ApplyConfiguration(app.Server.Configuration with { DeclaredCapabilities = Oid4VpCapabilities });
+        }
+
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         OAuthActionExecutor working = app.Server.OAuth().ActionExecutor!;
         (_, string parHandle) = await app.HandleParAsync(keys,
@@ -1831,6 +1838,88 @@ countingMetadataBuilder
         using HttpResponseMessage recovered = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
             app, requestUri, "alteration-subject", TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)recovered.StatusCode, "Restoring the working executor recovers the still-pending JAR request.");
+    }
+
+
+    /// <summary>
+    /// Declared signed request objects preserve a working signer at construction and on alteration under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "Construction-time validation enumerates the actions a request will need only for declared capabilities: a declaration naming signed request objects requires the registered `SignJarAction` handler, and a construction or candidate without it is refused with `CompositionDependencyException`."
+    /// The served Request Object follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>:
+    /// "The JWT Claims Set is then signed or signed and encrypted."
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task DeclaredSignedRequestObjectsRequireTheSignerAtConstructionAndOnAlterationAsync(bool isPost)
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        app.Server.ApplyConfiguration(app.Server.Configuration with
+        {
+            DeclaredCapabilities = [.. Oid4VpCapabilities, WellKnownCapabilityIdentifiers.VcSignedRequestObject]
+        });
+        string[] expected = ["urn:verifiable:capability:vc:signed_request_object requires ActionExecutor.SignJarAction"];
+        OAuthActionExecutor working = app.Server.OAuth().ActionExecutor!;
+        app.Server.OAuth().ActionExecutor = new OAuthActionExecutor();
+        CompositionDependencyException construction = Assert.ThrowsExactly<CompositionDependencyException>(app.Server.Validate);
+        Assert.AreSequenceEqual(expected, DescribeFailures(construction));
+        Assert.IsFalse(app.Server.IsValidated, "A refused construction is not admitted.");
+        app.Server.OAuth().ActionExecutor = working;
+        app.Server.Validate();
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        (_, string parHandle) = await app.HandleParAsync(keys,
+            new TransactionNonce("declared-signed-request"), DcqlFixtures.PidFamilyNamePrepared(), deadline.Token).ConfigureAwait(false);
+        _ = Assert.IsInstanceOfType<VerifierParReceivedState>(app.GetFlowState(parHandle).State);
+        CompositionDependencyException alteration = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() =>
+            app.Server.RequestAlterationAsync(candidate =>
+                candidate.Family<AuthorizationServerIntegration>().ActionExecutor = new OAuthActionExecutor(), deadline.Token));
+        Assert.AreSequenceEqual(expected, DescribeFailures(alteration));
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate preserves admission on the accepted composition.");
+        Uri requestUri = new(app.Host("default").HttpBaseAddress!, $"/connect/{keys.Registration.TenantId.Value}/request/{parHandle}");
+        using HttpResponseMessage response = isPost
+            ? await RawAuthCodeWirePushers.SendPinnedFormPostAsync(app, requestUri, new Dictionary<string, string> { ["wallet_nonce"] = "alteration-wallet" }, deadline.Token).ConfigureAwait(false)
+            : await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(app, requestUri, "alteration-subject", deadline.Token).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        Assert.AreEqual("application/oauth-authz-req+jwt", response.Content.Headers.ContentType?.MediaType);
+        string[] segments = body.Split('.');
+        Assert.HasCount(3, segments, "A signed compact JWS carries a header, payload and signature.");
+        Assert.IsFalse(string.IsNullOrEmpty(segments[2]), "The signed Request Object carries a signature.");
+        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(segments[0], BaseMemoryPool.Shared);
+        using JsonDocument header = JsonDocument.Parse(headerBytes.Memory);
+        Assert.IsTrue(header.RootElement.TryGetProperty("alg", out JsonElement algorithm));
+        Assert.IsFalse(string.IsNullOrEmpty(algorithm.GetString()), "The protected header names its signing algorithm.");
+        Assert.AreNotEqual("none", algorithm.GetString());
+        Assert.DoesNotContain("SignJarAction", body, StringComparison.Ordinal);
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults());
+    }
+
+
+    /// <summary>
+    /// An undeclared composition answers an unavailable key set under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "A JWKS request needing an unwired document builder receives a neutral server error without an internal member name."
+    /// </summary>
+    [TestMethod]
+    public async Task UndeclaredJwksWithoutItsBuilderAnswersWithNeutralServerErrorAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        await app.Server.RequestAlterationAsync(candidate =>
+            candidate.Family<AuthorizationServerIntegration>().Cryptography.BuildJwksDocumentAsync = null, deadline.Token).ConfigureAwait(false);
+        ServerHttpResponse response = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, keys.Registration.TenantId,
+            WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        using JsonDocument error = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("server_error", error.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("The server is not ready to serve this request.", error.RootElement.GetProperty("error_description").GetString());
+        Assert.DoesNotContain("BuildJwksDocumentAsync", response.Body, StringComparison.Ordinal);
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults());
     }
 
 
@@ -4593,4 +4682,3 @@ countingMetadataBuilder
         }
     }
 }
-

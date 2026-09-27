@@ -161,7 +161,7 @@ public static class MetadataEndpoints
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
-                        "BuildJwksDocumentAsync is not configured."));
+                        "The server is not ready to serve this request."));
                 }
 
                 ClientRecord? registration = context.ClientRegistration;

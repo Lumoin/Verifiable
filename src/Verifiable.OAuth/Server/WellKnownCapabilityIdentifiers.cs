@@ -276,6 +276,20 @@ public static class WellKnownCapabilityIdentifiers
         CapabilityIdentifier.Create("urn:verifiable:capability:vc:verifiable_presentation");
 
     /// <summary>
+    /// The verifier signs the Request Object it serves by reference under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>:
+    /// "To sign, JSON Web Signature (JWS) [RFC7515] is used. The result is a JWS-signed JWT [RFC7519]."
+    /// </summary>
+    /// <remarks>
+    /// A composition declaration requiring the registered
+    /// <see cref="Verifiable.OAuth.Oid4Vp.Server.SignJarAction"/> handler.
+    /// No endpoint candidate carries this capability; the request endpoint carries
+    /// <see cref="VcVerifiablePresentation"/>.
+    /// </remarks>
+    public static CapabilityIdentifier VcSignedRequestObject { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:vc:signed_request_object");
+
+    /// <summary>
     /// SIOPv2 — the Self-Issued OpenID Provider v2 Relying Party flow. Enables the
     /// request-preparation and Self-Issued ID Token response endpoints by which this
     /// Authorization Server, acting as the RP, requests and verifies a Self-Issued ID Token.
@@ -353,6 +367,7 @@ public static class WellKnownCapabilityIdentifiers
         OidcSessionManagement,
         FederationBase,
         VcVerifiablePresentation,
+        VcSignedRequestObject,
         SiopSelfIssuedOp,
         VcVerifiableCredentialIssuance,
         AuthZenAuthorizationApi,
