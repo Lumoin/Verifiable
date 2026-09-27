@@ -9,6 +9,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Server;
@@ -1298,11 +1299,13 @@ countingMetadataBuilder
     /// A composition declaring only discovery validates without the protocol dependencies and serves
     /// only its metadata under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
-    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate."
+    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate; signed request objects need the registered `SignJarAction` handler besides."
     /// and "Dispatch builds the endpoint chain only from candidates whose capability the declaration names, so no request reaches a handler whose dependencies validation did not check."
     /// The served document keeps the member
     /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see> defines as
     /// "REQUIRED.  The authorization server's issuer identifier".
+    /// The proof holds for a host with per-grant ordering disabled: the host's per-grant ordering gate
+    /// reads the codec encoder before dispatch, so a host running that gate wires the encoder itself.
     /// </summary>
     [TestMethod]
     public async Task DeclaredDiscoveryOnlyCompositionServesMetadataAndNothingElseAsync()
@@ -1351,7 +1354,7 @@ countingMetadataBuilder
     /// <summary>
     /// A composition declaring only the key set serves it with nothing but its builder under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
-    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate."
+    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate; signed request objects need the registered `SignJarAction` handler besides."
     /// The key set is the document
     /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see> describes as
     /// "The referenced document contains the signing key(s) the client uses to validate signatures from the authorization server."
@@ -1375,7 +1378,8 @@ countingMetadataBuilder
         ServerHttpResponse jwks = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
             WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(200, jwks.StatusCode, jwks.Body);
-        Assert.Contains(keys.SigningKeyId.Value, ReadJwksKeyIds(jwks.Body), "The declared key set publishes the registration's signing key.");
+        Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(jwks.Body, keys).ConfigureAwait(false),
+            "The declared key set publishes the registration's signing key, and it validates that key's signatures.");
         using HttpResponseMessage discovery = await SendDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(404, (int)discovery.StatusCode, "Undeclared discovery is not served.");
         Assert.AreEqual(string.Empty, await discovery.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false));
@@ -1421,7 +1425,8 @@ countingMetadataBuilder
         {
             string servedBody = await served.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false);
             Assert.AreEqual(200, (int)served.StatusCode, servedBody);
-            Assert.Contains(keys.SigningKeyId.Value, ReadJwksKeyIds(servedBody), "The advertised key set publishes the registration's signing key.");
+            Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(servedBody, keys).ConfigureAwait(false),
+                "The advertised key set publishes the registration's signing key, and it validates that key's signatures.");
         }
 
         ServerConfiguration configuration = app.Server.Configuration;
@@ -1433,7 +1438,8 @@ countingMetadataBuilder
         ServerHttpResponse retained = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
             WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(200, retained.StatusCode, retained.Body);
-        Assert.Contains(keys.SigningKeyId.Value, ReadJwksKeyIds(retained.Body), "The accepted composition keeps serving its key set.");
+        Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(retained.Body, keys).ConfigureAwait(false),
+            "The accepted composition keeps serving its key set, whose signing key validates that key's signatures.");
     }
 
 
@@ -1441,6 +1447,7 @@ countingMetadataBuilder
     /// A declared grant capability reports every dependency it lacks as a typed failure under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
     /// "A missing dependency of a declared capability is refused with `CompositionDependencyException`, whose failures name each declared capability and the dependency it lacks."
+    /// and "The failures are ordered by capability identifier and then by dependency path, ordinally, so the report is the same on every run."
     /// </summary>
     [TestMethod]
     public async Task DeclaredGrantCapabilityReportsEachMissingDependencyAsync()
@@ -1476,7 +1483,7 @@ countingMetadataBuilder
     /// <summary>
     /// A declared capability outside the narrowed set needs the full protocol dependency set under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
-    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate."
+    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate; signed request objects need the registered `SignJarAction` handler besides."
     /// </summary>
     [TestMethod]
     public async Task DeclaredUnknownCapabilityRequiresEveryProtocolDependencyAsync()
@@ -1519,9 +1526,47 @@ countingMetadataBuilder
 
 
     /// <summary>
-    /// Two declared capabilities lacking dependencies at once are each named with what they lack under
+    /// Declared signed request objects need every protocol dependency and their signer besides under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "With a declaration, validation requires only the dependencies of the declared capabilities: the discovery endpoint needs nothing beyond the host seams, the JWKS endpoint needs `Cryptography.BuildJwksDocumentAsync`, and every other capability needs subject resolution, the grant-family loader, both key resolvers and every codec delegate; signed request objects need the registered `SignJarAction` handler besides."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredSignedRequestObjectsNeedTheProtocolDependenciesAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        CompositionDependencyException fault = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() => app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with
+            {
+                DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint, WellKnownCapabilityIdentifiers.VcSignedRequestObject]
+            };
+            AuthorizationServerIntegration family = candidate.Family<AuthorizationServerIntegration>();
+            family.Cryptography.SigningKeyResolver = null;
+            family.Cryptography.VerificationKeyResolver = null;
+            family.ActionExecutor = null;
+        }, deadline.Token));
+        string[] expected =
+        [
+            "urn:verifiable:capability:vc:signed_request_object requires ActionExecutor.SignJarAction",
+            "urn:verifiable:capability:vc:signed_request_object requires Cryptography.SigningKeyResolver",
+            "urn:verifiable:capability:vc:signed_request_object requires Cryptography.VerificationKeyResolver"
+        ];
+        Assert.AreSequenceEqual(expected, DescribeFailures(fault));
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// Two declared capabilities lacking dependencies at once are each named with what they lack, in a
+    /// fixed order, under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
     /// "A missing dependency of a declared capability is refused with `CompositionDependencyException`, whose failures name each declared capability and the dependency it lacks."
+    /// and "The failures are ordered by capability identifier and then by dependency path, ordinally, so the report is the same on every run."
     /// </summary>
     [TestMethod]
     public async Task DeclaredCapabilitiesFailingTogetherAreEachNamedWithTheirDependenciesAsync()
@@ -1660,6 +1705,80 @@ countingMetadataBuilder
         using HttpResponseMessage discovery = await SendDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(404, (int)discovery.StatusCode, "A maintenance composition declaring nothing answers with the ordinary unmatched-endpoint response.");
         Assert.AreEqual(string.Empty, await discovery.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// A declaration holding a capability value that was never created names no capability, so it is
+    /// refused as incoherent wiring at construction and on alteration under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "The named `InvalidOperationException` identifies missing or incoherent wiring."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclarationHoldingAnUncreatedCapabilityIsRefusedWithTheNamedFaultAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        const string expected = "EndpointServer requires ServerConfiguration.DeclaredCapabilities to name only created capabilities.";
+        ServerConfiguration undeclared = app.Server.Configuration;
+        AuthorizationServerIntegration family = app.Server.OAuth();
+        ResolveSubjectIdentifierDelegate resolver = family.ResolveSubjectIdentifierAsync!;
+        app.Server.ApplyConfiguration(undeclared with { DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint, default] });
+        family.ResolveSubjectIdentifierAsync = null;
+        InvalidOperationException construction = Assert.ThrowsExactly<InvalidOperationException>(app.Server.Validate);
+        Assert.AreEqual(expected, construction.Message);
+        Assert.IsFalse(app.Server.IsValidated, "A refused construction is not admitted.");
+        family.ResolveSubjectIdentifierAsync = resolver;
+        app.Server.ApplyConfiguration(undeclared);
+        app.Server.Validate();
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string before = await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
+        InvalidOperationException alteration = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => app.Server.RequestAlterationAsync(candidate =>
+        {
+            candidate.Configuration = candidate.Configuration with
+            {
+                DeclaredCapabilities = [WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint, default]
+            };
+            candidate.Family<AuthorizationServerIntegration>().ResolveSubjectIdentifierAsync = null;
+        }, deadline.Token));
+        Assert.AreEqual(expected, alteration.Message);
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate must reopen admission before its requester faults.");
+        Assert.AreSame(undeclared, app.Server.Configuration);
+        Assert.AreEqual(before, await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// A declaration supplied with its own member comparer is served as exactly the capabilities it
+    /// holds: a comparer matching every capability that shares a URN prefix with the declared discovery
+    /// endpoint admits no token endpoint, under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "Dispatch builds the endpoint chain only from candidates whose capability the declaration names, so no request reaches a handler whose dependencies validation did not check."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclarationWithItsOwnComparerServesOnlyTheCapabilitiesItHoldsAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri,
+            Oid4VpCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        string segment = keys.Registration.TenantId;
+        await app.Server.RequestAlterationAsync(candidate =>
+            candidate.Configuration = candidate.Configuration with
+            {
+                DeclaredCapabilities = ImmutableHashSet.Create(new CapabilityPrefixMatchingComparer(), WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint)
+            }, deadline.Token).ConfigureAwait(false);
+        Assert.IsTrue(app.Server.IsValidated);
+        ServerHttpResponse token = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
+            WellKnownEndpointNames.AuthCodeToken, "POST",
+            new RequestFields { ["grant_type"] = "authorization_code", ["code"] = "unknown-code" }, [], deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(404, token.StatusCode, "A token endpoint the declaration does not hold is not served, whatever its comparer answers.");
+        Assert.AreEqual(string.Empty, token.Body);
+        using JsonDocument discovery = JsonDocument.Parse(await ReadDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false));
+        Assert.IsFalse(discovery.RootElement.TryGetProperty("token_endpoint", out _), "A token endpoint the declaration does not hold is not advertised.");
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "A declared composition answers every request without a host fault.");
     }
 
 
@@ -1842,17 +1961,22 @@ countingMetadataBuilder
 
 
     /// <summary>
-    /// Declared signed request objects preserve a working signer at construction and on alteration under
+    /// Declared signed request objects preserve a working signer at construction and on alteration,
+    /// whether the refused composition carries no action registry or an empty one, under
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
     /// "Construction-time validation enumerates the actions a request will need only for declared capabilities: a declaration naming signed request objects requires the registered `SignJarAction` handler, and a construction or candidate without it is refused with `CompositionDependencyException`."
     /// The served Request Object follows
     /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>:
-    /// "The JWT Claims Set is then signed or signed and encrypted."
+    /// "The JWT Claims Set is then signed or signed and encrypted.",
+    /// "To sign, JSON Web Signature (JWS) [RFC7515] is used.  The result is a JWS-signed JWT [RFC7519]."
+    /// and "A Request Object (Section 2.1) has the media type [RFC2046] "application/oauth-authz-req+jwt"."
     /// </summary>
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task DeclaredSignedRequestObjectsRequireTheSignerAtConstructionAndOnAlterationAsync(bool isPost)
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public async Task DeclaredSignedRequestObjectsRequireTheSignerAtConstructionAndOnAlterationAsync(bool isPost, bool isExecutorNull)
     {
         using CancellationTokenSource deadline = CreateTestCancellation();
         await using TestHostShell app = new(TimeProvider);
@@ -1863,7 +1987,7 @@ countingMetadataBuilder
         });
         string[] expected = ["urn:verifiable:capability:vc:signed_request_object requires ActionExecutor.SignJarAction"];
         OAuthActionExecutor working = app.Server.OAuth().ActionExecutor!;
-        app.Server.OAuth().ActionExecutor = new OAuthActionExecutor();
+        app.Server.OAuth().ActionExecutor = isExecutorNull ? null : new OAuthActionExecutor();
         CompositionDependencyException construction = Assert.ThrowsExactly<CompositionDependencyException>(app.Server.Validate);
         Assert.AreSequenceEqual(expected, DescribeFailures(construction));
         Assert.IsFalse(app.Server.IsValidated, "A refused construction is not admitted.");
@@ -1875,7 +1999,7 @@ countingMetadataBuilder
         _ = Assert.IsInstanceOfType<VerifierParReceivedState>(app.GetFlowState(parHandle).State);
         CompositionDependencyException alteration = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() =>
             app.Server.RequestAlterationAsync(candidate =>
-                candidate.Family<AuthorizationServerIntegration>().ActionExecutor = new OAuthActionExecutor(), deadline.Token));
+                candidate.Family<AuthorizationServerIntegration>().ActionExecutor = isExecutorNull ? null : new OAuthActionExecutor(), deadline.Token));
         Assert.AreSequenceEqual(expected, DescribeFailures(alteration));
         Assert.IsTrue(app.Server.IsValidated, "A rejected candidate preserves admission on the accepted composition.");
         Uri requestUri = new(app.Host("default").HttpBaseAddress!, $"/connect/{keys.Registration.TenantId.Value}/request/{parHandle}");
@@ -1885,15 +2009,51 @@ countingMetadataBuilder
         string body = await response.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
         Assert.AreEqual("application/oauth-authz-req+jwt", response.Content.Headers.ContentType?.MediaType);
-        string[] segments = body.Split('.');
-        Assert.HasCount(3, segments, "A signed compact JWS carries a header, payload and signature.");
-        Assert.IsFalse(string.IsNullOrEmpty(segments[2]), "The signed Request Object carries a signature.");
-        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(segments[0], BaseMemoryPool.Shared);
-        using JsonDocument header = JsonDocument.Parse(headerBytes.Memory);
-        Assert.IsTrue(header.RootElement.TryGetProperty("alg", out JsonElement algorithm));
-        Assert.IsFalse(string.IsNullOrEmpty(algorithm.GetString()), "The protected header names its signing algorithm.");
-        Assert.AreNotEqual("none", algorithm.GetString());
+        await AssertSignedRequestObjectAsync(body, keys, "declared-signed-request", isPost ? "alteration-wallet" : null, deadline.Token).ConfigureAwait(false);
         Assert.DoesNotContain("SignJarAction", body, StringComparison.Ordinal);
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults());
+    }
+
+
+    /// <summary>
+    /// Declared signed request objects need the host's action bridge that runs the signer for a Request
+    /// Object fetched by POST, at construction and on alteration, under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>:
+    /// "Dispatch builds the endpoint chain only from candidates whose capability the declaration names, so no request reaches a handler whose dependencies validation did not check."
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredSignedRequestObjectsRequireTheActionBridgeForAPostedFetchAsync()
+    {
+        using CancellationTokenSource deadline = CreateTestCancellation();
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial keys = await app.RegisterClientAsync(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+        app.Server.ApplyConfiguration(app.Server.Configuration with
+        {
+            DeclaredCapabilities = [.. Oid4VpCapabilities, WellKnownCapabilityIdentifiers.VcSignedRequestObject]
+        });
+        string[] expected = ["urn:verifiable:capability:vc:signed_request_object requires EndpointServer.ActionExecutor"];
+        FlowActionExecutorDelegate bridge = app.Server.ActionExecutor!;
+        app.Server.ActionExecutor = null;
+        CompositionDependencyException construction = Assert.ThrowsExactly<CompositionDependencyException>(app.Server.Validate);
+        Assert.AreSequenceEqual(expected, DescribeFailures(construction));
+        Assert.IsFalse(app.Server.IsValidated, "A refused construction is not admitted.");
+        app.Server.ActionExecutor = bridge;
+        app.Server.Validate();
+        await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        (_, string parHandle) = await app.HandleParAsync(keys,
+            new TransactionNonce("declared-bridge-request"), DcqlFixtures.PidFamilyNamePrepared(), deadline.Token).ConfigureAwait(false);
+        _ = Assert.IsInstanceOfType<VerifierParReceivedState>(app.GetFlowState(parHandle).State);
+        CompositionDependencyException alteration = await Assert.ThrowsExactlyAsync<CompositionDependencyException>(() =>
+            app.Server.RequestAlterationAsync(candidate => candidate.ActionExecutor = null, deadline.Token));
+        Assert.AreSequenceEqual(expected, DescribeFailures(alteration));
+        Assert.IsTrue(app.Server.IsValidated, "A rejected candidate preserves admission on the accepted composition.");
+        Uri requestUri = new(app.Host("default").HttpBaseAddress!, $"/connect/{keys.Registration.TenantId.Value}/request/{parHandle}");
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedFormPostAsync(app, requestUri,
+            new Dictionary<string, string> { ["wallet_nonce"] = "bridge-wallet" }, deadline.Token).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        Assert.AreEqual("application/oauth-authz-req+jwt", response.Content.Headers.ContentType?.MediaType);
+        await AssertSignedRequestObjectAsync(body, keys, "declared-bridge-request", "bridge-wallet", deadline.Token).ConfigureAwait(false);
         Assert.IsEmpty(app.Host("default").ConsumeHttpFaults());
     }
 
@@ -4562,15 +4722,89 @@ countingMetadataBuilder
     }
 
 
-    /// <summary>Reads every published key identifier from a key-set response body obtained over the listener.</summary>
-    /// <param name="body">The JWK Set JSON body.</param>
-    private static string[] ReadJwksKeyIds(string body)
+    /// <summary>
+    /// Rebuilds the published JWK whose <c>kid</c> is the registration's signing key identifier, as a
+    /// client reading the key set would, and checks it validates a signature the registration's signing
+    /// key makes: the key set carries usable public-key material, not only an identifier.
+    /// </summary>
+    /// <param name="body">The JWK Set JSON body obtained over the listener.</param>
+    /// <param name="keys">The registration's key material, whose private signing key makes the signature.</param>
+    /// <returns>Whether exactly one published key carries the identifier and it verifies the signature.</returns>
+    private static async Task<bool> IsSignatureVerifiedByPublishedSigningKeyAsync(string body, VerifierKeyMaterial keys)
     {
-        using JsonDocument document = JsonDocument.Parse(body);
+        Dictionary<string, string> jwk = new(StringComparer.Ordinal);
+        using(JsonDocument document = JsonDocument.Parse(body))
+        {
+            JsonElement[] published = [.. document.RootElement.GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray()
+                .Where(key => key.TryGetProperty(WellKnownJwkMemberNames.Kid, out JsonElement kid)
+                    && string.Equals(kid.GetString(), keys.SigningKeyId.Value, StringComparison.Ordinal))];
+            if(published.Length != 1)
+            {
 
-        return [.. document.RootElement.GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray()
-            .Where(jwk => jwk.TryGetProperty(WellKnownJwkMemberNames.Kid, out _))
-            .Select(jwk => jwk.GetProperty(WellKnownJwkMemberNames.Kid).GetString()!)];
+                return false;
+            }
+
+            foreach(JsonProperty member in published[0].EnumerateObject())
+            {
+                if(member.Value.ValueKind == JsonValueKind.String)
+                {
+                    jwk[member.Name] = member.Value.GetString()!;
+                }
+            }
+        }
+
+        using PublicKeyMemory publishedKey = DpopJwkUtilities.PublicKeyFromJwk(
+            jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+        ReadOnlySpan<byte> text = "key set signature check"u8;
+        using IMemoryOwner<byte> message = BaseMemoryPool.Shared.Rent(text.Length);
+        text.CopyTo(message.Memory.Span);
+        ReadOnlyMemory<byte> signed = message.Memory[..text.Length];
+        using Signature signature = await keys.SigningPrivateKey.SignAsync(signed, BaseMemoryPool.Shared).ConfigureAwait(false);
+        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
+            publishedKey.Tag.Get<CryptoAlgorithm>(), publishedKey.Tag.Get<Purpose>());
+
+        return await publishedKey.VerifyAsync(signed, signature, verify).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Checks a Request Object served over the listener is a JWS whose signature the registration's
+    /// public signing key verifies, under a named algorithm other than <c>none</c>, and whose signed
+    /// claims carry the verifier's client identifier, the transaction nonce and, for a request fetched
+    /// by POST, the wallet nonce the wallet sent.
+    /// </summary>
+    /// <param name="compactJws">The served Request Object.</param>
+    /// <param name="keys">The registration's key material, whose public signing key verifies the signature.</param>
+    /// <param name="expectedNonce">The transaction nonce the pushed request carried.</param>
+    /// <param name="expectedWalletNonce">The wallet nonce a POST fetch sent; <see langword="null"/> for a GET fetch.</param>
+    /// <param name="cancellationToken">The case deadline.</param>
+    private static async Task AssertSignedRequestObjectAsync(
+        string compactJws, VerifierKeyMaterial keys, string expectedNonce, string? expectedWalletNonce, CancellationToken cancellationToken)
+    {
+        string[] segments = compactJws.Split('.');
+        Assert.HasCount(3, segments, "A signed compact JWS carries a header, payload and signature.");
+        using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(segments[0], BaseMemoryPool.Shared))
+        {
+            using JsonDocument header = JsonDocument.Parse(headerBytes.Memory);
+            Assert.IsTrue(header.RootElement.TryGetProperty("alg", out JsonElement algorithm));
+            Assert.IsFalse(string.IsNullOrEmpty(algorithm.GetString()), "The protected header names its signing algorithm.");
+            Assert.AreNotEqual("none", algorithm.GetString());
+        }
+
+        bool isSignatureValid = await Jws.VerifyAsync(
+            compactJws, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, keys.SigningPublicKey, cancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isSignatureValid, "The registration's public signing key verifies the served Request Object's signature.");
+        using JsonDocument payload = JwtPayloadDecoding.DecodePayload(compactJws, BaseMemoryPool.Shared);
+        Assert.AreEqual(VerifierClientId, payload.RootElement.GetProperty("client_id").GetString());
+        Assert.AreEqual(expectedNonce, payload.RootElement.GetProperty("nonce").GetString());
+        if(expectedWalletNonce is null)
+        {
+            Assert.IsFalse(payload.RootElement.TryGetProperty("wallet_nonce", out _), "A Request Object fetched by GET carries no wallet nonce.");
+        }
+        else
+        {
+            Assert.AreEqual(expectedWalletNonce, payload.RootElement.GetProperty("wallet_nonce").GetString());
+        }
     }
 
 
@@ -4679,6 +4913,46 @@ countingMetadataBuilder
         /// </summary>
         public void OnCompleted()
         {
+        }
+    }
+
+
+    /// <summary>
+    /// A member comparer a caller can hand to a declaration that treats two capabilities as equal when
+    /// their URNs agree up to the last colon, so a set built with it answers that it names every
+    /// capability sharing that prefix with a member it holds.
+    /// </summary>
+    private sealed class CapabilityPrefixMatchingComparer: IEqualityComparer<CapabilityIdentifier>
+    {
+        /// <summary>Treats two capabilities as equal when their URN prefixes are ordinally equal.</summary>
+        /// <param name="x">The first capability.</param>
+        /// <param name="y">The second capability.</param>
+        /// <returns>Whether the two URN prefixes are ordinally equal.</returns>
+        public bool Equals(CapabilityIdentifier x, CapabilityIdentifier y)
+        {
+
+            return string.Equals(ReadPrefix(x), ReadPrefix(y), StringComparison.Ordinal);
+        }
+
+
+        /// <summary>Hashes the URN prefix, so every capability sharing it lands on the held member.</summary>
+        /// <param name="obj">The capability to hash.</param>
+        /// <returns>The ordinal hash of the URN prefix.</returns>
+        public int GetHashCode(CapabilityIdentifier obj)
+        {
+
+            return StringComparer.Ordinal.GetHashCode(ReadPrefix(obj));
+        }
+
+
+        /// <summary>Reads a capability's URN up to and including its last colon.</summary>
+        /// <param name="capability">The capability whose prefix is read.</param>
+        /// <returns>The URN prefix; empty for a URN without a colon.</returns>
+        private static string ReadPrefix(CapabilityIdentifier capability)
+        {
+            string urn = capability.Urn ?? string.Empty;
+
+            return urn[..(urn.LastIndexOf(':', StringComparison.Ordinal) + 1)];
         }
     }
 }

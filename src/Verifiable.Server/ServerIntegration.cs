@@ -536,6 +536,27 @@ public class ServerIntegration: WiringComponent
 
 
     /// <summary>
+    /// Names the dependencies a declared capability of this family needs from the dispatch host itself
+    /// rather than from the family's own wiring, such as
+    /// <see cref="CompositionDependency.ServerActionExecutor"/>.
+    /// </summary>
+    /// <remarks>
+    /// The host owns these members, so a family only describes them and
+    /// <see cref="EndpointServer"/> checks each one against its own wiring when the composition declares
+    /// its capabilities, refusing a missing one with a <see cref="CompositionDependencyFailure"/> in the
+    /// same <see cref="CompositionDependencyException"/> as the families' own failures. This default
+    /// names none, so a family whose capabilities need nothing from the host is unchanged.
+    /// </remarks>
+    /// <param name="capability">One declared capability.</param>
+    /// <returns>The host-level dependencies the capability needs; empty when it needs none.</returns>
+    public virtual IReadOnlyList<CompositionDependency> DescribeServerDependencies(CapabilityIdentifier capability)
+    {
+
+        return [];
+    }
+
+
+    /// <summary>
     /// Appends the names of any unset required host-generic seams to
     /// <paramref name="missing"/>. A derived integration calls this from its own
     /// <see cref="Validate"/> override before adding its protocol-seam checks, so a single

@@ -18,7 +18,7 @@ namespace Verifiable.Server;
 /// <para>
 /// The text form is the member path the host writes in code: <c>Group.Member</c>, or the member
 /// alone when <see cref="Group"/> is empty because the member sits on the integration itself.
-/// Ordering and equality compare the group and member ordinally.
+/// Equality compares the group and member ordinally; a refusal orders its failures by this text form, ordinally.
 /// </para>
 /// </remarks>
 /// <param name="Group">
@@ -41,6 +41,16 @@ public readonly record struct CompositionDependency(string Group, string Member)
     public string Member { get; } = !string.IsNullOrWhiteSpace(Member)
         ? Member
         : throw new ArgumentException("A composition dependency names a member.", nameof(Member));
+
+
+    /// <summary>
+    /// The dispatch host's action bridge, <see cref="EndpointServer.ActionExecutor"/>, which runs the
+    /// effects a flow transition emits. A family names it through
+    /// <see cref="ServerIntegration.DescribeServerDependencies"/> for a declared capability whose flow
+    /// emits effects, and <see cref="EndpointServer"/> checks it against its own wiring.
+    /// </summary>
+    public static CompositionDependency ServerActionExecutor { get; } =
+        new(nameof(EndpointServer), nameof(EndpointServer.ActionExecutor));
 
 
     /// <summary>

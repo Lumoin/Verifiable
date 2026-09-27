@@ -70,8 +70,27 @@ public sealed record ServerConfiguration
     /// endpoint candidates only: the per-request capability set a registration resolves and the
     /// builders' own registration checks are unchanged by it.
     /// </para>
+    /// <para>
+    /// The stored set compares its members with <see cref="CapabilityIdentifier"/>'s own ordinal URN
+    /// equality whatever comparer the supplied set carries, so validation, which enumerates the
+    /// members, and dispatch, which asks the set whether it names a candidate's capability, agree on
+    /// exactly the same capabilities. A member that is the default <see cref="CapabilityIdentifier"/>
+    /// names no capability and is refused by validation with the named
+    /// <see cref="InvalidOperationException"/>.
+    /// </para>
+    /// <para>
+    /// Helpers an application calls outside dispatch are not scoped by the declaration. Bearer-token
+    /// validation reads the codec decoder, the JWT deserializers and the verification key resolver, so
+    /// a composition that calls it declares a capability requiring subject resolution, the grant-family
+    /// loader, both key resolvers and every codec delegate: any capability other than discovery and the
+    /// key set.
+    /// </para>
     /// </remarks>
-    public ImmutableHashSet<CapabilityIdentifier>? DeclaredCapabilities { get; init; }
+    public ImmutableHashSet<CapabilityIdentifier>? DeclaredCapabilities
+    {
+        get;
+        init => field = value?.WithComparer(EqualityComparer<CapabilityIdentifier>.Default);
+    }
 
 
     /// <summary>

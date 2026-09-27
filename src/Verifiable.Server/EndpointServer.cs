@@ -281,10 +281,13 @@ public sealed class EndpointServer: IDisposable
     /// <summary>Validates the primary/family relationship, nested groups and configuration policy.</summary>
     /// <remarks>
     /// Without <see cref="ServerConfiguration.DeclaredCapabilities"/> every family runs its full check.
-    /// With a declaration every family runs <see cref="ServerIntegration.ValidateDeclaredCapabilities"/>,
-    /// an empty declaration needs explicit maintenance mode, and the declared capabilities' missing
-    /// dependencies are refused together, ordered by capability URN and then dependency path, after every
-    /// other check has passed.
+    /// With a declaration a member that is the default <see cref="CapabilityIdentifier"/> is refused with
+    /// the named <see cref="InvalidOperationException"/> before any family runs, every family runs
+    /// <see cref="ServerIntegration.ValidateDeclaredCapabilities"/>, the host-level dependencies the
+    /// families describe through <see cref="ServerIntegration.DescribeServerDependencies"/> are checked
+    /// against this composition's own wiring, an empty declaration needs explicit maintenance mode, and
+    /// the declared capabilities' missing dependencies are refused together, ordered by capability URN
+    /// and then dependency path, after every other check has passed.
     /// </remarks>
     /// <param name="onValidated">Updates the serving owner while all composition locks remain held.</param>
     /// <exception cref="CompositionDependencyException">A declared capability lacks a dependency.</exception>
@@ -300,6 +303,14 @@ public sealed class EndpointServer: IDisposable
             ImmutableHashSet<CapabilityIdentifier>? declaredCapabilities = InitialConfiguration?.DeclaredCapabilities;
             List<CompositionDependencyFailure> failures = [];
             InitialIntegration.Attach(this, InvalidateValidation);
+
+            //A default identifier names no capability, so it is incoherent wiring rather than a
+            //capability a dependency failure could name; it is refused before any family reports one.
+            if(declaredCapabilities is not null && declaredCapabilities.Any(capability => capability.Urn is null))
+            {
+                throw new InvalidOperationException("EndpointServer requires ServerConfiguration.DeclaredCapabilities to name only created capabilities.");
+            }
+
             if(declaredCapabilities is null)
             {
                 InitialIntegration.Validate();
@@ -332,6 +343,11 @@ public sealed class EndpointServer: IDisposable
                 }
             }
 
+            if(declaredCapabilities is not null)
+            {
+                failures.AddRange(CollectMissingServerDependencies(declaredCapabilities));
+            }
+
             if(InitialConfiguration is null || InitialConfiguration.EndpointBuilders is null
                 || (InitialConfiguration.EndpointBuilders.Count == 0 && !InitialConfiguration.IsMaintenanceMode))
             {
@@ -354,6 +370,42 @@ public sealed class EndpointServer: IDisposable
             HasValidatedWiring = true;
             onValidated?.Invoke();
         });
+    }
+
+
+    /// <summary>
+    /// Collects the host-level dependencies every family describes for the declared capabilities through
+    /// <see cref="ServerIntegration.DescribeServerDependencies"/> and returns those this composition's own
+    /// wiring lacks, each named once.
+    /// </summary>
+    /// <param name="declaredCapabilities">The capabilities the composition declares it serves.</param>
+    /// <returns>One failure per declared capability and missing host-level dependency; empty when none is missing.</returns>
+    private IEnumerable<CompositionDependencyFailure> CollectMissingServerDependencies(ImmutableHashSet<CapabilityIdentifier> declaredCapabilities)
+    {
+
+        return Integrations.Values.Prepend(InitialIntegration)
+            .Distinct<ServerIntegration>(ReferenceEqualityComparer.Instance)
+            .SelectMany(family => declaredCapabilities.SelectMany(capability => family.DescribeServerDependencies(capability)
+                .Where(dependency => !IsServerDependencyWired(dependency))
+                .Select(dependency => new CompositionDependencyFailure(capability, dependency))))
+            .Distinct();
+    }
+
+
+    /// <summary>
+    /// Answers whether this composition wires a host-level dependency a family describes. A dependency
+    /// naming no member this host carries is never wired, so the refusal names it rather than passing it.
+    /// </summary>
+    /// <param name="dependency">A host-level dependency a family describes.</param>
+    /// <returns>Whether this composition's own member is present.</returns>
+    private bool IsServerDependencyWired(CompositionDependency dependency)
+    {
+
+        return dependency switch
+        {
+            _ when dependency == CompositionDependency.ServerActionExecutor => InitialActionExecutor is not null,
+            _ => false
+        };
     }
 
 

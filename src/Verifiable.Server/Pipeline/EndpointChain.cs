@@ -143,7 +143,10 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <remarks>
     /// <para>
     /// Admitted RequestServer keeps builders, URI operations and family reads on one wiring view.
-    /// Direct helper callers do not acquire admission through this method.
+    /// Direct helper callers do not acquire admission through this method. The builders and the
+    /// declaration come from one read of <see cref="EndpointServer.Configuration"/>, but the declared
+    /// composition's guarantee (no candidate reaches the chain whose dependencies validation did not
+    /// check) holds for admitted views, whose configuration and families were validated together.
     /// The chain is fresh per request — the same registration may produce
     /// different chains in different requests when a builder gates on
     /// context or when <c>ResolveCapabilitiesAsync</c> attenuates
@@ -199,12 +202,15 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
                 + "chain outside the dispatcher must call context.SetServer "
                 + "before invoking this method.");
 
-        EndpointBuilderSet builders = server.Configuration.EndpointBuilders;
+        //One read of the configuration supplies the builders and the declaration, so both come from
+        //the same publication even for a caller outside admission.
+        ServerConfiguration configuration = server.Configuration;
+        EndpointBuilderSet builders = configuration.EndpointBuilders;
         if(builders.Count == 0) { return Empty; }
 
         //A composition that declares its capabilities was validated only for those capabilities'
         //dependencies, so a candidate outside the declaration never reaches the chain.
-        ImmutableHashSet<CapabilityIdentifier>? declaredCapabilities = server.Configuration.DeclaredCapabilities;
+        ImmutableHashSet<CapabilityIdentifier>? declaredCapabilities = configuration.DeclaredCapabilities;
 
         //Per-call capability set — CAEP/RISC attenuation point. The library
         //default returns registration.AllowedCapabilities unchanged; custom

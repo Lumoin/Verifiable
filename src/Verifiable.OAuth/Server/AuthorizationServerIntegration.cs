@@ -2858,20 +2858,28 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// (<see cref="ValidateRequiredContainers"/>), the client-authentication declaration, the wired
     /// feature dependencies and the authorization details type registry are checked exactly as
     /// <see cref="Validate"/> checks them and throw the same named <see cref="InvalidOperationException"/>.
-    /// Subject resolution, the grant-family loader, the key resolvers, the codec delegates and the
-    /// key-set builder and signing action are required only by the declared capabilities that use them; each one missing is
-    /// returned as a <see cref="CompositionDependencyFailure"/>.
+    /// Subject resolution, the grant-family loader, the key resolvers, the codec delegates, the
+    /// key-set builder and the signing action are required only by the declared capabilities that use
+    /// them; each one missing is returned as a <see cref="CompositionDependencyFailure"/>.
     /// </para>
     /// <para>
     /// Discovery (<see cref="WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint"/>) reads only the
     /// required containers and the verification key resolver when present, so it needs nothing beyond
     /// the host seams. The key set (<see cref="WellKnownCapabilityIdentifiers.OAuthJwksEndpoint"/>) reads
-    /// only <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>. Signed request objects
-    /// (<see cref="WellKnownCapabilityIdentifiers.VcSignedRequestObject"/>) require a registered
-    /// <see cref="SignJarAction"/> handler in <see cref="ActionExecutor"/>. Every other capability,
+    /// only <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>. Every other capability,
     /// well-known or application-defined, needs subject resolution, the grant-family loader, both key
     /// resolvers and every codec delegate: the members <see cref="Validate"/> requires of a composition
-    /// that declares nothing.
+    /// that declares nothing. Signed request objects
+    /// (<see cref="WellKnownCapabilityIdentifiers.VcSignedRequestObject"/>) need those members and a
+    /// registered <see cref="SignJarAction"/> handler in <see cref="ActionExecutor"/> besides, so a
+    /// candidate carrying that capability is dispatched only behind the full check; the host's action
+    /// bridge that runs the handler is described by <see cref="DescribeServerDependencies"/> and checked
+    /// by the host.
+    /// </para>
+    /// <para>
+    /// The nested <see cref="Cryptography"/> and <see cref="Codecs"/> groups are checked member by
+    /// member for the declared capabilities only; their own full checks, and so their
+    /// <see cref="WiringComponent.IsValidated"/> flags, run only for a composition that declares nothing.
     /// </para>
     /// </remarks>
     /// <param name="primaryIntegration">The composition's shared host operations; this integration itself.</param>
@@ -2937,11 +2945,33 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
             _ when capability == WellKnownCapabilityIdentifiers.OAuthJwksEndpoint =>
                 [(JwksBuilderDependency, Cryptography.BuildJwksDocumentAsync is not null)],
             _ when capability == WellKnownCapabilityIdentifiers.VcSignedRequestObject =>
-                [(SignJarActionDependency, ActionExecutor is not null && ActionExecutor.IsRegistered<SignJarAction>())],
+            [
+                .. DescribeProtocolDependencies(),
+                (SignJarActionDependency, ActionExecutor is not null && ActionExecutor.IsRegistered<SignJarAction>())
+            ],
             _ => DescribeProtocolDependencies()
         };
 
         return required.Where(entry => !entry.IsWired).Select(entry => entry.Dependency);
+    }
+
+
+    /// <summary>
+    /// Names the host-level dependency declared signed request objects need: the host's action bridge
+    /// (<see cref="CompositionDependency.ServerActionExecutor"/>), which runs the registered
+    /// <see cref="SignJarAction"/> handler a Request Object fetched by POST reaches as a flow effect.
+    /// Every other capability of this family needs nothing from the host.
+    /// </summary>
+    /// <param name="capability">One declared capability.</param>
+    /// <returns>The host's action bridge for signed request objects; empty for every other capability.</returns>
+    public override IReadOnlyList<CompositionDependency> DescribeServerDependencies(CapabilityIdentifier capability)
+    {
+
+        return capability switch
+        {
+            _ when capability == WellKnownCapabilityIdentifiers.VcSignedRequestObject => [CompositionDependency.ServerActionExecutor],
+            _ => []
+        };
     }
 
 

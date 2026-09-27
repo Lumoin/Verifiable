@@ -17,9 +17,11 @@ namespace Verifiable.Server;
 /// by capability URN and then by dependency path so the report is the same on every run.
 /// </para>
 /// <para>
-/// Deriving from <see cref="InvalidOperationException"/> keeps the named configuration fault of the
-/// live-configuration contract: a host already catching that type for missing or incoherent wiring
-/// receives this refusal through the same handler. A composition that declares nothing never raises it.
+/// Deriving from <see cref="InvalidOperationException"/> keeps the named configuration fault
+/// <see href="../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration §4.1</see>
+/// states: "The named `InvalidOperationException` identifies missing or incoherent wiring." A host
+/// already catching that type for missing or incoherent wiring receives this refusal through the same
+/// handler. A composition that declares nothing never raises it.
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1032:Implement standard exception constructors", Justification = "This exception always carries the dependency failures that refused the composition; the parameterless and message-only constructors would violate that invariant.")]
