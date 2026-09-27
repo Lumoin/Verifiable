@@ -14,12 +14,22 @@ namespace Verifiable.Tests.Core;
 /// canonicalization rows that fold any received casing onto one interned instance, and the
 /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3">RFC 9110, Section 8.3</see>
 /// <c>Content-Type</c> a library-composed POST carries.
+/// The additional names come from the W3C Trace Context Recommendation
+/// (<see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name">Section 3.2.1</see>
+/// and <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name-0">Section 3.3.1</see>),
+/// the W3C Baggage Candidate Recommendation Snapshot of 30 May 2024
+/// (<see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">Section 3.1</see>),
+/// <see href="https://www.rfc-editor.org/rfc/rfc6585#section-4">RFC 6585, Section 4</see>, and
+/// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-10.1">draft-ietf-httpapi-ratelimit-headers-11, Section 10.1</see>,
+/// which is an Internet-Draft.
 /// </summary>
 [TestClass]
 internal sealed class WellKnownHttpHeaderNamesTests
 {
+    /// <summary>The shared <see cref="BaseMemoryPool"/> used to compose an encrypted message.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
+    /// <summary>The recipient endpoint supplied to <see cref="DidCommHttpTransport"/>.</summary>
     private static Uri DidCommEndpoint { get; } = new("https://recipient.example/didcomm");
 
 
@@ -49,8 +59,14 @@ internal sealed class WellKnownHttpHeaderNamesTests
     /// <c>Accept-Language</c> (Section 12.5.4), <c>Content-Language</c> (Section 8.5),
     /// <c>Content-Type</c> (Section 8.3), <c>DPoP</c> / <c>DPoP-Nonce</c> (RFC 9449 Sections 4 and 8),
     /// <c>Cache-Control</c> (RFC 9111 Section 5.2), <c>WWW-Authenticate</c> (RFC 9110 Section 11.6.1),
-    /// <c>Location</c> (Section 10.2.2), <c>Date</c> (Section 6.6.1), and <c>Age</c> / <c>Expires</c>
-    /// (RFC 9111 Sections 5.1 and 5.3).
+    /// <c>Allow</c> (Section 10.2.1), <c>Location</c> (Section 10.2.2), <c>Date</c> (Section 6.6.1),
+    /// and <c>Age</c> / <c>Expires</c> (RFC 9111 Sections 5.1 and 5.3).
+    /// W3C Trace Context Sections 3.2.1 and 3.3.1 name <c>traceparent</c> and <c>tracestate</c>;
+    /// the Baggage Candidate Recommendation Snapshot Section 3.1 names <c>baggage</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3">RFC 9110, Section 10.2.3</see>
+    /// defines "Retry-After = HTTP-date / delay-seconds"; the Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-10.1">draft-ietf-httpapi-ratelimit-headers-11, Section 10.1</see>
+    /// lists <c>RateLimit-Policy</c> and <c>RateLimit</c>.
     /// </summary>
     /// <returns>The registered names in declaration order.</returns>
     private static TabledHeader[] AllRegisteredHeaders() =>
@@ -64,10 +80,17 @@ internal sealed class WellKnownHttpHeaderNamesTests
         new(nameof(WellKnownHttpHeaderNames.DPoPNonce), WellKnownHttpHeaderNames.DPoPNonce, "DPoP-Nonce", "dpop-nonce", "DPOP-NONCE", WellKnownHttpHeaderNames.IsDPoPNonce),
         new(nameof(WellKnownHttpHeaderNames.CacheControl), WellKnownHttpHeaderNames.CacheControl, "Cache-Control", "cache-control", "CACHE-CONTROL", WellKnownHttpHeaderNames.IsCacheControl),
         new(nameof(WellKnownHttpHeaderNames.WwwAuthenticate), WellKnownHttpHeaderNames.WwwAuthenticate, "WWW-Authenticate", "www-authenticate", "WWW-AUTHENTICATE", WellKnownHttpHeaderNames.IsWwwAuthenticate),
+        new(nameof(WellKnownHttpHeaderNames.Allow), WellKnownHttpHeaderNames.Allow, "Allow", "allow", "ALLOW", WellKnownHttpHeaderNames.IsAllow),
         new(nameof(WellKnownHttpHeaderNames.Location), WellKnownHttpHeaderNames.Location, "Location", "location", "LOCATION", WellKnownHttpHeaderNames.IsLocation),
         new(nameof(WellKnownHttpHeaderNames.Date), WellKnownHttpHeaderNames.Date, "Date", "date", "DATE", WellKnownHttpHeaderNames.IsDate),
         new(nameof(WellKnownHttpHeaderNames.Age), WellKnownHttpHeaderNames.Age, "Age", "age", "AGE", WellKnownHttpHeaderNames.IsAge),
-        new(nameof(WellKnownHttpHeaderNames.Expires), WellKnownHttpHeaderNames.Expires, "Expires", "expires", "EXPIRES", WellKnownHttpHeaderNames.IsExpires)
+        new(nameof(WellKnownHttpHeaderNames.Expires), WellKnownHttpHeaderNames.Expires, "Expires", "expires", "EXPIRES", WellKnownHttpHeaderNames.IsExpires),
+        new(nameof(WellKnownHttpHeaderNames.TraceParent), WellKnownHttpHeaderNames.TraceParent, "traceparent", "traceparent", "TRACEPARENT", WellKnownHttpHeaderNames.IsTraceParent),
+        new(nameof(WellKnownHttpHeaderNames.TraceState), WellKnownHttpHeaderNames.TraceState, "tracestate", "tracestate", "TRACESTATE", WellKnownHttpHeaderNames.IsTraceState),
+        new(nameof(WellKnownHttpHeaderNames.Baggage), WellKnownHttpHeaderNames.Baggage, "baggage", "baggage", "BAGGAGE", WellKnownHttpHeaderNames.IsBaggage),
+        new(nameof(WellKnownHttpHeaderNames.RetryAfter), WellKnownHttpHeaderNames.RetryAfter, "Retry-After", "retry-after", "RETRY-AFTER", WellKnownHttpHeaderNames.IsRetryAfter),
+        new(nameof(WellKnownHttpHeaderNames.RateLimitPolicy), WellKnownHttpHeaderNames.RateLimitPolicy, "RateLimit-Policy", "ratelimit-policy", "RATELIMIT-POLICY", WellKnownHttpHeaderNames.IsRateLimitPolicy),
+        new(nameof(WellKnownHttpHeaderNames.RateLimit), WellKnownHttpHeaderNames.RateLimit, "RateLimit", "ratelimit", "RATELIMIT", WellKnownHttpHeaderNames.IsRateLimit)
     ];
 
 
@@ -90,11 +113,20 @@ internal sealed class WellKnownHttpHeaderNamesTests
 
 
     /// <summary>
-    /// Every entry reads the exact field name its defining specification spells — the canonical spelling
-    /// a sender generates, even though a recipient must accept any casing per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110, Section 5.1</see>
-    /// ("Field names are case-insensitive and ought to be registered within the 'Hypertext Transfer
-    /// Protocol (HTTP) Field Name Registry'").
+    /// Every entry spells the name in its defining specification. W3C Trace Context says
+    /// "Header name: traceparent" and "Header name: tracestate"
+    /// (<see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name">Section 3.2.1</see>
+    /// and <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name-0">Section 3.3.1</see>).
+    /// The Baggage Candidate Recommendation Snapshot says "Header name: baggage"
+    /// (<see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">Section 3.1</see>).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3">RFC 9110, Section 10.2.3</see>
+    /// defines "Retry-After = HTTP-date / delay-seconds", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.1">Section 10.2.1</see>
+    /// defines "Allow = #method". The Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-3">draft-ietf-httpapi-ratelimit-headers-11, Section 3</see>
+    /// names "The &quot;RateLimit-Policy&quot; response header field", and
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-4">Section 4</see>
+    /// names "the &quot;RateLimit&quot; response header field".
     /// </summary>
     [TestMethod]
     public void EveryEntrySpellsItsRegisteredFieldNameVerbatim()
@@ -104,15 +136,16 @@ internal sealed class WellKnownHttpHeaderNamesTests
             Assert.AreEqual(entry.WireValue, entry.TabledValue,
                 $"{entry.FieldName} must read \"{entry.WireValue}\" verbatim as its defining specification spells it.");
         }
+
     }
 
 
     /// <summary>
-    /// Every entry carries a UTF-8 twin holding the same bytes as its string, so a span reader and a
-    /// string comparison name the identical field of
+    /// The library's UTF-8 pairing rule gives every entry a twin holding the same bytes as its string,
+    /// so a span reader and a string comparison name the identical field of
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110, Section 5.1</see>
-    /// ("field-name = token") rather than drifting apart. The twins are read directly rather than
-    /// swept by reflection: a byte span cannot cross the reflection boundary.
+    /// ("A field name labels the corresponding field value as having the semantics defined by that name.").
+    /// Each twin is read directly through <see cref="AssertUtf8Twin"/>.
     /// </summary>
     [TestMethod]
     public void EveryEntryHasAUtf8TwinHoldingTheSameBytes()
@@ -126,17 +159,23 @@ internal sealed class WellKnownHttpHeaderNamesTests
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.DPoPNonce), WellKnownHttpHeaderNames.DPoPNonce, WellKnownHttpHeaderNames.DPoPNonceUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.CacheControl), WellKnownHttpHeaderNames.CacheControl, WellKnownHttpHeaderNames.CacheControlUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.WwwAuthenticate), WellKnownHttpHeaderNames.WwwAuthenticate, WellKnownHttpHeaderNames.WwwAuthenticateUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Allow), WellKnownHttpHeaderNames.Allow, WellKnownHttpHeaderNames.AllowUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Location), WellKnownHttpHeaderNames.Location, WellKnownHttpHeaderNames.LocationUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Date), WellKnownHttpHeaderNames.Date, WellKnownHttpHeaderNames.DateUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Age), WellKnownHttpHeaderNames.Age, WellKnownHttpHeaderNames.AgeUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Expires), WellKnownHttpHeaderNames.Expires, WellKnownHttpHeaderNames.ExpiresUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.TraceParent), WellKnownHttpHeaderNames.TraceParent, WellKnownHttpHeaderNames.TraceParentUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.TraceState), WellKnownHttpHeaderNames.TraceState, WellKnownHttpHeaderNames.TraceStateUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Baggage), WellKnownHttpHeaderNames.Baggage, WellKnownHttpHeaderNames.BaggageUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.RetryAfter), WellKnownHttpHeaderNames.RetryAfter, WellKnownHttpHeaderNames.RetryAfterUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.RateLimitPolicy), WellKnownHttpHeaderNames.RateLimitPolicy, WellKnownHttpHeaderNames.RateLimitPolicyUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.RateLimit), WellKnownHttpHeaderNames.RateLimit, WellKnownHttpHeaderNames.RateLimitUtf8);
     }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110, Section 5.1</see>: "Field
-    /// names are case-insensitive and ought to be registered within the 'Hypertext Transfer Protocol
-    /// (HTTP) Field Name Registry'". Every entry's own predicate therefore recognizes its field name in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110, Section 5.1</see>:
+    /// "Field names are case-insensitive". Every entry's own predicate therefore recognizes its field name in
     /// the registered spelling, in all-lowercase, and in all-uppercase alike.
     /// </summary>
     [TestMethod]
@@ -153,6 +192,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
             Assert.IsTrue(entry.Predicate(entry.UpperCasedValue),
                 $"Field names are case-insensitive (RFC 9110 Section 5.1), so the predicate for {entry.FieldName} must recognize \"{entry.UpperCasedValue}\".");
         }
+
     }
 
 
@@ -181,13 +221,15 @@ internal sealed class WellKnownHttpHeaderNamesTests
                 Assert.IsFalse(entries[i].Predicate(entries[j].LowerCasedValue),
                     $"The predicate for {entries[i].FieldName} must reject \"{entries[j].LowerCasedValue}\" in any casing.");
             }
+
         }
+
     }
 
 
     /// <summary>
-    /// Because "field names are case-insensitive"
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110, Section 5.1</see>), a
+    /// The library's canonical-instance rule follows "Field names are case-insensitive"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110, Section 5.1</see>). A
     /// name received in any casing canonicalizes onto the one interned constant the table declares — the
     /// instance, not merely an equal string — so the whole library stores and compares one spelling.
     /// </summary>
@@ -210,6 +252,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
             Assert.AreSame(entry.TabledValue, WellKnownHttpHeaderNames.GetCanonicalizedValue(received),
                 $"\"{received}\" must canonicalize onto the interned {entry.FieldName} constant, since field names are case-insensitive (RFC 9110 Section 5.1).");
         }
+
     }
 
 

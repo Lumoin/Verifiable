@@ -17,16 +17,25 @@ namespace Verifiable.Core.Transport;
 /// rule, centralised in <see cref="Equals"/>.
 /// </para>
 /// <para>
-/// Every entry the library reads or composes anywhere — request, response,
-/// and cache-freshness headers alike — is named here: <see cref="Authorization"/>,
+/// Fields the library reads or composes include <see cref="Authorization"/>,
 /// <see cref="Accept"/>, <see cref="AcceptLanguage"/>, <see cref="ContentLanguage"/>,
 /// <see cref="ContentType"/>, <see cref="DPoP"/>, <see cref="DPoPNonce"/>,
 /// <see cref="CacheControl"/>, <see cref="WwwAuthenticate"/>, <see cref="Allow"/>,
-/// <see cref="Location"/>, <see cref="Date"/>, <see cref="Age"/>, and <see cref="Expires"/>.
-/// Each carries its own <c>IsXxx</c> predicate and a row in <see cref="GetCanonicalizedValue"/>. This
-/// type lives in <c>Verifiable.Core.Transport</c> beside <see cref="HttpHeaderSet"/> —
-/// a transport vocabulary the OAuth, Server, DIDComm, VCALM, and did:webvh surfaces
-/// all read, not an OAuth-only one.
+/// <see cref="Location"/>, <see cref="Date"/>, <see cref="Age"/>, <see cref="Expires"/>,
+/// and <see cref="RetryAfter"/>. Hosts that read or write trace context and rate limits beside
+/// the library can use <see cref="TraceParent"/>, <see cref="TraceState"/>,
+/// <see cref="Baggage"/>, <see cref="RateLimitPolicy"/>, and <see cref="RateLimit"/>.
+/// The trace-context names use the lowercase spelling their specifications ask senders to use:
+/// W3C Trace Context says "Vendors MUST expect the header name in any case (upper, lower, mixed),
+/// and SHOULD send the header name in lowercase."
+/// (<see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name">Section 3.2.1</see>
+/// and <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name-0">Section 3.3.1</see>);
+/// the W3C Baggage Candidate Recommendation Snapshot says "implementations SHOULD keep the header name lowercase."
+/// (<see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">Section 3.1</see>).
+/// Comparisons remain case-insensitive per
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110 §5.1</see>.
+/// Each entry carries its own <c>IsXxx</c> predicate and a row in <see cref="GetCanonicalizedValue"/>.
+/// This transport vocabulary lives beside <see cref="HttpHeaderSet"/>.
 /// </para>
 /// </remarks>
 public static class WellKnownHttpHeaderNames
@@ -203,6 +212,100 @@ public static class WellKnownHttpHeaderNames
     /// </summary>
     public static string Expires { get; } = Utf8Constants.ToInternedString(ExpiresUtf8);
 
+    /// <summary>
+    /// The UTF-8 source literal of <see cref="TraceParent"/>: "Header name: traceparent" in the
+    /// <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name">W3C Trace Context Recommendation §3.2.1</see>.
+    /// </summary>
+    public static ReadOnlySpan<byte> TraceParentUtf8 => "traceparent"u8;
+
+    /// <summary>
+    /// The interned trace-parent header name derived from <see cref="TraceParentUtf8"/>.
+    /// The <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name">W3C Trace Context Recommendation §3.2.1</see>
+    /// names "Header name: traceparent" and says "Vendors MUST expect the header name in any case
+    /// (upper, lower, mixed), and SHOULD send the header name in lowercase."
+    /// </summary>
+    public static string TraceParent { get; } = Utf8Constants.ToInternedString(TraceParentUtf8);
+
+    /// <summary>
+    /// The UTF-8 source literal of <see cref="TraceState"/>: "Header name: tracestate" in the
+    /// <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name-0">W3C Trace Context Recommendation §3.3.1</see>.
+    /// </summary>
+    public static ReadOnlySpan<byte> TraceStateUtf8 => "tracestate"u8;
+
+    /// <summary>
+    /// The interned trace-state header name derived from <see cref="TraceStateUtf8"/>.
+    /// The <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name-0">W3C Trace Context Recommendation §3.3.1</see>
+    /// names "Header name: tracestate" and says "Vendors MUST expect the header name in any case
+    /// (upper, lower, mixed), and SHOULD send the header name in lowercase."
+    /// </summary>
+    public static string TraceState { get; } = Utf8Constants.ToInternedString(TraceStateUtf8);
+
+    /// <summary>
+    /// The UTF-8 source literal of <see cref="Baggage"/>: "Header name: baggage" in the
+    /// <see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">W3C Baggage §3.1</see>,
+    /// a Candidate Recommendation Snapshot dated 30 May 2024.
+    /// </summary>
+    public static ReadOnlySpan<byte> BaggageUtf8 => "baggage"u8;
+
+    /// <summary>
+    /// The interned baggage header name derived from <see cref="BaggageUtf8"/>.
+    /// <see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">W3C Baggage §3.1</see>,
+    /// a Candidate Recommendation Snapshot dated 30 May 2024, names "Header name: baggage" and says
+    /// "implementations SHOULD keep the header name lowercase."
+    /// </summary>
+    public static string Baggage { get; } = Utf8Constants.ToInternedString(BaggageUtf8);
+
+    /// <summary>
+    /// The UTF-8 source literal of <see cref="RetryAfter"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3">RFC 9110 §10.2.3</see>
+    /// defines "Retry-After = HTTP-date / delay-seconds".
+    /// </summary>
+    public static ReadOnlySpan<byte> RetryAfterUtf8 => "Retry-After"u8;
+
+    /// <summary>
+    /// The interned retry-delay header name derived from <see cref="RetryAfterUtf8"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3">RFC 9110 §10.2.3</see>:
+    /// "Servers send the &quot;Retry-After&quot; header field to indicate how long the user agent ought
+    /// to wait before making a follow-up request." A 429 response
+    /// "MAY include a Retry-After header indicating how long to wait before making a new request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6585#section-4">RFC 6585 §4</see>).
+    /// </summary>
+    public static string RetryAfter { get; } = Utf8Constants.ToInternedString(RetryAfterUtf8);
+
+    /// <summary>
+    /// The UTF-8 source literal of <see cref="RateLimitPolicy"/>. The Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-3">draft-ietf-httpapi-ratelimit-headers-11 §3</see>
+    /// names "The &quot;RateLimit-Policy&quot; response header field".
+    /// </summary>
+    public static ReadOnlySpan<byte> RateLimitPolicyUtf8 => "RateLimit-Policy"u8;
+
+    /// <summary>
+    /// The interned quota-policy header name derived from <see cref="RateLimitPolicyUtf8"/>.
+    /// The Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-3">draft-ietf-httpapi-ratelimit-headers-11 §3</see>
+    /// says "The &quot;RateLimit-Policy&quot; response header field is a non-empty List[SF] of Quota Policy Items (Section 3.1)."
+    /// Its registration is proposed in
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-10.1">§10.1</see>.
+    /// </summary>
+    public static string RateLimitPolicy { get; } = Utf8Constants.ToInternedString(RateLimitPolicyUtf8);
+
+    /// <summary>
+    /// The UTF-8 source literal of <see cref="RateLimit"/>. The Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-4">draft-ietf-httpapi-ratelimit-headers-11 §4</see>
+    /// names "the &quot;RateLimit&quot; response header field".
+    /// </summary>
+    public static ReadOnlySpan<byte> RateLimitUtf8 => "RateLimit"u8;
+
+    /// <summary>
+    /// The interned service-limit header name derived from <see cref="RateLimitUtf8"/>.
+    /// The Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-4">draft-ietf-httpapi-ratelimit-headers-11 §4</see>
+    /// says "A server uses the &quot;RateLimit&quot; response header field to communicate the current service
+    /// limit for a quota policy for a particular partition key." Its registration is proposed in
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-10.1">§10.1</see>.
+    /// </summary>
+    public static string RateLimit { get; } = Utf8Constants.ToInternedString(RateLimitUtf8);
+
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="name"/> is the
@@ -288,10 +391,62 @@ public static class WellKnownHttpHeaderNames
     /// </summary>
     public static bool IsExpires(string name) => Equals(name, Expires);
 
+    /// <summary>
+    /// Tests whether <paramref name="name"/> names <see cref="TraceParent"/> through <see cref="Equals"/>.
+    /// The <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name">W3C Trace Context Recommendation §3.2.1</see>
+    /// says "Vendors MUST expect the header name in any case (upper, lower, mixed), and SHOULD send the header name in lowercase."
+    /// </summary>
+    public static bool IsTraceParent(string name) => Equals(name, TraceParent);
+
+    /// <summary>
+    /// Tests whether <paramref name="name"/> names <see cref="TraceState"/> through <see cref="Equals"/>.
+    /// The <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name-0">W3C Trace Context Recommendation §3.3.1</see>
+    /// says "Vendors MUST expect the header name in any case (upper, lower, mixed), and SHOULD send the header name in lowercase."
+    /// </summary>
+    public static bool IsTraceState(string name) => Equals(name, TraceState);
+
+    /// <summary>
+    /// Tests whether <paramref name="name"/> names <see cref="Baggage"/> through <see cref="Equals"/>.
+    /// <see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">W3C Baggage §3.1</see>,
+    /// a Candidate Recommendation Snapshot dated 30 May 2024, names "Header name: baggage".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110 §5.1</see> says
+    /// "Field names are case-insensitive".
+    /// </summary>
+    public static bool IsBaggage(string name) => Equals(name, Baggage);
+
+    /// <summary>
+    /// Tests whether <paramref name="name"/> names <see cref="RetryAfter"/> through <see cref="Equals"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3">RFC 9110 §10.2.3</see>
+    /// defines "Retry-After = HTTP-date / delay-seconds"; <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">§5.1</see>
+    /// says "Field names are case-insensitive".
+    /// </summary>
+    public static bool IsRetryAfter(string name) => Equals(name, RetryAfter);
+
+    /// <summary>
+    /// Tests whether <paramref name="name"/> names <see cref="RateLimitPolicy"/> through <see cref="Equals"/>.
+    /// The Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-3">draft-ietf-httpapi-ratelimit-headers-11 §3</see>
+    /// names "The &quot;RateLimit-Policy&quot; response header field"; <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110 §5.1</see>
+    /// says "Field names are case-insensitive".
+    /// </summary>
+    public static bool IsRateLimitPolicy(string name) => Equals(name, RateLimitPolicy);
+
+    /// <summary>
+    /// Tests whether <paramref name="name"/> names <see cref="RateLimit"/> through <see cref="Equals"/>.
+    /// The Internet-Draft
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-4">draft-ietf-httpapi-ratelimit-headers-11 §4</see>
+    /// names "the &quot;RateLimit&quot; response header field"; <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110 §5.1</see>
+    /// says "Field names are case-insensitive".
+    /// </summary>
+    public static bool IsRateLimit(string name) => Equals(name, RateLimit);
+
 
     /// <summary>
     /// Returns the canonical instance for <paramref name="name"/> when it
     /// matches one of the well-known headers, otherwise the input unchanged.
+    /// The library's canonical-instance rule follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110 §5.1</see>:
+    /// "Field names are case-insensitive".
     /// </summary>
     public static string GetCanonicalizedValue(string name) => name switch
     {
@@ -309,6 +464,12 @@ public static class WellKnownHttpHeaderNames
         var n when IsDate(n) => Date,
         var n when IsAge(n) => Age,
         var n when IsExpires(n) => Expires,
+        var n when IsTraceParent(n) => TraceParent,
+        var n when IsTraceState(n) => TraceState,
+        var n when IsBaggage(n) => Baggage,
+        var n when IsRetryAfter(n) => RetryAfter,
+        var n when IsRateLimitPolicy(n) => RateLimitPolicy,
+        var n when IsRateLimit(n) => RateLimit,
         _ => name
     };
 

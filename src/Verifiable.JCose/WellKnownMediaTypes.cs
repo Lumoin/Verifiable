@@ -397,6 +397,33 @@ namespace Verifiable.JCose
             /// </summary>
             public static string Json { get; } = Utf8Constants.ToInternedString(JsonUtf8);
 
+            /// <summary>
+            /// The UTF-8 source of <see cref="ProblemJson"/>. <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 Section 3</see>:
+            /// "When serialized in a JSON document, that format is identified with the "application/problem+json" media type."
+            /// </summary>
+            public static ReadOnlySpan<byte> ProblemJsonUtf8 => "application/problem+json"u8;
+
+            /// <summary>
+            /// The interned media type for JSON problem details, derived from <see cref="ProblemJsonUtf8"/>.
+            /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 Section 3</see>:
+            /// "When serialized in a JSON document, that format is identified with the "application/problem+json" media type."
+            /// </summary>
+            public static string ProblemJson { get; } = Utf8Constants.ToInternedString(ProblemJsonUtf8);
+
+            /// <summary>
+            /// The UTF-8 source of <see cref="ClientAuthenticationJwt"/>. The Internet-Draft
+            /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>
+            /// proposes "Type name: application" and "Subtype name: client-authentication+jwt".
+            /// </summary>
+            public static ReadOnlySpan<byte> ClientAuthenticationJwtUtf8 => "application/client-authentication+jwt"u8;
+
+            /// <summary>
+            /// The interned full media type for a client authentication JWT, derived from <see cref="ClientAuthenticationJwtUtf8"/>.
+            /// The Internet-Draft <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>
+            /// proposes "Type name: application" and "Subtype name: client-authentication+jwt".
+            /// </summary>
+            public static string ClientAuthenticationJwt { get; } = Utf8Constants.ToInternedString(ClientAuthenticationJwtUtf8);
+
             /// <summary>The UTF-8 source literal of <see cref="FormUrlEncoded"/>.</summary>
             public static ReadOnlySpan<byte> FormUrlEncodedUtf8 => "application/x-www-form-urlencoded"u8;
 
@@ -569,6 +596,25 @@ namespace Verifiable.JCose
             /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="Json"/>; otherwise, <see langword="false"/>.</returns>
             public static bool IsJson(string mediaType) => Equals(mediaType, Json);
 
+            /// <summary>
+            /// Recognizes <see cref="ProblemJson"/> through <see cref="Equals"/>, ignoring media-type parameters.
+            /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+            /// "The type and subtype tokens are case-insensitive."
+            /// </summary>
+            /// <param name="mediaType">The media type to recognize.</param>
+            /// <returns>Whether the type and subtype identify JSON problem details.</returns>
+            public static bool IsProblemJson(string mediaType) => Equals(mediaType, ProblemJson);
+
+
+            /// <summary>
+            /// Recognizes the <see cref="ClientAuthenticationJwt"/> media type proposed by the Internet-Draft
+            /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>:
+            /// "Subtype name: client-authentication+jwt". <see cref="Equals"/> compares the type and subtype case-insensitively.
+            /// </summary>
+            /// <param name="mediaType">The media type to recognize.</param>
+            /// <returns>Whether the type and subtype identify a client authentication JWT.</returns>
+            public static bool IsClientAuthenticationJwt(string mediaType) => Equals(mediaType, ClientAuthenticationJwt);
+
 
             /// <summary>
             /// Returns <see langword="true"/> if <paramref name="mediaType"/> is the
@@ -584,6 +630,11 @@ namespace Verifiable.JCose
             /// Returns the equivalent static instance, or the original instance if none match.
             /// This conversion is optional but allows for performance optimizations when comparing values elsewhere.
             /// </summary>
+            /// <remarks>
+            /// The catalog's canonical instance follows the comparison rule of
+            /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+            /// "The type and subtype tokens are case-insensitive."
+            /// </remarks>
             /// <param name="mediaType">The media type to canonicalize.</param>
             /// <returns>The equivalent static instance of <paramref name="mediaType"/>, or the original instance if none match.</returns>
             public static string GetCanonicalizedValue(string mediaType) => mediaType switch
@@ -606,6 +657,8 @@ namespace Verifiable.JCose
                 _ when IsDpopJwt(mediaType) => DpopJwt,
                 _ when IsSecEventJwt(mediaType) => SecEventJwt,
                 _ when IsJson(mediaType) => Json,
+                _ when IsProblemJson(mediaType) => ProblemJson,
+                _ when IsClientAuthenticationJwt(mediaType) => ClientAuthenticationJwt,
                 _ when IsFormUrlEncoded(mediaType) => FormUrlEncoded,
                 _ => mediaType
             };
@@ -862,6 +915,34 @@ namespace Verifiable.JCose
             public static string StatusListJwt { get; } = Utf8Constants.ToInternedString(StatusListJwtUtf8);
 
             /// <summary>
+            /// The UTF-8 source of <see cref="ClientAuthenticationJwt"/>. The Internet-Draft
+            /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11 Section 4</see>:
+            /// "Client authentication JWTs SHOULD be explicitly typed by using the typ header parameter value
+            /// client-authentication+jwt or another more specific explicit type value defined by a specification profiling this specification."
+            /// </summary>
+            public static ReadOnlySpan<byte> ClientAuthenticationJwtUtf8 => "client-authentication+jwt"u8;
+
+            /// <summary>
+            /// The interned explicit JWT type for client authentication, derived from <see cref="ClientAuthenticationJwtUtf8"/>.
+            /// The Internet-Draft <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11 Section 4</see>:
+            /// "Client authentication JWTs SHOULD be explicitly typed by using the typ header parameter value
+            /// client-authentication+jwt or another more specific explicit type value defined by a specification profiling this specification."
+            /// </summary>
+            public static string ClientAuthenticationJwt { get; } = Utf8Constants.ToInternedString(ClientAuthenticationJwtUtf8);
+
+
+            /// <summary>
+            /// Recognizes the <see cref="ClientAuthenticationJwt"/> type proposed by the Internet-Draft
+            /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11 Section 4</see>.
+            /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 Section 4.1.9</see>:
+            /// "A recipient using the media type value MUST treat it as if "application/" were prepended
+            /// to any "typ" value not containing a '/'." <see cref="Equals"/> recognizes both forms case-insensitively.
+            /// </summary>
+            /// <param name="typ">The JWT type to recognize.</param>
+            /// <returns>Whether the media type identifies a client authentication JWT.</returns>
+            public static bool IsClientAuthenticationJwt(string typ) => Equals(typ, ClientAuthenticationJwt);
+
+            /// <summary>
             /// Whether <paramref name="typ"/> is <see cref="LogoutJwt"/>.
             /// </summary>
             /// <param name="typ">The JWT typ header value.</param>
@@ -991,6 +1072,12 @@ namespace Verifiable.JCose
             /// Returns the equivalent static instance, or the original instance if none match.
             /// This conversion is optional but allows for performance optimizations when comparing values elsewhere.
             /// </summary>
+            /// <remarks>
+            /// The catalog's canonical instance follows
+            /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 Section 4.1.9</see>:
+            /// "A recipient using the media type value MUST treat it as if "application/" were prepended
+            /// to any "typ" value not containing a '/'."
+            /// </remarks>
             /// <param name="typ">The typ value to canonicalize.</param>
             /// <returns>The equivalent static instance of <paramref name="typ"/>, or the original instance if none match.</returns>
             public static string GetCanonicalizedValue(string typ) => typ switch
@@ -1010,6 +1097,7 @@ namespace Verifiable.JCose
                 _ when IsVerifierAttestationJwt(typ) => VerifierAttestationJwt,
                 _ when IsSecEventJwt(typ) => SecEventJwt,
                 _ when IsStatusListJwt(typ) => StatusListJwt,
+                _ when IsClientAuthenticationJwt(typ) => ClientAuthenticationJwt,
                 _ => typ
             };
 

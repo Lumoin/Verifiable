@@ -1,3 +1,4 @@
+using System.Text;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Oid4Vci;
@@ -13,7 +14,9 @@ namespace Verifiable.Tests.Jwt
     internal sealed class WellKnownMediaTypesTests
     {
         /// <summary>
-        /// All of the well-known Application media type values and their comparison functions.
+        /// The application media types exercised by <see cref="ApplicationMediaTypeValuesCompareCorrectly"/>.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+        /// "The type and subtype tokens are case-insensitive."
         /// </summary>
         public static IEnumerable<object[]> GetApplicationMediaTypeValues()
         {
@@ -26,12 +29,16 @@ namespace Verifiable.Tests.Jwt
             yield return new object[] { WellKnownMediaTypes.Application.VcCose, new Func<string, bool>(WellKnownMediaTypes.Application.IsVcCose) };
             yield return new object[] { WellKnownMediaTypes.Application.VpCose, new Func<string, bool>(WellKnownMediaTypes.Application.IsVpCose) };
             yield return new object[] { WellKnownMediaTypes.Application.Json, new Func<string, bool>(WellKnownMediaTypes.Application.IsJson) };
+            yield return new object[] { WellKnownMediaTypes.Application.ProblemJson, new Func<string, bool>(WellKnownMediaTypes.Application.IsProblemJson) };
+            yield return new object[] { WellKnownMediaTypes.Application.ClientAuthenticationJwt, new Func<string, bool>(WellKnownMediaTypes.Application.IsClientAuthenticationJwt) };
             yield return new object[] { WellKnownMediaTypes.Application.FormUrlEncoded, new Func<string, bool>(WellKnownMediaTypes.Application.IsFormUrlEncoded) };
         }
 
 
         /// <summary>
-        /// All of the well-known JWT typ header values and their comparison functions.
+        /// The JWT type values exercised by <see cref="JwtTypValuesCompareCorrectly"/>.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+        /// "The type and subtype tokens are case-insensitive."
         /// </summary>
         public static IEnumerable<object[]> GetJwtTypValues()
         {
@@ -39,11 +46,14 @@ namespace Verifiable.Tests.Jwt
             yield return new object[] { WellKnownMediaTypes.Jwt.VpLdJwt, new Func<string, bool>(WellKnownMediaTypes.Jwt.IsVpLdJwt) };
             yield return new object[] { WellKnownMediaTypes.Jwt.VcJwt, new Func<string, bool>(WellKnownMediaTypes.Jwt.IsVcJwt) };
             yield return new object[] { WellKnownMediaTypes.Jwt.VpJwt, new Func<string, bool>(WellKnownMediaTypes.Jwt.IsVpJwt) };
+            yield return new object[] { WellKnownMediaTypes.Jwt.ClientAuthenticationJwt, new Func<string, bool>(WellKnownMediaTypes.Jwt.IsClientAuthenticationJwt) };
         }
 
 
         /// <summary>
-        /// Tests that all well-known Application media type values are recognized correctly.
+        /// The local catalog recognizes each media type through its predicate and canonical instance.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+        /// "The type and subtype tokens are case-insensitive."
         /// </summary>
         /// <param name="mediaType">The media type to test.</param>
         /// <param name="isCorrectMediaType">The function that checks if the media type is recognized.</param>
@@ -74,7 +84,9 @@ namespace Verifiable.Tests.Jwt
 
 
         /// <summary>
-        /// Tests that all well-known JWT typ header values are recognized correctly.
+        /// The local catalog recognizes each JWT type through its predicate and canonical instance.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+        /// "The type and subtype tokens are case-insensitive."
         /// </summary>
         /// <param name="typ">The typ value to test.</param>
         /// <param name="isCorrectTyp">The function that checks if the typ is recognized.</param>
@@ -124,13 +136,17 @@ namespace Verifiable.Tests.Jwt
 
 
         /// <summary>
-        /// JWT typ short forms this suite proves compare equal to their <c>application/</c> long form.
+        /// The short forms exercised by <see cref="JwtEqualsTreatsShortAndLongFormsAsTheSameMediaType"/>.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 Section 4.1.9</see>:
+        /// "A recipient using the media type value MUST treat it as if "application/" were prepended
+        /// to any "typ" value not containing a '/'."
         /// </summary>
         public static IEnumerable<object[]> GetTypShortFormsForMediaTypeEquivalence()
         {
             yield return new object[] { WellKnownMediaTypes.Jwt.OauthIdJagJwt };
             yield return new object[] { WellKnownMediaTypes.Jwt.DpopJwt };
             yield return new object[] { WellKnownMediaTypes.Jwt.AtJwt };
+            yield return new object[] { WellKnownMediaTypes.Jwt.ClientAuthenticationJwt };
         }
 
 
@@ -141,9 +157,9 @@ namespace Verifiable.Tests.Jwt
         /// </summary>
         /// <param name="shortForm">The typ short form under test.</param>
         /// <remarks>
-        /// RFC 7515 §4.1.9: "A recipient using the media type value MUST treat it as if
-        /// "application/" were prepended to any "typ" value not containing a '/'," and per RFC 2045
-        /// media type and subtype values are case insensitive.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 Section 4.1.9</see>:
+        /// "A recipient using the media type value MUST treat it as if "application/" were prepended
+        /// to any "typ" value not containing a '/'."
         /// </remarks>
         [TestMethod]
         [DynamicData(nameof(GetTypShortFormsForMediaTypeEquivalence))]
@@ -223,7 +239,10 @@ namespace Verifiable.Tests.Jwt
 
 
         /// <summary>
-        /// Tests that Application and Jwt values correspond where applicable.
+        /// The local catalog's full media types correspond to their JWT type short forms.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 Section 4.1.9</see>:
+        /// "A recipient using the media type value MUST treat it as if "application/" were prepended
+        /// to any "typ" value not containing a '/'."
         /// </summary>
         [TestMethod]
         public void ApplicationAndJwtValuesCorrespond()
@@ -233,6 +252,39 @@ namespace Verifiable.Tests.Jwt
             Assert.AreEqual("application/" + WellKnownMediaTypes.Jwt.VpLdJwt, WellKnownMediaTypes.Application.VpLdJwt, "Application.VpLdJwt should be 'application/' + Jwt.VpLdJwt.");
             Assert.AreEqual("application/" + WellKnownMediaTypes.Jwt.VcJwt, WellKnownMediaTypes.Application.VcJwt, "Application.VcJwt should be 'application/' + Jwt.VcJwt.");
             Assert.AreEqual("application/" + WellKnownMediaTypes.Jwt.VpJwt, WellKnownMediaTypes.Application.VpJwt, "Application.VpJwt should be 'application/' + Jwt.VpJwt.");
+            Assert.AreEqual("application/" + WellKnownMediaTypes.Jwt.ClientAuthenticationJwt, WellKnownMediaTypes.Application.ClientAuthenticationJwt, "The client authentication media type must use its typ value as the subtype.");
+        }
+
+
+        /// <summary>
+        /// The local catalog spells its problem and client authentication media types exactly.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 Section 3</see>:
+        /// "When serialized in a JSON document, that format is identified with the "application/problem+json" media type."
+        /// The Internet-Draft <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>
+        /// specifies "Type name: application" and "Subtype name: client-authentication+jwt".
+        /// </summary>
+        [TestMethod]
+        public void ProblemAndClientAuthenticationMediaTypesSpellTheirDefiningNames()
+        {
+            Assert.AreEqual("application/problem+json", WellKnownMediaTypes.Application.ProblemJson);
+            Assert.AreEqual("application/client-authentication+jwt", WellKnownMediaTypes.Application.ClientAuthenticationJwt);
+            Assert.AreEqual("client-authentication+jwt", WellKnownMediaTypes.Jwt.ClientAuthenticationJwt);
+        }
+
+
+        /// <summary>
+        /// The local catalog's UTF-8 twins decode to the same media types as its interned strings.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 Section 3</see>
+        /// identifies the "application/problem+json" media type; the Internet-Draft
+        /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>
+        /// specifies "Subtype name: client-authentication+jwt". UTF-8 and string readers must name the same type.
+        /// </summary>
+        [TestMethod]
+        public void ProblemAndClientAuthenticationMediaTypesHaveUtf8Twins()
+        {
+            Assert.AreEqual(WellKnownMediaTypes.Application.ProblemJson, Encoding.UTF8.GetString(WellKnownMediaTypes.Application.ProblemJsonUtf8));
+            Assert.AreEqual(WellKnownMediaTypes.Application.ClientAuthenticationJwt, Encoding.UTF8.GetString(WellKnownMediaTypes.Application.ClientAuthenticationJwtUtf8));
+            Assert.AreEqual(WellKnownMediaTypes.Jwt.ClientAuthenticationJwt, Encoding.UTF8.GetString(WellKnownMediaTypes.Jwt.ClientAuthenticationJwtUtf8));
         }
 
 
