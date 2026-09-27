@@ -270,7 +270,7 @@ internal class JwkThumbprintMalformedInputTests
     public void ComputeECThumbprintWithNonAsciiCharacters()
     {
         //Non-ASCII characters in parameters.
-        var crv = "P-256🏴‍☠️";
+        var crv = "P-256🏴\u200D☠️";
         var kty = "EC麦わら";
         var x = "слава_україні";
         var y = "座標ワンピース";

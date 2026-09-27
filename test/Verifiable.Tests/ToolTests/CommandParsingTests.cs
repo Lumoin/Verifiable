@@ -333,7 +333,7 @@ internal class CommandParsingTests
             out var createIdArg, out var createParamArg, out _,
             out _, out _, out _, out _, out _, out _, out _);
 
-        string unicodeParam = "Alabasta_航海_🏴‍☠️";
+        string unicodeParam = "Alabasta_航海_🏴\u200D☠️";
         ParseResult result = rootCommand.Parse($"did create 1500000000 \"{unicodeParam}\"");
 
         Assert.IsEmpty(result.Errors);

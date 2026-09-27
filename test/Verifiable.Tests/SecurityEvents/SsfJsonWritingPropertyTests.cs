@@ -40,7 +40,7 @@ internal sealed class SsfJsonWritingPropertyTests
         Gen.Const(']'),
         Gen.Const('ä'),
         Gen.Const('€'),
-        Gen.Const(' '));
+        Gen.Const('\u00A0'));
 
     private static Gen<string> JsonStringGen { get; } =
         JsonCharGen.Array[1, 12].Select(static chars => new string(chars));

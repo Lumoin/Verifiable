@@ -189,12 +189,12 @@ internal sealed class XmlNodeTableTests
     [TestMethod]
     public void Utf16ByteOrderMarkIsStrippedButInteriorZeroWidthNoBreakSpaceIsKept()
     {
-        byte[] document = [0xFF, 0xFE, .. Encoding.Unicode.GetBytes("<a>﻿x</a>")];
+        byte[] document = [0xFF, 0xFE, .. Encoding.Unicode.GetBytes("<a>\uFEFFx</a>")];
         using var table = ParseAccepting(document, BaseMemoryPool.Shared);
 
         int text = table.FirstChildOf(table.DocumentElementIndex);
         Assert.AreEqual(XmlNodeKind.Text, table.KindOf(text));
-        Assert.AreEqual("﻿x", S(table.ValueOf(text)));
+        Assert.AreEqual("\uFEFFx", S(table.ValueOf(text)));
     }
 
 

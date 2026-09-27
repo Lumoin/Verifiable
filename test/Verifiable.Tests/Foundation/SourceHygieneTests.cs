@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using Verifiable.Cryptography;
 
@@ -7,7 +9,7 @@ namespace Verifiable.Tests.Foundation;
 /// <summary>
 /// One gate per standing house rule, each a source-text scan over every <c>.cs</c> file under <c>src/</c>
 /// and/or <c>test/</c> from a located repository root, each failing by listing <c>file:line</c> rather than
-/// by any reflection over the loaded type system. The seventeen rules: banner-divider comments, planning-process
+/// by any reflection over the loaded type system. The eighteen rules: banner-divider comments, planning-process
 /// vocabulary, the spec-line shorthand, and internal coordination-process pointers are one four-way scan
 /// (<see cref="SourceHygieneScanner"/>, proven live by <see cref="ScannerReportsEmbeddedSamplesWithFileAndLineShape"/>'s
 /// embedded samples); production code threads its caller's memory pool
@@ -35,9 +37,11 @@ namespace Verifiable.Tests.Foundation;
 /// (<see cref="TestMethodsHaveANonEmptyBody"/>); no line starts with a <c>#region</c> or
 /// <c>#endregion</c> directive (<see cref="SourceTreeHasNoRegionDirectives"/>); the BouncyCastle provider
 /// never constructs a platform AEAD cipher directly
-/// (<see cref="BouncyCastleProviderNeverConstructsAPlatformAeadCipher"/>); and test sources contain no
+/// (<see cref="BouncyCastleProviderNeverConstructsAPlatformAeadCipher"/>); test sources contain no
 /// unrecorded or increased matches for fixed wall-clock budgets or blocking task waits
-/// (<see cref="TestsAreBoundedByTestContextAloneNeverAFixedWallClockBudgetOrABlockingTaskWait"/>). Runs on a clean clone: the
+/// (<see cref="TestsAreBoundedByTestContextAloneNeverAFixedWallClockBudgetOrABlockingTaskWait"/>); and no
+/// source file carries a raw invisible or direction-changing code point, only its C# escape
+/// (<see cref="SourceTreeCarriesNoRawInvisibleOrDirectionChangingCodePoint"/>). Runs on a clean clone: the
 /// root is located by walking up from <see cref="AppContext.BaseDirectory"/> to the directory containing
 /// <c>Verifiable.slnx</c>, no environment variable or hardcoded path involved.
 /// </summary>
@@ -2624,6 +2628,73 @@ internal sealed class SourceHygieneTests
         Assert.HasCount(2, provenancePointers, string.Join(Environment.NewLine, violations));
         Assert.Contains(static violation => violation.LineNumber == 1, provenancePointers);
         Assert.Contains(static violation => violation.LineNumber == 2, provenancePointers);
+    }
+
+    /// <summary>
+    /// Decides whether <paramref name="rune"/> is a code point source must never carry raw: the no-break space
+    /// U+00A0, the line and paragraph separators U+2028 and U+2029, and every code point of Unicode general
+    /// category Format (Cf), which covers the soft hyphen U+00AD, U+200B to U+200F, the embeddings and
+    /// overrides U+202A to U+202E, U+2060 to U+2064, the isolates U+2066 to U+2069 and U+FEFF. Each renders as
+    /// nothing, as the character it imitates, or reorders the text around it.
+    /// </summary>
+    /// <param name="rune">The code point read from a source line.</param>
+    /// <returns><see langword="true"/> when the code point is invisible or changes direction.</returns>
+    private static bool IsInvisibleOrDirectionChanging(Rune rune) => rune.Value switch
+    {
+        0x00A0 or 0x2028 or 0x2029 => true,
+        _ => Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format
+    };
+
+    /// <summary>
+    /// Every raw invisible or direction-changing code point in <paramref name="lines"/>, one entry per
+    /// occurrence naming the file, the one-based line and the code point. A leading byte-order mark never
+    /// reaches <paramref name="lines"/>: <see cref="File.ReadAllLines(string)"/> detects the encoding from it
+    /// and consumes it, so a U+FEFF found here sits past the start of the file.
+    /// </summary>
+    /// <param name="relativePath">The file's repository-relative path, for the failure text.</param>
+    /// <param name="lines">The file's lines.</param>
+    /// <returns>The occurrences, empty when the file carries none.</returns>
+    private static List<string> FindInvisibleCodePoints(string relativePath, string[] lines)
+    {
+        List<string> occurrences = [];
+        for(int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+        {
+            foreach(Rune rune in lines[lineIndex].EnumerateRunes())
+            {
+                if(IsInvisibleOrDirectionChanging(rune))
+                {
+                    occurrences.Add(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{relativePath}:{lineIndex + 1}: U+{rune.Value:X4} {Rune.GetUnicodeCategory(rune)} (write it as a C# escape)"));
+                }
+            }
+        }
+
+        return occurrences;
+    }
+
+    /// <summary>
+    /// A raw invisible or direction-changing code point in source cannot be read: it renders as nothing, as
+    /// the character it imitates, or reorders the text around it, so it can hide a different literal or
+    /// comparison from every reader, the way a no-break space in a literal reads as an ordinary space. No
+    /// <c>.cs</c> file under <c>src</c> or <c>test</c> carries U+00A0, U+00AD, U+200B to U+200F, U+2028 to
+    /// U+202E, U+2060 to U+2064, U+2066 to U+2069, U+FEFF past a leading byte-order mark, or any other code
+    /// point of Unicode general category Format (Cf) raw; the same character written as a C# escape
+    /// (<c>\u00A0</c>) is legible and passes. The failure names each file, line and code point.
+    /// </summary>
+    [TestMethod]
+    public void SourceTreeCarriesNoRawInvisibleOrDirectionChangingCodePoint()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        List<string> failures = [];
+
+        foreach(string filePath in SourceHygieneScanner.EnumerateSourceFiles(repositoryRoot))
+        {
+            string relativePath = Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
+            failures.AddRange(FindInvisibleCodePoints(relativePath, File.ReadAllLines(filePath)));
+        }
+
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
     }
 }
 

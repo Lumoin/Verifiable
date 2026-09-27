@@ -364,7 +364,7 @@ internal sealed class VerifiablePresentationRequestTests
     [DataRow("https://127.0.0.1:8443/issuers/1?active=true#key-1")]
     [DataRow("https://[2001:db8::1]/")]
     [DataRow("https://münchen.example/")]
-    [DataRow("https://a.example/a b")]
+    [DataRow("https://a.example/a\u00A0b")]
     public void QueryByExampleAcceptsUrlStandardIssuer(string issuer)
     {
         string json = "{\"query\":[{\"type\":\"QueryByExample\",\"credentialQuery\":{\"acceptedIssuers\":[\""
