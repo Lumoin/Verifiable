@@ -192,7 +192,10 @@ public static partial class DateTimeStampFormat
     /// <item><description><c>(\.\d{1,7})?</c> - Optional fractional seconds (1-7 digits).</description></item>
     /// <item><description><c>(Z|[+-]\d{2}:\d{2})</c> - Required timezone (Z or ±HH:mm).</description></item>
     /// </list>
+    /// The pattern anchors its end with <c>\z</c> rather than <c>$</c>: <c>$</c> matches immediately before a
+    /// trailing line terminator as well as at the absolute end of the input, so it would accept a value
+    /// carrying a trailing newline as if the newline were not there; <c>\z</c> matches only the absolute end.
     /// </remarks>
-    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})\z", RegexOptions.CultureInvariant)]
     private static partial Regex DateTimeStampPattern();
 }

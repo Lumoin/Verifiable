@@ -105,6 +105,27 @@ internal sealed class DateTimeStampFormatTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">VC Data Integrity §2.1</see>: "The date and time
+    /// the proof was created … MUST be specified as an [XMLSCHEMA11-2] dateTimeStamp string". A value carrying a
+    /// trailing line feed or space after an otherwise valid dateTimeStamp is not itself a dateTimeStamp string, so
+    /// <see cref="DateTimeStampFormat.TryParse(string?, out DateTimeOffset)"/> refuses it: the .NET regular
+    /// expression <c>$</c> anchor matches immediately before a trailing line terminator as well as at the absolute
+    /// end of the input, so a pattern anchored with it would otherwise accept the trailing character as if it were
+    /// not there.
+    /// </summary>
+    /// <param name="value">A dateTimeStamp string carrying a disqualifying trailing character.</param>
+    [TestMethod]
+    [DataRow("2024-01-15T10:30:45Z\n")]
+    [DataRow("2024-01-15T10:30:45Z ")]
+    public void TryParseRejectsATrailingCharacterAfterTheTimeZone(string value)
+    {
+        var success = DateTimeStampFormat.TryParse(value, out _);
+
+        Assert.IsFalse(success, $"Expected '{value}' to be invalid.");
+    }
+
+
     [TestMethod]
     [DataRow(null)]
     [DataRow("")]
