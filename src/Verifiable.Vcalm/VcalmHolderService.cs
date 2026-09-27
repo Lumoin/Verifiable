@@ -31,14 +31,20 @@ public static class VcalmHolderService
     /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity §4.4</see> requires of every
     /// proof (<see cref="HasCompleteBaseProofs"/>). The §3.5.1 endpoint refuses an input that does not with a 400 through
     /// that same predicate before it calls this method; any other caller that passes one breaks this method's precondition
-    /// and is refused before any derivation, so no derived credential ever carries a defective proof forward.
+    /// and is refused before any derivation, so no derived credential ever carries a defective proof forward. Every
+    /// selective pointer must be a JSON pointer (<see cref="AreAllJsonPointers"/>): one that is not is refused the same
+    /// way, before any derivation, never skipped, so a derivation never silently leaves out a claim it was asked to
+    /// disclose.
     /// </remarks>
     /// <param name="baseCredential">The base-proofed ecdsa-sd-2023 credential to derive from.</param>
     /// <param name="selectivePointers">The §3.5.1 JSON pointers naming the information to disclose.</param>
     /// <param name="derivation">The application-supplied selective-disclosure derive seams.</param>
     /// <param name="context">The per-request context threaded to the canonicalizer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="ArgumentException">A proof of <paramref name="baseCredential"/> lacks a Data Integrity §4.4 mandatory member.</exception>
+    /// <exception cref="ArgumentException">
+    /// A proof of <paramref name="baseCredential"/> lacks a Data Integrity §4.4 mandatory member, or an item of
+    /// <paramref name="selectivePointers"/> is not a JSON pointer.
+    /// </exception>
     public static async ValueTask<DataIntegritySecuredCredential> DeriveAsync(
         DataIntegritySecuredCredential baseCredential,
         ImmutableArray<string> selectivePointers,
@@ -56,15 +62,19 @@ public static class VcalmHolderService
         }
 
         //§3.5.1: "selectivePointers [array] An array of JSON pointers specifying the selectively
-        //disclosed information." Each pointer becomes a requested CredentialPath; the derive surface
-        //unions them with the issuer's mandatory pointers (always disclosed) and trims the rest.
+        //disclosed information." An item that is not a JSON pointer is data this holder cannot process
+        //(§2.4), refused before any derivation rather than skipped.
+        if(!AreAllJsonPointers(selectivePointers))
+        {
+            throw new ArgumentException(UnparseablePointerDetail, nameof(selectivePointers));
+        }
+
+        //Each pointer becomes a requested CredentialPath; the derive surface unions them with the
+        //issuer's mandatory pointers (always disclosed) and trims the rest.
         HashSet<CredentialPath> requestedPaths = [];
         foreach(string pointer in selectivePointers)
         {
-            if(CredentialPath.TryFromJsonPointer(pointer, out CredentialPath path))
-            {
-                _ = requestedPaths.Add(path);
-            }
+            _ = requestedPaths.Add(CredentialPath.FromJsonPointer(pointer));
         }
 
         return await baseCredential.DeriveProofAsync(
@@ -89,15 +99,15 @@ public static class VcalmHolderService
     /// <summary>
     /// §3.5.2 create-presentation: secures <paramref name="presentation"/> with a Data Integrity
     /// proof binding the §3.5.2 <c>challenge</c> / <c>domain</c> / <c>verificationMethod</c> /
-    /// <c>created</c> the request supplied, falling back to the instance defaults where the request
-    /// omitted them. The proof purpose is <c>authentication</c> (VC-DM 2.0 §4.13).
+    /// <c>created</c> its caller passes. The proof purpose is <c>authentication</c> (VC-DM 2.0 §4.13).
     /// </summary>
     /// <param name="presentation">The unproofed presentation to secure.</param>
     /// <param name="challenge">The §3.5.2 anti-replay challenge the proof binds.</param>
     /// <param name="domain">The §3.5.2 domain the proof binds.</param>
     /// <param name="verificationMethodId">
-    /// The §3.5.2 <c>verificationMethod</c> the proof carries (the request value, or the instance
-    /// default when the request omitted it).
+    /// The §3.5.2 <c>verificationMethod</c> the proof carries. The proof is signed with
+    /// <see cref="VcalmPresentationSigning.PrivateKey"/>, so this must name that key's method, as the §3.5.2
+    /// endpoint's <see cref="VcalmPresentationSigning.DefaultVerificationMethodId"/> does.
     /// </param>
     /// <param name="proofCreated">The proof's <c>created</c> timestamp (the request value, or the instance clock).</param>
     /// <param name="signing">The application-supplied presentation-signing seams.</param>
@@ -182,6 +192,28 @@ public static class VcalmHolderService
     /// <param name="baseCredential">The base credential the derivation starts from.</param>
     internal static bool HasCompleteBaseProofs(DataIntegritySecuredCredential baseCredential) =>
         baseCredential.Proof is not { } proofs || proofs.All(VcalmVerificationService.HasMandatoryProofOptions);
+
+
+    /// <summary>
+    /// Whether every §3.5.1 selective pointer is a JSON pointer <see cref="CredentialPath.TryFromJsonPointer"/> accepts.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#derive-credential">§3.5.1</see> names "selectivePointers [array]"
+    /// as "An array of JSON pointers specifying the selectively disclosed information.", so an item that is not one is
+    /// an option value the holder cannot process and is refused under the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see> rule that an endpoint MUST throw an error on
+    /// option values it does not know how to process. The derive endpoint and <see cref="DeriveAsync"/> share this one
+    /// check, in the library, so a replaced parse seam cannot bypass it.
+    /// </summary>
+    /// <param name="selectivePointers">The requested selective pointers.</param>
+    internal static bool AreAllJsonPointers(ImmutableArray<string> selectivePointers) =>
+        selectivePointers.All(pointer => CredentialPath.TryFromJsonPointer(pointer, out _));
+
+
+    /// <summary>
+    /// The problem detail stated when a selective pointer is not a JSON pointer: <see cref="DeriveAsync"/> throws its
+    /// <see cref="ArgumentException"/> with it.
+    /// </summary>
+    internal static string UnparseablePointerDetail { get; } =
+        "A selectivePointers item is not a JSON pointer; this holder derives only from the JSON pointers it can resolve.";
 
 
     /// <summary>

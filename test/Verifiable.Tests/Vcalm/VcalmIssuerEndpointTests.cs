@@ -603,6 +603,35 @@ internal sealed class VcalmIssuerEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#issue-credential">VCALM §3.2.1</see> names "mandatoryPointers
+    /// [array]": "Each item in the mandatoryPointers array MUST be a string." An item whose escape is an unpaired
+    /// surrogate spells no string (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>:
+    /// "The behavior of software that receives JSON texts containing such values is unpredictable"), so it is data
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see> requires the endpoint to refuse
+    /// ("Implementations MUST throw an error if an endpoint receives data, options, or option values that it does not
+    /// understand or know how to process."): HTTP 400 with <c>https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED</c>,
+    /// never an exception escaping the parser, and nothing is issued.
+    /// </summary>
+    [TestMethod]
+    public async Task UnpairedSurrogateMandatoryPointerYields400()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+
+        string credentialJson = BuildCredentialJson(ctx.IssuerDid, credentialId: "urn:uuid:mp-surrogate");
+        string body = "{\"credential\":" + credentialJson + ",\"options\":{\"mandatoryPointers\":[\"\\ud800\"]}}";
+
+        using JsonDocument response = await VcalmWireFixtures.PostIssueWireAsync(
+            app, ctx.Segment, body, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "An unreadable mandatoryPointers item is an option value this issuer cannot process.");
+        Assert.IsEmpty(CredentialStore, "A refused issue request is never issued, so the store seam is never reached.");
+    }
+
+
+    /// <summary>
     /// "Implementations MUST throw an error if an endpoint receives data, options, or option values
     /// that it does not understand or know how to process."
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>. §3.2.1 names

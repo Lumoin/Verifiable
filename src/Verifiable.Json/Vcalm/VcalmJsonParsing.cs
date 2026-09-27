@@ -1065,10 +1065,17 @@ public static class VcalmJsonParsing
     }
 
 
-    //§3.5.2 body: {presentation, options{type?, cryptosuite?, verificationMethod?, proofPurpose?,
-    //created?, challenge?, domain?}}. STRICT per §2.4: a non-object body, a missing REQUIRED
-    //presentation, or an unrecognized top-level member is Malformed; an unrecognized options member is
-    //UnknownOption.
+    /// <summary>
+    /// Reads the §3.5.2 body <c>{presentation, options{type?, cryptosuite?, verificationMethod?, proofPurpose?,
+    /// created?, challenge?, domain?}}</c>. STRICT per §2.4: a non-object body, a missing REQUIRED
+    /// <c>presentation</c>, or an unrecognized or repeated top-level member is
+    /// <see cref="VcalmParseFailure.Malformed"/>; an options member or value the holder cannot process is
+    /// <see cref="VcalmParseFailure.UnknownOption"/>. A <c>proof</c> member on the presentation, of any JSON kind, is
+    /// recorded on <see cref="VcalmCreatePresentationRequest.HasProofMember"/> for the endpoint to refuse.
+    /// </summary>
+    /// <param name="requestBody">The UTF-8-decoded request body.</param>
+    /// <param name="options">The serializer options the presentation is read with.</param>
+    /// <returns>The parsed request, or a request carrying its parse failure.</returns>
     private static VcalmCreatePresentationRequest ParseCreatePresentation(string requestBody, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(requestBody);
@@ -1118,6 +1125,11 @@ public static class VcalmJsonParsing
                 return VcalmCreatePresentationRequest.UnknownOption();
             }
 
+            //§3.5.2: "The document MAY include an embedded proof." This holder processes none, so the
+            //presence of a proof member is recorded from the raw JSON: the presentation reader drops a
+            //JSON null member, which the typed presentation then cannot show.
+            bool hasProofMember = presentationElement.TryGetProperty(VcalmParameterNames.Proof, out _);
+
             string presentationJson = presentationElement.GetRawText();
             VerifiablePresentation? presentation = TryDeserialize<VerifiablePresentation>(presentationJson, options);
             if(presentation is null)
@@ -1129,15 +1141,24 @@ public static class VcalmJsonParsing
             {
                 Presentation = presentation,
                 PresentationId = presentation.Id,
-                Options = parsedOptions
+                Options = parsedOptions,
+                HasProofMember = hasProofMember
             };
         }
     }
 
 
-    //§3.5.1 options: only selectivePointers (an array of string JSON pointers). §2.4: a non-object
-    //options value, a non-array selectivePointers, a non-string item, or any other options member is
-    //UnknownOption. An absent options object yields an empty pointer set.
+    /// <summary>
+    /// Reads the §3.5.1 <c>options</c> object, whose only member is <c>selectivePointers</c>: "An array of JSON
+    /// pointers specifying the selectively disclosed information. Each item in the selectivePointers array MUST be a
+    /// string." §2.4: a non-object options value, a non-array <c>selectivePointers</c>, an item that is not a readable
+    /// string (<see cref="TryReadString"/>), a repeated member or any other options member is
+    /// <see cref="VcalmParseFailure.UnknownOption"/>. An absent options object yields an empty pointer set. The JSON
+    /// pointer grammar of each item is checked by the library, not here, so a replaced parse seam cannot skip it.
+    /// </summary>
+    /// <param name="root">The derive request's top-level JSON object.</param>
+    /// <param name="selectivePointers">The pointer strings; valid only when the result is <see cref="VcalmParseFailure.None"/>.</param>
+    /// <returns><see cref="VcalmParseFailure.None"/> when the options object is absent or well formed; otherwise <see cref="VcalmParseFailure.UnknownOption"/>.</returns>
     private static VcalmParseFailure TryParseSelectivePointers(JsonElement root, out ImmutableArray<string> selectivePointers)
     {
         selectivePointers = ImmutableArray<string>.Empty;
@@ -1174,12 +1195,14 @@ public static class VcalmJsonParsing
                 ImmutableArray<string>.Builder builder = ImmutableArray.CreateBuilder<string>();
                 foreach(JsonElement item in property.Value.EnumerateArray())
                 {
-                    if(item.ValueKind != JsonValueKind.String)
+                    //An item of another kind, or a string whose escapes spell no Unicode string, is an option
+                    //value this holder cannot process.
+                    if(!TryReadString(item, out string? pointer))
                     {
                         return VcalmParseFailure.UnknownOption;
                     }
 
-                    builder.Add(item.GetString()!);
+                    builder.Add(pointer);
                 }
 
                 pointers = builder.ToImmutable();
@@ -1197,11 +1220,19 @@ public static class VcalmJsonParsing
     }
 
 
-    //§3.5.2 options: the members shaping the produced proof. §2.4: a non-object options value or an
-    //unrecognized member is UnknownOption. type / cryptosuite / proofPurpose are accepted on the wire
-    //(the instance's signing configuration fixes the actual proof type / cryptosuite / purpose) so a
-    //caller may name the defaults; challenge / domain / verificationMethod / created are read into the
-    //parsed options.
+    /// <summary>
+    /// Reads the §3.5.2 <c>options</c> object, the members shaping the produced proof: <c>type</c>,
+    /// <c>cryptosuite</c>, <c>verificationMethod</c>, <c>proofPurpose</c>, <c>created</c>, <c>challenge</c> and
+    /// <c>domain</c>, each named "[string]" by §3.5.2. §2.4: "Implementations MUST throw an error if an endpoint
+    /// receives data, options, or option values that it does not understand or know how to process." So a non-object
+    /// options value, an unrecognized or repeated member, or a member whose value is not a readable string
+    /// (<see cref="TryReadString"/>, an explicit JSON <c>null</c> included) is <see cref="VcalmParseFailure.UnknownOption"/>.
+    /// Every value is carried into the parsed options as read; whether the instance can produce it is the endpoint's
+    /// check against its own signing configuration.
+    /// </summary>
+    /// <param name="root">The create-presentation request's top-level JSON object.</param>
+    /// <param name="options">The parsed options; valid only when the result is <see cref="VcalmParseFailure.None"/>.</param>
+    /// <returns><see cref="VcalmParseFailure.None"/> when the options object is absent or every present member is recognized and a readable string; otherwise <see cref="VcalmParseFailure.UnknownOption"/>.</returns>
     private static VcalmParseFailure TryParseCreatePresentationOptions(
         JsonElement root, out VcalmCreatePresentationOptions options)
     {
@@ -1220,6 +1251,9 @@ public static class VcalmJsonParsing
         string? domain = null;
         string? verificationMethod = null;
         string? created = null;
+        string? type = null;
+        string? cryptosuite = null;
+        string? proofPurpose = null;
 
         HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
         foreach(JsonProperty property in optionsElement.EnumerateObject())
@@ -1231,32 +1265,24 @@ public static class VcalmJsonParsing
                 return VcalmParseFailure.UnknownOption;
             }
 
-            if(string.Equals(property.Name, VcalmParameterNames.Challenge, StringComparison.Ordinal))
+            //§3.5.2 names every option "[string]": a value of another kind, or a string whose escapes
+            //spell no Unicode string, is an option value this holder cannot process, never read as absent.
+            //An unrecognized member is the §2.4 unknown-option MUST.
+            string name = property.Name;
+            bool isReadable = name switch
             {
-                challenge = ReadString(property.Value);
-            }
-            else if(string.Equals(property.Name, VcalmParameterNames.Domain, StringComparison.Ordinal))
+                _ when string.Equals(name, VcalmParameterNames.Challenge, StringComparison.Ordinal) => TryReadString(property.Value, out challenge),
+                _ when string.Equals(name, VcalmParameterNames.Domain, StringComparison.Ordinal) => TryReadString(property.Value, out domain),
+                _ when string.Equals(name, VcalmParameterNames.VerificationMethod, StringComparison.Ordinal) => TryReadString(property.Value, out verificationMethod),
+                _ when string.Equals(name, VcalmParameterNames.Created, StringComparison.Ordinal) => TryReadString(property.Value, out created),
+                _ when string.Equals(name, VcalmParameterNames.Type, StringComparison.Ordinal) => TryReadString(property.Value, out type),
+                _ when string.Equals(name, VcalmParameterNames.Cryptosuite, StringComparison.Ordinal) => TryReadString(property.Value, out cryptosuite),
+                _ when string.Equals(name, VcalmParameterNames.ProofPurpose, StringComparison.Ordinal) => TryReadString(property.Value, out proofPurpose),
+                _ => false
+            };
+
+            if(!isReadable)
             {
-                domain = ReadString(property.Value);
-            }
-            else if(string.Equals(property.Name, VcalmParameterNames.VerificationMethod, StringComparison.Ordinal))
-            {
-                verificationMethod = ReadString(property.Value);
-            }
-            else if(string.Equals(property.Name, VcalmParameterNames.Created, StringComparison.Ordinal))
-            {
-                created = ReadString(property.Value);
-            }
-            else if(string.Equals(property.Name, VcalmParameterNames.Type, StringComparison.Ordinal)
-                || string.Equals(property.Name, VcalmParameterNames.Cryptosuite, StringComparison.Ordinal)
-                || string.Equals(property.Name, VcalmParameterNames.ProofPurpose, StringComparison.Ordinal))
-            {
-                //§3.5.2 type / cryptosuite / proofPurpose are accepted but the instance's signing
-                //configuration fixes the actual proof shape; the wire values are not threaded through.
-            }
-            else
-            {
-                //§2.4 unknown-option MUST.
                 return VcalmParseFailure.UnknownOption;
             }
         }
@@ -1266,7 +1292,10 @@ public static class VcalmJsonParsing
             Challenge = challenge,
             Domain = domain,
             VerificationMethod = verificationMethod,
-            Created = created
+            Created = created,
+            Type = type,
+            Cryptosuite = cryptosuite,
+            ProofPurpose = proofPurpose
         };
 
         return VcalmParseFailure.None;
@@ -2035,12 +2064,14 @@ public static class VcalmJsonParsing
                 ImmutableArray<string>.Builder pointers = ImmutableArray.CreateBuilder<string>();
                 foreach(JsonElement item in property.Value.EnumerateArray())
                 {
-                    if(item.ValueKind != JsonValueKind.String)
+                    //An item of another kind, or a string whose escapes spell no Unicode string, is an option
+                    //value this issuer cannot process.
+                    if(!TryReadString(item, out string? pointer))
                     {
                         return VcalmParseFailure.UnknownOption;
                     }
 
-                    pointers.Add(item.GetString()!);
+                    pointers.Add(pointer);
                 }
 
                 mandatoryPointers = pointers.ToImmutable();

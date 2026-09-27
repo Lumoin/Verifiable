@@ -31,6 +31,16 @@ public sealed record VcalmCreatePresentationRequest
     /// <summary>The parsed §3.5.2 create-presentation options (§2.4 all-optional). Defaulted when absent.</summary>
     public VcalmCreatePresentationOptions Options { get; init; } = new();
 
+    /// <summary>
+    /// Whether the wire <c>presentation</c> object carries a <c>proof</c> member of any JSON kind, <c>null</c>
+    /// included. The typed <see cref="Presentation"/> cannot say so for every shape, because a JSON <c>null</c>
+    /// member is dropped when the presentation is read, so the parser records the member's presence from the raw
+    /// JSON. This holder processes no embedded presentation proof (the §3.5.2 schema: "The document MAY include
+    /// an embedded proof."), so the endpoint refuses a request carrying one before any signing. A parse seam that
+    /// leaves this <see langword="false"/> still meets the endpoint's check of the typed presentation.
+    /// </summary>
+    public bool HasProofMember { get; init; }
+
     /// <summary>The strict-parse outcome; <see cref="VcalmParseFailure.None"/> on success.</summary>
     public VcalmParseFailure Failure { get; init; }
 
@@ -51,7 +61,9 @@ public sealed record VcalmCreatePresentationRequest
 /// shape the produced Data Integrity proof. §2.4: every option is OPTIONAL; an absent member takes its
 /// §3.5.2 default. <see cref="Challenge"/> and <see cref="Domain"/> are required by the Core presentation
 /// signer (a presentation proof binds an anti-replay challenge + domain, VC-DM 2.0 §4.13); the §3.5.2
-/// endpoint maps an absent challenge / domain to a 400.
+/// endpoint maps an absent challenge / domain to a 400. A present value the instance cannot produce is
+/// refused under §2.4 ("Implementations MUST throw an error if an endpoint receives data, options, or
+/// option values that it does not understand or know how to process."), never replaced by a default.
 /// </summary>
 [DebuggerDisplay("VcalmCreatePresentationOptions Challenge={Challenge} Domain={Domain}")]
 public sealed record VcalmCreatePresentationOptions
@@ -71,14 +83,40 @@ public sealed record VcalmCreatePresentationOptions
     /// <summary>
     /// §3.5.2 <c>options.verificationMethod</c>: "The URI of the verificationMethod used for the proof.
     /// If omitted, a default verification method will be used." <see langword="null"/> when absent, in
-    /// which case the instance's configured default is used.
+    /// which case the instance's configured default is used. The instance signs with the key of its
+    /// configured default only, so the endpoint refuses any other value.
     /// </summary>
     public string? VerificationMethod { get; init; }
 
     /// <summary>
     /// §3.5.2 <c>options.created</c>: "The date and time of the proof (with a maximum accuracy in
     /// seconds). Default current system time." <see langword="null"/> when absent, in which case the
-    /// instance's clock supplies the value.
+    /// instance's clock supplies the value. The endpoint accepts only a Data Integrity dateTimeStamp
+    /// (<see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity §2.1</see>: "MUST be
+    /// specified as an [XMLSCHEMA11-2] dateTimeStamp string") and refuses any other value, a value without
+    /// a time zone included.
     /// </summary>
     public string? Created { get; init; }
+
+    /// <summary>
+    /// §3.5.2 <c>options.type</c>: "The type of the proof. Default 'DataIntegrityProof'."
+    /// <see langword="null"/> when absent. The instance produces a <c>DataIntegrityProof</c> only, so the
+    /// endpoint refuses any other value.
+    /// </summary>
+    public string? Type { get; init; }
+
+    /// <summary>
+    /// §3.5.2 <c>options.cryptosuite</c>: "The cryptosuite of the proof." <see langword="null"/> when
+    /// absent. The instance signs under its configured cryptosuite only, so the endpoint refuses any other
+    /// value.
+    /// </summary>
+    public string? Cryptosuite { get; init; }
+
+    /// <summary>
+    /// §3.5.2 <c>options.proofPurpose</c>: "The purpose of the proof. Default 'assertionMethod'."
+    /// <see langword="null"/> when absent. The instance signs a presentation proof for
+    /// <c>authentication</c> only, the purpose a presentation proof is verified under, so the endpoint
+    /// refuses any other value.
+    /// </summary>
+    public string? ProofPurpose { get; init; }
 }

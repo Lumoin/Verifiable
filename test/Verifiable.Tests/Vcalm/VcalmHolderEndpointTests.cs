@@ -374,6 +374,42 @@ internal sealed class VcalmHolderEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#derive-credential">VCALM §3.5.1</see> names
+    /// "selectivePointers [array]" as "An array of JSON pointers specifying the selectively disclosed information. Each
+    /// item in the selectivePointers array MUST be a string.", and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see> says "Implementations MUST throw an error
+    /// if an endpoint receives data, options, or option values that it does not understand or know how to process." An
+    /// item that is not a JSON pointer (no leading slash, an escape other than <c>~0</c> or <c>~1</c>) or not a
+    /// readable string (an unpaired surrogate escape) is refused with HTTP 400 and
+    /// <c>https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED</c>
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#error-handling">§3.8</see>: "An option that is unknown to the
+    /// implementation was provided to the API call."), never skipped and never answered as a server fault.
+    /// </summary>
+    /// <param name="pointerJson">The JSON text of the one item the request's <c>selectivePointers</c> array carries.</param>
+    [TestMethod]
+    [DataRow("\"credentialSubject/degree/name\"")]
+    [DataRow("\"/credentialSubject/~2\"")]
+    [DataRow("\"/credentialSubject/\\ud800\"")]
+    public async Task DeriveRefusesASelectivePointerItCannotProcess(string pointerJson)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        SdIssuerContext sd = CreateSdIssuerKeys();
+        string segment = await RegisterHolderAsync(app).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential baseCredential = await CreateBaseProofedCredentialAsync(sd).ConfigureAwait(false);
+        string deriveBody = "{\"verifiableCredential\":" + SerializeCredential(baseCredential)
+            + ",\"options\":{\"selectivePointers\":[" + pointerJson + "]}}";
+
+        using JsonDocument refused = await VcalmWireFixtures.PostDeriveWireAsync(
+            app, segment, deriveBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            $"The selective pointer {pointerJson} is an option value this holder cannot process.");
+    }
+
+
+    /// <summary>
     /// §3.5.2 → §3.3.2 round-trip (the money-shot): a presentation created through
     /// <c>POST /presentations</c> with a challenge and domain verifies TRUE when driven straight into
     /// the verifier service's <c>/presentations/verify</c> endpoint with the same challenge and domain.
@@ -586,6 +622,29 @@ internal sealed class VcalmHolderEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#derive-credential">VCALM §3.5.1</see> names
+    /// "selectivePointers [array]" as "An array of JSON pointers specifying the selectively disclosed information.",
+    /// and <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see> says "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The holder service's derivation refuses a selective pointer that is not a JSON pointer, whoever calls
+    /// it and before any derivation, instead of deriving a credential that silently leaves the claim out.
+    /// </summary>
+    [TestMethod]
+    public async Task HolderServiceDerivationRefusesAnUnparseablePointer()
+    {
+        SdIssuerContext sd = CreateSdIssuerKeys();
+        DataIntegritySecuredCredential baseCredential = await CreateBaseProofedCredentialAsync(sd).ConfigureAwait(false);
+
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await VcalmHolderService.DeriveAsync(
+            baseCredential,
+            ["credentialSubject/degree/name"],
+            BuildDerivationConfig(),
+            EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
     /// presentation proof the holder service creates covers every contained credential's existing proof, so the service
@@ -663,7 +722,7 @@ internal sealed class VcalmHolderEndpointTests
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." The
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> input presentation's schema says
     /// "The document MAY include an embedded proof.", and this holder processes no embedded presentation proof: a
-    /// <c>proof</c> member that is an empty list or a string is refused with HTTP 400 and
+    /// <c>proof</c> member that is an empty list, a string or <c>null</c> is refused with HTTP 400 and
     /// <c>https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR</c> exactly like a proof object, never signed over
     /// and never dropped, and nothing is stored.
     /// </summary>
@@ -671,6 +730,7 @@ internal sealed class VcalmHolderEndpointTests
     [TestMethod]
     [DataRow("[]")]
     [DataRow("\"x\"")]
+    [DataRow("null")]
     public async Task CreatePresentationWithAProofMemberOfAnotherShapeIsRefused(string proofJson)
     {
         await using TestHostShell app = new(TimeProvider);
@@ -733,6 +793,130 @@ internal sealed class VcalmHolderEndpointTests
             holder.Signing,
             EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>: "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process.", and
+    /// "any given instance configuration MAY prohibit client use of some options properties in order to prevent clients
+    /// from passing certain data to that instance." The
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> options are each "[string]": "type
+    /// [string]" ("The type of the proof. Default 'DataIntegrityProof'."), "cryptosuite [string]" ("The cryptosuite of
+    /// the proof."), "verificationMethod [string]" ("The URI of the verificationMethod used for the proof."),
+    /// "proofPurpose [string]" ("The purpose of the proof."), "created [string]", "challenge [string]" and
+    /// "domain [string]". A value that is not a readable string, or a <c>type</c>, <c>cryptosuite</c>,
+    /// <c>proofPurpose</c> or <c>verificationMethod</c> other than the one this instance signs with, is refused with
+    /// HTTP 400 and <c>https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED</c>
+    /// (<see href="https://www.w3.org/TR/vcalm-1.0/#error-handling">§3.8</see>: "An option that is unknown to the
+    /// implementation was provided to the API call."), and nothing is signed or stored.
+    /// </summary>
+    /// <param name="optionsJson">The JSON text of the request's whole <c>options</c> object.</param>
+    [TestMethod]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"type\":\"Ed25519Signature2020\"}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"cryptosuite\":\"ecdsa-rdfc-2019\"}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"proofPurpose\":\"capabilityInvocation\"}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"verificationMethod\":\"did:example:someone-else#key-1\"}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"verificationMethod\":42}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"created\":42}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"type\":1}")]
+    [DataRow("{\"challenge\":42,\"domain\":\"verifier.example\"}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":[\"verifier.example\"]}")]
+    [DataRow("{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"verificationMethod\":\"\\ud800\"}")]
+    public async Task CreatePresentationRefusesAnOptionValueItCannotProcess(string optionsJson)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
+        string createBody = "{\"presentation\":" + presentationJson + ",\"options\":" + optionsJson + "}";
+
+        using JsonDocument refused = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            $"The options {optionsJson} carry a value this holder cannot process.");
+        Assert.IsTrue(PresentationStore.IsEmpty, "The refused request signs and stores nothing.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity §2.1</see>: "The date and time the
+    /// proof was created is OPTIONAL and, if included, MUST be specified as an [XMLSCHEMA11-2] dateTimeStamp string,
+    /// either in Universal Coordinated Time (UTC), denoted by a Z at the end of the value, or with a time zone offset
+    /// relative to UTC. A conforming processor MAY chose to consume time values that were incorrectly serialized without
+    /// an offset." This holder does not: the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">§3.5.2</see> option "created [string]" ("The
+    /// date and time of the proof (with a maximum accuracy in seconds). Default current system time.") that is not a
+    /// dateTimeStamp, a value without a time zone included, is refused with HTTP 400 and
+    /// <c>https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR</c> under
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>'s "Implementations MUST throw an error if
+    /// an endpoint receives data, options, or option values that it does not understand or know how to process.", never
+    /// replaced by the current system time, and nothing is signed or stored.
+    /// </summary>
+    /// <param name="created">The <c>options.created</c> string the request carries.</param>
+    [TestMethod]
+    [DataRow("yesterday")]
+    [DataRow("2020-04-02T18:28:08")]
+    public async Task CreatePresentationRefusesACreatedThatIsNotADateTimeStamp(string created)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
+        string createBody = "{\"presentation\":" + presentationJson
+            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"created\":\"" + created + "\"}}";
+
+        using JsonDocument refused = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 400, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            $"The created value {created} is not a dateTimeStamp.");
+        Assert.Contains("options.created",
+            refused.RootElement.GetProperty(VcalmParameterNames.ProblemDetail).GetString()!,
+            "The detail names the created option as the refused value.");
+        Assert.IsTrue(PresentationStore.IsEmpty, "The refused request signs and stores nothing.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-presentation">VCALM §3.5.2</see>: "POST /presentations -
+    /// Creates a presentation and returns it in the response body." with options "for specifying how the
+    /// DataIntegrityProof is created": a request naming exactly the values this instance signs with ("type [string]"
+    /// <c>DataIntegrityProof</c>, its own "cryptosuite [string]", "proofPurpose [string]" <c>authentication</c>, its own
+    /// "verificationMethod [string]") and a "created [string]" dateTimeStamp is answered 201, and the returned proof
+    /// carries each of those values, <c>created</c> included, exactly as requested.
+    /// </summary>
+    [TestMethod]
+    public async Task CreatePresentationHonoursTheOptionValuesItSupports()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+
+        string verificationMethodId = holder.Signing.DefaultVerificationMethodId;
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
+        string createBody = "{\"presentation\":" + presentationJson
+            + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\",\"type\":\"DataIntegrityProof\","
+            + "\"cryptosuite\":\"eddsa-jcs-2022\",\"proofPurpose\":\"authentication\","
+            + "\"verificationMethod\":\"" + verificationMethodId + "\",\"created\":\"2020-04-02T18:28:08Z\"}}";
+
+        using JsonDocument created = await VcalmWireFixtures.PostCreatePresentationWireAsync(
+            app, segment, createBody, 201, TestContext.CancellationToken).ConfigureAwait(false);
+
+        JsonElement proofMember = created.RootElement
+            .GetProperty(VcalmParameterNames.VerifiablePresentation).GetProperty(VcalmParameterNames.Proof);
+        JsonElement proof = proofMember.ValueKind == JsonValueKind.Array ? proofMember[0] : proofMember;
+        Assert.AreEqual("DataIntegrityProof", proof.GetProperty("type").GetString());
+        Assert.AreEqual("eddsa-jcs-2022", proof.GetProperty("cryptosuite").GetString());
+        Assert.AreEqual("authentication", proof.GetProperty("proofPurpose").GetString());
+        Assert.AreEqual(verificationMethodId, proof.GetProperty("verificationMethod").GetString());
+        Assert.AreEqual("2020-04-02T18:28:08Z", proof.GetProperty("created").GetString());
+        Assert.HasCount(1, PresentationStore, "The honoured request stores exactly the one presentation it signed.");
     }
 
 

@@ -1,7 +1,8 @@
-using System.Globalization;
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Model.Did;
 using Verifiable.JCose;
 
 namespace Verifiable.Vcalm;
@@ -29,7 +30,10 @@ namespace Verifiable.Vcalm;
 /// enforce them: the body MUST be <c>application/json</c> (else 400), MUST be within
 /// <see cref="VcalmIntegration.VcalmMaxRequestBytes"/> (else 413), and MUST NOT carry an option /
 /// member the holder does not understand (an unknown option → 400 with the §3.8
-/// <see cref="VcalmProblemTypes.UnknownOptionProvided"/> type).
+/// <see cref="VcalmProblemTypes.UnknownOptionProvided"/> type). An option value the holder cannot
+/// process is refused the same way: a value that is not a string, a selective pointer that is not a
+/// JSON pointer, or a proof type, cryptosuite, purpose or verification method this instance does not
+/// sign with.
 /// </para>
 /// </remarks>
 public static class VcalmHolderEndpoints
@@ -133,6 +137,16 @@ public static class VcalmHolderEndpoints
                     return (null, UnknownOptionRequest());
                 }
 
+                //§3.5.1 "selectivePointers [array]": "An array of JSON pointers specifying the selectively
+                //disclosed information. Each item in the selectivePointers array MUST be a string." An item
+                //that is not a JSON pointer is an option value this holder cannot process (§2.4), refused
+                //before any derivation rather than skipped, through the same check the holder service
+                //itself enforces.
+                if(!VcalmHolderService.AreAllJsonPointers(request.SelectivePointers))
+                {
+                    return (null, UnknownOptionRequest());
+                }
+
                 //§3.5.1: derivation needs a base-proofed credential. A credential that carries no
                 //embedded proof is not a derivable ecdsa-sd-2023 base credential — a §3.5.1 400.
                 if(request.Credential is null || request.Credential.Proof is not { Count: > 0 })
@@ -207,8 +221,9 @@ public static class VcalmHolderEndpoints
                 //"The document MAY include an embedded proof.", and this holder processes none: an embedded proof
                 //would be signed over and then replaced by the new proof, which then never verifies. A presentation
                 //carrying a proof member is refused before any signing, through the same check the holder service
-                //itself enforces.
-                if(VcalmHolderService.HasEmbeddedProof(request.Presentation))
+                //itself enforces. The parser records a proof member of any JSON kind, null included, which the
+                //typed presentation cannot show once a null member has been dropped.
+                if(request.HasProofMember || VcalmHolderService.HasEmbeddedProof(request.Presentation))
                 {
                     return (null, EmbeddedProofRequest());
                 }
@@ -451,9 +466,13 @@ public static class VcalmHolderEndpoints
 
 
     /// <summary>
-    /// The §3.5.2 create-presentation: binds the request's challenge, domain, verificationMethod and created (falling
-    /// back to instance defaults), signs the presentation, persists it under its id, and returns the 201
-    /// <c>{verifiablePresentation}</c> body.
+    /// The §3.5.2 create-presentation: binds the request's challenge, domain and created (the instance clock when
+    /// <c>created</c> is omitted), signs the presentation under the instance's configured verification method,
+    /// persists it under its id, and returns the 201 <c>{verifiablePresentation}</c> body. An option value the holder
+    /// cannot process is refused before anything is signed: a <c>type</c>, <c>cryptosuite</c>, <c>proofPurpose</c> or
+    /// <c>verificationMethod</c> other than the one this instance signs with is answered as an unknown option
+    /// (<see cref="AreOptionValuesProcessable"/>), and a <c>created</c> that is not a dateTimeStamp as a malformed
+    /// value, never replaced by the clock.
     /// </summary>
     /// <param name="server">The host, for the time provider, the identifier seam and the signing wiring.</param>
     /// <param name="request">The parsed create-presentation request.</param>
@@ -480,23 +499,37 @@ public static class VcalmHolderEndpoints
 
         VcalmCreatePresentationOptions options = request.Options;
 
-        //§3.5.2 verificationMethod: the request value, else the instance's configured default ("If
-        //omitted, a default verification method will be used.").
-        string verificationMethodId = !string.IsNullOrEmpty(options.VerificationMethod)
-            ? options.VerificationMethod
-            : signing.DefaultVerificationMethodId;
+        //§2.4: "Implementations MUST throw an error if an endpoint receives data, options, or option values
+        //that it does not understand or know how to process.", and "any given instance configuration MAY
+        //prohibit client use of some options properties". A proof type, cryptosuite, purpose or verification
+        //method this instance does not sign with would name a proof it cannot produce, so the request is
+        //refused before anything is signed.
+        if(!AreOptionValuesProcessable(options, signing))
+        {
+            return UnknownOptionRequest();
+        }
 
-        //§3.5.2 created: the request value when it parses, else the instance clock ("Default current
-        //system time.").
-        DateTime proofCreated = TryParseCreated(options.Created, out DateTime parsed)
-            ? parsed
-            : server.TimeProvider.GetUtcNow().UtcDateTime;
+        //§3.5.2 created: "The date and time of the proof (with a maximum accuracy in seconds). Default
+        //current system time." Data Integrity §2.1 requires a dateTimeStamp, a time zone included; its MAY
+        //to consume a value serialized without an offset is not taken, so a value that does not parse is
+        //refused rather than replaced by the clock. The proof writes the instant to the second.
+        DateTimeOffset requestedCreated = default;
+        if(options.Created is not null && !DateTimeStampFormat.TryParse(options.Created, out requestedCreated))
+        {
+            return MalformedCreatedRequest();
+        }
 
+        DateTime proofCreated = options.Created is null
+            ? server.TimeProvider.GetUtcNow().UtcDateTime
+            : requestedCreated.UtcDateTime;
+
+        //§3.5.2 verificationMethod: "If omitted, a default verification method will be used." A present value
+        //equals that default (checked above), so the proof always names the method whose key signs it.
         DataIntegritySecuredPresentation secured = await VcalmHolderService.CreatePresentationAsync(
             request.Presentation!,
             options.Challenge!,
             options.Domain!,
-            verificationMethodId,
+            signing.DefaultVerificationMethodId,
             proofCreated,
             signing,
             context,
@@ -525,32 +558,26 @@ public static class VcalmHolderEndpoints
 
 
     /// <summary>
-    /// The §3.5.2 <c>created</c> parsing: an ISO 8601 timestamp the request supplied. A value that does not parse
-    /// falls back to the instance clock (the §3.5.2 default).
+    /// Whether every present §3.5.2 proof option names what this instance produces: a <c>type</c> of
+    /// <see cref="DataIntegrityProof.DataIntegrityProofType"/>, the configured suite's
+    /// <see cref="CryptosuiteInfo.CryptosuiteName"/>, a <c>proofPurpose</c> of <see cref="AuthenticationMethod.Purpose"/>
+    /// (the purpose the presentation signer writes and a presentation proof is verified under) and the configured
+    /// <see cref="VcalmPresentationSigning.DefaultVerificationMethodId"/> (the method whose key signs the proof). An
+    /// absent option is always processable; a present one naming anything else is an option value the holder cannot
+    /// process (<see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>), compared ordinally.
     /// </summary>
-    /// <param name="created">The request's <c>options.created</c>, or <see langword="null"/>.</param>
-    /// <param name="parsed">The UTC instant when parsing succeeds.</param>
-    private static bool TryParseCreated(string? created, out DateTime parsed)
-    {
-        parsed = default;
-        if(string.IsNullOrEmpty(created))
+    /// <param name="options">The parsed create-presentation options.</param>
+    /// <param name="signing">The presentation-signing configuration resolved for the request's tenant.</param>
+    /// <returns><see langword="true"/> when every present value is one this instance produces; otherwise <see langword="false"/>.</returns>
+    private static bool AreOptionValuesProcessable(VcalmCreatePresentationOptions options, VcalmPresentationSigning signing) =>
+        options switch
         {
-            return false;
-        }
-
-        if(DateTimeOffset.TryParse(
-            created,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out DateTimeOffset offset))
-        {
-            parsed = offset.UtcDateTime;
-
-            return true;
-        }
-
-        return false;
-    }
+            { Type: { } type } when !string.Equals(type, DataIntegrityProof.DataIntegrityProofType, StringComparison.Ordinal) => false,
+            { Cryptosuite: { } cryptosuite } when !string.Equals(cryptosuite, signing.Cryptosuite.CryptosuiteName, StringComparison.Ordinal) => false,
+            { ProofPurpose: { } proofPurpose } when !string.Equals(proofPurpose, AuthenticationMethod.Purpose, StringComparison.Ordinal) => false,
+            { VerificationMethod: { } verificationMethod } when !string.Equals(verificationMethod, signing.DefaultVerificationMethodId, StringComparison.Ordinal) => false,
+            _ => true
+        };
 
 
     /// <summary>
@@ -827,6 +854,28 @@ public static class VcalmHolderEndpoints
             VcalmProblemTypes.MalformedValueError,
             "MALFORMED_VALUE_ERROR",
             VcalmHolderService.EmbeddedProofDetail);
+
+        return ServerHttpResponse.Json(
+            400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
+    }
+
+
+    /// <summary>
+    /// The §3.5.2 malformed-created 400: the request's <c>options.created</c> is not the dateTimeStamp
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity §2.1</see> requires of a proof's
+    /// <c>created</c> ("MUST be specified as an [XMLSCHEMA11-2] dateTimeStamp string"). The holder does not take that
+    /// clause's MAY to consume a value serialized without an offset, and never replaces a value it could not read by
+    /// the clock, so the request is refused under the <see href="https://www.w3.org/TR/vcalm-1.0/#options">§2.4</see>
+    /// rule that an endpoint MUST throw an error on an option value it does not know how to process, with the
+    /// <see cref="VcalmProblemTypes.MalformedValueError"/> type.
+    /// </summary>
+    private static ServerHttpResponse MalformedCreatedRequest()
+    {
+        VcalmProblemDetail problem = VcalmProblemDetail.Error(
+            VcalmProblemTypes.MalformedValueError,
+            "MALFORMED_VALUE_ERROR",
+            "The options.created value is not a dateTimeStamp: a date and time to the second, optionally with "
+            + "fractional seconds, followed by Z or a time zone offset such as +01:00.");
 
         return ServerHttpResponse.Json(
             400, VcalmResponseWriter.BuildProblemDetailBody(problem), WellKnownMediaTypes.Application.Json);
