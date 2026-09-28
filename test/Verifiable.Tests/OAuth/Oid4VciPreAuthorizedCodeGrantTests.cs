@@ -853,7 +853,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7">RFC 9449 §7</see>: a
     /// DPoP-bound access token must be presented with a matching proof at the resource endpoint. A
     /// token this grant bound is refused at the Credential Endpoint without a proof and accepted
-    /// with one — mirrors
+    /// with one carrying the nonce the refusal provided — mirrors
     /// <see cref="Oid4VciDpopCredentialEndpointTests.DpopBoundTokenWithValidProofIssues"/> for a
     /// token minted by the Pre-Authorized Code grant instead of the authorization-code grant.
     /// </summary>
@@ -917,24 +917,16 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             httpClient, credentialUrl, ConfigurationId, accessToken, dpopProof: null, TestContext.CancellationToken)
             .ConfigureAwait(false);
         string noProofBody = await noProofResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(HttpStatusCode.BadRequest, noProofResponse.StatusCode, noProofBody);
-        Assert.Contains(OAuthErrors.UseDpopNonce, noProofBody);
 
-        string ath = await DpopProofValidator.ComputeAthAsync(
-            accessToken, TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool, TestContext.CancellationToken)
-            .ConfigureAwait(false);
-        DpopProofClaims credentialClaims = new()
-        {
-            Htm = WellKnownHttpMethods.Post,
-            Htu = credentialUrl.ToString(),
-            Iat = TimeProvider.GetUtcNow(),
-            Jti = Guid.NewGuid().ToString("N"),
-            Ath = ath
-        };
-        string credentialProof = await DpopProofConstruction.BuildAsync(
-            credentialClaims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+        //RFC 9449 §9: the resource answers the unproven request with 401, a DPoP challenge and the
+        //nonce the proof then carries.
+        Assert.AreEqual(HttpStatusCode.Unauthorized, noProofResponse.StatusCode, noProofBody);
+        Assert.Contains(OAuthErrors.UseDpopNonce, noProofBody);
+        string resourceNonce = ResourceDpopProofs.ReadNonce(noProofResponse);
+
+        string credentialProof = await ResourceDpopProofs.BuildAsync(
+            dpopKey, WellKnownHttpMethods.Post, credentialUrl.ToString(), accessToken, resourceNonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage provenResponse = await PostCredentialRequestAsync(
             httpClient, credentialUrl, ConfigurationId, accessToken, credentialProof, TestContext.CancellationToken)

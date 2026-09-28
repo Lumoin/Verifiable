@@ -41,11 +41,20 @@ namespace Verifiable.OAuth.Oidc;
 /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7">RFC 9449 §7</see>. The access token
 /// must have been issued by this Authorization Server (the <c>iss</c> claim matches the resolved
 /// issuer URI) and must be unexpired. A token carrying a <c>cnf.jkt</c> binding is served only under
-/// the <c>DPoP</c> scheme with a proof from the bound key: RFC 9449 §7.2 "such a protected resource
-/// MUST reject a DPoP-bound access token received as a bearer token per [RFC6750]." OIDC Core §5.3.1
-/// requires the granted scope to include <c>openid</c>; the endpoint returns 403
-/// <c>insufficient_scope</c> when that condition is not met. The refusals of a token presented under
-/// the <c>Bearer</c> scheme carry the RFC 6750 §3 <c>WWW-Authenticate</c> challenge.
+/// the <c>DPoP</c> scheme with a proof from the bound key:
+/// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see> "such a protected
+/// resource MUST reject a DPoP-bound access token received as a bearer token per [RFC6750]." An
+/// unbound token is served only under the <c>Bearer</c> scheme. OIDC Core §5.3.1 requires the granted
+/// scope to include <c>openid</c>; the endpoint returns 403 <c>insufficient_scope</c> when that
+/// condition is not met.
+/// </para>
+/// <para>
+/// Every refusal carries one <c>WWW-Authenticate</c> value (RFC 6750 §3). A request without usable
+/// credentials is answered <c>Bearer scope="openid", DPoP algs="…"</c>, naming both schemes and no
+/// error (RFC 6750 §3.1, RFC 9449 §7.2). A refusal of a presented token carries the challenge of the
+/// scheme it was presented under, per RFC 9449 §7.2: "If the mechanism used to attempt
+/// authentication could be established unambiguously, then the corresponding challenge SHOULD be
+/// used to deliver error information".
 /// </para>
 /// <para>
 /// The endpoint performs bearer validation, the <c>iss</c> / <c>exp</c> /
@@ -121,6 +130,20 @@ public static class UserInfoEndpoints
         BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InsufficientScope, scope: WellKnownScopes.OpenId);
 
 
+    /// <summary>
+    /// The challenge a request without usable credentials is answered with,
+    /// <c>Bearer scope="openid", DPoP algs="…"</c>: both schemes UserInfo accepts, no error
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>: "If the
+    /// request lacks any authentication information (e.g., the client was unaware that authentication
+    /// is necessary or attempted using an unsupported authentication method), the resource server
+    /// SHOULD NOT include an error code or other error information."), and the scope UserInfo requires
+    /// as the auth-param RFC 6750 §3 requires after the <c>Bearer</c> scheme.
+    /// </summary>
+    private static string MissingCredentialsChallenge { get; } =
+        CredentialEndpointDpopValidation.BuildMissingCredentialsChallenge(
+            BearerTokenChallenge.BuildChallenge(scope: WellKnownScopes.OpenId));
+
+
     /// <summary>Builds the UserInfo endpoint using the admitted token validation and claim operations.</summary>
     private static EndpointCandidate BuildUserInfo(string httpMethod) =>
         new()
@@ -168,31 +191,33 @@ public static class UserInfoEndpoints
                 {
                     return (null, ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
-                        "Missing or malformed Authorization header."));
+                        "Missing or malformed Authorization header.")
+                        .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, MissingCredentialsChallenge));
                 }
 
                 (JwtPayload? validatedPayload, ServerHttpResponse? validationFailure) =
                     await BearerTokenValidation.ValidateAsync(accessToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
 
+                //RFC 9449 §7.2 — the refusal of a token presented under the DPoP scheme is
+                //delivered in that scheme's challenge.
                 if(validationFailure is not null)
                 {
-                    return (null, validationFailure);
+                    return (null, CredentialEndpointDpopValidation.InPresentationScheme(
+                        validationFailure, isDpopPresentation));
                 }
 
                 //RFC 9449 §7.1 and §7.2 — a token bound by cnf.jkt is served only under the
                 //DPoP scheme with a proof from the bound key; presented as a bearer token it is
-                //refused. The enforcement is the one the OID4VCI protected endpoints run. Under
-                //the Bearer scheme its only refusal is that downgrade, a 401 that carries the
-                //RFC 6750 §3 challenge.
+                //refused, and an unbound token is not served under the DPoP scheme. The
+                //enforcement is the one the OID4VCI protected endpoints run, and each of its
+                //refusals carries the challenge of the presentation's scheme.
                 ServerHttpResponse? dpopFailure = await CredentialEndpointDpopValidation.EnforceAsync(
                     server, context, registration, validatedPayload!, accessToken!, isDpopPresentation,
                     server.TimeProvider.GetUtcNow(), ct).ConfigureAwait(false);
                 if(dpopFailure is not null)
                 {
-                    return (null, isDpopPresentation
-                        ? dpopFailure
-                        : dpopFailure.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InvalidTokenChallenge));
+                    return (null, dpopFailure);
                 }
 
                 //OIDC Core §5.3.1 — the access token MUST carry the openid
@@ -206,7 +231,9 @@ public static class UserInfoEndpoints
                     return (null, ServerHttpResponse.Forbidden(
                         OAuthErrors.InsufficientScope,
                         "UserInfo requires the openid scope per OIDC Core §5.3.1.")
-                        .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InsufficientScopeChallenge));
+                        .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, isDpopPresentation
+                            ? CredentialEndpointDpopValidation.BuildDpopChallenge(OAuthErrors.InsufficientScope, WellKnownScopes.OpenId)
+                            : InsufficientScopeChallenge));
                 }
 
                 if(!validatedPayload.TryGetValue(WellKnownJwtClaimNames.Sub, out object? subObj)
@@ -216,7 +243,9 @@ public static class UserInfoEndpoints
                     return (null, ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
                         "Validated access token does not carry a sub claim.")
-                        .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InvalidTokenChallenge));
+                        .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, isDpopPresentation
+                            ? CredentialEndpointDpopValidation.BuildDpopChallenge(OAuthErrors.InvalidToken)
+                            : InvalidTokenChallenge));
                 }
 
                 //One-time OidcClaims resolution before the contributor walk —

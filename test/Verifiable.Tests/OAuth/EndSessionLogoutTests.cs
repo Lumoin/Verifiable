@@ -596,9 +596,16 @@ internal sealed class EndSessionLogoutTests
     /// than one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST
     /// be written such that they are mutually exclusive, rejecting JWTs of the wrong kind." A hint
     /// carrying an ID Token's claims and signed under the very key the registration lists for ID
-    /// Tokens, but explicitly typed as another kind of JWT this issuer produces, is not an ID Token:
-    /// the end-session request over the wire is refused with 400 <c>invalid_request</c> and the session
-    /// stays live. The rows are an access token's, a logout token's and an ID-JAG's <c>typ</c>.
+    /// Tokens, but explicitly typed as another kind of JWT this issuer produces, is not an ID Token, and
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">RP-Initiated
+    /// Logout 1.0 §4</see> fixes what follows: "If any of the validation procedures defined in this
+    /// specification fail, any operations requiring the information that failed to correctly validate
+    /// MUST be aborted and the information that failed to validate MUST NOT be used." and "when the OP
+    /// detects errors in the RP-Initiated Logout request, the OP MUST not perform post-logout
+    /// redirection to an RP." The end-session request over the wire is not redirected and the session
+    /// stays live. The 400 <c>invalid_request</c> body and its description are the library's own refusal
+    /// shape; the specification names no error code or status. The rows are an access token's, a
+    /// logout token's and an ID-JAG's <c>typ</c>.
     /// </summary>
     /// <param name="type">The explicit <c>typ</c> the hint's protected header carries.</param>
     [TestMethod]
@@ -631,9 +638,8 @@ internal sealed class EndSessionLogoutTests
     /// passed to the Logout Endpoint as a hint about the End-User's current authenticated session with
     /// the Client." An ID Token this server issued, signed under the registration's ID Token key, whose
     /// header carries no <c>typ</c> or one naming the JWT media type, is accepted over the wire: the
-    /// end-session request redirects
-    /// to the registered post-logout URI with the <c>state</c> and ends the session. The <c>typ</c> is
-    /// compared as the media type
+    /// end-session request redirects to the registered post-logout URI with the <c>state</c> and ends
+    /// the session. The <c>typ</c> is compared as the media type
     /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see> makes it:
     /// "Per RFC 2045 [RFC2045], all media type values, subtype values, and parameter names are case
     /// insensitive." and "A recipient using the media type value MUST treat it as if "application/"
@@ -679,7 +685,15 @@ internal sealed class EndSessionLogoutTests
     /// fail to validate other kinds of JWTs." A hint carrying this registration's ID Token claims and
     /// typed <c>JWT</c>, but signed under a key the registration does not list for ID Tokens (another
     /// registration's signing key on the same server, which the server can resolve by its <c>kid</c>),
-    /// is refused over the wire with 400 <c>invalid_request</c> and the session stays live.
+    /// fails that validation, and
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">RP-Initiated
+    /// Logout 1.0 §4</see> fixes what follows: "If any of the validation procedures defined in this
+    /// specification fail, any operations requiring the information that failed to correctly validate
+    /// MUST be aborted and the information that failed to validate MUST NOT be used." and "when the OP
+    /// detects errors in the RP-Initiated Logout request, the OP MUST not perform post-logout
+    /// redirection to an RP." The end-session request over the wire is not redirected and the session
+    /// stays live. The 400 <c>invalid_request</c> body and its description are the library's own refusal
+    /// shape; the specification names no error code or status.
     /// </summary>
     [TestMethod]
     public async Task EndSessionRefusesAHintSignedUnderAKeyNotListedForIdTokensAsync()
@@ -708,9 +722,16 @@ internal sealed class EndSessionLogoutTests
     /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
     /// Logout 1.0 §2</see>: "When an id_token_hint parameter is present, the OP MUST validate that it
     /// was the issuer of the ID Token." A hint whose protected header's <c>kid</c> is a single space
-    /// names no key, so the OP cannot validate that it issued it: the end-session request over the wire
-    /// is refused with 400 <c>invalid_request</c> and the description "id_token_hint header is missing
-    /// kid.", never a server error, and the session stays live.
+    /// names no key, so the OP cannot validate that it issued it, and
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">RP-Initiated
+    /// Logout 1.0 §4</see> fixes what follows: "If any of the validation procedures defined in this
+    /// specification fail, any operations requiring the information that failed to correctly validate
+    /// MUST be aborted and the information that failed to validate MUST NOT be used." and "when the OP
+    /// detects errors in the RP-Initiated Logout request, the OP MUST not perform post-logout
+    /// redirection to an RP." The end-session request over the wire is not redirected, never answered
+    /// with a server error, and the session stays live. The 400 <c>invalid_request</c> body with the
+    /// description "id_token_hint header is missing kid." is the library's own refusal shape; the
+    /// specification names no error code or status.
     /// </summary>
     [TestMethod]
     public async Task EndSessionRefusesAHintWhoseKidIsWhitespaceAsync()
@@ -734,6 +755,73 @@ internal sealed class EndSessionLogoutTests
         Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual("id_token_hint header is missing kid.", document.RootElement.GetProperty("error_description").GetString());
         Assert.IsEmpty(terminated, "A hint whose kid names no key must not end the session.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">RP-Initiated
+    /// Logout 1.0 §4</see>: "If any of the validation procedures defined in this specification fail,
+    /// any operations requiring the information that failed to correctly validate MUST be aborted and
+    /// the information that failed to validate MUST NOT be used." and "when the OP detects errors in the
+    /// RP-Initiated Logout request, the OP MUST not perform post-logout redirection to an RP." A hint
+    /// whose protected header is a JSON array (<c>W10.e30.AA</c>, the header <c>[]</c>) fails
+    /// validation: the end-session request over the wire is not redirected, never answered with a
+    /// server error, and the session stays live. The 400 <c>invalid_request</c> body is the library's
+    /// own refusal shape; the specification names no error code or status.
+    /// </summary>
+    [TestMethod]
+    public async Task EndSessionRefusesAHintWhoseHeaderIsNotAJsonObjectAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, "W10.e30.AA", "m1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "A refused hint must not redirect.");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+        Assert.IsEmpty(terminated, "A malformed hint must not end the session.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
+    /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
+    /// fail to validate other kinds of JWTs." A registration whose access tokens and ID Tokens are
+    /// issued under two distinct keys: a hint carrying the registration's ID Token claims, typed
+    /// <c>JWT</c>, but signed under the registration's own access-token key, fails the validation
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 §2</see> requires ("When an id_token_hint parameter is present, the OP MUST validate
+    /// that it was the issuer of the ID Token."), and
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">§4</see>
+    /// "when the OP detects errors in the RP-Initiated Logout request, the OP MUST not perform
+    /// post-logout redirection to an RP.": the end-session request over the wire is not redirected and
+    /// the session stays live. The 400 <c>invalid_request</c> body is the library's own refusal shape.
+    /// </summary>
+    [TestMethod]
+    public async Task EndSessionRefusesAHintSignedUnderTheRegistrationsAccessTokenKeyAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+        _ = await IssuanceKeySeparation.SeparateIdTokenKeyAsync(host, material).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
+        string hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, "JWT").ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "a1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertHintRefused(response, body);
+        Assert.IsEmpty(terminated, "A hint signed under the access-token key must not end the session.");
     }
 
 

@@ -246,8 +246,10 @@ public static class EndSessionEndpoints
                 bytes => oauth.Codecs.JwtHeaderDeserializer!(bytes),
                 oauth.MemoryPool!);
         }
-        catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+        catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
         {
+            //A protected header that is not a JSON object (for example "[]") fails in the wired
+            //header deserializer; the hint is malformed input, refused without ending the session.
             return (null, null, ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequest, $"id_token_hint is malformed: {ex.Message}"));
         }

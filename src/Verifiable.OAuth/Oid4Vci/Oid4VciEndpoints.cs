@@ -301,16 +301,19 @@ public static class Oid4VciEndpoints
                 if(!BearerTokenValidation.TryExtractAccessToken(
                     context, out string? bearerToken, out bool isDpopPresentation))
                 {
-                    return Respond(ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidToken, "Missing or malformed Authorization header."));
+                    return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
+                        server, registration, context, ct).ConfigureAwait(false));
                 }
 
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
                     await BearerTokenValidation.ValidateAsync(bearerToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
+                //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
+                //in that scheme's challenge.
                 if(validationFailure is not null)
                 {
-                    return Respond(validationFailure);
+                    return Respond(CredentialEndpointDpopValidation.InPresentationScheme(
+                        validationFailure, isDpopPresentation));
                 }
 
                 //RFC 9449 §7.1: when the Access Token carries a cnf.jkt binding, a DPoP proof
@@ -605,16 +608,19 @@ public static class Oid4VciEndpoints
                 if(!BearerTokenValidation.TryExtractAccessToken(
                     context, out string? bearerToken, out bool isDpopPresentation))
                 {
-                    return Respond(ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidToken, "Missing or malformed Authorization header."));
+                    return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
+                        server, registration, context, ct).ConfigureAwait(false));
                 }
 
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
                     await BearerTokenValidation.ValidateAsync(bearerToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
+                //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
+                //in that scheme's challenge.
                 if(validationFailure is not null)
                 {
-                    return Respond(validationFailure);
+                    return Respond(CredentialEndpointDpopValidation.InPresentationScheme(
+                        validationFailure, isDpopPresentation));
                 }
 
                 //RFC 9449 §7.1: when the Access Token carries a cnf.jkt binding, a DPoP proof
@@ -1509,16 +1515,19 @@ public static class Oid4VciEndpoints
                 if(!BearerTokenValidation.TryExtractAccessToken(
                     context, out string? bearerToken, out bool isDpopPresentation))
                 {
-                    return Respond(ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidToken, "Missing or malformed Authorization header."));
+                    return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
+                        server, registration, context, ct).ConfigureAwait(false));
                 }
 
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
                     await BearerTokenValidation.ValidateAsync(bearerToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
+                //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
+                //in that scheme's challenge.
                 if(validationFailure is not null)
                 {
-                    return Respond(validationFailure);
+                    return Respond(CredentialEndpointDpopValidation.InPresentationScheme(
+                        validationFailure, isDpopPresentation));
                 }
 
                 //RFC 9449 §7.1: when the Access Token carries a cnf.jkt binding, a DPoP proof

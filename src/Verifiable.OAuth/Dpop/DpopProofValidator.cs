@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Validation;
 
@@ -94,6 +95,19 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
+        //RFC 9449 §4.3 item 3: "All required claims per Section 4.2 are contained in the JWT." An
+        //empty jti identifies nothing the replay guard can track; it is a malformed proof.
+        if(string.IsNullOrEmpty(claims.Jti))
+        {
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
+        }
+
+        //RFC 9449 §8.1: nonce = 1*NQCHAR. An empty nonce matches no nonce the server provided.
+        if(claims.Nonce is { Length: 0 })
+        {
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.NonceMismatch);
+        }
+
         //RFC 9449 §4.2: the embedded JWK MUST be a public key. Reject a proof whose jwk
         //leaks private/symmetric material before reconstructing the key or verifying.
         if(DpopJwkUtilities.ContainsPrivateKeyMaterial(header.Jwk))
@@ -119,6 +133,17 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
+        //RFC 9449 §4.3 items 5 and 6: the alg names an algorithm acceptable per local policy and the
+        //signature verifies with the public key in jwk. The key reconstructed from the jwk fixes the
+        //algorithm family the verification runs under, so a declared alg of another family (an RSA
+        //alg over an EC key, a curve other than the key's) is refused before any verification.
+        if(!IsAlgorithmOfKey(header.Alg, publicKey.Tag.Get<CryptoAlgorithm>()))
+        {
+            publicKey.Dispose();
+
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidAlg);
+        }
+
         //Signature verification via JCose's Jws.VerifyAsync — composes the
         //library's existing JWS verification primitive (including the pooled
         //signing-input construction and RFC 8725 §3.11 length bound) instead
@@ -140,13 +165,15 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.SignatureFailed);
         }
 
-        //Claim checks.
-        if(!string.Equals(claims.Htm, request.HttpMethod, StringComparison.OrdinalIgnoreCase))
+        //RFC 9449 §4.3 item 8: "The htm claim matches the HTTP method of the current request." RFC
+        //9110 §9.1: "The method token is case-sensitive", so the comparison is ordinal.
+        if(!string.Equals(claims.Htm, request.HttpMethod, StringComparison.Ordinal))
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.HtmMismatch);
         }
 
-        if(!string.Equals(claims.Htu, request.HttpUrl, StringComparison.Ordinal))
+        //RFC 9449 §4.3 item 9, compared after the normalization its SHOULD names.
+        if(!IsSameTargetUri(claims.Htu, request.HttpUrl))
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.HtuMismatch);
         }
@@ -247,4 +274,71 @@ public static class DpopProofValidator
         || WellKnownJwaValues.IsPs384(alg)
         || WellKnownJwaValues.IsPs512(alg)
         || WellKnownJwaValues.IsEdDsa(alg);
+
+
+    /// <summary>
+    /// Whether the declared <paramref name="alg"/> is an algorithm of the key reconstructed from the
+    /// proof's <c>jwk</c>: <c>ES256</c> over P-256, <c>ES384</c> over P-384, <c>ES512</c> over P-521,
+    /// <c>ES256K</c> over secp256k1, <c>EdDSA</c> over Ed25519, and the RSA PKCS#1 and PSS algorithms
+    /// over an RSA key. The verification the validator runs is selected by the key, so an alg outside
+    /// the key's family would otherwise be declared without being the algorithm that verified.
+    /// </summary>
+    /// <param name="alg">The proof header's <c>alg</c>.</param>
+    /// <param name="keyAlgorithm">The algorithm the reconstructed public key is tagged with.</param>
+    /// <returns><see langword="true"/> when the declared algorithm belongs to the key.</returns>
+    private static bool IsAlgorithmOfKey(string alg, CryptoAlgorithm keyAlgorithm) =>
+        (keyAlgorithm.Equals(CryptoAlgorithm.P256) && WellKnownJwaValues.IsEs256(alg))
+        || (keyAlgorithm.Equals(CryptoAlgorithm.P384) && WellKnownJwaValues.IsEs384(alg))
+        || (keyAlgorithm.Equals(CryptoAlgorithm.P521) && WellKnownJwaValues.IsEs512(alg))
+        || (keyAlgorithm.Equals(CryptoAlgorithm.Secp256k1) && WellKnownJwaValues.IsEs256K(alg))
+        || (keyAlgorithm.Equals(CryptoAlgorithm.Ed25519) && WellKnownJwaValues.IsEdDsa(alg))
+        || ((keyAlgorithm.Equals(CryptoAlgorithm.Rsa2048) || keyAlgorithm.Equals(CryptoAlgorithm.Rsa4096))
+            && (WellKnownJwaValues.IsRs256(alg) || WellKnownJwaValues.IsRs384(alg) || WellKnownJwaValues.IsRs512(alg)
+                || WellKnownJwaValues.IsPs256(alg) || WellKnownJwaValues.IsPs384(alg) || WellKnownJwaValues.IsPs512(alg)));
+
+
+    /// <summary>
+    /// The URI components the <c>htu</c> comparison covers: scheme, host, port and path, never query
+    /// or fragment.
+    /// </summary>
+    private static UriComponents TargetUriComponents { get; } =
+        UriComponents.Scheme | UriComponents.Host | UriComponents.Port | UriComponents.Path;
+
+
+    /// <summary>
+    /// Whether the proof's <paramref name="presentedHtu"/> names the same target as
+    /// <paramref name="expectedHtu"/>, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see>: item 9 "The
+    /// htu claim matches the HTTP URI value for the HTTP request in which the JWT was received, ignoring
+    /// any query and fragment parts.", and "To reduce the likelihood of false negatives, servers SHOULD
+    /// employ syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization
+    /// (Section 6.2.3 of [RFC3986]) before comparing the htu claim." Both values are parsed as absolute
+    /// <c>http</c> or <c>https</c> URIs, whose parser lowercases the scheme and host, drops a default
+    /// port, removes dot segments and gives an empty path the root; the scheme, host, port and path are
+    /// then compared ordinally with unreserved percent-encodings decoded, so the path's case stays
+    /// significant and the query and fragment take no part.
+    /// </summary>
+    /// <param name="presentedHtu">The proof's <c>htu</c> claim.</param>
+    /// <param name="expectedHtu">The target URI of the request being served.</param>
+    /// <returns><see langword="true"/> when the two name the same target.</returns>
+    private static bool IsSameTargetUri(string presentedHtu, string expectedHtu)
+    {
+        if(!Uri.TryCreate(presentedHtu, UriKind.Absolute, out Uri? presented)
+            || !Uri.TryCreate(expectedHtu, UriKind.Absolute, out Uri? expected)
+            || !IsHttpScheme(presented)
+            || !IsHttpScheme(expected))
+        {
+            return false;
+        }
+
+        return Uri.Compare(presented, expected, TargetUriComponents, UriFormat.SafeUnescaped, StringComparison.Ordinal) == 0;
+    }
+
+
+    /// <summary>Whether <paramref name="uri"/> is an <c>http</c> or <c>https</c> URI, the schemes an <c>htu</c> names.</summary>
+    /// <param name="uri">The parsed absolute URI.</param>
+    /// <returns><see langword="true"/> for the two HTTP schemes.</returns>
+    private static bool IsHttpScheme(Uri uri) =>
+        string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+        || string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal);
 }

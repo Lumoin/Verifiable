@@ -308,6 +308,7 @@ internal sealed class JtiReplayGuardStoreProofTests
         {
             SaveFlowStateAsync = store.SaveAsync,
             ResolveCorrelationKeyAsync = store.ResolveAsync,
+            ClaimFlowStateAsync = store.ClaimAsync,
             GenerateIdentifierAsync = DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
             MemoryPool = BaseMemoryPool.Shared
         };
@@ -450,6 +451,26 @@ internal sealed class JtiReplayGuardStoreProofTests
 
             return ValueTask.FromResult<string?>(null);
         }
+
+        /// <summary>The <c>(flow id, step)</c> pairs already claimed, keyed ordinally on the flow id.</summary>
+        private HashSet<(string FlowId, int StepCount)> ClaimedSteps { get; } = [];
+
+        /// <summary>
+        /// Claims one step of a saved record exactly once, as a host's atomic claim does: the first claim
+        /// of a <c>(flow id, step)</c> pair succeeds and every later one is refused.
+        /// </summary>
+        /// <param name="tenantId">The tenant; accepted to match the delegate shape.</param>
+        /// <param name="flowId">The record's flow id.</param>
+        /// <param name="expectedStepCount">The step claimed.</param>
+        /// <param name="context">The request context; accepted to match the delegate shape.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        public ValueTask<bool> ClaimAsync(
+            TenantId tenantId,
+            string flowId,
+            int expectedStepCount,
+            ExchangeContext context,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(ClaimedSteps.Add((flowId, expectedStepCount)));
     }
 }
 

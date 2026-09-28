@@ -6,6 +6,7 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Keys;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Dpop;
 
@@ -110,6 +111,14 @@ public static class DefaultDpopNonceValidation
 
             long issuedAtUnixSeconds = BinaryPrimitives.ReadInt64BigEndian(decodedSpan[offset..]);
             offset += WellKnownDpopValues.NonceIssuedAtByteLength;
+
+            //The timestamp is read before the HMAC is checked, so it is still presented, unverified
+            //input: a value no DateTimeOffset holds is a malformed nonce, never a server fault.
+            if(!JwtTemporalChecks.IsRepresentableUnixSeconds(issuedAtUnixSeconds))
+            {
+                return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.Malformed);
+            }
+
             DateTimeOffset issuedAt = DateTimeOffset.FromUnixTimeSeconds(issuedAtUnixSeconds);
 
             ReadOnlyMemory<byte> presentedAudienceHash =

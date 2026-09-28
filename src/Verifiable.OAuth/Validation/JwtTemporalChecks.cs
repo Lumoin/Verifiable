@@ -65,4 +65,28 @@ public static class JwtTemporalChecks
     /// </summary>
     public static bool IsWithinLifetimeCeiling(DateTimeOffset start, DateTimeOffset end, TimeSpan ceiling) =>
         end - start <= ceiling;
+
+
+    /// <summary>
+    /// The earliest Unix-seconds value a <see cref="DateTimeOffset"/> represents, 0001-01-01T00:00:00Z.
+    /// </summary>
+    internal static long MinimumRepresentableUnixSeconds { get; } = DateTimeOffset.MinValue.ToUnixTimeSeconds();
+
+
+    /// <summary>
+    /// The latest Unix-seconds value a <see cref="DateTimeOffset"/> represents, 9999-12-31T23:59:59Z.
+    /// </summary>
+    internal static long MaximumRepresentableUnixSeconds { get; } = DateTimeOffset.MaxValue.ToUnixTimeSeconds();
+
+
+    /// <summary>
+    /// Whether <paramref name="unixSeconds"/>, a NumericDate read off presented wire input, names an
+    /// instant a <see cref="DateTimeOffset"/> can hold. A value outside that range cannot be compared as
+    /// an instant, and <see cref="DateTimeOffset.FromUnixTimeSeconds"/> throws on it, so a validator
+    /// answers it as malformed input before constructing the instant.
+    /// </summary>
+    /// <param name="unixSeconds">The seconds since the Unix epoch.</param>
+    /// <returns><see langword="true"/> when the value is within the representable range.</returns>
+    internal static bool IsRepresentableUnixSeconds(long unixSeconds) =>
+        unixSeconds >= MinimumRepresentableUnixSeconds && unixSeconds <= MaximumRepresentableUnixSeconds;
 }

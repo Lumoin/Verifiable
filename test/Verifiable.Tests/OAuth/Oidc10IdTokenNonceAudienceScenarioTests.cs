@@ -233,6 +233,38 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
 
 
     /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation">OpenID Connect
+    /// Core 1.0 §3.1.3.7</see>: "The Client MUST validate the signature of all other ID Tokens according
+    /// to JWS [JWS] using the algorithm specified in the JWT alg Header Parameter. The Client MUST use
+    /// the keys provided by the Issuer." An id_token issued over the token endpoint and re-signed under
+    /// the issuer's key with a protected header whose <c>kid</c> is a single space names no key the
+    /// relying party can use: <see cref="Oidc10IdTokenValidator.ValidateAsync"/> rejects it with
+    /// <see cref="JwsAccessTokenValidationFailureReason.InvalidHeader"/> and the description "JWS header
+    /// is missing the kid member.", never an exception.
+    /// </summary>
+    [TestMethod]
+    public async Task IdTokenWithWhitespaceKidIsRejected()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string idToken = await DriveCodeExchangeForIdTokenAsync(
+            host, material, nonce: null, stampSessionId: false).ConfigureAwait(false);
+        string whitespaceKidIdToken = await CompactJwsResigning.ResignWithHeaderAsync(
+            host, idToken, material.SigningKeyId, " ", "JWT").ConfigureAwait(false);
+
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+            whitespaceKidIdToken, material, expectedNonce: null, trustedAudiences: null).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.InvalidHeader, result.FailureReason);
+        Assert.AreEqual("JWS header is missing the kid member.", result.FailureDescription);
+    }
+
+
+    /// <summary>
     /// Replaces the host's claim issuer with the standard rules plus a deployment contributor that
     /// adds a second, application-chosen audience to the ID Token — the shape the untrusted-audience
     /// scenarios validate against.

@@ -3,6 +3,7 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth;
 
@@ -278,9 +279,11 @@ public static class JwsAccessTokenValidator
                 "JWS alg 'none' is rejected per RFC 8725 §3.1.");
         }
 
+        //A kid of only whitespace names no key: it is refused here as missing, so it never reaches
+        //the KeyId the resolver is asked with.
         if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidValue)
             || kidValue is not string kid
-            || string.IsNullOrEmpty(kid))
+            || string.IsNullOrWhiteSpace(kid))
         {
             return SignedJwtValidationOutcome.Failure(
                 JwsAccessTokenValidationFailureReason.InvalidHeader,
@@ -578,28 +581,44 @@ public static class JwsAccessTokenValidator
     }
 
 
+    /// <summary>
+    /// Reads the NumericDate claim <paramref name="claimName"/> (RFC 7519 §2, seconds since the Unix
+    /// epoch) of a verified payload as an instant. A value that is not a number, or that names no
+    /// instant a <see cref="DateTimeOffset"/> can hold (<see cref="JwtTemporalChecks.IsRepresentableUnixSeconds"/>),
+    /// is reported as unreadable, so the caller refuses the token as malformed instead of an exception
+    /// escaping from the conversion.
+    /// </summary>
+    /// <param name="payload">The verified payload.</param>
+    /// <param name="claimName">The NumericDate claim to read.</param>
+    /// <param name="value">The instant when the claim is present and representable.</param>
+    /// <returns><see langword="true"/> when the claim is present and names a representable instant.</returns>
     internal static bool TryReadEpochSeconds(JwtPayload payload, string claimName, out DateTimeOffset value)
     {
-        if(payload.TryGetValue(claimName, out object? raw))
+        value = default;
+        if(!payload.TryGetValue(claimName, out object? raw))
         {
-            long seconds;
-            switch(raw)
-            {
-                case long l: seconds = l; break;
-                case int i: seconds = i; break;
-                case double d: seconds = (long)d; break;
-                case decimal dec: seconds = (long)dec; break;
-                default:
-                    value = default;
-                    return false;
-            }
-
-            value = DateTimeOffset.FromUnixTimeSeconds(seconds);
-            return true;
+            return false;
         }
 
-        value = default;
-        return false;
+        long? seconds = raw switch
+        {
+            long l => l,
+            int i => i,
+            double d when d >= JwtTemporalChecks.MinimumRepresentableUnixSeconds
+                && d <= JwtTemporalChecks.MaximumRepresentableUnixSeconds => (long)d,
+            decimal dec when dec >= JwtTemporalChecks.MinimumRepresentableUnixSeconds
+                && dec <= JwtTemporalChecks.MaximumRepresentableUnixSeconds => (long)dec,
+            _ => null
+        };
+
+        if(seconds is not long unixSeconds || !JwtTemporalChecks.IsRepresentableUnixSeconds(unixSeconds))
+        {
+            return false;
+        }
+
+        value = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+
+        return true;
     }
 
 

@@ -134,16 +134,27 @@ public static class DpopJwkUtilities
 
 
     /// <summary>
-    /// Computes the RFC 7638 thumbprint of an already-projected JWK as a
-    /// base64url-encoded string. Composes
-    /// <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool, IDictionary{string, string})"/>
-    /// which sorts the JWK members lexicographically per RFC 7638 §3.1,
-    /// writes the canonical JSON, and hashes with SHA-256. No kty dispatch
-    /// is required here — RFC 7638 §3.2's "required members differ per
-    /// kty" concern is handled by the caller supplying only those members
-    /// (which <see cref="ToJwk"/> already does), and by the lexicographic-
-    /// sort step inside the JCose utility.
+    /// Computes the RFC 7638 thumbprint of a JWK as a base64url-encoded string, over the required
+    /// members of its <c>kty</c> only.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7638#section-3.2">RFC 7638 §3.2</see>: "Only the
+    /// required members of a key's representation are used when computing its JWK Thumbprint value." and
+    /// §3.2.2: "The benefit of including only the JWK required members is that the JWK Thumbprint of any
+    /// JWK representing the key remains the same, regardless of any other attributes that are present."
+    /// The members are <c>crv</c>, <c>kty</c>, <c>x</c>, <c>y</c> for an EC key and <c>e</c>,
+    /// <c>kty</c>, <c>n</c> for an RSA key (RFC 7638 §3.2), <c>crv</c>, <c>kty</c>, <c>x</c> for an OKP
+    /// key (<see href="https://www.rfc-editor.org/rfc/rfc8037#section-2">RFC 8037 §2</see>) and
+    /// <c>alg</c>, <c>kty</c>, <c>pub</c> for an AKP key. Any other member a received JWK carries (a
+    /// <c>kid</c>, an <c>alg</c>, a <c>use</c>) is left out, so a proof's embedded JWK matches the
+    /// <c>cnf.jkt</c> its key was bound under whatever metadata it carries. A JWK of another <c>kty</c>
+    /// is hashed over all its members. Composes
+    /// <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool, IDictionary{string, string})"/>,
+    /// which sorts the members lexicographically per RFC 7638 §3.1, writes the canonical JSON and hashes
+    /// with SHA-256.
     /// </summary>
+    /// <param name="jwk">The JWK, for example a DPoP proof's embedded <c>jwk</c> header.</param>
+    /// <param name="base64UrlEncoder">The base64url encoder for the digest.</param>
+    /// <param name="memoryPool">The pool the digest is computed in.</param>
+    /// <returns>The base64url-encoded SHA-256 thumbprint.</returns>
     public static string ComputeThumbprintFromJwk(
         IReadOnlyDictionary<string, string> jwk,
         EncodeDelegate base64UrlEncoder,
@@ -153,15 +164,53 @@ public static class DpopJwkUtilities
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        //ComputeGenericThumbprint requires IDictionary; copy the read-only
-        //view into a fresh mutable dictionary. The JWK has at most a
-        //handful of entries — a per-call allocation that's negligible
-        //against the SHA-256 work that follows.
-        Dictionary<string, string> jwkDict = new(jwk, StringComparer.Ordinal);
+        Dictionary<string, string> jwkDict = SelectThumbprintMembers(jwk);
         using IMemoryOwner<byte> hash = JwkThumbprintUtilities.ComputeGenericThumbprint(
             memoryPool, jwkDict);
 
         return base64UrlEncoder(hash.Memory.Span);
+    }
+
+
+    /// <summary>
+    /// Copies the members RFC 7638 §3.2 requires for <paramref name="jwk"/>'s <c>kty</c> into a fresh
+    /// dictionary (the form <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool, IDictionary{string, string})"/>
+    /// takes), or every member when the <c>kty</c> is absent or of no family listed here.
+    /// </summary>
+    /// <param name="jwk">The JWK whose members are selected.</param>
+    /// <returns>The members the thumbprint is computed over.</returns>
+    private static Dictionary<string, string> SelectThumbprintMembers(IReadOnlyDictionary<string, string> jwk)
+    {
+        string[]? requiredMembers = jwk.TryGetValue(WellKnownJwkMemberNames.Kty, out string? kty)
+            ? kty switch
+            {
+                var k when WellKnownKeyTypeValues.IsEc(k) =>
+                    [WellKnownJwkMemberNames.Crv, WellKnownJwkMemberNames.Kty, WellKnownJwkMemberNames.X, WellKnownJwkMemberNames.Y],
+                var k when WellKnownKeyTypeValues.IsRsa(k) =>
+                    [WellKnownJwkMemberNames.E, WellKnownJwkMemberNames.Kty, WellKnownJwkMemberNames.N],
+                var k when WellKnownKeyTypeValues.IsOkp(k) =>
+                    [WellKnownJwkMemberNames.Crv, WellKnownJwkMemberNames.Kty, WellKnownJwkMemberNames.X],
+                var k when WellKnownKeyTypeValues.IsAkp(k) =>
+                    [WellKnownJwkMemberNames.Alg, WellKnownJwkMemberNames.Kty, WellKnownJwkMemberNames.Pub],
+                _ => null
+            }
+            : null;
+
+        if(requiredMembers is null)
+        {
+            return new Dictionary<string, string>(jwk, StringComparer.Ordinal);
+        }
+
+        Dictionary<string, string> selected = new(requiredMembers.Length, StringComparer.Ordinal);
+        foreach(string member in requiredMembers)
+        {
+            if(jwk.TryGetValue(member, out string? value))
+            {
+                selected[member] = value;
+            }
+        }
+
+        return selected;
     }
 
 

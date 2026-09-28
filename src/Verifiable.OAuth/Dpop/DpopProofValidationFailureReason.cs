@@ -16,7 +16,10 @@ public enum DpopProofValidationFailureReason
     /// </summary>
     InvalidTyp,
 
-    /// <summary>The <c>alg</c> header is missing or not an acceptable algorithm.</summary>
+    /// <summary>
+    /// The <c>alg</c> header is missing, not an acceptable algorithm, or not an algorithm of the key the
+    /// <c>jwk</c> header carries (RFC 9449 §4.3 items 5 and 6).
+    /// </summary>
     InvalidAlg,
 
     /// <summary>The <c>jwk</c> header is missing or malformed.</summary>

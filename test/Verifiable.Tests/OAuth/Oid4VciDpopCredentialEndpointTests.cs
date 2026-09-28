@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
@@ -52,6 +53,15 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
             WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint);
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 §7.1</see>: "For such an
+    /// access token, a resource server MUST check that a DPoP proof was also received in the DPoP header
+    /// field of the HTTP request, check the DPoP proof according to the rules in Section 4.3, and check
+    /// that the public key of the DPoP proof matches the public key to which the access token is bound
+    /// per Section 6." A DPoP-bound access token presented at the Credential Endpoint over the wire
+    /// under the <c>DPoP</c> scheme with a proof signed by the bound key and carrying the nonce the
+    /// endpoint provided is served: 200.
+    /// </summary>
     [TestMethod]
     public async Task DpopBoundTokenWithValidProofIssues()
     {
@@ -59,7 +69,8 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
         using DpopClientFixture fixture = ctx.Fixture;
 
-        string proof = await BuildCredentialProofAsync(ctx, freshKey: null).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceAsync(ctx).ConfigureAwait(false);
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce).ConfigureAwait(false);
         using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -67,6 +78,14 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>: "Resource servers
+    /// use an HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and
+    /// DPoP-Nonce value to accomplish this." A DPoP-bound access token presented at the Credential
+    /// Endpoint over the wire under the <c>DPoP</c> scheme with no proof is answered 401, one challenge
+    /// <c>DPoP error="use_dpop_nonce", algs="…"</c>, <c>use_dpop_nonce</c> in the body and a
+    /// <c>DPoP-Nonce</c>.
+    /// </summary>
     [TestMethod]
     public async Task DpopBoundTokenWithoutProofChallengesForNonce()
     {
@@ -79,13 +98,27 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
             .ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
-        Assert.Contains(OAuthErrors.UseDpopNonce, body);
-        Assert.IsTrue(response.Headers.Contains(WellKnownHttpHeaderNames.DPoPNonce),
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 9449 §9: the nonce challenge carries a WWW-Authenticate: DPoP value.");
+        Assert.AreEqual(DpopChallenge("use_dpop_nonce"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
+        Assert.IsFalse(string.IsNullOrEmpty(ResourceDpopProofs.ReadNonce(response)),
             "A nonce challenge must carry a fresh DPoP-Nonce header.");
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "such a
+    /// protected resource MUST reject a DPoP-bound access token received as a bearer token per
+    /// [RFC6750]." and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>:
+    /// "If the protected resource request does not include authentication credentials or does not
+    /// contain an access token that enables access to the protected resource, the resource server MUST
+    /// include the HTTP "WWW-Authenticate" response header field". A DPoP-bound access token presented
+    /// at the Credential Endpoint over the wire under the <c>Bearer</c> scheme is refused with 401
+    /// <c>invalid_token</c> and the single challenge <c>Bearer error="invalid_token"</c>.
+    /// </summary>
     [TestMethod]
     public async Task DpopBoundTokenUnderBearerSchemeIsRejected()
     {
@@ -93,17 +126,28 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
         using DpopClientFixture fixture = ctx.Fixture;
 
-        string proof = await BuildCredentialProofAsync(ctx, freshKey: null).ConfigureAwait(false);
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce: null).ConfigureAwait(false);
         //Present the sender-constrained token under the Bearer scheme — a downgrade.
         using HttpResponseMessage response = await PostCredentialAsync(
             ctx, ctx.AccessToken, proof, scheme: WellKnownAuthenticationSchemes.Bearer).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
-        Assert.Contains(OAuthErrors.InvalidToken, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see> item 12:
+    /// "confirm that the public key to which the access token is bound matches the public key from the
+    /// DPoP proof". A DPoP-bound access token presented at the Credential Endpoint over the wire with a
+    /// structurally valid proof signed by a key other than the bound one is refused with 401 and the
+    /// <c>DPoP error="invalid_token"</c> challenge of §7.1's Figure 16 ("Invalid DPoP key binding").
+    /// </summary>
     [TestMethod]
     public async Task DpopProofWithWrongKeyIsRejected()
     {
@@ -114,13 +158,113 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         //A structurally valid proof signed by a DIFFERENT key than the token was bound to.
         var otherKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         DpopKey otherKey = new(otherKeys, WellKnownJwaValues.Es256);
-        string proof = await BuildCredentialProofAsync(ctx, freshKey: otherKey).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceAsync(ctx).ConfigureAwait(false);
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: otherKey, nonce).ConfigureAwait(false);
 
         using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
-        Assert.Contains(OAuthErrors.InvalidDpopProof, body);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
+        Assert.AreEqual(DpopChallenge("invalid_token"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>: "If the
+    /// request lacks any authentication information (e.g., the client was unaware that authentication
+    /// is necessary or attempted using an unsupported authentication method), the resource server
+    /// SHOULD NOT include an error code or other error information." A Credential Request sent over the
+    /// wire with no <c>Authorization</c> header is refused with 401 and exactly one challenge that
+    /// names both schemes the endpoint accepts and no error: a <c>Bearer</c> challenge whose
+    /// <c>realm</c> is the issuer's absolute URI, then <c>DPoP algs="…"</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialEndpointChallengesARequestWithoutCredentialsForBothSchemesAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        using StringContent content = new(
+            "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}",
+            Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, ctx.CredentialUrl) { Content = content };
+        using HttpResponseMessage response = await ctx.Http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The header is read as sent: the client's typed view splits one field value into its challenges.
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.NonValidated.TryGetValues("WWW-Authenticate", out HeaderStringValues challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        string challenge = Assert.ContainsSingle(challenges);
+        const string RealmPrefix = "Bearer realm=\"";
+        string dpopPart = $"\", DPoP algs=\"{AcceptedProofAlgorithms}\"";
+        Assert.StartsWith(RealmPrefix, challenge, challenge);
+        Assert.EndsWith(dpopPart, challenge, challenge);
+        string realm = challenge[RealmPrefix.Length..^dpopPart.Length];
+        Assert.IsTrue(Uri.TryCreate(realm, UriKind.Absolute, out _), $"The realm names the issuer: {realm}");
+        Assert.DoesNotContain("error=", challenge, "No error information is sent to a request without credentials.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "If the
+    /// mechanism used to attempt authentication could be established unambiguously, then the
+    /// corresponding challenge SHOULD be used to deliver error information". A DPoP-bound access token
+    /// whose signature does not verify, presented at the Credential Endpoint over the wire under the
+    /// <c>DPoP</c> scheme, is refused with 401 <c>invalid_token</c> and the single challenge
+    /// <c>DPoP error="invalid_token", algs="…"</c>, never a <c>Bearer</c> one.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialEndpointAnswersARefusedDpopPresentationWithADpopChallengeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        int signatureStart = ctx.AccessToken.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((ctx.AccessToken.Length - signatureStart) / 2);
+        char flipped = ctx.AccessToken[tamperIndex] == 'A' ? 'B' : 'A';
+        string tampered = string.Concat(
+            ctx.AccessToken.AsSpan(0, tamperIndex), flipped.ToString(), ctx.AccessToken.AsSpan(tamperIndex + 1));
+
+        using HttpResponseMessage response = await PostCredentialAsync(ctx, tampered, dpopProof: null).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(DpopChallenge("invalid_token"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>The <c>algs</c> value of every <c>DPoP</c> challenge the Credential Endpoint answers with.</summary>
+    private const string AcceptedProofAlgorithms = "ES256 ES384 ES512 RS256 RS384 RS512 PS256 PS384 PS512 EdDSA";
+
+
+    /// <summary>The <c>DPoP</c> challenge carrying <paramref name="error"/>.</summary>
+    /// <param name="error">The challenge's <c>error</c>.</param>
+    /// <returns>The literal <c>WWW-Authenticate</c> value.</returns>
+    private static string DpopChallenge(string error) => $"DPoP error=\"{error}\", algs=\"{AcceptedProofAlgorithms}\"";
+
+
+    /// <summary>
+    /// Presents the bound token at the Credential Endpoint over the wire with no proof and returns the
+    /// nonce its RFC 9449 §9 challenge provides.
+    /// </summary>
+    /// <param name="ctx">The bound-token context.</param>
+    /// <returns>The nonce the endpoint provided.</returns>
+    private async Task<string> ObtainResourceNonceAsync(BoundTokenContext ctx)
+    {
+        using HttpResponseMessage challenge = await PostCredentialAsync(ctx, ctx.AccessToken, dpopProof: null)
+            .ConfigureAwait(false);
+
+        return ResourceDpopProofs.ReadNonce(challenge);
     }
 
 
@@ -142,7 +286,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
             candidateIntegration.ValidateDpopProofAsync = null;
         }).ConfigureAwait(false);
 
-        string proof = await BuildCredentialProofAsync(ctx, freshKey: null).ConfigureAwait(false);
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce: null).ConfigureAwait(false);
         using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -311,29 +455,17 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
     /// <summary>
     /// Builds a fresh DPoP proof for the credential POST: htm=POST, htu=the credential URL,
-    /// ath bound to the access token, signed by the token's key (or <paramref name="freshKey"/>
-    /// to forge a thumbprint mismatch).
+    /// ath bound to the access token, the resource <paramref name="nonce"/> when given, signed by the
+    /// token's key (or <paramref name="freshKey"/> to forge a thumbprint mismatch).
     /// </summary>
-    private async Task<string> BuildCredentialProofAsync(BoundTokenContext ctx, DpopKey? freshKey)
-    {
-        string ath = await DpopProofValidator.ComputeAthAsync(
-            ctx.AccessToken, TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool, TestContext.CancellationToken)
-            .ConfigureAwait(false);
-
-        DpopProofClaims claims = new()
-        {
-            Htm = WellKnownHttpMethods.Post,
-            Htu = ctx.CredentialUrl.ToString(),
-            Iat = TimeProvider.GetUtcNow(),
-            Jti = Guid.NewGuid().ToString("N"),
-            Ath = ath
-        };
-
-        return await DpopProofConstruction.BuildAsync(
-            claims, freshKey ?? ctx.Fixture.DpopKey, TestHostShell.Base64UrlEncoder,
-            DpopTestSupport.Serializer, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
-            TestHostShell.MemoryPool, TestContext.CancellationToken).ConfigureAwait(false);
-    }
+    /// <param name="ctx">The bound-token context.</param>
+    /// <param name="freshKey">A key other than the bound one, or <see langword="null"/> for the bound key.</param>
+    /// <param name="nonce">The resource nonce, or <see langword="null"/> to carry none.</param>
+    /// <returns>The DPoP proof JWT.</returns>
+    private Task<string> BuildCredentialProofAsync(BoundTokenContext ctx, DpopKey? freshKey, string? nonce) =>
+        ResourceDpopProofs.BuildAsync(
+            freshKey ?? ctx.Fixture.DpopKey, WellKnownHttpMethods.Post, ctx.CredentialUrl.ToString(), ctx.AccessToken,
+            nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken);
 
 
     private async Task<HttpResponseMessage> PostCredentialAsync(

@@ -95,7 +95,11 @@ public static class JtiReplayGuard
     /// first use is recorded, the guard resolves the same key again and requires equality
     /// with the flow id it just saved; a store that cannot reproduce what it recorded is
     /// treated as unavailable under every policy (a defective store is neither "present"
-    /// nor "absent").
+    /// nor "absent"). The first use is then decided by the store's atomic claim
+    /// (<see cref="Verifiable.Server.ServerIntegration.ClaimFlowStateAsync"/>) on the record's first
+    /// step, which exactly one caller wins, so concurrent presentations of the same
+    /// <c>(issuer, jti)</c> that all found no record admit one presentation and answer every other
+    /// one <see cref="JtiReplayOutcome.Replayed"/> (RFC 9449 §11.1).
     /// </summary>
     /// <param name="server">The authorization server (its integration store and clock).</param>
     /// <param name="context">The exchange context carrying the resolved policy and tenant.</param>
@@ -134,13 +138,14 @@ public static class JtiReplayGuard
         }
 
         //The store is the (issuer, jti)-keyed correlation index. The read delegate, the
-        //write delegate, and the id generator the write needs must ALL be present for the
-        //defense to actually record — a read-only half-wiring would never trip, so the
-        //three are treated as one indivisible capability.
+        //write delegate, the id generator the write needs and the atomic claim that picks the
+        //one first use must ALL be present for the defense to actually record — a read-only
+        //half-wiring would never trip, so the four are treated as one indivisible capability.
         bool isStoreAvailable =
             oauth.ResolveCorrelationKeyAsync is not null
             && oauth.SaveFlowStateAsync is not null
-            && oauth.GenerateIdentifierAsync is not null;
+            && oauth.GenerateIdentifierAsync is not null
+            && oauth.ClaimFlowStateAsync is not null;
         if(!isStoreAvailable)
         {
             return policy == JtiReplayPolicy.Required
@@ -186,9 +191,20 @@ public static class JtiReplayGuard
         //malfunction.
         string? proof = await oauth.ResolveCorrelationKeyAsync!(
             tenantId, FlowKind.JtiReplay, correlationKey, context, cancellationToken).ConfigureAwait(false);
+        if(!string.Equals(proof, correlationKey, StringComparison.Ordinal))
+        {
+            return JtiReplayOutcome.StoreUnavailable;
+        }
 
-        return string.Equals(proof, correlationKey, StringComparison.Ordinal)
+        //Concurrent presentations of one jti can all read "absent" above and all save the same
+        //record, so neither the read nor the save decides the first use. The store's atomic claim
+        //on the record's first step does: exactly one caller wins it, and every other presentation
+        //of the same (issuer, jti) is a replay.
+        bool isFirstUse = await oauth.ClaimFlowStateAsync!(
+            tenantId, correlationKey, 0, context, cancellationToken).ConfigureAwait(false);
+
+        return isFirstUse
             ? JtiReplayOutcome.FirstUse
-            : JtiReplayOutcome.StoreUnavailable;
+            : JtiReplayOutcome.Replayed;
     }
 }

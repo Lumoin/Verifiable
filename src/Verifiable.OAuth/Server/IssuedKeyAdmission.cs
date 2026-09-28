@@ -29,8 +29,8 @@ namespace Verifiable.OAuth.Server;
 /// for the grace window in which tokens signed just before the cutover are still in flight. A
 /// historical key is admitted because the application opted to keep it for tokens issued before an
 /// earlier rotation; an access token verified under it is still bounded by its <c>exp</c>. A
-/// withdrawn or compromised key is
-/// removed from the set, and that removal is what revokes its admission.
+/// withdrawn or compromised key is removed from the set, and that removal is what revokes its
+/// admission.
 /// </para>
 /// <para>
 /// The <see cref="ServerVerificationKeyResolverDelegate"/> resolves a key by its identifier alone and

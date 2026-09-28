@@ -5,6 +5,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Server;
 
@@ -291,8 +292,10 @@ public static class BearerTokenValidation
                 bytes => oauth.Codecs.JwtHeaderDeserializer(bytes),
                 oauth.MemoryPool!);
         }
-        catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+        catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
         {
+            //A protected header that is not a JSON object (for example "[]") fails in the wired
+            //header deserializer; the token is malformed input, refused with its challenge.
             return (null, RefuseToken(
                 $"Access token is malformed: {ex.Message}"));
         }
@@ -459,6 +462,14 @@ public static class BearerTokenValidation
             {
                 return (null, RefuseToken(
                     "Access token is missing the exp claim."));
+            }
+
+            //A NumericDate beyond the instants a DateTimeOffset holds is malformed input: it is
+            //refused before the instant is constructed, never raised as a server fault.
+            if(!JwtTemporalChecks.IsRepresentableUnixSeconds(expSeconds))
+            {
+                return (null, RefuseToken(
+                    "Access token exp claim is not a representable NumericDate."));
             }
 
             DateTimeOffset now = server.TimeProvider.GetUtcNow();

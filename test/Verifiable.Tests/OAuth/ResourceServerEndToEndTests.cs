@@ -338,14 +338,130 @@ internal sealed class ResourceServerEndToEndTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>:
+    /// "invalid_token The access token provided is expired, revoked, malformed, or invalid for other
+    /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
+    /// token whose protected header's <c>kid</c> is a single space names no key and is malformed: the
+    /// resource server validating it with <see cref="Verifiable.OAuth.JwsAccessTokenValidator"/> refuses it over the wire
+    /// with 401 and a <c>Bearer</c> challenge carrying <c>error="invalid_token"</c>, never a server
+    /// error.
+    /// </summary>
+    [TestMethod]
+    public async Task AccessTokenWithWhitespaceKidReturns401()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        FakeTimeProvider time = new(NowInstant);
+
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(keys.PublicKey),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
+        string token = await BuildAccessTokenAsync(keys.PrivateKey, payload, kid: " ").ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
+        string challenge = challenges.Single();
+        Assert.StartsWith("Bearer ", challenge, challenge);
+        Assert.Contains("error=\"invalid_token\"", challenge);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>:
+    /// "invalid_token The access token provided is expired, revoked, malformed, or invalid for other
+    /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
+    /// token whose <c>exp</c> is 9223372036854775807, a NumericDate no instant is represented for, is
+    /// malformed: the resource server validating it with <see cref="Verifiable.OAuth.JwsAccessTokenValidator"/> refuses
+    /// it over the wire with 401 and a <c>Bearer</c> challenge carrying <c>error="invalid_token"</c>,
+    /// never a server error.
+    /// </summary>
+    [TestMethod]
+    public async Task AccessTokenWithUnrepresentableExpReturns401()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        FakeTimeProvider time = new(NowInstant);
+
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(keys.PublicKey),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
+        payload[WellKnownJwtClaimNames.Exp] = long.MaxValue;
+        string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
+        string challenge = challenges.Single();
+        Assert.StartsWith("Bearer ", challenge, challenge);
+        Assert.Contains("error=\"invalid_token\"", challenge);
+    }
+
+
+    /// <summary>Sends a Bearer-scheme GET for <c>/protected</c> to the resource server over its loopback listener.</summary>
+    /// <param name="rs">The running resource server.</param>
+    /// <param name="token">The access token presented.</param>
+    /// <returns>The wire response; the caller disposes it.</returns>
+    private async Task<HttpResponseMessage> SendProtectedRequestAsync(TestResourceServerShell rs, string token)
+    {
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
+        using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        return await client.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
     private static ServerVerificationKeyResolverDelegate BuildResolver(PublicKeyMemory publicKey) =>
         (kid, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
             string.Equals(kid.Value, Kid, StringComparison.Ordinal) ? publicKey : null);
 
 
-    private async Task<string> BuildAccessTokenAsync(PrivateKeyMemory privateKey, JwtPayload payload)
+    /// <summary>
+    /// Signs an RFC 9068 access token over <paramref name="payload"/> with an <c>at+jwt</c> header whose
+    /// <c>kid</c> is <paramref name="kid"/>, or the resolver's key id when none is given.
+    /// </summary>
+    /// <param name="privateKey">The signing key.</param>
+    /// <param name="payload">The token's claims.</param>
+    /// <param name="kid">The header <c>kid</c>, or <see langword="null"/> for the resolver's key id.</param>
+    /// <returns>The compact JWS.</returns>
+    private async Task<string> BuildAccessTokenAsync(PrivateKeyMemory privateKey, JwtPayload payload, string? kid = null)
     {
         JwtHeader header = JwtHeaderExtensions.ForAccessToken(WellKnownJwaValues.Es256, Kid);
+        if(kid is not null)
+        {
+            header[WellKnownJwkMemberNames.Kid] = kid;
+        }
+
         UnsignedJwt unsignedJwt = new(header, payload);
 
         using JwsMessage jws = await unsignedJwt.SignAsync(
