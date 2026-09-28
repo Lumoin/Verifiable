@@ -74,25 +74,38 @@ public static class AuthCodeJarSigning
 
 
     /// <summary>
-    /// Projects request parameters into signed claims. The method is optional per
+    /// Projects request parameters into signed claims, which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see> defines as the
+    /// authorization request parameters: "The parameters are represented as the JWT Claims of the
+    /// object." The method is optional per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>:
-    /// "OPTIONAL, defaults to "plain" if not present in the request".
+    /// "OPTIONAL, defaults to "plain" if not present in the request". The <c>scope</c> claim is signed
+    /// only when <see cref="AuthCodeRequestObject.Scope"/> names a value: RFC 6749 §3.1 treats a
+    /// parameter sent without a value as omitted, and §3.3 leaves the default for an omitted scope to
+    /// the authorization server, so a blank scope signs no claim rather than an empty one.
     /// </summary>
+    /// <param name="requestObject">The request object whose parameters become the claims.</param>
+    /// <returns>The claims to sign.</returns>
     private static JwtPayload BuildPayload(AuthCodeRequestObject requestObject)
     {
         JwtPayload payload = new(capacity: 13)
         {
             [OAuthRequestParameterNames.ClientId] = requestObject.ClientId,
             [OAuthRequestParameterNames.ResponseType] = requestObject.ResponseType,
-            [OAuthRequestParameterNames.RedirectUri] = requestObject.RedirectUri.ToString(),
-            [OAuthRequestParameterNames.Scope] = requestObject.Scope,
-            [OAuthRequestParameterNames.State] = requestObject.State,
-            [WellKnownJwtClaimNames.Nonce] = requestObject.Nonce,
-            [OAuthRequestParameterNames.CodeChallenge] = requestObject.CodeChallenge,
-            [WellKnownJwtClaimNames.Iat] = requestObject.Iat.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Nbf] = requestObject.Nbf.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = requestObject.Exp.ToUnixTimeSeconds()
+            [OAuthRequestParameterNames.RedirectUri] = requestObject.RedirectUri.ToString()
         };
+
+        if(!string.IsNullOrWhiteSpace(requestObject.Scope))
+        {
+            payload[OAuthRequestParameterNames.Scope] = requestObject.Scope;
+        }
+
+        payload[OAuthRequestParameterNames.State] = requestObject.State;
+        payload[WellKnownJwtClaimNames.Nonce] = requestObject.Nonce;
+        payload[OAuthRequestParameterNames.CodeChallenge] = requestObject.CodeChallenge;
+        payload[WellKnownJwtClaimNames.Iat] = requestObject.Iat.ToUnixTimeSeconds();
+        payload[WellKnownJwtClaimNames.Nbf] = requestObject.Nbf.ToUnixTimeSeconds();
+        payload[WellKnownJwtClaimNames.Exp] = requestObject.Exp.ToUnixTimeSeconds();
 
         if(requestObject.CodeChallengeMethod is string method)
         {

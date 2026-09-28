@@ -75,7 +75,12 @@ public readonly struct AuthCodeClient
     /// <param name="additionalFields">
     /// Additional fields to include in the PAR request body (for example
     /// <c>scope</c>, <c>acr_values</c>). May be
-    /// <see cref="OAuthFormEncodedFields.Empty"/>.
+    /// <see cref="OAuthFormEncodedFields.Empty"/>. The <c>scope</c> field is the scope the request
+    /// names, sent as given; with no <c>scope</c> field, or a blank one, the request carries no
+    /// <c>scope</c> parameter and the authorization server applies its own default or refuses
+    /// (RFC 6749 §3.3). An OpenID Connect request names <c>openid</c> in this field itself
+    /// (OpenID Connect Core 1.0 §3.1.2.1: "OpenID Connect requests MUST contain the openid scope
+    /// value.").
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> StartParAsync(
@@ -136,7 +141,8 @@ public readonly struct AuthCodeClient
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>:
     /// generates a fresh PKCE verifier and challenge and returns a redirect straight to the
     /// authorization endpoint carrying <c>response_type</c>, <c>client_id</c>, <c>redirect_uri</c>,
-    /// <c>scope</c>, and <c>state</c>, plus <c>code_challenge</c>/<c>code_challenge_method</c> per
+    /// <c>scope</c> when the caller names one, and <c>state</c>, plus
+    /// <c>code_challenge</c>/<c>code_challenge_method</c> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see> — no pushed
     /// authorization request is sent. Refused before anything is built when the resolved
     /// authorization server metadata's <see cref="AuthorizationServerMetadata.RequirePushedAuthorizationRequests"/>
@@ -151,10 +157,15 @@ public readonly struct AuthCodeClient
     /// </param>
     /// <param name="additionalFields">
     /// Additional fields to include on the authorization redirect's query (for example
-    /// <c>acr_values</c>). May be <see cref="OAuthFormEncodedFields.Empty"/>. A field named after one
-    /// this call mints itself — <c>response_type</c>, <c>client_id</c>, <c>redirect_uri</c>,
-    /// <c>scope</c>, <c>state</c>, <c>code_challenge</c>, <c>code_challenge_method</c>, or
-    /// <c>resource</c> — is dropped rather than allowed to override it.
+    /// <c>scope</c>, <c>acr_values</c>). May be <see cref="OAuthFormEncodedFields.Empty"/>. The
+    /// <c>scope</c> field is the scope the request names, sent as given; with no <c>scope</c> field,
+    /// or a blank one, the query carries no <c>scope</c> parameter and the authorization server
+    /// applies its own default or refuses (RFC 6749 §3.3). An OpenID Connect request names
+    /// <c>openid</c> in this field itself (OpenID Connect Core 1.0 §3.1.2.1: "OpenID Connect requests
+    /// MUST contain the openid scope value."). A field named after one this call mints itself —
+    /// <c>response_type</c>, <c>client_id</c>, <c>redirect_uri</c>, <c>state</c>,
+    /// <c>code_challenge</c>, <c>code_challenge_method</c>, or <c>resource</c> — is dropped rather
+    /// than allowed to override it.
     /// </param>
     /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
     /// <param name="resource">

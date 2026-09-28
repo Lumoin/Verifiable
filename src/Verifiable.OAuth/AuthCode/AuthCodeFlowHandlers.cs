@@ -134,8 +134,12 @@ public static class AuthCodeFlowHandlers
     /// redirect URI for the caller to forward to the user agent.
     /// </summary>
     /// <param name="fields">
-    /// Inbound form fields. May include <c>scope</c>; other required values are
-    /// taken from <paramref name="registration"/>.
+    /// Inbound form fields. A <c>scope</c> field names the requested scope values (RFC 6749 §3.3,
+    /// space-delimited) and is sent as given; without one, or with a blank one, the pushed request
+    /// carries no <c>scope</c> parameter and the authorization server applies its own default or
+    /// refuses (RFC 6749 §3.3). An OpenID Connect request names <c>openid</c> in this field itself
+    /// (OpenID Connect Core 1.0 §3.1.2.1). Other required values are taken from
+    /// <paramref name="registration"/>.
     /// </param>
     /// <param name="redirectUri">The client's redirect URI to which the authorization response is returned.</param>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
@@ -159,8 +163,12 @@ public static class AuthCodeFlowHandlers
 
     /// <inheritdoc cref="HandleParAsync(IReadOnlyDictionary{string, string}, Uri, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
     /// <param name="fields">
-    /// Inbound form fields. May include <c>scope</c>; other required values are
-    /// taken from <paramref name="registration"/>.
+    /// Inbound form fields. A <c>scope</c> field names the requested scope values (RFC 6749 §3.3,
+    /// space-delimited) and is sent as given; without one, or with a blank one, the pushed request
+    /// carries no <c>scope</c> parameter and the authorization server applies its own default or
+    /// refuses (RFC 6749 §3.3). An OpenID Connect request names <c>openid</c> in this field itself
+    /// (OpenID Connect Core 1.0 §3.1.2.1). Other required values are taken from
+    /// <paramref name="registration"/>.
     /// </param>
     /// <param name="redirectUri">The client's redirect URI to which the authorization response is returned.</param>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
@@ -205,9 +213,7 @@ public static class AuthCodeFlowHandlers
 
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
 
-        ImmutableArray<string> scopes = fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
-            ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
-            : [WellKnownScopes.OpenId];
+        ImmutableArray<string> scopes = ReadRequestedScopes(fields);
 
         var parBody = new ParRequestBody
         {
@@ -326,7 +332,11 @@ public static class AuthCodeFlowHandlers
     /// of the flow (callback, token) never reads <see cref="ParCompletedState.Par"/> again.
     /// </remarks>
     /// <param name="fields">
-    /// Inbound form fields. May include <c>scope</c>; other required values are taken from
+    /// Inbound form fields. A <c>scope</c> field names the requested scope values (RFC 6749 §3.3,
+    /// space-delimited) and is sent as given; without one, or with a blank one, the redirect's query
+    /// carries no <c>scope</c> parameter and the authorization server applies its own default or
+    /// refuses (RFC 6749 §3.3). An OpenID Connect request names <c>openid</c> in this field itself
+    /// (OpenID Connect Core 1.0 §3.1.2.1). Other required values are taken from
     /// <paramref name="registration"/>. Any field outside
     /// <see cref="AuthorizationFlowOwnedFieldNames"/> rides onto the authorization redirect's query
     /// verbatim, but never overrides a value this handler mints (RFC 6749 §4.1.1's
@@ -404,9 +414,7 @@ public static class AuthCodeFlowHandlers
         string state = GenerateEntropyHexString(infrastructure);
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
 
-        ImmutableArray<string> scopes = fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
-            ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
-            : [WellKnownScopes.OpenId];
+        ImmutableArray<string> scopes = ReadRequestedScopes(fields);
 
         Uri authorizationUri = BuildDirectAuthorizeRedirectUri(
             metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, pkce, resource, fields);
@@ -436,11 +444,21 @@ public static class AuthCodeFlowHandlers
 
     /// <summary>
     /// Builds the direct authorization redirect URI per RFC 6749 §4.1.1: <c>response_type=code</c>,
-    /// <c>client_id</c>, <c>redirect_uri</c>, <c>scope</c>, and <c>state</c>, plus the PKCE pair per
+    /// <c>client_id</c>, <c>redirect_uri</c>, <c>scope</c> when <paramref name="scopes"/> names at
+    /// least one value (<see cref="AddScopeWhenNamed"/>), and <c>state</c>, plus the PKCE pair per
     /// RFC 7636 §4.3, each <paramref name="resource"/> entry as its own repeated occurrence, and the
     /// caller's <paramref name="additionalFields"/> that are not one of
     /// <see cref="AuthorizationFlowOwnedFieldNames"/>.
     /// </summary>
+    /// <param name="authorizationEndpoint">The authorization endpoint the redirect targets.</param>
+    /// <param name="clientId">The client identifier sent as <c>client_id</c>.</param>
+    /// <param name="redirectUri">The redirect URI sent as <c>redirect_uri</c>.</param>
+    /// <param name="scopes">The scope values the caller named; empty sends no <c>scope</c> parameter.</param>
+    /// <param name="state">The <c>state</c> value this start minted.</param>
+    /// <param name="pkce">The PKCE pair whose challenge and method are sent.</param>
+    /// <param name="resource">The RFC 8707 resource indicators, each sent as its own occurrence.</param>
+    /// <param name="additionalFields">The caller's further fields, flow-owned names skipped.</param>
+    /// <returns>The authorization endpoint URI carrying the request on its query.</returns>
     private static Uri BuildDirectAuthorizeRedirectUri(
         Uri authorizationEndpoint,
         string clientId,
@@ -455,12 +473,13 @@ public static class AuthCodeFlowHandlers
         {
             [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.ClientId] = clientId,
-            [OAuthRequestParameterNames.RedirectUri] = redirectUri.ToString(),
-            [OAuthRequestParameterNames.Scope] = string.Join(' ', scopes),
-            [OAuthRequestParameterNames.State] = state,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = pkce.Method.ToString().ToUpperInvariant()
+            [OAuthRequestParameterNames.RedirectUri] = redirectUri.ToString()
         };
+
+        AddScopeWhenNamed(query, scopes);
+        query[OAuthRequestParameterNames.State] = state;
+        query[OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge;
+        query[OAuthRequestParameterNames.CodeChallengeMethod] = pkce.Method.ToString().ToUpperInvariant();
 
         TokenEndpointClientOperations.AddResourceOccurrences(query, resource);
         AddAdditionalAuthorizationFields(query, additionalFields);
@@ -1314,18 +1333,66 @@ public static class AuthCodeFlowHandlers
         return PkceGeneration.Generate(base64UrlEncoder, pool);
     }
 
+    /// <summary>
+    /// Encodes the pushed authorization request body of RFC 9126 §2.1: <c>client_id</c>,
+    /// <c>response_type</c>, <c>redirect_uri</c>, <c>scope</c> when <see cref="ParRequestBody.Scopes"/>
+    /// names at least one value (<see cref="AddScopeWhenNamed"/>), <c>state</c>, and the PKCE pair of
+    /// RFC 7636 §4.3.
+    /// </summary>
+    /// <param name="body">The typed parameters of the pushed request.</param>
+    /// <returns>The form fields to post to the pushed authorization request endpoint.</returns>
     private static OutgoingFormFields EncodeParRequestBody(ParRequestBody body)
     {
-        return new OutgoingFormFields
+        OutgoingFormFields fields = new()
         {
             [OAuthRequestParameterNames.ClientId] = body.ClientId,
             [OAuthRequestParameterNames.ResponseType] = body.ResponseType,
-            [OAuthRequestParameterNames.RedirectUri] = body.RedirectUri.ToString(),
-            [OAuthRequestParameterNames.Scope] = string.Join(' ', body.Scopes),
-            [OAuthRequestParameterNames.State] = body.State,
-            [OAuthRequestParameterNames.CodeChallenge] = body.CodeChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = body.CodeChallengeMethod.ToString().ToUpperInvariant()
+            [OAuthRequestParameterNames.RedirectUri] = body.RedirectUri.ToString()
         };
+
+        AddScopeWhenNamed(fields, body.Scopes);
+        fields[OAuthRequestParameterNames.State] = body.State;
+        fields[OAuthRequestParameterNames.CodeChallenge] = body.CodeChallenge;
+        fields[OAuthRequestParameterNames.CodeChallengeMethod] = body.CodeChallengeMethod.ToString().ToUpperInvariant();
+
+        return fields;
+    }
+
+
+    /// <summary>
+    /// The scope values the caller names in its <c>scope</c> field, split on the space delimiter of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>, and empty
+    /// when the field is absent or blank. RFC 6749 §4.1.1 makes <c>scope</c> "OPTIONAL" and §3.3
+    /// leaves the default for an omitted scope to the authorization server ("If the client omits the
+    /// scope parameter when requesting authorization, the authorization server MUST either process the
+    /// request using a pre-defined default value or fail the request indicating an invalid scope."),
+    /// so the client adds no value of its own; an OpenID Connect caller names <c>openid</c> itself
+    /// (OpenID Connect Core 1.0 §3.1.2.1: "OpenID Connect requests MUST contain the openid scope
+    /// value.").
+    /// </summary>
+    /// <param name="fields">The caller's inbound fields.</param>
+    /// <returns>The named scope values, in the caller's order; empty when the caller names none.</returns>
+    private static ImmutableArray<string> ReadRequestedScopes(IReadOnlyDictionary<string, string> fields) =>
+        fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
+            ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
+            : [];
+
+
+    /// <summary>
+    /// Writes the <c>scope</c> parameter as the space-delimited list of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see> when
+    /// <paramref name="scopes"/> names at least one value, and writes nothing otherwise. RFC 6749 §3.1
+    /// reads "Parameters sent without a value MUST be treated as if they were omitted from the
+    /// request.", so a request naming no scope omits the parameter instead of sending <c>scope=</c>.
+    /// </summary>
+    /// <param name="fields">The request fields composed so far.</param>
+    /// <param name="scopes">The scope values the caller named.</param>
+    private static void AddScopeWhenNamed(OutgoingFormFields fields, ImmutableArray<string> scopes)
+    {
+        if(!scopes.IsDefaultOrEmpty)
+        {
+            fields[OAuthRequestParameterNames.Scope] = string.Join(' ', scopes);
+        }
     }
 
     private static OutgoingFormFields EncodeTokenRequest(
@@ -1349,6 +1416,18 @@ public static class AuthCodeFlowHandlers
         return fields;
     }
 
+    /// <summary>
+    /// Encodes the refresh request of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>:
+    /// <c>grant_type=refresh_token</c>, <c>client_id</c>, <c>refresh_token</c>, <c>scope</c> only when
+    /// <see cref="RefreshTokenRequest.Scope"/> names a value, and each RFC 8707 <c>resource</c>
+    /// occurrence. A blank scope is not sent: RFC 6749 §3.1 treats a parameter sent without a value as
+    /// omitted, and §6 treats an omitted scope "as equal to the scope originally granted by the
+    /// resource owner".
+    /// </summary>
+    /// <param name="clientId">The client identifier sent as <c>client_id</c>.</param>
+    /// <param name="request">The caller's refresh parameters.</param>
+    /// <returns>The form fields to post to the token endpoint.</returns>
     private static OutgoingFormFields EncodeRefreshRequest(string clientId, RefreshTokenRequest request)
     {
         var fields = new OutgoingFormFields
@@ -1358,7 +1437,7 @@ public static class AuthCodeFlowHandlers
             [OAuthRequestParameterNames.RefreshToken] = request.RefreshToken
         };
 
-        if(request.Scope is not null)
+        if(!string.IsNullOrWhiteSpace(request.Scope))
         {
             fields[OAuthRequestParameterNames.Scope] = request.Scope;
         }

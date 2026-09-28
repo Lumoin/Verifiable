@@ -24,9 +24,11 @@ public sealed record RefreshTokenRequest
     public required string RefreshToken { get; init; }
 
     /// <summary>
-    /// The scopes to request in the refreshed token. When <see langword="null"/>,
-    /// the authorization server issues the same scopes as the original grant.
-    /// Must not exceed the originally granted scopes.
+    /// The scopes to request in the refreshed token. When <see langword="null"/> or blank, the
+    /// request carries no <c>scope</c> parameter (RFC 6749 §3.1 treats a parameter sent without a
+    /// value as omitted) and the authorization server issues the same scopes as the original grant
+    /// (RFC 6749 §6: "if omitted is treated as equal to the scope originally granted by the resource
+    /// owner"). Must not exceed the originally granted scopes.
     /// </summary>
     public string? Scope { get; init; }
 

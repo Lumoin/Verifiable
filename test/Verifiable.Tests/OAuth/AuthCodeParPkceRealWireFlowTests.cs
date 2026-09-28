@@ -4545,11 +4545,13 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// authorize, callback, token — against a registration whose profile permits a direct
     /// authorization request. The redirect
     /// <see cref="AuthCodeClient.StartAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, IReadOnlyList{string}?, TimeSpan, CancellationToken)"/>
-    /// returns carries every parameter
+    /// returns carries the parameters
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see> lists —
     /// "response_type: REQUIRED. Value MUST be set to 'code'.", "client_id: REQUIRED.",
-    /// "redirect_uri: OPTIONAL.", "scope: OPTIONAL.", "state: RECOMMENDED." — plus the PKCE pair per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>.
+    /// "redirect_uri: OPTIONAL.", "state: RECOMMENDED." — plus the PKCE pair per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>. The caller
+    /// names no scope and the policy requires none, so "scope: OPTIONAL." is not sent and the journey
+    /// still reaches the token.
     /// </summary>
     [TestMethod]
     public async Task PlainStartReachesTokenOverRealWire()
@@ -4590,8 +4592,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             "RFC 6749 §4.1.1: client_id REQUIRED.");
         Assert.AreEqual(RedirectUri.OriginalString, queryParams[OAuthRequestParameterNames.RedirectUri],
             "RFC 6749 §4.1.1: redirect_uri.");
-        Assert.AreEqual(WellKnownScopes.OpenId, queryParams[OAuthRequestParameterNames.Scope],
-            "RFC 6749 §4.1.1: scope.");
+        Assert.IsFalse(queryParams.ContainsKey(OAuthRequestParameterNames.Scope),
+            "RFC 6749 §4.1.1: scope OPTIONAL; a start whose caller names no scope sends none.");
         Assert.AreEqual(flowId, queryParams[OAuthRequestParameterNames.State],
             "RFC 6749 §4.1.1: state.");
         Assert.AreEqual(parState.Pkce.EncodedChallenge, queryParams[OAuthRequestParameterNames.CodeChallenge],
@@ -4725,6 +4727,320 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.AreEqual(parState.Pkce.EncodedChallenge, queryParams[OAuthRequestParameterNames.CodeChallenge],
             "An additional field named code_challenge must not override the PKCE challenge this call minted.");
         Assert.AreNotEqual("attacker-supplied-challenge", queryParams[OAuthRequestParameterNames.CodeChallenge]);
+    }
+
+
+    /// <summary>
+    /// The row value naming the pushed start
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>), whose
+    /// authorization request parameters travel in the body of the pushed authorization request.
+    /// </summary>
+    private const string PushedStart = "pushed";
+
+
+    /// <summary>
+    /// The row value naming the direct start
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>), whose
+    /// authorization request parameters travel on the authorization endpoint's query.
+    /// </summary>
+    private const string DirectStart = "direct";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see> makes
+    /// the parameter "scope OPTIONAL", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see> gives the
+    /// default to the authorization server: "If the client omits the scope parameter when requesting
+    /// authorization, the authorization server MUST either process the request using a pre-defined
+    /// default value or fail the request indicating an invalid scope." A client whose caller names no
+    /// scope sends no <c>scope</c> parameter; an OpenID Connect request names <c>openid</c> itself
+    /// (<see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect
+    /// Core 1.0 §3.1.2.1</see>: "OpenID Connect requests MUST contain the openid scope value."). Under a
+    /// policy that requires no scope, the request the server receives carries no <c>scope</c> and the
+    /// flow reaches an authorization code.
+    /// </summary>
+    /// <param name="start">Which start carries the request: <see cref="PushedStart"/> or <see cref="DirectStart"/>.</param>
+    [TestMethod]
+    [DataRow(PushedStart)]
+    [DataRow(DirectStart)]
+    public async Task ARequestWithoutAScopeFieldSendsNoScopeAsync(string start)
+    {
+        RequestFields received = await DriveStartToCallbackAndReadReceivedRequestAsync(
+            start, OAuthFormEncodedFields.Empty).ConfigureAwait(false);
+
+        Assert.IsFalse(received.ContainsKey(OAuthRequestParameterNames.Scope),
+            $"A start whose caller names no scope must send no scope parameter; the server received scope " +
+            $"[{string.Join(", ", received.GetValues(OAuthRequestParameterNames.Scope))}].");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." A caller whose
+    /// <c>scope</c> field is blank names no scope, so the request carries no <c>scope</c> parameter at
+    /// all rather than <c>scope=</c>.
+    /// </summary>
+    /// <param name="start">Which start carries the request: <see cref="PushedStart"/> or <see cref="DirectStart"/>.</param>
+    [TestMethod]
+    [DataRow(PushedStart)]
+    [DataRow(DirectStart)]
+    public async Task ABlankScopeFieldSendsNoScopeParameterAsync(string start)
+    {
+        OAuthFormEncodedFields blankScope = new(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Scope] = string.Empty
+        });
+
+        RequestFields received = await DriveStartToCallbackAndReadReceivedRequestAsync(start, blankScope)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(received.ContainsKey(OAuthRequestParameterNames.Scope),
+            $"A blank scope field must send no scope parameter, never scope=; the server received scope " +
+            $"[{string.Join(", ", received.GetValues(OAuthRequestParameterNames.Scope).Select(value => $"'{value}'"))}].");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect
+    /// Core 1.0 §3.1.2.1</see>: "OpenID Connect requests MUST contain the openid scope value. ...
+    /// Other scope values MAY be present." The scope the caller names travels as given, as the one
+    /// space-delimited <c>scope</c> value of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AnExplicitScopeIsSentAsGivenAsync()
+    {
+        OAuthFormEncodedFields namedScope = new(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Scope] = "openid profile"
+        });
+
+        RequestFields received = await DriveStartToCallbackAndReadReceivedRequestAsync(PushedStart, namedScope)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(received.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope),
+            "The scope the caller names must be sent exactly once.");
+        Assert.AreEqual("openid profile", scope);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: "If the client
+    /// omits the scope parameter when requesting authorization, the authorization server MUST either
+    /// process the request using a pre-defined default value or fail the request". Under the FAPI 2.0
+    /// policy the server requires a scope on the request, so a pushed request whose caller names none
+    /// reaches the server without one and is refused there, not filled in by the client.
+    /// </summary>
+    [TestMethod]
+    public async Task AFapiRegistrationRefusesAPushedRequestWithoutScopeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, _) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Fapi20,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
+            registration, RedirectUri, OAuthFormEncodedFields.Empty, [], resource: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, parResult.Outcome,
+            $"A pushed request without scope must be refused under a scope-requiring policy. " +
+            $"ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
+        Assert.AreEqual("invalid_request", parResult.ErrorCode);
+        Assert.AreEqual("scope is required under the active policy.", parResult.ErrorDescription);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>: on a refresh
+    /// request "scope OPTIONAL. ... if omitted is treated as equal to the scope originally granted by
+    /// the resource owner", and <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749
+    /// §3.1</see>: "Parameters sent without a value MUST be treated as if they were omitted from the
+    /// request." A refresh whose caller gives a blank scope sends no <c>scope</c> parameter, never
+    /// <c>scope=</c>, and receives the originally granted scope.
+    /// </summary>
+    [TestMethod]
+    public async Task ABlankRefreshScopeSendsNoScopeParameterAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        string flowId = await DriveParAuthorizeAndCallbackAsync(
+            host.Host("default"), client, registration, clientFlowStore, material.Registration.TenantId.Value,
+            host.ServerCertificate, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Token exchange must succeed. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        string refreshToken = (string)tokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+        AuthCodeFlowEndpointResult refreshResult = await client.AuthCode.RefreshAsync(
+            registration,
+            new RefreshTokenRequest { ClientId = ClientId, RefreshToken = refreshToken, Scope = string.Empty },
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, refreshResult.Outcome,
+            $"The refresh must succeed. ErrorCode={refreshResult.ErrorCode} ErrorDescription={refreshResult.ErrorDescription}");
+
+        RequestFields refreshRequest = accepted.Single(received =>
+            received.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+            && string.Equals(grantType, "refresh_token", StringComparison.Ordinal));
+        Assert.IsFalse(refreshRequest.ContainsKey(OAuthRequestParameterNames.Scope),
+            $"A blank refresh scope must send no scope parameter, never scope=; the server received scope " +
+            $"[{string.Join(", ", refreshRequest.GetValues(OAuthRequestParameterNames.Scope).Select(value => $"'{value}'"))}].");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>: a Request Object
+    /// carries the authorization request parameters, and "The parameters are represented as the JWT
+    /// Claims of the object."; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749
+    /// §3.1</see>: "Parameters sent without a value MUST be treated as if they were omitted from the
+    /// request." A signed request object whose caller gives a blank scope carries no <c>scope</c> claim
+    /// rather than an empty one.
+    /// </summary>
+    /// <param name="start">
+    /// Which start carries the request object: <see cref="PushedStart"/> pushes it (RFC 9126 §3), and
+    /// <see cref="DirectStart"/> passes it by value on the authorization endpoint's query (RFC 9101 §5.1).
+    /// </param>
+    [TestMethod]
+    [DataRow(PushedStart)]
+    [DataRow(DirectStart)]
+    public async Task ABlankRequestObjectScopeSignsNoScopeClaimAsync(string start)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri,
+            Capabilities
+                .Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
+                .Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest),
+            profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, _) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        JwtHeaderSerializer headerSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!;
+        JwtPayloadSerializer payloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!;
+
+        string requestObject = start switch
+        {
+            PushedStart => await StartJarParAndReadReceivedRequestObjectAsync(
+                client, registration, material, headerSerializer, payloadSerializer, accepted).ConfigureAwait(false),
+            DirectStart => await StartJarAuthorizeAndReadRequestObjectAsync(
+                client, registration, material, headerSerializer, payloadSerializer).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown authorization request start.")
+        };
+
+        using JsonDocument claims = DecodePayload(requestObject);
+        Assert.IsFalse(claims.RootElement.TryGetProperty(OAuthRequestParameterNames.Scope, out JsonElement scopeClaim),
+            $"A blank scope must sign no scope claim; the request object carried scope {scopeClaim.GetRawText()}. " +
+            $"Claims: {claims.RootElement}");
+    }
+
+
+    /// <summary>
+    /// Starts a pushed authorization request carrying a signed request object whose caller gives a
+    /// blank scope, and returns the compact request object as the server received it in the pushed
+    /// body's <c>request</c> parameter.
+    /// </summary>
+    /// <param name="client">The client SDK instance the start is issued through.</param>
+    /// <param name="registration">The registration identifying the authorization server to the client.</param>
+    /// <param name="material">The registered client's request-object signing key material.</param>
+    /// <param name="headerSerializer">Serializes the request object's protected header.</param>
+    /// <param name="payloadSerializer">Serializes the request object's claims.</param>
+    /// <param name="accepted">The parameters of every request the server accepted, in arrival order.</param>
+    /// <returns>The compact request object the server received.</returns>
+    private async Task<string> StartJarParAndReadReceivedRequestObjectAsync(
+        OAuthClient client,
+        ClientRegistration registration,
+        VerifierKeyMaterial material,
+        JwtHeaderSerializer headerSerializer,
+        JwtPayloadSerializer payloadSerializer,
+        ConcurrentQueue<RequestFields> accepted)
+    {
+        AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarParAsync(
+            registration,
+            new AuthCodeStartJarParOptions
+            {
+                Scope = string.Empty,
+                SigningKey = material.SigningPrivateKey,
+                SigningKeyId = material.SigningKeyId.Value,
+                RedirectUri = RedirectUri,
+                HeaderSerializer = headerSerializer,
+                PayloadSerializer = payloadSerializer,
+                MemoryPool = BaseMemoryPool.Shared
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome,
+            $"The pushed request object must be accepted. ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+
+        RequestFields pushed = accepted.Single(received => received.ContainsKey(OAuthRequestParameterNames.Request));
+
+        return pushed[OAuthRequestParameterNames.Request];
+    }
+
+
+    /// <summary>
+    /// Starts an authorization request passing a signed request object by value whose caller gives a
+    /// blank scope, and returns the compact request object from the <c>request</c> parameter of the
+    /// authorization redirect the client composes for the user agent.
+    /// </summary>
+    /// <param name="client">The client SDK instance the start is issued through.</param>
+    /// <param name="registration">The registration identifying the authorization server to the client.</param>
+    /// <param name="material">The registered client's request-object signing key material.</param>
+    /// <param name="headerSerializer">Serializes the request object's protected header.</param>
+    /// <param name="payloadSerializer">Serializes the request object's claims.</param>
+    /// <returns>The compact request object the authorization redirect carries.</returns>
+    private async Task<string> StartJarAuthorizeAndReadRequestObjectAsync(
+        OAuthClient client,
+        ClientRegistration registration,
+        VerifierKeyMaterial material,
+        JwtHeaderSerializer headerSerializer,
+        JwtPayloadSerializer payloadSerializer)
+    {
+        AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarAuthorizeAsync(
+            registration,
+            new AuthCodeStartJarAuthorizeOptions
+            {
+                Scope = string.Empty,
+                SigningKey = material.SigningPrivateKey,
+                SigningKeyId = material.SigningKeyId.Value,
+                RedirectUri = RedirectUri,
+                HeaderSerializer = headerSerializer,
+                PayloadSerializer = payloadSerializer,
+                MemoryPool = BaseMemoryPool.Shared
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome,
+            $"A request object by value must redirect. ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+
+        return ParseQuery(result.RedirectUri!)[OAuthRequestParameterNames.Request];
     }
 
 
@@ -5411,6 +5727,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// genuine RFC 8707 §2 multi-resource wire form, never several indicators joined by a space
     /// into one occurrence. <see langword="null"/> omits the parameter entirely.
     /// </param>
+    /// <param name="fields">
+    /// The fields the caller hands the pushed start, among them the <c>scope</c> it names;
+    /// <see langword="null"/> names <c>openid</c> through
+    /// <see cref="OAuthFormEncodedFieldsFixtures.OpenIdScope"/>, the scope the journeys driven through
+    /// this helper request.
+    /// </param>
     private static async Task<string> DriveParAuthorizeAndCallbackAsync(
         HostedAuthorizationServer hosted,
         OAuthClient client,
@@ -5419,10 +5741,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string segment,
         X509Certificate2 pinnedCertificate,
         CancellationToken cancellationToken,
-        IReadOnlyList<string>? resource = null)
+        IReadOnlyList<string>? resource = null,
+        OAuthFormEncodedFields? fields = null)
     {
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
-            registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope,
+            registration, RedirectUri, fields ?? OAuthFormEncodedFieldsFixtures.OpenIdScope,
             [], resource, cancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
@@ -5523,6 +5846,122 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"Callback must succeed. ErrorCode={callbackResult.ErrorCode} ErrorDescription={callbackResult.ErrorDescription}");
 
         return flowId;
+    }
+
+
+    /// <summary>
+    /// Drives a plain authorization start through
+    /// <see cref="AuthCodeClient.StartAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, IReadOnlyList{string}?, TimeSpan, CancellationToken)"/>
+    /// with <paramref name="fields"/>, then the browser's authorize GET of the redirect the client
+    /// composes and the callback (<see cref="GetAuthorizeRedirectAndCallbackAsync"/>). Returns the
+    /// flow identifier ready for token exchange.
+    /// </summary>
+    /// <param name="hosted">The hosted authorization server the real wire calls reach.</param>
+    /// <param name="client">The client SDK instance the start and callback calls are issued through.</param>
+    /// <param name="registration">The registration identifying the authorization server to the client.</param>
+    /// <param name="clientFlowStore">The client-local flow-state store the start writes the flow into.</param>
+    /// <param name="pinnedCertificate">The server's certificate the real wire calls pin against.</param>
+    /// <param name="fields">The fields the caller hands the start, among them any <c>scope</c> it names.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<string> DriveDirectStartAuthorizeAndCallbackAsync(
+        HostedAuthorizationServer hosted,
+        OAuthClient client,
+        ClientRegistration registration,
+        Dictionary<string, FlowState> clientFlowStore,
+        X509Certificate2 pinnedCertificate,
+        OAuthFormEncodedFields fields,
+        CancellationToken cancellationToken)
+    {
+        AuthCodeFlowEndpointResult startResult = await client.AuthCode.StartAsync(
+            registration, RedirectUri, fields, [], resource: null,
+            requestLifetime: TimeSpan.FromMinutes(5), cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
+            $"A plain start must redirect. ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+
+        string flowId = clientFlowStore.Keys.Single();
+
+        return await GetAuthorizeRedirectAndCallbackAsync(
+            hosted, client, registration, pinnedCertificate, startResult.RedirectUri!, flowId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Wires the host's issuer resolution, which the authorization-code endpoints consult for every
+    /// request they accept, to record that request's parameters exactly as the HTTP skin decoded them
+    /// off the real wire, and then to answer the registration's own
+    /// <see cref="ClientRecord.IssuerUri"/>, the value the default resolver answers. A request whose
+    /// handling resolves the issuer more than once is recorded once, by the identity of its decoded
+    /// parameters. An assertion over the recorded parameters therefore observes what the client's
+    /// request carried on the wire.
+    /// </summary>
+    /// <param name="host">The host whose authorization server records the requests it accepts.</param>
+    /// <returns>The parameters of every accepted request, each once, in arrival order.</returns>
+    private static async Task<ConcurrentQueue<RequestFields>> RecordAcceptedRequestFieldsAsync(TestHostShell host)
+    {
+        ConcurrentQueue<RequestFields> accepted = new();
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveIssuerAsync = (registration, context, _) =>
+            {
+                if(context.IncomingRequest is { } request
+                    && !accepted.Any(recorded => ReferenceEquals(recorded, request.Fields)))
+                {
+                    accepted.Enqueue(request.Fields);
+                }
+
+                return ValueTask.FromResult<Uri?>(((ClientRecord)registration).IssuerUri);
+            };
+        }).ConfigureAwait(false);
+
+        return accepted;
+    }
+
+
+    /// <summary>
+    /// Registers a client under <see cref="PolicyProfile.Rfc6749WithPkce"/>, a policy that requires no
+    /// <c>scope</c> on the request, starts an authorization request through the client with
+    /// <paramref name="fields"/> by the start <paramref name="start"/> names (<see cref="PushedStart"/>
+    /// or <see cref="DirectStart"/>), and drives it over the real wire through the authorize leg to an
+    /// authorization code accepted at the callback. Returns the authorization request's parameters as
+    /// the server received them: the pushed body, or the authorize query of a direct start.
+    /// </summary>
+    /// <param name="start">Which start carries the request: <see cref="PushedStart"/> or <see cref="DirectStart"/>.</param>
+    /// <param name="fields">The fields the caller hands the start, among them any <c>scope</c> it names.</param>
+    /// <returns>The authorization request's parameters as the server received them.</returns>
+    private async Task<RequestFields> DriveStartToCallbackAndReadReceivedRequestAsync(string start, OAuthFormEncodedFields fields)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+
+        _ = start switch
+        {
+            PushedStart => await DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, segment, host.ServerCertificate,
+                TestContext.CancellationToken, fields: fields).ConfigureAwait(false),
+            DirectStart => await DriveDirectStartAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, host.ServerCertificate, fields,
+                TestContext.CancellationToken).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown authorization request start.")
+        };
+
+        //The authorization request is the one accepted request that carries the PKCE challenge:
+        //the pushed body of a pushed start, the authorize query of a direct start. The request_uri
+        //completion of a pushed start carries only client_id and request_uri.
+        return accepted.Single(received => received.ContainsKey(OAuthRequestParameterNames.CodeChallenge));
     }
 
 

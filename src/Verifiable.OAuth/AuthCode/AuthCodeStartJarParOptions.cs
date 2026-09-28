@@ -15,7 +15,13 @@ namespace Verifiable.OAuth.AuthCode;
 /// </summary>
 public sealed record AuthCodeStartJarParOptions
 {
-    /// <summary>The space-separated scope string carried into the JAR's <c>scope</c> claim.</summary>
+    /// <summary>
+    /// The space-separated scope string (RFC 6749 §3.3) carried into the JAR's <c>scope</c> claim. A
+    /// blank string names no scope, and the request object then carries no <c>scope</c> claim
+    /// (RFC 6749 §3.1: "Parameters sent without a value MUST be treated as if they were omitted from
+    /// the request."). An OpenID Connect request names <c>openid</c> here itself (OpenID Connect Core
+    /// 1.0 §3.1.2.1).
+    /// </summary>
     public required string Scope { get; init; }
 
     /// <summary>The client's JAR signing key. Tag determines the JWS <c>alg</c>.</summary>
