@@ -53,6 +53,7 @@ internal sealed class TextHygieneTests
     [DataRow(0x009F, TextHygieneClass.Control)]
     [DataRow(0xE0041, TextHygieneClass.Tag)]
     [DataRow(0xE0000, TextHygieneClass.Tag)]
+    [DataRow(0xE0002, TextHygieneClass.Tag)]
     [DataRow(0xE007F, TextHygieneClass.Tag)]
     [DataRow(0xD800, TextHygieneClass.UnpairedSurrogate)]
     [DataRow(0xDC00, TextHygieneClass.UnpairedSurrogate)]
@@ -77,6 +78,8 @@ internal sealed class TextHygieneTests
     [DataRow("\u00A0")]
     [DataRow("\u2764\uFE0F")]
     [DataRow("\U000DFFFF")]
+    [DataRow("\u2065")]
+    [DataRow("\U000E0080")]
     public void DefaultRuleLeavesReadableTextAlone(string text)
     {
         AssertClean(text, TextHygieneRule.Default);
@@ -199,11 +202,8 @@ internal sealed class TextHygieneTests
     /// <summary>
     /// <see cref="TextHygiene.EscapeVisibly"/> reserves and advances the caller's writer once for a whole run of
     /// several clean scalars, not once per scalar, so a partner's large adversarial input is written without one
-    /// allocation request per code unit. This pins <see cref="TextHygiene"/>'s documented allocation and per-run
-    /// writing behavior.
-    /// <see href="https://www.unicode.org/reports/tr9/#Explicit_Directional_Overrides">UAX #9, Section 2.2</see>
-    /// says of the format characters this primitive escapes: "They are to be avoided wherever possible, because of
-    /// security concerns," the concern a caller holding hostile input relies on a bounded writer to contain.
+    /// allocation request per code unit. This pins the documented contract of
+    /// <see cref="TextHygiene.EscapeVisibly"/>: "Everything else is written unchanged, one run at a time."
     /// </summary>
     [TestMethod]
     public void EscapeVisiblyReservesOnceForARunOfCleanScalars()
@@ -338,8 +338,8 @@ internal sealed class TextHygieneTests
     }
 
     /// <summary>
-    /// UTF-16 inspection reports each lone surrogate, whether low first, high twice or high before a pair, and never
-    /// swallows the well-formed pair or the U+202E that follows.
+    /// UTF-16 inspection reports each lone surrogate, whether low first or high twice, and never swallows the U+202E
+    /// that follows.
     /// Unicode core <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G25660">D91</see>
     /// states "Because surrogate code points are not Unicode scalar values, isolated UTF-16 code units in the range"
     /// of surrogates "are ill-formed."
@@ -605,11 +605,12 @@ internal sealed class TextHygieneTests
     }
 
     /// <summary>
-    /// <see cref="TextHygieneFinding"/>'s default value, which no inspection produces, is a zero-length occurrence at
-    /// offset zero whose class is <see cref="TextHygieneClass.Control"/>, the enumeration's first and so default,
-    /// member.
-    /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see> defines Cc as
-    /// "a C0 or C1 control code".
+    /// <see cref="TextHygieneFinding"/>'s default value, which no inspection produces, pins the type's documented
+    /// default: a zero-length occurrence at offset zero whose class is <see cref="TextHygieneClass.Control"/>, the
+    /// enumeration's first and so default, member. Unicode core
+    /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G25539">D76</see> defines a
+    /// Unicode scalar value as "Any Unicode code point except high-surrogate and low-surrogate code points", so
+    /// U+0000, the default's <see cref="TextHygieneFinding.Scalar"/>, is one.
     /// </summary>
     [TestMethod]
     public void DefaultValueIsAZeroLengthControlAtOffsetZero()
@@ -626,9 +627,13 @@ internal sealed class TextHygieneTests
     /// <summary>
     /// Every occurrence <see cref="TextHygiene"/> reports over mixed input has a length of at least one input unit,
     /// whatever its class, so <see cref="TextHygieneFinding"/>'s unproduced zero-length default is never mistaken
-    /// for a real occurrence.
-    /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see> defines the general
-    /// categories the classes this input exercises are drawn from.
+    /// for a real occurrence. Unicode core
+    /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G25660">D91</see> states
+    /// "Because surrogate code points are not Unicode scalar values, isolated UTF-16 code units in the range"
+    /// of surrogates "are ill-formed", and
+    /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G55471">D93b</see> defines the
+    /// maximal subpart of an ill-formed UTF-8 sequence as never shorter than "a subsequence of length one", so the
+    /// two classes the decoding itself produces are as bounded as the classes a general category selects.
     /// </summary>
     [TestMethod]
     public void EveryProducedFindingHasAPositiveLength()
@@ -643,6 +648,21 @@ internal sealed class TextHygieneTests
         {
             Assert.IsGreaterThanOrEqualTo(1, finding.Length, "A produced occurrence never has a zero length.");
         }
+
+        byte[] utf8 = [.. Encoding.UTF8.GetBytes(TextOf(0x202E)), (byte)'a', 0xC3, (byte)'b', .. Encoding.UTF8.GetBytes(TextOf(0xE0041))];
+        List<TextHygieneFinding> utf8Findings = [];
+
+        TextHygiene.CollectFindings(utf8.AsSpan(), TextHygieneRule.Strict, utf8Findings);
+
+        Assert.IsNotEmpty(utf8Findings, "The mixed UTF-8 input must produce findings.");
+        bool hasIllFormedEncodingFinding = false;
+        foreach(TextHygieneFinding finding in utf8Findings)
+        {
+            Assert.IsGreaterThanOrEqualTo(1, finding.Length, "A produced occurrence never has a zero length in UTF-8.");
+            hasIllFormedEncodingFinding = hasIllFormedEncodingFinding || finding.Class == TextHygieneClass.IllFormedEncoding;
+        }
+
+        Assert.IsTrue(hasIllFormedEncodingFinding, "The lone lead byte must be reported as an ill-formed occurrence.");
     }
 
     /// <summary>

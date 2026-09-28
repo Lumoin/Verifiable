@@ -52,7 +52,10 @@ public sealed class TextHygieneRule
     /// assigned default-ignorable code points outside Cf, combining marks, whitespace look-alikes, U+2800 and
     /// confusable characters, which no class covers (see <see cref="TextHygieneClass"/>), and a code point assigned
     /// after the running runtime's Unicode version, which reads as Cn. The reserved default-ignorable code points
-    /// are <see cref="TextHygieneClass.Unassigned"/>, a class <see cref="Default"/> does not select, so they pass too.
+    /// outside the Tags block (the ranges <see cref="TextHygieneClass"/> names) are
+    /// <see cref="TextHygieneClass.Unassigned"/> while the running runtime has not assigned them, a class
+    /// <see cref="Default"/> does not select, so they pass; those inside the Tags block (U+E0000, U+E0002 to
+    /// U+E001F) are <see cref="TextHygieneClass.Tag"/>, which <see cref="Default"/> reports.
     /// </summary>
     public static TextHygieneRule Default { get; } = new(
         new[]
@@ -76,9 +79,10 @@ public sealed class TextHygieneRule
     /// <summary>
     /// Gets <see cref="Default"/> plus <see cref="TextHygieneClass.PrivateUse"/> and
     /// <see cref="TextHygieneClass.Unassigned"/>, so a code point assigned after the running runtime's Unicode version,
-    /// a reserved default-ignorable code point and a noncharacter are reported as Cn. It still passes the variation
-    /// selectors, the assigned default-ignorable code points outside Cf, combining marks, whitespace look-alikes,
-    /// U+2800 and confusable characters: no class covers them (see <see cref="TextHygieneClass"/>).
+    /// a reserved default-ignorable code point outside the Tags block and a noncharacter are reported as Cn; a
+    /// reserved default-ignorable code point inside the Tags block is still <see cref="TextHygieneClass.Tag"/>. It
+    /// still passes the variation selectors, the assigned default-ignorable code points outside Cf, combining marks,
+    /// whitespace look-alikes, U+2800 and confusable characters: no class covers them (see <see cref="TextHygieneClass"/>).
     /// </summary>
     public static TextHygieneRule Strict { get; } = new(
         Default.Classes.Concat([TextHygieneClass.PrivateUse, TextHygieneClass.Unassigned]).ToFrozenSet(),

@@ -9,8 +9,8 @@ namespace Verifiable.Core.Text;
 /// <see cref="Class"/> is <see cref="TextHygieneClass.IllFormedEncoding"/> for every value of the type. This is a
 /// value type, so its default value exists, with <see cref="Offset"/> and <see cref="Length"/> both zero; no
 /// inspection ever produces that value, because every occurrence <see cref="TextHygiene"/> reports has a
-/// <see cref="Length"/> of at least one. <see cref="ForCodePoint"/> and <see cref="ForIllFormedEncoding"/> are the
-/// only way <see cref="TextHygiene"/> builds an occurrence with a positive length.
+/// <see cref="Length"/> of at least one. Outside this library, a caller can make only the default value; every
+/// other value is the answer of a <see cref="TextHygiene"/> inspection.
 /// </summary>
 public readonly record struct TextHygieneFinding
 {
