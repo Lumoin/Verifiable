@@ -232,8 +232,9 @@ public static class EndSessionEndpoints
     /// The <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/> is asked for the admitted
     /// key under <see cref="KeyUsageContext.IdTokenIssuance"/>, the usage the key rule names, so a key
     /// store that keeps keys apart per kind answers only a key it holds for ID Tokens; a hint whose key the
-    /// resolver does not produce for that usage is refused. The key rule stays the library's guarantee:
-    /// the usage lets the resolver narrow what verifies, never widen it.
+    /// resolver does not produce for that usage is refused with a fixed description that names no key. The
+    /// key rule stays the library's guarantee: the usage lets the resolver narrow what verifies, never
+    /// widen it.
     /// </para>
     /// </remarks>
     private static async ValueTask<(string? Subject, string? SessionId, ServerHttpResponse? Error)> VerifyIdTokenHintAsync(
@@ -312,10 +313,11 @@ public static class EndSessionEndpoints
 
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver!(
                 new KeyId(kid), KeyUsageContext.IdTokenIssuance, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+            //The description is fixed: a refusal names no key the hint presented.
             if(publicKey is null)
             {
                 return (null, null, ServerHttpResponse.BadRequest(
-                    OAuthErrors.InvalidRequest, $"No verification key found for kid '{kid}'."));
+                    OAuthErrors.InvalidRequest, "No verification key is available for the id_token_hint."));
             }
 
             //RFC 7519 §4: the Claim Names within a JWT Claims Set MUST be unique. Gate the already-

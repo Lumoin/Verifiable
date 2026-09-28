@@ -827,6 +827,61 @@ internal sealed class JarAuthorizeByValueTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.2">RFC 9101 section 6.2</see>: "If the key
+    /// is not associated with the client or if signature validation fails, the authorization server
+    /// MUST return an "invalid_request_object" error to the client in response to the authorization
+    /// request." A verification-key resolver that holds the registration's request-object key only for
+    /// ID Tokens answers nothing when asked under <see cref="KeyUsageContext.JarSigning"/>, so no key
+    /// associated with the client verifies the request object: a signed request object sent by value to
+    /// the authorize endpoint over the wire is answered 400 <c>invalid_request_object</c> with the fixed
+    /// description "No verification key is available for the request object.", never a server fault, and
+    /// the body names no key identifier.
+    /// </summary>
+    [TestMethod]
+    public async Task JarByValueRefusesARequestObjectWhoseKeyTheResolverDoesNotHoldAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        KeyId jarKeyId = material.Registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Cryptography.VerificationKeyResolver = (keyId, usage, tenantId, ctx, ct) =>
+                ValueTask.FromResult(
+                    usage == KeyUsageContext.IdTokenIssuance && hosted.VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
+                        ? key : null);
+        }).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri uri = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + $"?client_id={Uri.EscapeDataString(ClientId)}&request={Uri.EscapeDataString(compactJar)}");
+
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "A refused request object is not redirected.");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request_object", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "No verification key is available for the request object.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.DoesNotContain(jarKeyId.Value, body, StringComparison.Ordinal, "The refusal names no key identifier.");
+    }
+
+
     [TestMethod]
     public async Task RejectsDirectAuthorizeWhenProfileRequiresPushedAuthorizationRequests()
     {

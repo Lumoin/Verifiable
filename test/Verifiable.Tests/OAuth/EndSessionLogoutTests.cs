@@ -903,6 +903,56 @@ internal sealed class EndSessionLogoutTests
     }
 
 
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 section 2</see>: "When an id_token_hint parameter is present, the OP MUST validate that it
+    /// was the issuer of the ID Token." A verification-key resolver that holds the hint's key only for
+    /// access tokens answers nothing when asked under <see cref="KeyUsageContext.IdTokenIssuance"/>, so the
+    /// OP cannot validate the hint, and
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">RP-Initiated
+    /// Logout 1.0 section 4</see> fixes what follows: "when the OP detects errors in the RP-Initiated Logout
+    /// request, the OP MUST not perform post-logout redirection to an RP." An ID Token this server issued,
+    /// presented as <c>id_token_hint</c> at the end-session endpoint over the wire, is not redirected and
+    /// the session stays live; the 400 <c>invalid_request</c> body carries the fixed description
+    /// "No verification key is available for the id_token_hint." and names no key identifier. The status,
+    /// the code and the description are the library's own refusal shape; the specification names none.
+    /// </summary>
+    [TestMethod]
+    public async Task EndSessionRefusesAHintWhoseKeyTheResolverDoesNotHoldForIdTokensAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-H").ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Cryptography.VerificationKeyResolver = (keyId, usage, tenantId, ctx, ct) =>
+                ValueTask.FromResult(
+                    usage == KeyUsageContext.AccessTokenIssuance && hosted.VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
+                        ? key : null);
+        }).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, idToken, "h1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "A refused hint must not redirect.");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "No verification key is available for the id_token_hint.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.DoesNotContain(material.SigningKeyId.Value, body, StringComparison.Ordinal, "The refusal names no key identifier.");
+        Assert.IsEmpty(terminated, "A hint whose key the resolver does not hold for ID Tokens must not end the session.");
+    }
+
+
     /// <summary>The client identifier of the second registration whose signing key the foreign-key hint borrows.</summary>
     private const string OtherClientId = "https://other.client.example.com";
 

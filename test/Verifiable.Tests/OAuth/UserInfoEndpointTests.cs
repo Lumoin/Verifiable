@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Net;
 using System.Net.Http.Headers;
@@ -1776,10 +1777,13 @@ internal sealed class UserInfoEndpointTests
     /// library's answer to that null. The design follows
     /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
     /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
-    /// fail to validate other kinds of JWTs." A resolver that holds the registration's key for access
-    /// tokens serves the access token at UserInfo over the wire with 200 and the End-User's <c>sub</c>;
-    /// a resolver that holds the same key only for ID Tokens answers nothing for an access token, and
-    /// UserInfo refuses it with 401 <c>invalid_token</c> and <c>Bearer error="invalid_token"</c>.
+    /// fail to validate other kinds of JWTs." In both rows the resolver is asked for the access token's
+    /// key exactly once, under <see cref="KeyUsageContext.AccessTokenIssuance"/>. A resolver that holds
+    /// the registration's key for access tokens serves the access token at UserInfo over the wire with
+    /// 200 and the End-User's <c>sub</c>; a resolver that holds the same key only for ID Tokens answers
+    /// nothing for an access token, and UserInfo refuses it with 401 <c>invalid_token</c>,
+    /// <c>Bearer error="invalid_token"</c> and the fixed description "No verification key is available
+    /// for the access token.", which names no key identifier.
     /// </summary>
     /// <param name="row">Which usage the row's resolver holds the key under: <see cref="HeldForAccessTokensRow"/> or <see cref="HeldForIdTokensRow"/>.</param>
     [TestMethod]
@@ -1802,12 +1806,20 @@ internal sealed class UserInfoEndpointTests
         };
 
         HostedAuthorizationServer hosted = host.Host("default");
+        ConcurrentQueue<KeyUsageContext> askedUsages = new();
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.Cryptography.VerificationKeyResolver = (keyId, usage, tenantId, ctx, ct) =>
-                ValueTask.FromResult(
+            {
+                if(keyId == material.SigningKeyId)
+                {
+                    askedUsages.Enqueue(usage);
+                }
+
+                return ValueTask.FromResult(
                     usage == heldUsage && hosted.VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
                         ? key : null);
+            };
         }).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken)
@@ -1819,15 +1831,18 @@ internal sealed class UserInfoEndpointTests
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
             using JsonDocument served = JsonDocument.Parse(body);
             Assert.AreEqual(SubjectId, served.RootElement.GetProperty("sub").GetString());
+            Assert.AreEqual(KeyUsageContext.AccessTokenIssuance, Assert.ContainsSingle(askedUsages));
 
             return;
         }
 
         AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        Assert.AreEqual(KeyUsageContext.AccessTokenIssuance, Assert.ContainsSingle(askedUsages));
         using JsonDocument refused = JsonDocument.Parse(body);
         Assert.AreEqual(
-            "No verification key found for kid '" + material.SigningKeyId.Value + "'.",
+            "No verification key is available for the access token.",
             refused.RootElement.GetProperty("error_description").GetString());
+        Assert.DoesNotContain(material.SigningKeyId.Value, body, StringComparison.Ordinal, "The refusal names no key identifier.");
     }
 
 
@@ -2109,20 +2124,15 @@ internal sealed class UserInfoEndpointTests
     /// <param name="host">The host whose listener serves the request.</param>
     /// <param name="material">The registration whose UserInfo path is addressed.</param>
     /// <returns>The absolute UserInfo URL.</returns>
-    private async Task<Uri> UserInfoUrlAsync(TestHostShell host, VerifierKeyMaterial material)
-    {
-        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-        return new Uri(host.Host("default").HttpBaseAddress!,
-            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, material.Registration.TenantId.Value));
-    }
+    private Task<Uri> UserInfoUrlAsync(TestHostShell host, VerifierKeyMaterial material) =>
+        RawAuthCodeWirePushers.ResolveUserInfoUriAsync(host, material, TestContext.CancellationToken);
 
 
     /// <summary>
     /// Sends a request to the registration's UserInfo endpoint over the host's loopback HTTPS listener
     /// with <paramref name="accessToken"/> under <paramref name="scheme"/> and, when given,
-    /// <paramref name="dpopProof"/> in the <c>DPoP</c> header, so the request, its headers and the
-    /// response's headers cross the real transport.
+    /// <paramref name="dpopProof"/> in the <c>DPoP</c> header, through the shared
+    /// <see cref="RawAuthCodeWirePushers.SendUserInfoRequestAsync"/> under this test's cancellation token.
     /// </summary>
     /// <param name="host">The host whose listener serves the request.</param>
     /// <param name="material">The registration whose UserInfo path is addressed.</param>
@@ -2131,24 +2141,15 @@ internal sealed class UserInfoEndpointTests
     /// <param name="dpopProof">The DPoP proof, or <see langword="null"/> to send no <c>DPoP</c> header.</param>
     /// <param name="httpMethod">The request method, or <see langword="null"/> for POST.</param>
     /// <returns>The wire response; the caller disposes it.</returns>
-    private async Task<HttpResponseMessage> SendUserInfoOverWireAsync(
+    private Task<HttpResponseMessage> SendUserInfoOverWireAsync(
         TestHostShell host,
         VerifierKeyMaterial material,
         string accessToken,
         string scheme = "Bearer",
         string? dpopProof = null,
-        HttpMethod? httpMethod = null)
-    {
-        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
-        using HttpRequestMessage request = new(httpMethod ?? HttpMethod.Post, userInfoUrl);
-        _ = request.Headers.TryAddWithoutValidation("Authorization", $"{scheme} {accessToken}");
-        if(dpopProof is not null)
-        {
-            _ = request.Headers.TryAddWithoutValidation("DPoP", dpopProof);
-        }
-
-        return await host.Host("default").SharedHttpClient!.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
-    }
+        HttpMethod? httpMethod = null) =>
+        RawAuthCodeWirePushers.SendUserInfoRequestAsync(
+            host, material, accessToken, scheme, dpopProof, httpMethod, TestContext.CancellationToken);
 
 
     private static async Task<VerifierKeyMaterial> RegisterPlainUserInfoClientAsync(TestHostShell host)

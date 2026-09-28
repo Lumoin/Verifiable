@@ -320,4 +320,57 @@ internal static class RawAuthCodeWirePushers
         return await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
+
+    /// <summary>
+    /// The URL of <paramref name="material"/>'s UserInfo endpoint on the host's loopback HTTPS listener,
+    /// starting the listener when it is not yet running.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration whose UserInfo path is addressed.</param>
+    /// <param name="cancellationToken">Cancellation of the listener start.</param>
+    /// <returns>The absolute UserInfo URL.</returns>
+    public static async Task<Uri> ResolveUserInfoUriAsync(
+        TestHostShell host, VerifierKeyMaterial material, CancellationToken cancellationToken)
+    {
+        await host.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+
+        return new Uri(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, material.Registration.TenantId.Value));
+    }
+
+
+    /// <summary>
+    /// Sends a request to <paramref name="material"/>'s UserInfo endpoint over the host's loopback HTTPS
+    /// listener with <paramref name="accessToken"/> in the <c>Authorization</c> header under
+    /// <paramref name="scheme"/> and, when given, <paramref name="dpopProof"/> in the <c>DPoP</c> header,
+    /// so the request, its headers and the response's headers cross the real transport. Shared by every
+    /// test class that presents a token at UserInfo, so the wire request exists once.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration whose UserInfo path is addressed.</param>
+    /// <param name="accessToken">The access token presented.</param>
+    /// <param name="scheme">The <c>Authorization</c> scheme the token is presented under.</param>
+    /// <param name="dpopProof">The DPoP proof, or <see langword="null"/> to send no <c>DPoP</c> header.</param>
+    /// <param name="httpMethod">The request method, or <see langword="null"/> for POST.</param>
+    /// <param name="cancellationToken">Cancellation of the wire exchange.</param>
+    /// <returns>The wire response; the caller disposes it.</returns>
+    public static async Task<HttpResponseMessage> SendUserInfoRequestAsync(
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        string accessToken,
+        string scheme,
+        string? dpopProof,
+        HttpMethod? httpMethod,
+        CancellationToken cancellationToken)
+    {
+        Uri userInfoUrl = await ResolveUserInfoUriAsync(host, material, cancellationToken).ConfigureAwait(false);
+        using HttpRequestMessage request = new(httpMethod ?? HttpMethod.Post, userInfoUrl);
+        _ = request.Headers.TryAddWithoutValidation("Authorization", $"{scheme} {accessToken}");
+        if(dpopProof is not null)
+        {
+            _ = request.Headers.TryAddWithoutValidation("DPoP", dpopProof);
+        }
+
+        return await host.Host("default").SharedHttpClient!.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
 }

@@ -22,8 +22,10 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class TenantIdThreadingTests
 {
+    /// <summary>The test framework's context, whose cancellation token bounds every wire exchange of a test.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The injected clock every host of this class runs on, fixed at a known instant so issuance and validation read no wall clock.</summary>
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 5, 15, 12, 0, 0, TimeSpan.Zero));
 
@@ -92,15 +94,10 @@ internal sealed class TenantIdThreadingTests
         using JsonDocument tokenBody = JsonDocument.Parse(drive.TokenResponse.Body);
         string accessToken = tokenBody.RootElement.GetProperty("access_token").GetString()!;
 
-        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
-        Uri userInfoUrl = new(hosted.HttpBaseAddress!,
-            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, keys.Registration.TenantId.Value));
-        using HttpRequestMessage request = new(HttpMethod.Post, userInfoUrl);
-        _ = request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {accessToken}");
-
         hosted.VerificationKeyResolutions.Clear();
-        using HttpResponseMessage response = await hosted.SharedHttpClient!.SendAsync(request, TestContext.CancellationToken)
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendUserInfoRequestAsync(
+            host, keys, accessToken, "Bearer", dpopProof: null, httpMethod: null, TestContext.CancellationToken)
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 

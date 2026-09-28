@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -111,6 +113,59 @@ internal sealed class JarParTests
         AssertErrorCode(body, OAuthErrors.InvalidRequest);
         Assert.DoesNotContain("\"request_uri\":", body, StringComparison.Ordinal,
             "A pushed request presenting request_uri must never itself mint one.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.2">RFC 9101 section 6.2</see>: "If the key
+    /// is not associated with the client or if signature validation fails, the authorization server
+    /// MUST return an "invalid_request_object" error to the client in response to the authorization
+    /// request." A verification-key resolver that holds the registration's request-object key only for
+    /// ID Tokens answers nothing when asked under <see cref="KeyUsageContext.JarSigning"/>, so no key
+    /// associated with the client verifies the request object: a signed request object pushed to the
+    /// pushed authorization request endpoint over the wire is answered 400 <c>invalid_request_object</c>
+    /// with the fixed description "No verification key is available for the request object.", never a
+    /// server fault, mints no <c>request_uri</c>, and the body names no key identifier.
+    /// </summary>
+    [TestMethod]
+    public async Task PushedRequestObjectWhoseKeyTheResolverDoesNotHoldIsRefusedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
+        KeyId jarKeyId = material.Registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, DefaultState, DefaultNonce),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Cryptography.VerificationKeyResolver = (keyId, usage, tenantId, ctx, ct) =>
+                ValueTask.FromResult(
+                    usage == KeyUsageContext.IdTokenIssuance && hosted.VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
+                        ? key : null);
+        }).ConfigureAwait(false);
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.Request] = compactJar
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request_object", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "No verification key is available for the request object.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsFalse(document.RootElement.TryGetProperty("request_uri", out _), "A refused pushed request mints no request_uri.");
+        Assert.DoesNotContain(jarKeyId.Value, body, StringComparison.Ordinal, "The refusal names no key identifier.");
     }
 
 

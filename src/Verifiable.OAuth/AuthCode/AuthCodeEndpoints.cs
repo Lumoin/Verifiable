@@ -2125,9 +2125,11 @@ public static class AuthCodeEndpoints
         }
         catch(Exception ex) when(ex is KeyNotFoundException or InvalidOperationException)
         {
+            //A registration without a request-object key is a composition defect, a server fault; the
+            //exception's message stays out of the body.
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
-                $"Registration '{registration.ClientId}' has no JAR signing key configured: {ex.Message}"));
+                "The registration has no request-object verification key configured."));
         }
 
         ServerVerificationKeyResolverDelegate? resolver = oauth.Cryptography.VerificationKeyResolver;
@@ -2142,11 +2144,15 @@ public static class AuthCodeEndpoints
         PublicKeyMemory? signingPublicKey = await resolver(
             verificationKeyId, KeyUsageContext.JarSigning, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
+        //RFC 9101 section 6.2: "If the key is not associated with the client or if signature validation fails,
+        //the authorization server MUST return an "invalid_request_object" error". A resolver that
+        //produces no key for the request-object usage holds none associated with the client for it, so
+        //the request object is refused, with one fixed description that names no key.
         if(signingPublicKey is null)
         {
-            return (null, ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError,
-                $"Verification key '{verificationKeyId.Value}' is unavailable."));
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "No verification key is available for the request object."));
         }
 
         JwtHeaderDeserializer? headerDeserializer = oauth.Codecs.JwtHeaderDeserializer;

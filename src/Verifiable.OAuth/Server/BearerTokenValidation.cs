@@ -251,7 +251,7 @@ public static class BearerTokenValidation
     /// then asked for the admitted key under the same usage,
     /// <see cref="KeyUsageContext.AccessTokenIssuance"/>, so a key store that keeps keys apart per kind
     /// answers only a key it holds for access tokens; a listed key the resolver does not produce for that
-    /// usage is refused as unknown. The admission stays the library's guarantee: the usage lets the
+    /// usage is refused with a fixed description that names no key. The admission stays the library's guarantee: the usage lets the
     /// resolver narrow what verifies, never widen it.
     /// </remarks>
     private static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateCoreAsync(
@@ -366,10 +366,11 @@ public static class BearerTokenValidation
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver(
                 new KeyId(kid), KeyUsageContext.AccessTokenIssuance, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
+            //The description is fixed: a refusal names no key the token presented.
             if(publicKey is null)
             {
                 return (null, RefuseToken(
-                    $"No verification key found for kid '{kid}'."));
+                    "No verification key is available for the access token."));
             }
 
             //4. Verify signature via the algorithm-agnostic Jws.VerifyAsync

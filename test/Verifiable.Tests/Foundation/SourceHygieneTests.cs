@@ -708,32 +708,47 @@ internal sealed class SourceHygieneTests
     }
 
     /// <summary>
-    /// Matches a code line naming <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/>, simple or namespace-qualified. In
+    /// Matches a code line that names an unstated <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/> in any
+    /// spelling a line scan can see: <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/> (simple or
+    /// namespace-qualified), <c>default(KeyUsageContext)</c> with an optional namespace prefix, <c>new KeyUsageContext()</c>,
+    /// <c>KeyUsageContext.Create(0)</c>, a <c>using static</c> directive importing the type's members, and a
+    /// <c>using</c> alias directive naming the type. The type is a value type whose default is
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/> (code 0), so each of the first four spellings
+    /// yields that value, and an alias or a static import lets a later line name it without the type's own name. In
     /// <c>src/Verifiable.OAuth</c>, the library that declares and invokes
-    /// <see cref="Verifiable.OAuth.Server.ServerVerificationKeyResolverDelegate"/>, that value has one use: an argument telling a
-    /// verification-key resolver, or the validator core that forwards to one, that the key is expected
-    /// under no usage at all.
+    /// <see cref="Verifiable.OAuth.Server.ServerVerificationKeyResolverDelegate"/>, such a value has one use: an
+    /// argument telling a verification-key resolver, or the validator core that forwards to one, that the key is
+    /// expected under no usage at all.
     /// </summary>
     private static Regex UnstatedVerificationKeyUsagePattern { get; } = new(
-        @"\bKeyUsageContext\.None\b", RegexOptions.Compiled);
+        @"\bKeyUsageContext\s*\.\s*None\b"
+        + @"|\bdefault\s*\(\s*(?:global::)?(?:\w+\s*\.\s*)*KeyUsageContext\s*\)"
+        + @"|\bnew\s+(?:global::)?(?:\w+\s*\.\s*)*KeyUsageContext\s*\(\s*\)"
+        + @"|\bKeyUsageContext\s*\.\s*Create\s*\(\s*0\s*\)"
+        + @"|^\s*(?:global\s+)?using\s+static\s+(?:global::)?(?:\w+\s*\.\s*)*KeyUsageContext\s*;"
+        + @"|^\s*(?:global\s+)?using\s+\w+\s*=\s*(?:global::)?(?:\w+\s*\.\s*)*KeyUsageContext\s*;",
+        RegexOptions.Compiled);
 
     /// <summary>
-    /// The standing record of every <c>src/Verifiable.OAuth/**</c> line still naming
-    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/>. The record is empty: every verification-key resolution in the
-    /// library states the usage its key is expected under. This list only shrinks and must never gain an
-    /// entry.
+    /// The standing record of every <c>src/Verifiable.OAuth/**</c> line still naming an unstated
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/> in a spelling
+    /// <see cref="UnstatedVerificationKeyUsagePattern"/> sees. The record is empty. This list only shrinks and
+    /// must never gain an entry.
     /// </summary>
     private static IReadOnlyDictionary<string, int> UnstatedVerificationKeyUsageAllowlist { get; } = new Dictionary<string, int>();
 
     /// <summary>
-    /// Every call the library makes to a <see cref="Verifiable.OAuth.Server.ServerVerificationKeyResolverDelegate"/> states the
-    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/> the key is expected under, the delegate's documented contract, so an
-    /// application's key store can keep keys apart per kind as
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see> advises: "Use
-    /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will fail
-    /// to validate other kinds of JWTs." <see cref="UnstatedVerificationKeyUsageAllowlist"/> is the standing
-    /// record of every <c>src/Verifiable.OAuth</c> line still passing <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/>; it
-    /// is empty and must never gain an entry.
+    /// No code line under <c>src/Verifiable.OAuth</c> names an unstated
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/> in any spelling a line scan can see
+    /// (<see cref="UnstatedVerificationKeyUsagePattern"/> lists them), the source side of the documented
+    /// contract of <see cref="Verifiable.OAuth.Server.ServerVerificationKeyResolverDelegate"/> that every
+    /// resolution states the usage its key is expected under, so an application's key store can keep keys apart
+    /// per kind as <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 section 3.12</see> advises:
+    /// "Use different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will fail
+    /// to validate other kinds of JWTs." A target-typed bare <c>default</c> argument, a variable holding the
+    /// unstated value and a value computed at run time are outside what a line scan can see; the usage rows over
+    /// the wire prove the usage each call site states. <see cref="UnstatedVerificationKeyUsageAllowlist"/> is
+    /// the standing record of every site; it is empty and must never gain an entry.
     /// </summary>
     [TestMethod]
     public void LibraryStatesTheUsageOfEveryVerificationKeyResolution()
@@ -746,31 +761,43 @@ internal sealed class SourceHygieneTests
             UnstatedVerificationKeyUsagePattern,
             SourceHygieneViolationKind.UnstatedVerificationKeyUsage,
             UnstatedVerificationKeyUsageAllowlist,
-            "name the usage the verified key is expected under instead of KeyUsageContext.None");
+            "name the usage the verified key is expected under instead of an unstated KeyUsageContext");
     }
 
     /// <summary>
-    /// Proves <see cref="UnstatedVerificationKeyUsagePattern"/> actually fires: run here over an embedded
-    /// sample (never a repository file) carrying a resolver call passing <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/>,
-    /// a namespace-qualified one, a call naming <see cref="Verifiable.Cryptography.Context.KeyUsageContext.AccessTokenIssuance"/> and a
-    /// documentation line naming <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/>, the result must report exactly the two
-    /// code lines passing <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/>.
+    /// Proves the pattern the ratchet <see cref="LibraryStatesTheUsageOfEveryVerificationKeyResolution"/> rests on:
+    /// <see cref="UnstatedVerificationKeyUsagePattern"/>, run here over an embedded sample (never a repository file),
+    /// reports each spelling of an unstated usage on its own line (a <c>using static</c> import, a <c>using</c>
+    /// alias, <see cref="Verifiable.Cryptography.Context.KeyUsageContext.None"/> simple and namespace-qualified,
+    /// <c>default(KeyUsageContext)</c> simple and namespace-qualified, <c>new KeyUsageContext()</c> and
+    /// <c>KeyUsageContext.Create(0)</c>) and spares a plain namespace import, a documentation line, a call naming
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.AccessTokenIssuance"/> and a call creating a
+    /// non-zero usage code.
     /// </summary>
     [TestMethod]
     public void UnstatedVerificationKeyUsageScannerReportsEmbeddedSamplesAndSparesStatedUsages()
     {
         string[] sampleLines =
         [
+            "using Verifiable.Cryptography.Context;",
+            "using static Verifiable.Cryptography.Context.KeyUsageContext;",
+            "using Usage = Verifiable.Cryptography.Context.KeyUsageContext;",
+            "",
             "namespace Sample;",
             "",
             "internal static class SampleResolution",
             "{",
-            "    /// <summary>Never passes <see cref=\"KeyUsageContext.None\"/>.</summary>",
+            "    /// <summary>Never passes <see cref=\"KeyUsageContext.None\"/> or <c>default(KeyUsageContext)</c>.</summary>",
             "    private static async Task ResolveAsync()",
             "    {",
             "        _ = await resolver(keyId, KeyUsageContext.None, tenantId, context, cancellationToken);",
             "        _ = await resolver(keyId, Verifiable.Cryptography.Context.KeyUsageContext.None, tenantId, context, cancellationToken);",
+            "        _ = await resolver(keyId, default(KeyUsageContext), tenantId, context, cancellationToken);",
+            "        _ = await resolver(keyId, default(Verifiable.Cryptography.Context.KeyUsageContext), tenantId, context, cancellationToken);",
+            "        _ = await resolver(keyId, new KeyUsageContext(), tenantId, context, cancellationToken);",
+            "        _ = await resolver(keyId, KeyUsageContext.Create(0), tenantId, context, cancellationToken);",
             "        _ = await resolver(keyId, KeyUsageContext.AccessTokenIssuance, tenantId, context, cancellationToken);",
+            "        _ = await resolver(keyId, KeyUsageContext.Create(12), tenantId, context, cancellationToken);",
             "    }",
             "}",
         ];
@@ -778,10 +805,16 @@ internal sealed class SourceHygieneTests
         IReadOnlyList<SourceHygieneViolation> violations = SourceHygieneScanner.ScanCodeLinesForPattern(
             "Sample.cs", sampleLines, UnstatedVerificationKeyUsagePattern, SourceHygieneViolationKind.UnstatedVerificationKeyUsage);
 
-        Assert.HasCount(2, violations);
-        Assert.Contains(static v => v.LineNumber == 8, violations);
-        Assert.Contains(static v => v.LineNumber == 9, violations);
-        Assert.DoesNotContain(static v => v.LineNumber is 5 or 10, violations);
+        Assert.HasCount(8, violations);
+        Assert.Contains(static v => v.LineNumber == 2, violations);
+        Assert.Contains(static v => v.LineNumber == 3, violations);
+        Assert.Contains(static v => v.LineNumber == 12, violations);
+        Assert.Contains(static v => v.LineNumber == 13, violations);
+        Assert.Contains(static v => v.LineNumber == 14, violations);
+        Assert.Contains(static v => v.LineNumber == 15, violations);
+        Assert.Contains(static v => v.LineNumber == 16, violations);
+        Assert.Contains(static v => v.LineNumber == 17, violations);
+        Assert.DoesNotContain(static v => v.LineNumber is 1 or 9 or 18 or 19, violations);
     }
 
     /// <summary>
@@ -2838,7 +2871,7 @@ internal enum SourceHygieneViolationKind
     /// <summary>A <c>src/Verifiable.BouncyCastle/**</c> line constructing a platform AEAD cipher directly instead of BouncyCastle's own managed implementation.</summary>
     PlatformAeadCipherConstruction,
 
-    /// <summary>A <c>src/Verifiable.OAuth/**</c> code line naming <c>KeyUsageContext.None</c>, a verification-key resolution that states no usage for its key.</summary>
+    /// <summary>A <c>src/Verifiable.OAuth/**</c> code line naming an unstated <c>KeyUsageContext</c> (<c>KeyUsageContext.None</c>, <c>default(KeyUsageContext)</c>, <c>new KeyUsageContext()</c>, <c>KeyUsageContext.Create(0)</c>, or a <c>using static</c> or alias directive for the type), a verification-key resolution that states no usage for its key.</summary>
     UnstatedVerificationKeyUsage,
 
     /// <summary>A <c>test/**</c> line calling <c>CancelAfter(TimeSpan)</c>, which runs against the real system clock with no <see cref="TimeProvider"/> overload to drive it from a fake one.</summary>

@@ -64,18 +64,18 @@ public delegate ValueTask<PrivateKeyMemory?> ServerSigningKeyResolverDelegate(
 
 
 /// <summary>
-/// Resolves a public verification key by <see cref="KeyId"/> for a stated
-/// <see cref="KeyUsageContext"/>. Mirrors <see cref="ServerSigningKeyResolverDelegate"/>
-/// for the verification side, with the usage placed right after the key id as
-/// <see cref="SelectSigningKeyDelegate"/> places it.
+/// The public key a caller verifies under, asked for by its <see cref="KeyId"/> and by the
+/// <see cref="KeyUsageContext"/> the key is expected under: the verification-side byte-loader
+/// beside <see cref="ServerSigningKeyResolverDelegate"/>.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The <paramref name="usage"/> parameter names the kind of token or artefact the
 /// caller verifies or publishes — the <see cref="SigningKeySet"/> slot the key is
-/// expected under (RFC 8725 §3.12 <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">"use
-/// different keys for different kinds of JWTs"</see>; RFC 7517 §4.2
-/// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">the "use" parameter</see>).
+/// expected under. <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 section 3.12</see>:
+/// "Use different keys for different kinds of JWTs."; the JWK <c>use</c> parameter of
+/// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC 7517 section 4.2</see> marks a
+/// published key's intended use the same way.
 /// An implementation answers <see langword="null"/> for a key it does not hold for
 /// that usage. Wherever the library holds the registration's key sets its own
 /// admission runs first, so the usage this parameter carries never widens what a
