@@ -980,7 +980,7 @@ public static class MetadataEndpoints
         foreach(KeyId keyId in signingKeySet.Current)
         {
             Verifiable.Cryptography.PublicKeyMemory? key =
-                await resolver(keyId, registration.TenantId, context, cancellationToken)
+                await resolver(keyId, Verifiable.Cryptography.Context.KeyUsageContext.None, registration.TenantId, context, cancellationToken)
                     .ConfigureAwait(false);
             if(key is null) { continue; }
 

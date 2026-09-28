@@ -1,5 +1,6 @@
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
@@ -120,6 +121,7 @@ public static class Oidc10IdTokenValidator
             timeProvider,
             memoryPool,
             iatSkew,
+            KeyUsageContext.None,
             tenantId,
             context,
             expectedAuthorizedParty,

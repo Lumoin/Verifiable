@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -701,7 +702,7 @@ internal sealed class IdJagGrantTests
             idpPrivateKey, externalKid, externalIdpIssuer, SubjectIdentity, ResourceAsIssuer,
             ClientId, ChatScope, assertionIssuedAt, assertionIssuedAt.AddMinutes(5)).ConfigureAwait(false);
 
-        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? idpPublicKey : null);
 
@@ -838,7 +839,7 @@ internal sealed class IdJagGrantTests
             idpPrivateKey, externalKid, externalIdpIssuer, SubjectIdentity, ResourceAsIssuer,
             ClientId, ChatScope, now, now.AddMinutes(5)).ConfigureAwait(false);
 
-        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? idpPublicKey : null);
 
@@ -1294,7 +1295,7 @@ internal sealed class IdJagGrantTests
 
         //The Resource AS resolves the external IdP's key by kid (an in-memory JWKS for the foreign key)
         //and runs the full §4.4.1 validation — nothing here came from our own mint.
-        ValueTask<PublicKeyMemory?> foreignResolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
+        ValueTask<PublicKeyMemory?> foreignResolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? idpPublicKey : null);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
@@ -1357,7 +1358,7 @@ internal sealed class IdJagGrantTests
             attackerPrivateKey, externalKid, externalIdpIssuer, SubjectIdentity, ResourceAsIssuer,
             ClientId, ChatScope, now, now.AddMinutes(5)).ConfigureAwait(false);
 
-        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? trustedPublicKey : null);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
@@ -1404,7 +1405,7 @@ internal sealed class IdJagGrantTests
             idpPrivateKey, externalKid, externalIdpIssuer, SubjectIdentity, "https://other-rs.example/",
             ClientId, ChatScope, now, now.AddMinutes(5)).ConfigureAwait(false);
 
-        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? idpPublicKey : null);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
@@ -1941,7 +1942,7 @@ internal sealed class IdJagGrantTests
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
 
         //An empty key resolver — no issuer's key resolves, modelling an untrusted issuer.
-        static ValueTask<PublicKeyMemory?> emptyResolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
+        static ValueTask<PublicKeyMemory?> emptyResolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateJwtBearerAssertionAsync =
@@ -5568,7 +5569,7 @@ internal sealed class IdJagGrantTests
         }
 
         PublicKeyMemory? key = await resolver(
-            new KeyId(kid), default, [], TestContext.CancellationToken).ConfigureAwait(false);
+            new KeyId(kid), KeyUsageContext.IdTokenIssuance, default, [], TestContext.CancellationToken).ConfigureAwait(false);
         if(key is null)
         {
             return null;
@@ -5709,7 +5710,7 @@ internal sealed class IdJagGrantTests
                 jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, Pool);
         }
 
-        return (kid, tenant, ctx, ct) =>
+        return (kid, usage, tenant, ctx, ct) =>
             ValueTask.FromResult(keysByKid.GetValueOrDefault(kid.Value));
     }
 

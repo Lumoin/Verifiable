@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -247,7 +248,7 @@ internal sealed class AccessTokenTypeValidationTests
     private async Task<JwsAccessTokenValidationResult> ValidateAsAccessTokenAsync(
         string token, VerifierKeyMaterial material, string expectedAudience)
     {
-        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);
@@ -277,7 +278,7 @@ resolveKey,
     private async Task<Oidc10IdTokenValidationResult> ValidateAsIdTokenAsync(
         string token, VerifierKeyMaterial material, string expectedAudience)
     {
-        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);
@@ -305,7 +306,7 @@ resolveKey,
     /// <summary>Validates a hand-built token against a locally resolved (non-host) key, mirroring <see cref="JwsAccessTokenValidatorTests"/>.</summary>
     private async Task<JwsAccessTokenValidationResult> ValidateStandaloneAsync(string token, PublicKeyMemory publicKey)
     {
-        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(string.Equals(kid.Value, StandaloneKid, StringComparison.Ordinal)
                 ? publicKey : null);
 

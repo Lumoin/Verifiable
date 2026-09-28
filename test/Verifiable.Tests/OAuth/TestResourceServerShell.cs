@@ -294,7 +294,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             Cryptography = new AuthorizationServerCryptography
             {
                 SigningKeyResolver = (_, _, _, _) => ValueTask.FromResult<PrivateKeyMemory?>(null),
-                VerificationKeyResolver = (_, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null)
+                VerificationKeyResolver = (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null)
             },
             Codecs = new AuthorizationServerCodecs
             {

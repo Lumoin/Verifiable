@@ -1774,7 +1774,7 @@ internal sealed class AgenticFlowCapstoneTests
 
         private static ServerVerificationKeyResolverDelegate BuildMapResolver(
             Dictionary<string, PublicKeyMemory> keysByKid) =>
-            (kid, tenantId, context, cancellationToken) =>
+            (kid, usage, tenantId, context, cancellationToken) =>
                 ValueTask.FromResult(keysByKid.GetValueOrDefault(kid.Value));
 
 

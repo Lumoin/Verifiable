@@ -360,7 +360,7 @@ public static class BearerTokenValidation
 
             //3. Resolve the verification key.
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver(
-                new KeyId(kid), registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+                new KeyId(kid), KeyUsageContext.None, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
             if(publicKey is null)
             {

@@ -1,5 +1,6 @@
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 
 using Verifiable.OAuth.Server.Metadata;
@@ -63,15 +64,31 @@ public delegate ValueTask<PrivateKeyMemory?> ServerSigningKeyResolverDelegate(
 
 
 /// <summary>
-/// Resolves a public verification key by <see cref="KeyId"/>. Mirrors
-/// <see cref="ServerSigningKeyResolverDelegate"/> for the verification side.
+/// Resolves a public verification key by <see cref="KeyId"/> for a stated
+/// <see cref="KeyUsageContext"/>. Mirrors <see cref="ServerSigningKeyResolverDelegate"/>
+/// for the verification side, with the usage placed right after the key id as
+/// <see cref="SelectSigningKeyDelegate"/> places it.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The <paramref name="usage"/> parameter names the kind of token or artefact the
+/// caller verifies or publishes — the <see cref="SigningKeySet"/> slot the key is
+/// expected under (RFC 8725 §3.12 <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">"use
+/// different keys for different kinds of JWTs"</see>; RFC 7517 §4.2
+/// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">the "use" parameter</see>).
+/// An implementation answers <see langword="null"/> for a key it does not hold for
+/// that usage. Wherever the library holds the registration's key sets its own
+/// admission runs first, so the usage this parameter carries never widens what a
+/// caller-supplied resolver alone would verify.
+/// </para>
+/// <para>
 /// The <paramref name="tenantId"/> parameter enables per-tenant key isolation;
 /// applications that don't need it ignore the value.
+/// </para>
 /// </remarks>
 public delegate ValueTask<PublicKeyMemory?> ServerVerificationKeyResolverDelegate(
     KeyId keyId,
+    KeyUsageContext usage,
     TenantId tenantId,
     ExchangeContext context,
     CancellationToken cancellationToken);

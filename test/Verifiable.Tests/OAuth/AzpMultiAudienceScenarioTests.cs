@@ -3,6 +3,7 @@ using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.Tests.TestInfrastructure;
@@ -240,7 +241,7 @@ internal sealed class AzpMultiAudienceScenarioTests
     private async Task<Oidc10IdTokenValidationResult> ValidateAsRelyingPartyAsync(
         string idToken, VerifierKeyMaterial material, string? expectedAuthorizedParty)
     {
-        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);

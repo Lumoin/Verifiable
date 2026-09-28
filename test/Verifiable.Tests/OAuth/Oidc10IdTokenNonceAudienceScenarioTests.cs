@@ -3,6 +3,7 @@ using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -461,7 +462,7 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         string? expectedIssuerOverride = null,
         string? expectedAudienceOverride = null)
     {
-        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);

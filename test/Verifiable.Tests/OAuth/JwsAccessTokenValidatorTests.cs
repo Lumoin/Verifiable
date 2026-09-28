@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -183,7 +184,7 @@ internal sealed class JwsAccessTokenValidatorTests
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         //Resolver returns null for any kid — simulating an unknown key.
-        static ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        static ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(null);
 
         JwsAccessTokenValidationResult result = await ValidateInternalAsync(token, resolver).ConfigureAwait(false);
@@ -877,7 +878,7 @@ internal sealed class JwsAccessTokenValidatorTests
     private async Task<JwsAccessTokenValidationResult> ValidateAsync(
         string token, PublicKeyMemory publicKey, string? expectedAuthorizedParty = null)
     {
-        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(string.Equals(kid.Value, DefaultKid, StringComparison.Ordinal)
                 ? publicKey : null);
         return await ValidateInternalAsync(token, resolver, expectedAuthorizedParty).ConfigureAwait(false);

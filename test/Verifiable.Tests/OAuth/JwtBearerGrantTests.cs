@@ -1598,7 +1598,7 @@ internal sealed class JwtBearerGrantTests
                 jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, Pool);
         }
 
-        return (kid, tenant, ctx, ct) =>
+        return (kid, usage, tenant, ctx, ct) =>
             ValueTask.FromResult(keysByKid.GetValueOrDefault(kid.Value));
     }
 

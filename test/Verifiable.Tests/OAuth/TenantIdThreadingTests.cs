@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -80,9 +81,10 @@ internal sealed class TenantIdThreadingTests
             host.Server.OAuth().Cryptography.VerificationKeyResolver!;
 
         //Smoke: call the resolver directly with a fabricated tenant to
-        //confirm the delegate accepts the new four-parameter shape.
+        //confirm the delegate accepts the five-parameter shape.
         PublicKeyMemory? key = await resolver(
             "kid-never-issued",
+            KeyUsageContext.None,
             new TenantId("some-tenant"),
             [],
             TestContext.CancellationToken).ConfigureAwait(false);

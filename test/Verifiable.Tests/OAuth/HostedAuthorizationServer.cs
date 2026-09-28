@@ -1456,7 +1456,7 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
                     host.SigningKeys.TryGetValue(keyId, out PrivateKeyMemory? key)
                         ? key : null),
 
-            VerificationKeyResolver = (keyId, tenantId, ctx, ct) =>
+            VerificationKeyResolver = (keyId, usage, tenantId, ctx, ct) =>
                 ValueTask.FromResult(
                     host.VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
                         ? key : null),

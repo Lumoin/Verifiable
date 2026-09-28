@@ -1,6 +1,7 @@
 using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
@@ -107,6 +108,7 @@ public static class JwsAccessTokenValidator
             timeProvider,
             memoryPool,
             iatSkew,
+            KeyUsageContext.None,
             tenantId,
             context,
             expectedAuthorizedParty,
@@ -192,6 +194,11 @@ public static class JwsAccessTokenValidator
     /// <param name="timeProvider">Time provider for <c>exp</c>/<c>nbf</c>/<c>iat</c> checks.</param>
     /// <param name="memoryPool">Memory pool for transient decoded buffers and pooled signing-input bytes.</param>
     /// <param name="iatSkew">Tolerance for an <c>iat</c> claim slightly in the future.</param>
+    /// <param name="usage">
+    /// The <see cref="KeyUsageContext"/> passed to <paramref name="resolveVerificationKey"/> — the
+    /// kind of token this call verifies. <see cref="KeyUsageContext.None"/> until each profile names
+    /// its own usage.
+    /// </param>
     /// <param name="tenantId">Tenant identifier threaded to the key resolver.</param>
     /// <param name="context">Per-request context bag threaded to the key resolver.</param>
     /// <param name="expectedAuthorizedParty">
@@ -217,6 +224,7 @@ public static class JwsAccessTokenValidator
         TimeProvider timeProvider,
         BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
+        KeyUsageContext usage,
         TenantId tenantId,
         ExchangeContext context,
         string? expectedAuthorizedParty,
@@ -333,7 +341,7 @@ public static class JwsAccessTokenValidator
         //(typically a shared keyset/HSM handle); the validator does not
         //dispose it.
         PublicKeyMemory? publicKey = await resolveVerificationKey(
-            new KeyId(kid), tenantId, context, cancellationToken).ConfigureAwait(false);
+            new KeyId(kid), usage, tenantId, context, cancellationToken).ConfigureAwait(false);
         if(publicKey is null)
         {
             return SignedJwtValidationOutcome.Failure(

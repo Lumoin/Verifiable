@@ -1882,7 +1882,7 @@ public static class FederationEndpoints
         foreach(KeyId keyId in federationKeys.PublishedKeys)
         {
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver!(
-                keyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+                keyId, KeyUsageContext.None, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             if(publicKey is null)
             {
                 continue;

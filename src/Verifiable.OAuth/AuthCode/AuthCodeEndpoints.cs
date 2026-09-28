@@ -2138,7 +2138,7 @@ public static class AuthCodeEndpoints
         }
 
         PublicKeyMemory? signingPublicKey = await resolver(
-            verificationKeyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+            verificationKeyId, KeyUsageContext.None, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
         if(signingPublicKey is null)
         {

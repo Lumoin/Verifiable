@@ -671,7 +671,7 @@ internal sealed class ResourceServerEndToEndTests
 
 
     private static ServerVerificationKeyResolverDelegate BuildResolver(PublicKeyMemory publicKey) =>
-        (kid, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
+        (kid, usage, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
             string.Equals(kid.Value, Kid, StringComparison.Ordinal) ? publicKey : null);
 
 
