@@ -75,7 +75,8 @@ public delegate ValueTask<PrivateKeyMemory?> ServerSigningKeyResolverDelegate(
 /// expected under. <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 section 3.12</see>:
 /// "Use different keys for different kinds of JWTs."; the JWK <c>use</c> parameter of
 /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC 7517 section 4.2</see> marks a
-/// published key's intended use the same way.
+/// published key as a signature (<c>sig</c>) or an encryption (<c>enc</c>) key, a coarser
+/// separation than the per-kind usage this parameter names.
 /// An implementation answers <see langword="null"/> for a key it does not hold for
 /// that usage. Wherever the library holds the registration's key sets its own
 /// admission runs first, so the usage this parameter carries never widens what a

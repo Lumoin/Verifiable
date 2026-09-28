@@ -11,13 +11,12 @@ using Verifiable.Tests.OAuth;
 namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
-/// Hand-built real-wire PAR / token / authorize form pushers for the wire shapes the
-/// <see cref="OAuthClient"/> abstraction cannot produce — a non-<c>S256</c>
-/// <c>code_challenge_method</c>, an absent <c>redirect_uri</c> or <c>code</c> at the token
-/// endpoint, and similar adversarial or off-happy-path fields. Shared by
-/// <see cref="Verifiable.Tests.OAuth.RedirectUriMatchingTests"/> and
-/// <see cref="Verifiable.Tests.OAuth.AuthCodeParPkceRealWireFlowTests"/> so the wire-plumbing
-/// exists once.
+/// Hand-built real-wire requests to the authorization server's endpoints — PAR, token, authorize
+/// and UserInfo — for wire shapes the <see cref="OAuthClient"/> abstraction cannot produce: a
+/// non-<c>S256</c> <c>code_challenge_method</c>, an absent <c>redirect_uri</c> or <c>code</c> at
+/// the token endpoint, a bare Authorization-header GET to UserInfo, and similar adversarial or
+/// off-happy-path fields. Shared across the OAuth test tree so each raw wire request exists once
+/// rather than being rebuilt per test class.
 /// </summary>
 internal static class RawAuthCodeWirePushers
 {

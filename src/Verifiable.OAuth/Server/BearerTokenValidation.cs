@@ -251,8 +251,8 @@ public static class BearerTokenValidation
     /// then asked for the admitted key under the same usage,
     /// <see cref="KeyUsageContext.AccessTokenIssuance"/>, so a key store that keeps keys apart per kind
     /// answers only a key it holds for access tokens; a listed key the resolver does not produce for that
-    /// usage is refused with a fixed description that names no key. The admission stays the library's guarantee: the usage lets the
-    /// resolver narrow what verifies, never widen it.
+    /// usage is refused with a fixed description that names no key. The admission stays the library's
+    /// guarantee: the usage lets the resolver narrow what verifies, never widen it.
     /// </remarks>
     private static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateCoreAsync(
         string bearerToken,

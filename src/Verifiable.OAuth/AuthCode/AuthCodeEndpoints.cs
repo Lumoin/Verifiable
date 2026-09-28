@@ -2059,6 +2059,14 @@ public static class AuthCodeEndpoints
     /// JAR's signature is verified, before its replay identifier is consulted, and before any handle
     /// is generated.
     /// </para>
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.2">RFC 9101 §6.2</see>: "If the
+    /// key is not associated with the client or if signature validation fails, the authorization
+    /// server MUST return an "invalid_request_object" error". A verification-key resolver that
+    /// answers <see langword="null"/> for the registration's request-object usage holds no key
+    /// associated with the client for it, so the request object is refused
+    /// <c>invalid_request_object</c> with one fixed description that names no key.
+    /// </para>
     /// </remarks>
     private static async ValueTask<(AuthCodeRequestObject? RequestObject, ServerHttpResponse? EarlyExit)>
         VerifyAndValidateAuthCodeJarAsync(

@@ -882,6 +882,54 @@ internal sealed class JarAuthorizeByValueTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section 4.1.2.1</see>:
+    /// "server_error The authorization server encountered an unexpected condition that prevented it
+    /// from fulfilling the request." A registration whose signing keys carry no
+    /// <see cref="KeyUsageContext.JarSigning"/> entry is such a condition: a signed request object sent
+    /// by value to the authorize endpoint over the wire is answered 500 <c>server_error</c> with the
+    /// fixed description "The registration has no request-object verification key configured.", and
+    /// the body names neither the client identifier nor the usage.
+    /// </summary>
+    [TestMethod]
+    public async Task JarByValueAnswersAFixedServerErrorForARegistrationWithNoRequestObjectKeyAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        _ = await host.UpdateAsync(
+            material,
+            previous => previous with { SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + $"?client_id={Uri.EscapeDataString(ClientId)}&request={Uri.EscapeDataString(compactJar)}");
+
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.ServerError, document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "The registration has no request-object verification key configured.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.DoesNotContain(ClientId, body, StringComparison.Ordinal, "The refusal names no client identifier.");
+        Assert.DoesNotContain("JarSigning", body, StringComparison.Ordinal, "The refusal names no usage.");
+    }
+
+
     [TestMethod]
     public async Task RejectsDirectAuthorizeWhenProfileRequiresPushedAuthorizationRequests()
     {
