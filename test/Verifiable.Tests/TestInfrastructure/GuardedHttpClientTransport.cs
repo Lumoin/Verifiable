@@ -40,13 +40,6 @@ internal static class GuardedHttpClientTransport
     /// <summary>
     /// The W3C Trace Context response header whose value is copied into
     /// <see cref="HttpResponseData.TransportMetadata"/> under
-    /// <see cref="HttpResponseDataKeys.TraceParent"/>.
-    /// </summary>
-    private const string TraceParentHeaderName = "traceparent";
-
-    /// <summary>
-    /// The W3C Trace Context response header whose value is copied into
-    /// <see cref="HttpResponseData.TransportMetadata"/> under
     /// <see cref="HttpResponseDataKeys.TraceState"/>.
     /// </summary>
     private const string TraceStateHeaderName = "tracestate";
@@ -122,7 +115,7 @@ internal static class GuardedHttpClientTransport
             //only when its deployment chooses to echo trace context on responses;
             //when absent, TransportMetadata stays null.
             Dictionary<string, string>? transportMetadata = null;
-            if(response.Headers.TryGetValue(TraceParentHeaderName, out string? traceParent))
+            if(response.Headers.TryGetValue(WellKnownHttpHeaderNames.TraceParent, out string? traceParent))
             {
                 transportMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
                 {

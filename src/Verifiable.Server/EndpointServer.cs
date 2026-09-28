@@ -949,7 +949,7 @@ public sealed class EndpointServer: IDisposable
     public static ServerHttpResponse AdmissionRefusal =>
         (ServerHttpResponse.ServerError(ServerErrors.TemporarilyUnavailable, "The server is temporarily unable to accept this request. Retry the request.")
             with
-        { StatusCode = 503 }).WithHeader("Retry-After", "1");
+        { StatusCode = 503 }).WithHeader(WellKnownHttpHeaderNames.RetryAfter, "1");
 
 
     /// <summary>Releases one admitted request and wakes the alteration worker at quiescence.</summary>

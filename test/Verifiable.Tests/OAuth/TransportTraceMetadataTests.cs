@@ -36,8 +36,6 @@ internal sealed class TransportTraceMetadataTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private const string TraceParentHeaderName = "traceparent";
-
     private const string TraceStateHeaderName = "tracestate";
 
     /// <summary>The W3C Trace Context specification's own <c>traceparent</c> example value.</summary>
@@ -58,7 +56,7 @@ internal sealed class TransportTraceMetadataTests
                 Body = /*lang=json,strict*/ """{"ok":true}""",
                 Headers = new Dictionary<string, string>
                 {
-                    [TraceParentHeaderName] = ResponseTraceParent,
+                    [WellKnownHttpHeaderNames.TraceParent] = ResponseTraceParent,
                     [TraceStateHeaderName] = ResponseTraceState
                 }
             }),
@@ -114,7 +112,7 @@ internal sealed class TransportTraceMetadataTests
                 Body = /*lang=json,strict*/ """{"ok":true}""",
                 Headers = new Dictionary<string, string>
                 {
-                    [TraceParentHeaderName] = ResponseTraceParent,
+                    [WellKnownHttpHeaderNames.TraceParent] = ResponseTraceParent,
                     [TraceStateHeaderName] = ResponseTraceState
                 }
             }),
@@ -154,7 +152,7 @@ internal sealed class TransportTraceMetadataTests
                 Body = /*lang=json,strict*/ """{"error":"invalid_request","error_description":"code_challenge missing"}""",
                 Headers = new Dictionary<string, string>
                 {
-                    [TraceParentHeaderName] = ResponseTraceParent
+                    [WellKnownHttpHeaderNames.TraceParent] = ResponseTraceParent
                 }
             }),
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -209,7 +207,7 @@ internal sealed class TransportTraceMetadataTests
                         StatusCode = 200,
                         Headers = serverTraceParent is null
                             ? null
-                            : new Dictionary<string, string> { [TraceParentHeaderName] = serverTraceParent }
+                            : new Dictionary<string, string> { [WellKnownHttpHeaderNames.TraceParent] = serverTraceParent }
                     });
                 },
                 TestContext.CancellationToken).ConfigureAwait(false);

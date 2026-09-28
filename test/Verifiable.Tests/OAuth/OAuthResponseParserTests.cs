@@ -1,4 +1,5 @@
 using Verifiable.Core;
+using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
@@ -257,7 +258,7 @@ internal sealed class OAuthResponseParsersTests
         HttpResponseData response = Respond(
             /*lang=json,strict*/ """{"type":"invalid_request","detail":"code_challenge is required","instance":"urn:uuid:abc-123"}""",
             statusCode: 400,
-            contentType: "application/problem+json");
+            contentType: WellKnownMediaTypes.Application.ProblemJson);
 
         Result<ParResponse, OAuthParseError> result =
             OAuthResponseParsers.ParseParResponse(response);
@@ -369,7 +370,7 @@ internal sealed class OAuthResponseParsersTests
         HttpResponseData response = Respond(
             /*lang=json,strict*/ """{"type":"invalid_grant","detail":"Authorization code expired","instance":"urn:uuid:xyz-789"}""",
             statusCode: 400,
-            contentType: "application/problem+json");
+            contentType: WellKnownMediaTypes.Application.ProblemJson);
 
         Result<TokenResponse, OAuthParseError> result =
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
