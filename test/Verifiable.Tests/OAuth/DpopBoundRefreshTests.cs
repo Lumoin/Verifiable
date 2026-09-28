@@ -64,7 +64,7 @@ internal sealed class DpopBoundRefreshTests
 
         //Step 1 — PAR, over the real wire through the DPoP-wired client.
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -177,7 +177,7 @@ internal sealed class DpopBoundRefreshTests
 
         //Step 1 — PAR, over the real wire through the DPoP-wired client.
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -350,7 +350,7 @@ internal sealed class DpopBoundRefreshTests
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -454,7 +454,7 @@ internal sealed class DpopBoundRefreshTests
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -588,7 +588,7 @@ internal sealed class DpopBoundRefreshTests
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -719,7 +719,7 @@ internal sealed class DpopBoundRefreshTests
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -1085,7 +1085,7 @@ internal sealed class DpopBoundRefreshTests
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -1195,7 +1195,7 @@ internal sealed class DpopBoundRefreshTests
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
@@ -1680,7 +1680,7 @@ internal sealed class DpopBoundRefreshTests
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");

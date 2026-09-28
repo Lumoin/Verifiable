@@ -63,7 +63,7 @@ internal sealed class DpopEndToEndTests
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
             fixture.Registration,
             RedirectUri,
-            OAuthFormEncodedFields.Empty,
+            OAuthFormEncodedFieldsFixtures.OpenIdScope,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
@@ -319,7 +319,7 @@ internal sealed class DpopEndToEndTests
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
             fixture.Registration,
             RedirectUri,
-            OAuthFormEncodedFields.Empty,
+            OAuthFormEncodedFieldsFixtures.OpenIdScope,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome, parResult.ErrorDescription);
 

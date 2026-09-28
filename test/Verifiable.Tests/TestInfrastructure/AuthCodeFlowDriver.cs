@@ -506,18 +506,22 @@ internal static class AuthCodeFlowDriver
     /// <summary>
     /// Composes the effective PAR form fields: <paramref name="additionalParFields"/> with the
     /// <c>scope</c> parameter merged in when <paramref name="scope"/> is non-null. An explicit
-    /// <c>scope</c> argument wins over a <c>scope</c> entry in the additional fields.
+    /// <c>scope</c> argument wins over a <c>scope</c> entry in the additional fields. When neither
+    /// names a scope, this driver names <see cref="WellKnownScopes.OpenId"/> itself: it is the
+    /// test driver's own default for a caller that does not care which scope a drive requests, kept
+    /// independent of whatever scope the OAuth client library falls back to when a request carries
+    /// none.
     /// </summary>
     private static OAuthFormEncodedFields ComposeParFields(string? scope, OAuthFormEncodedFields additionalParFields)
     {
-        if(scope is null)
-        {
-            return additionalParFields;
-        }
+        string effectiveScope = scope
+            ?? (additionalParFields.Fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? existingScope)
+                ? existingScope
+                : WellKnownScopes.OpenId);
 
         Dictionary<string, string> merged = new(additionalParFields.Fields, StringComparer.Ordinal)
         {
-            [OAuthRequestParameterNames.Scope] = scope
+            [OAuthRequestParameterNames.Scope] = effectiveScope
         };
 
         return new OAuthFormEncodedFields(merged);

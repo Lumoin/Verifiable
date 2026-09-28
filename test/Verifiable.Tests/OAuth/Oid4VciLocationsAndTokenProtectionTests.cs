@@ -341,7 +341,8 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         //Push authorization_details so the issued token gives access to Credentials.
         OAuthFormEncodedFields parFields = new(new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [OAuthRequestParameterNames.AuthorizationDetails] = DetailWithoutLocations(DegreeConfigurationId)
+            [OAuthRequestParameterNames.AuthorizationDetails] = DetailWithoutLocations(DegreeConfigurationId),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         });
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(

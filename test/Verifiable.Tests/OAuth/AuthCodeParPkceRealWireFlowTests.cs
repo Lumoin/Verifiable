@@ -5422,7 +5422,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         IReadOnlyList<string>? resource = null)
     {
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
-            registration, RedirectUri, OAuthFormEncodedFields.Empty,
+            registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope,
             [], resource, cancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,

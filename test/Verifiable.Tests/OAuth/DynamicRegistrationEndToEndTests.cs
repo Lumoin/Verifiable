@@ -76,7 +76,7 @@ internal sealed class DynamicRegistrationEndToEndTests
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
             result.Registration,
             DefaultRedirectUri,
-            OAuthFormEncodedFields.Empty,
+            OAuthFormEncodedFieldsFixtures.OpenIdScope,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,

@@ -307,7 +307,7 @@ internal sealed class ResolveIssuerDelegateTests
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
             registration,
             new Uri("https://client.example.com/callback"),
-            OAuthFormEncodedFields.Empty,
+            OAuthFormEncodedFieldsFixtures.OpenIdScope,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"PAR must redirect over the real wire. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");

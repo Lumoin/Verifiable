@@ -395,7 +395,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         //Step 1 — PAR.
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"PAR must redirect. {parResult.ErrorCode} {parResult.ErrorDescription}");
