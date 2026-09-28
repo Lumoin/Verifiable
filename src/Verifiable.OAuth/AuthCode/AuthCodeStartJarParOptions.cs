@@ -32,7 +32,9 @@ public sealed record AuthCodeStartJarParOptions
     /// while multiple values are represented as an array of strings"), and the flow state keeps them
     /// so that the code redemption names them as well (the MCP authorization specification: "MUST be
     /// included in both authorization requests and token requests"). The canonical form of each URI
-    /// is the caller's to give; the entries travel as given.
+    /// is the caller's to give; the entries travel as given. An entry holding any white-space
+    /// character is refused with <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> and
+    /// <c>invalid_request</c> before anything is signed, sent or stored.
     /// </summary>
     public IReadOnlyList<string>? Resource { get; init; }
 

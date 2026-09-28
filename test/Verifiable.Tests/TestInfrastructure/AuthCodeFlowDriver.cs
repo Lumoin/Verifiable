@@ -82,10 +82,14 @@ internal static class AuthCodeFlowDriver
     /// <c>openid</c> (<see cref="ComposeParFields"/>); the OAuth client library adds no scope of its own.
     /// </param>
     /// <param name="additionalParFields">
-    /// Further PAR form fields (authorization_details, issuer_state, ...). The client library drops
-    /// the names its start composes itself from these on a public registration, <c>resource</c> among
-    /// them, so a drive that names resource indicators names them through the client's own
-    /// <c>resource</c> argument rather than here.
+    /// Further PAR form fields (authorization_details, issuer_state, ...). On a public registration
+    /// the client library drops the names its start composes itself from these, <c>resource</c>
+    /// among them; a caller naming resource indicators for the code exchange names them there, at
+    /// <see cref="AuthCodeClient.ExchangeTokenAsync(ClientRegistration, string, ExchangeContext, ClientAssertionOptions?, IReadOnlyList{string}?, CancellationToken)"/>,
+    /// not here. On the confidential path (<see cref="PushConfidentialParAsync"/>), a <c>resource</c>
+    /// field named here still travels on the raw PAR push as given, but the saved
+    /// <see cref="ParCompletedState"/> does not carry it, so the resulting flow's code redemption
+    /// names no resource by default.
     /// </param>
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2), required when
@@ -177,9 +181,11 @@ internal static class AuthCodeFlowDriver
     /// credentials attached (<see cref="AttachConfidentialParCredentialsAsync"/>), then builds
     /// and saves the same client-side <see cref="ParCompletedState"/>
     /// <see cref="AuthCodeClient.StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, System.Threading.CancellationToken)"/>
-    /// would — the entry point for every <see cref="ClientAuthenticationMethod"/> other than
-    /// <see cref="ClientAuthenticationMethod.None"/>, since that client call carries no per-call
-    /// assertion options.
+    /// would, except that a <c>resource</c> field named in <paramref name="additionalParFields"/>
+    /// travels on the pushed request but is not carried onto the saved state, since this path takes
+    /// no <c>resource</c> argument of its own — the entry point for every
+    /// <see cref="ClientAuthenticationMethod"/> other than <see cref="ClientAuthenticationMethod.None"/>,
+    /// since that client call carries no per-call assertion options.
     /// </summary>
     private static async Task<(string FlowId, ParResponse Par)> PushConfidentialParAsync(
         HostedAuthorizationServer host,

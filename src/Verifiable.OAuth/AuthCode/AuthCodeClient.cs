@@ -495,7 +495,9 @@ public readonly struct AuthCodeClient
     /// AuthCode JAR carrying the PKCE challenge and the AuthCode claims, POSTs
     /// to the PAR endpoint with the outer <c>client_id</c> + <c>request</c>
     /// body, and returns the authorize redirect URI carrying the issued
-    /// <c>request_uri</c>.
+    /// <c>request_uri</c>. A <see cref="AuthCodeStartJarParOptions.Resource"/> entry holding any
+    /// white-space character is refused with <c>invalid_request</c> before anything is signed, sent
+    /// or stored.
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="jarOptions">Per-call inputs including signing key and serialisers.</param>
@@ -530,7 +532,9 @@ public readonly struct AuthCodeClient
     /// <summary>
     /// Starts a JAR-by-value direct authorization per RFC 9101 §6.1: signs an
     /// AuthCode JAR and returns a redirect URL whose query carries
-    /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>.
+    /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>. A
+    /// <see cref="AuthCodeStartJarAuthorizeOptions.Resource"/> entry holding any white-space
+    /// character is refused with <c>invalid_request</c> before anything is signed, sent or stored.
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="jarOptions">Per-call inputs including signing key and serialisers.</param>

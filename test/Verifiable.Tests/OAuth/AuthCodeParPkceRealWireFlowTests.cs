@@ -4828,10 +4828,9 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: "If the client
     /// omits the scope parameter when requesting authorization, the authorization server MUST either
     /// process the request using a pre-defined default value or fail the request indicating an invalid
-    /// scope." Under the FAPI 2.0 policy the server has no default scope, so a pushed request whose
-    /// caller names none reaches the server without one and the server fails it: the client reports
-    /// the refusal, is given no <c>request_uri</c>, and keeps no flow, and the server records no
-    /// pushed request.
+    /// scope." Under the FAPI 2.0 policy a pushed request whose caller names no scope is refused: the
+    /// client reports the refusal, is given no <c>request_uri</c>, keeps no flow, and the server's
+    /// flow-state count stays unchanged.
     /// </summary>
     [TestMethod]
     public async Task AFapiRegistrationRefusesAPushedRequestWithoutScopeAsync()
@@ -4866,13 +4865,16 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>: on a refresh
-    /// request "scope OPTIONAL. ... if omitted is treated as equal to the scope originally granted by
-    /// the resource owner", and <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749
-    /// §3.1</see>: "Parameters sent without a value MUST be treated as if they were omitted from the
-    /// request." A refresh whose caller gives a blank scope sends no <c>scope</c> parameter, never
-    /// <c>scope=</c>, and the refresh response names the originally granted scope, <c>openid</c>, the
-    /// scope the authorization request named.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." A refresh whose
+    /// caller gives a blank scope sends no <c>scope</c> parameter, never <c>scope=</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>: an omitted
+    /// refresh scope "is treated as equal to the scope originally granted by the resource owner" — the
+    /// scope this test itself requested and was granted at authorization, <c>openid</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>: the
+    /// response's <c>scope</c> is "OPTIONAL, if identical to the scope requested by the client;
+    /// otherwise, REQUIRED", so the server may omit it; when it names one, it must name that same
+    /// scope.
     /// </summary>
     [TestMethod]
     public async Task ABlankRefreshScopeSendsNoScopeParameterAsync()
@@ -4918,8 +4920,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.IsFalse(refreshRequest.ContainsKey(OAuthRequestParameterNames.Scope),
             $"A blank refresh scope must send no scope parameter, never scope=; the server received scope " +
             $"[{string.Join(", ", refreshRequest.GetValues(OAuthRequestParameterNames.Scope).Select(value => $"'{value}'"))}].");
-        Assert.AreEqual("openid", (string)refreshResult.Body![OAuthRequestParameterNames.Scope],
-            "A refresh that names no scope is granted the scope originally granted.");
+        Assert.IsTrue(
+            !refreshResult.Body!.ContainsKey(OAuthRequestParameterNames.Scope)
+            || string.Equals((string)refreshResult.Body[OAuthRequestParameterNames.Scope], "openid", StringComparison.Ordinal),
+            "A refresh response, when it names a scope, must name the scope this test itself requested " +
+            "and was granted at authorization.");
     }
 
 
@@ -5140,7 +5145,9 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// Which start carries the authorization request: <see cref="PushedStart"/>,
     /// <see cref="DirectStart"/>, <see cref="PushedRequestObjectStart"/>,
     /// <see cref="RequestObjectByValueStart"/>, or the <see cref="AutomatonPath"/>, whose caller
-    /// composes the pushed request itself.
+    /// composes the pushed request itself, so the <see cref="AutomatonPath"/> row's
+    /// authorization-request assertions pin that composition rather than exercising the library;
+    /// its token-request assertions exercise the library the same as every other row.
     /// </param>
     [TestMethod]
     [DataRow(PushedStart)]
@@ -5184,6 +5191,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 .Single(received => received.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
                 .GetValues(OAuthRequestParameterNames.Resource)]
         };
+
         Assert.HasCount(2, authorizationResource,
             $"The authorization request must name both resources the caller named; the server received resource " +
             $"[{string.Join(", ", authorizationResource)}].");
@@ -5251,7 +5259,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// object signs are the entries the flow keeps and the code redemption sends, so a request object
     /// start whose resource list holds an entry with white space in it, inside or around the URI, is
     /// refused by the client before anything is signed or sent: the start answers
-    /// <c>invalid_request</c>, the server receives no request, and the client keeps no flow.
+    /// <c>invalid_request</c>, the server observes no arriving request, and the client keeps no flow.
     /// </summary>
     /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
     /// <param name="entry">The one resource entry the caller names: two URIs with a space between them, or one URI padded with spaces.</param>
@@ -5270,6 +5278,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             await ComposeResourceJourneyClientAsync(host, material).ConfigureAwait(false);
         ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
 
+        int arrivals = 0;
+        host.Host("default").RequestArriving = () =>
+        {
+            _ = Interlocked.Increment(ref arrivals);
+
+            return Task.CompletedTask;
+        };
+
         AuthCodeFlowEndpointResult startResult = await StartRequestObjectAsync(
             start, host, client, registration, material, WellKnownScopes.OpenId, [entry]).ConfigureAwait(false);
 
@@ -5278,6 +5294,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription} RedirectUri={startResult.RedirectUri}");
         Assert.AreEqual("invalid_request", startResult.ErrorCode);
         Assert.IsNull(startResult.RedirectUri, "A refused start composes no authorization redirect.");
+        Assert.AreEqual(0, Volatile.Read(ref arrivals),
+            $"A refused start must reach the server with no request; the server observed {Volatile.Read(ref arrivals)} arrival(s).");
         Assert.IsEmpty(accepted, $"A refused start must send nothing; the server received {accepted.Count} request(s).");
         Assert.IsEmpty(clientFlowStore, "A refused start must store no flow.");
     }

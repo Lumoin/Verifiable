@@ -1240,14 +1240,15 @@ public static class AuthCodeFlowHandlers
     /// and the code redemption sends.
     /// </remarks>
     /// <param name="jarOptions">The caller's per-call inputs: the scope, the resource indicators, the signing key and the serializers.</param>
-    /// <param name="infrastructure">The long-lived infrastructure carrying parsing, persistence, and time delegates.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates: it resolves the authorization server metadata before anything is signed.</param>
     /// <param name="registration">The registration identifying the authorization server this call targets.</param>
-    /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> with the authorization redirect URI on
     /// success; <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> with <c>ErrorCode</c>
-    /// <c>invalid_request</c> when a resource entry holds white space.
+    /// <c>invalid_request</c> when a resource entry holds white space; or the outcome of a failed
+    /// authorization server metadata resolution.
     /// </returns>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleJarAuthorizeAsync(
         AuthCodeStartJarAuthorizeOptions jarOptions,
@@ -1437,7 +1438,8 @@ public static class AuthCodeFlowHandlers
 
     /// <summary>
     /// Whether any entry of the caller's resource list holds a white-space character
-    /// (<see cref="char.IsWhiteSpace(char)"/>) anywhere in it, a blank entry included.
+    /// (<see cref="char.IsWhiteSpace(char)"/>) anywhere in it, an entry of white space only included;
+    /// an empty entry names no indicator and is dropped by <see cref="ReadNamedResource"/> instead.
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: the value "MUST
     /// be an absolute URI, as specified by Section 4.3 of [RFC3986]", and
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 §2</see>: "A URI is
