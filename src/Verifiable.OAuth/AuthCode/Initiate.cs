@@ -28,4 +28,18 @@ public sealed record Initiate(
     string FlowId,
     string ExpectedIssuer,
     DateTimeOffset InitiatedAt,
-    DateTimeOffset InitialExpiresAt): FlowInput;
+    DateTimeOffset InitialExpiresAt): FlowInput
+{
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
+    /// <c>resource</c> indicators the authorization request names, in the order sent, and empty when
+    /// it names none. The transitions carry them to
+    /// <see cref="Verifiable.OAuth.AuthCode.States.AuthorizationCodeReceivedState.Resource"/> so that
+    /// the code redemption names them too: the MCP authorization specification says the
+    /// <c>resource</c> parameter "MUST be included in both authorization requests and token
+    /// requests"
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#resource-parameter-implementation">MCP
+    /// authorization, Resource Parameter Implementation</see>).
+    /// </summary>
+    public ImmutableArray<string> Resource { get; init; } = [];
+}

@@ -23,6 +23,18 @@ public sealed record AuthCodeStartJarAuthorizeOptions
     /// </summary>
     public required string Scope { get; init; }
 
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
+    /// <c>resource</c> indicators the request names, each one absolute URI given as its own entry, or
+    /// <see langword="null"/> to name none. The request object carries them as its <c>resource</c>
+    /// claim (RFC 8707 §2.1: "a single "resource" parameter value is represented as a JSON string
+    /// while multiple values are represented as an array of strings"), and the flow state keeps them
+    /// so that the code redemption names them as well (the MCP authorization specification: "MUST be
+    /// included in both authorization requests and token requests"). The canonical form of each URI
+    /// is the caller's to give; the entries travel as given.
+    /// </summary>
+    public IReadOnlyList<string>? Resource { get; init; }
+
     /// <summary>The client's JAR signing key. Tag determines the JWS <c>alg</c>.</summary>
     public required PrivateKeyMemory SigningKey { get; init; }
 

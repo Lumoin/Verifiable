@@ -19,6 +19,13 @@ public sealed record ParRequestReadyState: FlowState
     public required ImmutableArray<string> Scopes { get; init; }
 
     /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
+    /// <c>resource</c> indicators carried forward from <see cref="PkceGeneratedState.Resource"/>
+    /// toward <see cref="ParCompletedState.Resource"/>; empty when the flow requests none.
+    /// </summary>
+    public ImmutableArray<string> Resource { get; init; } = [];
+
+    /// <summary>
     /// The serialized PAR request body, ready to POST as
     /// <c>application/x-www-form-urlencoded</c> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>.

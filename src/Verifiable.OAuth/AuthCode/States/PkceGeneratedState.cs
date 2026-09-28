@@ -21,4 +21,12 @@ public sealed record PkceGeneratedState: FlowState
 
     /// <summary>The requested scopes.</summary>
     public required ImmutableArray<string> Scopes { get; init; }
+
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
+    /// <c>resource</c> indicators the flow requests, carried from <see cref="Initiate.Resource"/>
+    /// toward <see cref="ParCompletedState.Resource"/> so that the code redemption names them; empty
+    /// when the flow requests none.
+    /// </summary>
+    public ImmutableArray<string> Resource { get; init; } = [];
 }

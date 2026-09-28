@@ -82,13 +82,19 @@ public static class AuthCodeJarSigning
     /// "OPTIONAL, defaults to "plain" if not present in the request". The <c>scope</c> claim is signed
     /// only when <see cref="AuthCodeRequestObject.Scope"/> names a value: RFC 6749 §3.1 treats a
     /// parameter sent without a value as omitted, and §3.3 leaves the default for an omitted scope to
-    /// the authorization server, so a blank scope signs no claim rather than an empty one.
+    /// the authorization server, so a blank scope signs no claim rather than an empty one. The
+    /// <c>resource</c> claim is signed only when <see cref="AuthCodeRequestObject.Resource"/> names
+    /// an indicator, in the shape
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see> gives it:
+    /// "For an authorization request sent as a JSON Web Token (JWT), such as when using the JWT
+    /// Secured Authorization Request [JWT-SAR], a single "resource" parameter value is represented as
+    /// a JSON string while multiple values are represented as an array of strings."
     /// </summary>
     /// <param name="requestObject">The request object whose parameters become the claims.</param>
     /// <returns>The claims to sign.</returns>
     private static JwtPayload BuildPayload(AuthCodeRequestObject requestObject)
     {
-        JwtPayload payload = new(capacity: 13)
+        JwtPayload payload = new(capacity: 14)
         {
             [OAuthRequestParameterNames.ClientId] = requestObject.ClientId,
             [OAuthRequestParameterNames.ResponseType] = requestObject.ResponseType,
@@ -98,6 +104,16 @@ public static class AuthCodeJarSigning
         if(!string.IsNullOrWhiteSpace(requestObject.Scope))
         {
             payload[OAuthRequestParameterNames.Scope] = requestObject.Scope;
+        }
+
+        if(!string.IsNullOrWhiteSpace(requestObject.Resource))
+        {
+            string[] indicators = requestObject.Resource.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            payload[OAuthRequestParameterNames.Resource] = indicators switch
+            {
+                [string single] => single,
+                _ => indicators
+            };
         }
 
         payload[OAuthRequestParameterNames.State] = requestObject.State;

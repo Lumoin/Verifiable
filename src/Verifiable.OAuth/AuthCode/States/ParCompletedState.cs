@@ -26,6 +26,17 @@ public sealed record ParCompletedState: FlowState
     public required ImmutableArray<string> Scopes { get; init; }
 
     /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
+    /// <c>resource</c> indicators the authorization request named, in the order sent, and empty when
+    /// it named none. Carried so that the code redemption names them: the MCP authorization
+    /// specification says the <c>resource</c> parameter "MUST be included in both authorization
+    /// requests and token requests"
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#resource-parameter-implementation">MCP
+    /// authorization, Resource Parameter Implementation</see>).
+    /// </summary>
+    public ImmutableArray<string> Resource { get; init; } = [];
+
+    /// <summary>
     /// The PAR response. <see cref="ParResponse.RequestUri"/> is used as both the
     /// deep-link redirect parameter and the DB secondary lookup key.
     /// </summary>

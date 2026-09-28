@@ -311,6 +311,69 @@ public readonly struct AuthCodeClient
         string flowId,
         ExchangeContext context,
         ClientAssertionOptions? clientAssertionOptions,
+        CancellationToken cancellationToken) =>
+        ExchangeTokenAsync(registration, flowId, context, clientAssertionOptions, resource: null, cancellationToken);
+
+
+    /// <summary>
+    /// Exchanges the authorization code and PKCE verifier for tokens at the token endpoint, naming
+    /// the <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>
+    /// <c>resource</c> indicators of the access token request, and attaching client authentication as
+    /// <see cref="ExchangeTokenAsync(ClientRegistration, string, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
+    /// describes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The MCP authorization specification says the <c>resource</c> parameter "MUST be included in
+    /// both authorization requests and token requests" and that clients "MUST send this parameter
+    /// regardless of whether authorization servers support it"
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#resource-parameter-implementation">MCP
+    /// authorization, Resource Parameter Implementation</see>). RFC 8707 §2.2: "When the "resource"
+    /// parameter is used on an access token request made to the token endpoint, for all grant types,
+    /// it indicates the target service or protected resource where the client intends to use the
+    /// requested access token." In the <c>authorization_code</c> case "where the requested resources
+    /// are a subset of the set of resources originally granted, the authorization server will issue
+    /// an access token based on that subset of requested resources, whereas any refresh token that
+    /// is returned is bound to the full original grant."
+    /// </para>
+    /// <para>
+    /// When <paramref name="resource"/> names no indicator, the request names the indicators the
+    /// authorization request of this flow named, so every code redemption of a flow that requested a
+    /// resource carries it. An authorization server that does not know the parameter ignores it
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 §3.2</see>, the
+    /// token endpoint: "The authorization server MUST ignore unrecognized request parameters.").
+    /// </para>
+    /// <para>
+    /// The indicators travel exactly as given, each as its own <c>resource</c> occurrence. The
+    /// canonical form of each URI, which the MCP authorization specification requires ("MUST use the
+    /// canonical URI of the MCP server"), is the caller's obligation: the client neither folds case
+    /// nor otherwise rewrites an indicator.
+    /// </para>
+    /// </remarks>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="flowId">
+    /// The flow identifier (the <c>state</c> value) that correlates this token
+    /// request with the original PAR.
+    /// </param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="clientAssertionOptions">
+    /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
+    /// <see cref="ClientRegistration.AuthenticationMethod"/> is
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// </param>
+    /// <param name="resource">
+    /// The RFC 8707 <c>resource</c> indicators to name, each one absolute URI given as its own entry
+    /// and sent as its own occurrence; a subset of the originally granted set narrows the access
+    /// token to that subset. <see langword="null"/>, or a list naming no non-blank entry, names the
+    /// indicators the authorization request of this flow named.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public ValueTask<AuthCodeFlowEndpointResult> ExchangeTokenAsync(
+        ClientRegistration registration,
+        string flowId,
+        ExchangeContext context,
+        ClientAssertionOptions? clientAssertionOptions,
+        IReadOnlyList<string>? resource,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
@@ -323,6 +386,7 @@ public readonly struct AuthCodeClient
             registration,
             context,
             clientAssertionOptions,
+            resource,
             cancellationToken);
     }
 

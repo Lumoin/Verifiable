@@ -36,6 +36,17 @@ namespace Verifiable.OAuth.AuthCode;
 ///       <c>code_challenge</c> was present in the original request.
 ///     </description>
 ///   </item>
+///   <item>
+///     <description>
+///       Resource indicators
+///       (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>): the
+///       <see cref="Initiate.Resource"/> set rides every transition to
+///       <see cref="AuthorizationCodeReceivedState.Resource"/>, so the code redemption names the
+///       resources the authorization request named, as the MCP authorization specification requires
+///       of the <c>resource</c> parameter ("MUST be included in both authorization requests and token
+///       requests").
+///     </description>
+///   </item>
 /// </list>
 /// </remarks>
 public static class AuthCodeFlowTransitions
@@ -76,7 +87,8 @@ public static class AuthCodeFlowTransitions
                             Kind = FlowKind.AuthCodeClient,
                             Pkce = init.Pkce,
                             RedirectUri = init.RedirectUri,
-                            Scopes = init.Scopes
+                            Scopes = init.Scopes,
+                            Resource = init.Resource
                         },
                         StackAction<AuthCodeStackSymbol>.None,
                         "Initiate"),
@@ -93,6 +105,7 @@ public static class AuthCodeFlowTransitions
                             Pkce = pkce.Pkce,
                             RedirectUri = pkce.RedirectUri,
                             Scopes = pkce.Scopes,
+                            Resource = pkce.Resource,
                             EncodedBody = composed.EncodedBody
                         },
                         StackAction<AuthCodeStackSymbol>.None,
@@ -110,6 +123,7 @@ public static class AuthCodeFlowTransitions
                             Pkce = ready.Pkce,
                             RedirectUri = ready.RedirectUri,
                             Scopes = ready.Scopes,
+                            Resource = ready.Resource,
                             Par = par.Par
                         },
                         StackAction<AuthCodeStackSymbol>.None,
@@ -128,7 +142,8 @@ public static class AuthCodeFlowTransitions
                             State = code.State,
                             IssuerId = code.IssuerId,
                             Pkce = completed.Pkce,
-                            RedirectUri = completed.RedirectUri
+                            RedirectUri = completed.RedirectUri,
+                            Resource = completed.Resource
                         },
                         StackAction<AuthCodeStackSymbol>.None,
                         "CodeReceived"),

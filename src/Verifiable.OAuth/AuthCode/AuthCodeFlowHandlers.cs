@@ -214,6 +214,7 @@ public static class AuthCodeFlowHandlers
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
 
         ImmutableArray<string> scopes = ReadRequestedScopes(fields);
+        ImmutableArray<string> requestedResource = ReadNamedResource(resource);
 
         var parBody = new ParRequestBody
         {
@@ -294,6 +295,7 @@ public static class AuthCodeFlowHandlers
             Pkce = pkce,
             RedirectUri = redirectUri,
             Scopes = scopes,
+            Resource = requestedResource,
             Par = parResponse
         };
 
@@ -415,6 +417,7 @@ public static class AuthCodeFlowHandlers
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
 
         ImmutableArray<string> scopes = ReadRequestedScopes(fields);
+        ImmutableArray<string> requestedResource = ReadNamedResource(resource);
 
         Uri authorizationUri = BuildDirectAuthorizeRedirectUri(
             metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, pkce, resource, fields);
@@ -429,6 +432,7 @@ public static class AuthCodeFlowHandlers
             Pkce = pkce,
             RedirectUri = redirectUri,
             Scopes = scopes,
+            Resource = requestedResource,
             Par = new ParResponse(authorizationUri, (int)requestLifetime.TotalSeconds)
         };
 
@@ -641,7 +645,8 @@ public static class AuthCodeFlowHandlers
             State = state,
             IssuerId = iss,
             Pkce = parCompleted.Pkce,
-            RedirectUri = parCompleted.RedirectUri
+            RedirectUri = parCompleted.RedirectUri,
+            Resource = parCompleted.Resource
         };
 
         await infrastructure.SaveStateAsync(codeReceived, context, cancellationToken).ConfigureAwait(false);
@@ -715,7 +720,11 @@ public static class AuthCodeFlowHandlers
     /// become that many REPEATED <c>resource</c> occurrences on the wire
     /// (<see cref="OutgoingFormFields.Add"/>); a single entry that itself packs several URIs
     /// separated by spaces is a malformed indicator, not a shorthand for repetition.
-    /// <see langword="null"/> or empty omits the parameter, leaving the full granted set in force.
+    /// <see langword="null"/>, or a list naming no non-blank entry, names the indicators the
+    /// authorization request of this flow named (<see cref="AuthorizationCodeReceivedState.Resource"/>):
+    /// the MCP authorization specification says the parameter "MUST be included in both
+    /// authorization requests and token requests". A flow whose authorization request named none
+    /// sends none, leaving the full granted set in force.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleTokenAsync(
@@ -779,13 +788,15 @@ public static class AuthCodeFlowHandlers
         //RFC 8707 §2.2 Figure 3: a resource named at code redemption narrows the minted access
         //token to a subset of what PAR/authorize granted — each entry becomes its OWN repeated
         //resource occurrence on the wire, the same convention HandleParAsync (resource) and
-        //RefreshAsync (RefreshTokenRequest.Resource) use on their legs.
+        //RefreshAsync (RefreshTokenRequest.Resource) use on their legs. A caller naming none
+        //sends the set the authorization request named (MCP authorization: "MUST be included in
+        //both authorization requests and token requests").
         OutgoingFormFields tokenFields = EncodeTokenRequest(
             registration.ClientId.Value,
             codeState.Code,
             codeState.RedirectUri,
             codeState.Pkce,
-            resource);
+            SelectTokenRequestResource(ReadNamedResource(resource), codeState.Resource));
 
         Result<HttpResponseData, AuthCodeFlowEndpointResult> tokenSendResult = await TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync(
             infrastructure, metadata.TokenEndpoint!, tokenFields,
@@ -1083,9 +1094,10 @@ public static class AuthCodeFlowHandlers
         string state = GenerateEntropyHexString(infrastructure);
         string nonce = jarOptions.Nonce ?? GenerateEntropyHexString(infrastructure);
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
+        ImmutableArray<string> requestedResource = ReadNamedResource(jarOptions.Resource);
 
         AuthCodeRequestObject requestObject = BuildJarRequestObject(
-            registration, jarOptions, pkce, state, nonce, now);
+            registration, jarOptions, pkce, state, nonce, now, requestedResource);
 
         string compactJar = await AuthCodeJarSigning.SignAsync(
             requestObject,
@@ -1163,6 +1175,7 @@ public static class AuthCodeFlowHandlers
             Pkce = pkce,
             RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
+            Resource = requestedResource,
             Par = parResponse
         };
 
@@ -1217,6 +1230,7 @@ public static class AuthCodeFlowHandlers
         string state = GenerateEntropyHexString(infrastructure);
         string nonce = jarOptions.Nonce ?? GenerateEntropyHexString(infrastructure);
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
+        ImmutableArray<string> requestedResource = ReadNamedResource(jarOptions.Resource);
 
         AuthCodeRequestObject requestObject = new()
         {
@@ -1232,7 +1246,8 @@ public static class AuthCodeFlowHandlers
             Nbf = now,
             Exp = now.Add(jarOptions.JarLifetime),
             Iss = registration.ClientId.Value,
-            Aud = registration.AuthorizationServerIssuer.OriginalString
+            Aud = registration.AuthorizationServerIssuer.OriginalString,
+            Resource = JoinRequestObjectResource(requestedResource)
         };
 
         string compactJar = await AuthCodeJarSigning.SignAsync(
@@ -1262,6 +1277,7 @@ public static class AuthCodeFlowHandlers
             Pkce = pkce,
             RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
+            Resource = requestedResource,
             Par = new ParResponse(authorizationUri, (int)jarOptions.JarLifetime.TotalSeconds)
         };
 
@@ -1275,13 +1291,28 @@ public static class AuthCodeFlowHandlers
     }
 
 
+    /// <summary>
+    /// Builds the claims of the request object a pushed start signs
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>: "The
+    /// parameters are represented as the JWT Claims of the object."), the RFC 8707
+    /// <c>resource</c> indicators among them.
+    /// </summary>
+    /// <param name="registration">The registration naming the client and the authorization server.</param>
+    /// <param name="jarOptions">The caller's per-call inputs.</param>
+    /// <param name="pkce">The PKCE pair whose challenge and method are signed.</param>
+    /// <param name="state">The <c>state</c> value this start minted.</param>
+    /// <param name="nonce">The <c>nonce</c> value this start signs.</param>
+    /// <param name="now">The instant the object is issued at.</param>
+    /// <param name="resource">The resource indicators the request names, empty when none.</param>
+    /// <returns>The request object to sign.</returns>
     private static AuthCodeRequestObject BuildJarRequestObject(
         ClientRegistration registration,
         AuthCodeStartJarParOptions jarOptions,
         PkceParameters pkce,
         string state,
         string nonce,
-        DateTimeOffset now) => new()
+        DateTimeOffset now,
+        ImmutableArray<string> resource) => new()
         {
             ClientId = registration.ClientId.Value,
             ResponseType = WellKnownResponseTypes.Code,
@@ -1295,8 +1326,59 @@ public static class AuthCodeFlowHandlers
             Nbf = now,
             Exp = now.Add(jarOptions.JarLifetime),
             Iss = registration.ClientId.Value,
-            Aud = registration.AuthorizationServerIssuer.OriginalString
+            Aud = registration.AuthorizationServerIssuer.OriginalString,
+            Resource = JoinRequestObjectResource(resource)
         };
+
+
+    /// <summary>
+    /// The RFC 8707 <c>resource</c> indicators a caller names: its non-blank entries, in its order
+    /// and as given, and empty for <see langword="null"/> or a list naming none. These are exactly the
+    /// entries <see cref="TokenEndpointClientOperations.AddResourceOccurrences"/> sends, so the set a
+    /// flow state keeps is the set its authorization request carried. No entry is folded or
+    /// rewritten: the canonical form of each URI is the caller's to give (the MCP authorization
+    /// specification: the parameter "MUST use the canonical URI of the MCP server").
+    /// </summary>
+    /// <param name="resource">The caller's resource indicators, or <see langword="null"/>.</param>
+    /// <returns>The named indicators; empty when the caller names none.</returns>
+    private static ImmutableArray<string> ReadNamedResource(IReadOnlyList<string>? resource) =>
+        resource is null
+            ? []
+            : [.. resource.Where(static indicator => !string.IsNullOrWhiteSpace(indicator))];
+
+
+    /// <summary>
+    /// The resource indicators a token request of the authorization-code grant names: the ones its
+    /// caller names, and otherwise the ones the authorization request of the flow named. The MCP
+    /// authorization specification says the parameter "MUST be included in both authorization
+    /// requests and token requests"; <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC
+    /// 8707 §2.2</see> lets a caller name a subset of the granted set on this request, to which "the
+    /// authorization server will issue an access token based on that subset of requested
+    /// resources".
+    /// </summary>
+    /// <param name="callerResource">The indicators the caller of the code redemption names.</param>
+    /// <param name="requestedResource">The indicators the authorization request named.</param>
+    /// <returns>The indicators the token request names; empty when neither names one.</returns>
+    private static ImmutableArray<string> SelectTokenRequestResource(
+        ImmutableArray<string> callerResource, ImmutableArray<string> requestedResource) =>
+        (callerResource.IsDefaultOrEmpty, requestedResource.IsDefaultOrEmpty) switch
+        {
+            (false, _) => callerResource,
+            (true, false) => requestedResource,
+            (true, true) => []
+        };
+
+
+    /// <summary>
+    /// The <see cref="AuthCodeRequestObject.Resource"/> value of a request object naming
+    /// <paramref name="resource"/>: the indicators space-joined, the form that property carries, or
+    /// <see langword="null"/> when the request names none, so the object then carries no
+    /// <c>resource</c> claim.
+    /// </summary>
+    /// <param name="resource">The resource indicators the request names.</param>
+    /// <returns>The space-joined indicators, or <see langword="null"/> when there are none.</returns>
+    private static string? JoinRequestObjectResource(ImmutableArray<string> resource) =>
+        resource.IsDefaultOrEmpty ? null : string.Join(' ', resource);
 
 
     private static Uri BuildJarAuthorizeRedirectUri(

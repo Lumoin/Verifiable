@@ -193,6 +193,14 @@ internal static class AuthCodeFlowDriver
         Assert.IsTrue(parResult.IsSuccess,
             $"Confidential PAR must succeed over the real wire. Status={parHttpResponse.StatusCode} Body={parHttpResponse.Body}");
 
+        //The raw push sends a resource field of additionalParFields as given, so the saved state
+        //carries it for the code redemption exactly as StartParAsync's state carries its resource.
+        ImmutableArray<string> resource =
+            additionalParFields.Fields.TryGetValue(OAuthRequestParameterNames.Resource, out string? resourceField)
+            && !string.IsNullOrWhiteSpace(resourceField)
+                ? [resourceField]
+                : [];
+
         ParResponse parResponse = parResult.Value;
         ParCompletedState parCompleted = new()
         {
@@ -204,6 +212,7 @@ internal static class AuthCodeFlowDriver
             Pkce = pkce,
             RedirectUri = redirectUri,
             Scopes = scopes,
+            Resource = resource,
             Par = parResponse
         };
 
