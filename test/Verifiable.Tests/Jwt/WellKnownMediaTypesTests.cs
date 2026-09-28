@@ -257,34 +257,80 @@ namespace Verifiable.Tests.Jwt
 
 
         /// <summary>
-        /// The local catalog spells its problem and client authentication media types exactly.
+        /// The local catalog spells the problem details media type and its UTF-8 twin exactly.
         /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 Section 3</see>:
         /// "When serialized in a JSON document, that format is identified with the "application/problem+json" media type."
-        /// The Internet-Draft <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>
-        /// specifies "Type name: application" and "Subtype name: client-authentication+jwt".
         /// </summary>
         [TestMethod]
-        public void ProblemAndClientAuthenticationMediaTypesSpellTheirDefiningNames()
+        public void ProblemJsonMediaTypeSpellsItsDefiningName()
         {
             Assert.AreEqual("application/problem+json", WellKnownMediaTypes.Application.ProblemJson);
-            Assert.AreEqual("application/client-authentication+jwt", WellKnownMediaTypes.Application.ClientAuthenticationJwt);
-            Assert.AreEqual("client-authentication+jwt", WellKnownMediaTypes.Jwt.ClientAuthenticationJwt);
+            Assert.AreEqual("application/problem+json", Encoding.UTF8.GetString(WellKnownMediaTypes.Application.ProblemJsonUtf8));
         }
 
 
         /// <summary>
-        /// The local catalog's UTF-8 twins decode to the same media types as its interned strings.
-        /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 Section 3</see>
-        /// identifies the "application/problem+json" media type; the Internet-Draft
-        /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>
-        /// specifies "Subtype name: client-authentication+jwt". UTF-8 and string readers must name the same type.
+        /// The local catalog spells the client authentication JWT media type and its UTF-8 twin exactly.
+        /// The Internet-Draft <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-8.1.1">rfc7523bis-11 Section 8.1.1</see>
+        /// registers "Type name: application" and "Subtype name: client-authentication+jwt".
         /// </summary>
         [TestMethod]
-        public void ProblemAndClientAuthenticationMediaTypesHaveUtf8Twins()
+        public void ClientAuthenticationMediaTypeSpellsItsRegisteredName()
         {
-            Assert.AreEqual(WellKnownMediaTypes.Application.ProblemJson, Encoding.UTF8.GetString(WellKnownMediaTypes.Application.ProblemJsonUtf8));
-            Assert.AreEqual(WellKnownMediaTypes.Application.ClientAuthenticationJwt, Encoding.UTF8.GetString(WellKnownMediaTypes.Application.ClientAuthenticationJwtUtf8));
-            Assert.AreEqual(WellKnownMediaTypes.Jwt.ClientAuthenticationJwt, Encoding.UTF8.GetString(WellKnownMediaTypes.Jwt.ClientAuthenticationJwtUtf8));
+            Assert.AreEqual("application/client-authentication+jwt", WellKnownMediaTypes.Application.ClientAuthenticationJwt);
+            Assert.AreEqual("application/client-authentication+jwt", Encoding.UTF8.GetString(WellKnownMediaTypes.Application.ClientAuthenticationJwtUtf8));
+        }
+
+
+        /// <summary>
+        /// The local catalog spells the client authentication JWT <c>typ</c> value and its UTF-8 twin exactly.
+        /// The Internet-Draft <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11 Section 4</see>:
+        /// "Client authentication JWTs SHOULD be explicitly typed by using the typ header parameter value client-authentication+jwt".
+        /// </summary>
+        [TestMethod]
+        public void ClientAuthenticationTypSpellsItsExplicitType()
+        {
+            Assert.AreEqual("client-authentication+jwt", WellKnownMediaTypes.Jwt.ClientAuthenticationJwt);
+            Assert.AreEqual("client-authentication+jwt", Encoding.UTF8.GetString(WellKnownMediaTypes.Jwt.ClientAuthenticationJwtUtf8));
+        }
+
+
+        /// <summary>
+        /// The client authentication <c>typ</c> short form and its <c>application/</c> long form, written as
+        /// literals in any casing, name the same media type.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 Section 4.1.9</see>:
+        /// "A recipient using the media type value MUST treat it as if "application/" were prepended
+        /// to any "typ" value not containing a '/'."
+        /// </summary>
+        /// <param name="received">The literal received <c>typ</c> or media type value.</param>
+        [TestMethod]
+        [DataRow("client-authentication+jwt")]
+        [DataRow("application/client-authentication+jwt")]
+        [DataRow("CLIENT-AUTHENTICATION+JWT")]
+        [DataRow("Application/Client-Authentication+JWT")]
+        public void ClientAuthenticationTypIsRecognizedInItsShortAndLongForms(string received)
+        {
+            Assert.IsTrue(WellKnownMediaTypes.Jwt.IsClientAuthenticationJwt(received));
+        }
+
+
+        /// <summary>
+        /// The problem details and client authentication media types, written as literals in any casing,
+        /// are recognized by their predicates.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+        /// "The type and subtype tokens are case-insensitive."
+        /// </summary>
+        /// <param name="received">The literal received media type.</param>
+        /// <param name="isProblemJson">Whether the literal names the problem details media type.</param>
+        [TestMethod]
+        [DataRow("application/problem+json", true)]
+        [DataRow("Application/Problem+JSON", true)]
+        [DataRow("APPLICATION/CLIENT-AUTHENTICATION+JWT", false)]
+        [DataRow("application/client-authentication+jwt", false)]
+        public void ProblemAndClientAuthenticationMediaTypesAreRecognizedRegardlessOfCase(string received, bool isProblemJson)
+        {
+            Assert.AreEqual(isProblemJson, WellKnownMediaTypes.Application.IsProblemJson(received));
+            Assert.AreEqual(!isProblemJson, WellKnownMediaTypes.Application.IsClientAuthenticationJwt(received));
         }
 
 

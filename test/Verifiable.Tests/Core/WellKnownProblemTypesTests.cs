@@ -113,9 +113,7 @@ internal sealed class WellKnownProblemTypesTests
             {
                 Assert.IsFalse(isProblemType(other));
             }
-
         }
-
     }
 
 

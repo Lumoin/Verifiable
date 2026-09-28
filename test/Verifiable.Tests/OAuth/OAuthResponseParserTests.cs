@@ -1,6 +1,8 @@
 using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Client;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -11,6 +13,68 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class OAuthResponseParsersTests
 {
+    /// <summary>The test context whose cancellation token bounds each loopback exchange.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
+
+    /// <summary>
+    /// A PAR endpoint answer is read as an RFC 9457 problem only when its <c>Content-Type</c>, received
+    /// over the real loopback wire, names the problem details media type; a value that merely contains
+    /// the text <c>application/problem+json</c> names another media type.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 Section 3</see>:
+    /// "When serialized in a JSON document, that format is identified with the "application/problem+json" media type."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 Section 8.3.1</see>:
+    /// "The type and subtype tokens are case-insensitive."
+    /// </summary>
+    /// <param name="contentType">The literal <c>Content-Type</c> the server sends.</param>
+    /// <param name="isExpectedProblem">Whether the value names the problem details media type.</param>
+    [TestMethod]
+    [DataRow("application/problem+json", true)]
+    [DataRow("Application/Problem+JSON; charset=utf-8", true)]
+    [DataRow("application/problem+jsonx", false)]
+    [DataRow("text/plain; note=\"application/problem+json\"", false)]
+    [DataRow("text/plain", false)]
+    public async Task ProblemJsonIsRecognizedByMediaTypeNotBySubstring(string contentType, bool isExpectedProblem)
+    {
+        await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(
+            (request, cancellationToken) => Task.FromResult(new MinimalHttpResponse
+            {
+                StatusCode = 400,
+                ContentType = contentType,
+                Body = /*lang=json,strict*/ """{"type":"invalid_request","detail":"code_challenge is required","instance":"urn:uuid:abc-123"}"""
+            }),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(host.Certificate);
+
+        HttpResponseData received = await HttpClientTransport.SendFormPostAsync(
+            client,
+            host.BaseAddress,
+            new Dictionary<string, string> { ["client_id"] = "problem-media-type-client" },
+            OutgoingHeaders.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The application's transport delegate lifts the received Content-Type into the
+        //documented metadata key, as HttpResponseData leaves that capture to the application.
+        string? wireContentType = received.Headers.TryGetSingle(WellKnownHttpHeaderNames.ContentType);
+        Assert.IsNotNull(wireContentType, "The loopback response must carry a Content-Type.");
+        HttpResponseData response = received with
+        {
+            TransportMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [HttpResponseDataKeys.ContentType] = wireContentType
+            }
+        };
+
+        Result<ParResponse, OAuthParseError> result = OAuthResponseParsers.ParseParResponse(response);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(isExpectedProblem, response.IsProblemJson,
+            $"Content-Type \"{wireContentType}\" names the problem details media type: {isExpectedProblem}.");
+        Assert.AreEqual(isExpectedProblem, result.Error is OAuthProtocolError { Support.SpecificationReference: "RFC 9457" },
+            $"Content-Type \"{wireContentType}\" is parsed as an RFC 9457 problem: {isExpectedProblem}.");
+    }
+
 
     [TestMethod]
     public void ParseParResponseSucceedsForMinimalValidResponse()

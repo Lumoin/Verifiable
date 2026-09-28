@@ -5,17 +5,22 @@ using Verifiable.Core.Mcp;
 namespace Verifiable.Tests.Core;
 
 /// <summary>
-/// Literal vocabulary checks for <see cref="McpProtocolRevision"/> and the MCP catalogs.
-/// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "MCP defines the following error codes:" <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>: "The method does not exist / is not available."
-/// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+/// Literal vocabulary checks for <see cref="McpProtocolRevision"/> and the MCP catalogs of
+/// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index">MCP 2026-07-28</see>,
+/// the current revision. Each test quotes the clause it checks.
 /// </summary>
 [TestClass]
 internal sealed class McpProtocolVocabularyTests
 {
     /// <summary>
     /// The <see cref="McpErrorCode"/> entries paired with independently transcribed codes and names.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "MCP defines the following error codes:" <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>: "The method does not exist / is not available."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>:
+    /// "The error codes from and including -32768 to -32000 are reserved for pre-defined errors."
+    /// Its table pairs -32700 with "Parse error", -32600 with "Invalid Request", -32601 with "Method not found",
+    /// -32602 with "Invalid params" and -32603 with "Internal error".
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">MCP 2026-07-28</see>:
+    /// "MCP defines the following error codes:", pairing -32020 with "HeaderMismatch",
+    /// -32021 with "MissingRequiredClientCapability" and -32022 with "UnsupportedProtocolVersion".
     /// </summary>
     public static IEnumerable<object[]> GetErrorCodes()
     {
@@ -34,7 +39,6 @@ internal sealed class McpProtocolVocabularyTests
     /// Literal code classifications for <see cref="McpErrorCode.IsDefinedIn(int, McpProtocolRevision)"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "Implementations of this protocol version MUST NOT emit these codes:"
     /// <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>: "Any code within this range, but not defined explicitly below is reserved for future use."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static IEnumerable<object[]> GetCodeClassifications()
     {
@@ -61,8 +65,8 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The literal transport names and comparison spellings for <see cref="WellKnownMcpHeaderNames"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#standard-request-headers">Specification</see>: "These headers are REQUIRED for compliance."
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#earlier-streamable-http-revisions">Specification</see>: "An `Mcp-Session-Id` header on a request: ignore it, and do not mint or echo session IDs."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#earlier-streamable-http-revisions">Specification</see>:
+    /// "Protocol versions `2025-03-26` through `2025-11-25` also used the Streamable HTTP transport, but in a different shape: servers could assign a session via the `Mcp-Session-Id` header (terminated with HTTP DELETE)".
     /// </summary>
     public static IEnumerable<object[]> GetHeaderNames()
     {
@@ -77,7 +81,6 @@ internal sealed class McpProtocolVocabularyTests
     /// The literal reserved names of <see cref="WellKnownMcpMetaKeys"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "The following `_meta` keys are reserved by this specification:"
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "identify themselves without relying on any prior connection state:"
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static IEnumerable<object[]> GetMetaKeys()
     {
@@ -95,9 +98,10 @@ internal sealed class McpProtocolVocabularyTests
 
 
     /// <summary>
-    /// The literal schema method names of <see cref="WellKnownMcpMethodNames"/>.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#completerequest">Completion request</see>: "A request from the client to the server, to ask for completion options."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// The literal schema method names of <see cref="WellKnownMcpMethodNames"/>, each the constant <c>method</c> member of its schema interface.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#jsonrpcrequest-method">Schema</see>: <c>method: string</c>
+    /// on <c>JSONRPCRequest</c>, fixed per interface, for example
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#calltoolrequest-method">CallToolRequest</see>: <c>method: "tools/call"</c>.
     /// </summary>
     public static IEnumerable<object[]> GetMethodNames()
     {
@@ -127,8 +131,13 @@ internal sealed class McpProtocolVocabularyTests
 
     /// <summary>
     /// Every <see cref="McpErrorCode"/> entry spells its defining code and name.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "MCP defines the following error codes:" <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>: "The method does not exist / is not available."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>:
+    /// "The error codes from and including -32768 to -32000 are reserved for pre-defined errors."
+    /// Its table pairs -32700 with "Parse error", -32600 with "Invalid Request", -32601 with "Method not found",
+    /// -32602 with "Invalid params" and -32603 with "Internal error".
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">MCP 2026-07-28</see>:
+    /// "MCP defines the following error codes:", pairing -32020 with "HeaderMismatch",
+    /// -32021 with "MissingRequiredClientCapability" and -32022 with "UnsupportedProtocolVersion".
     /// </summary>
     /// <param name="error">The catalog entry.</param>
     /// <param name="expectedCode">The literal code.</param>
@@ -146,9 +155,12 @@ internal sealed class McpProtocolVocabularyTests
 
 
     /// <summary>
-    /// The local instance classification agrees with the revision owning each <see cref="McpErrorCode"/>.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "MCP defines the following error codes:" <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>: "The method does not exist / is not available."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// Every <see cref="McpErrorCode"/> entry is defined by the current revision, and only the JSON-RPC codes are defined by 2025-11-25;
+    /// a code a revision defines is not forbidden by it.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">MCP 2026-07-28</see>:
+    /// "MCP uses the standard JSON-RPC 2.0 error codes (-32700, -32600 to -32603) for general protocol failures."
+    /// The same section continues "MCP defines the following error codes:" and lists -32020, -32021 and -32022,
+    /// which the 2025-11-25 revision does not define.
     /// </summary>
     /// <param name="error">The catalog entry.</param>
     /// <param name="expectedCode">The literal code.</param>
@@ -169,7 +181,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// Definitions are revision-specific in <see cref="McpErrorCode"/>; an undefined code is not automatically an allowed code.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "Codes defined by earlier protocol versions remain reserved and will not be reused."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="code">The literal error code.</param>
     /// <param name="isCurrentDefined">Whether the current revision defines the code.</param>
@@ -190,7 +201,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "New codes MUST NOT be allocated in this sub-range, and new implementations SHOULD NOT use codes from this sub-range at all."
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Specification</see>: "Implementations MUST NOT emit any code from this sub-range that is not defined by this specification and MUST use defined codes only with their specified meanings."
     /// <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>: "Any code within this range, but not defined explicitly below is reserved for future use."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="code">The literal error code.</param>
     /// <param name="isCurrentDefined">Whether the current revision defines the code.</param>
@@ -209,7 +219,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// An unknown method has the status specified for <see cref="McpErrorCode.MethodNotFound"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#protocol-version-header">Specification</see>: "If the server does not implement the requested RPC method, it MUST respond with `404 Not Found` and a JSON-RPC error with code `-32601` (`Method not found`)."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="revisionText">The revision being interpreted.</param>
     /// <param name="expectedStatus">The literal status or an unspecified pairing.</param>
@@ -231,7 +240,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#server-validation">Specification</see>: "return HTTP status `400 Bad Request`"
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code `-32602` (Invalid params)."
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "On HTTP, the response status MUST be `400 Bad Request`."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="error">The catalog entry.</param>
     /// <param name="expectedCode">The literal code.</param>
@@ -248,14 +256,13 @@ internal sealed class McpProtocolVocabularyTests
             Assert.AreEqual(expectedStatuses[index], error.HttpStatusIn(McpProtocolRevision.Revision20260728, situations[index]),
                 $"Code {expectedCode} in situation {situations[index].Name}.");
         }
-
     }
 
 
     /// <summary>
     /// The local unspecified-status result for <see cref="McpErrorCode"/> preserves the earlier transport's silence.
     /// <see href="https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server">Specification</see>: "If the input is a JSON-RPC request, the server MUST either return `Content-Type: text/event-stream`, to initiate an SSE stream, or `Content-Type: application/json`, to return one JSON object."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="error">The catalog entry.</param>
     /// <param name="expectedCode">The literal code.</param>
@@ -270,14 +277,14 @@ internal sealed class McpProtocolVocabularyTests
         {
             Assert.IsNull(error.HttpStatusIn(McpProtocolRevision.Revision20251125, situation));
         }
-
     }
 
 
     /// <summary>
     /// The local unknown-revision policy makes no classification or status claim through <see cref="McpErrorCode"/>.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation">Specification</see>: "Every request carries its protocol version, and the server accepts or rejects each request independently:"
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation">Specification</see>:
+    /// "If the server does not implement the requested version (whether the version is unknown to the server, or is a known version the server has chosen not to support), it MUST respond with an UnsupportedProtocolVersionError listing the versions it does support".
+    /// A revision this catalog does not know therefore receives no definition, prohibition or status from it.
     /// </summary>
     [TestMethod]
     public void UnknownRevisionHasNoDefinedForbiddenOrStatusAnswer()
@@ -304,16 +311,13 @@ internal sealed class McpProtocolVocabularyTests
                 Assert.IsNull(error.HttpStatusIn(parsed.Value, situation));
                 Assert.IsNull(error.HttpStatusIn(default, situation));
             }
-
         }
-
     }
 
 
     /// <summary>
     /// The local absence policy requires a <see cref="McpErrorSituation"/> before returning a status.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#server-validation">Specification</see>: "When rejecting a request due to header validation failure, servers MUST return HTTP status `400 Bad Request`"
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     [TestMethod]
     public void MissingSituationHasNoStatusAnswer()
@@ -324,7 +328,6 @@ internal sealed class McpProtocolVocabularyTests
             Assert.IsNull(error.HttpStatusIn(McpProtocolRevision.Revision20260728, null));
             Assert.IsNull(error.HttpStatusIn(McpProtocolRevision.Revision20251125, null));
         }
-
     }
 
 
@@ -332,7 +335,6 @@ internal sealed class McpProtocolVocabularyTests
     /// The <see cref="WellKnownMcpHeaderNames"/> spellings match the named transport fields.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#protocol-version-header">Specification</see>: "Every POST request to the MCP endpoint MUST include an `MCP-Protocol-Version` header."
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#standard-request-headers">Specification</see>: "These headers are REQUIRED for compliance."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="expected">The literal field name.</param>
     /// <param name="tabledValue">The catalog string.</param>
@@ -351,7 +353,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The <see cref="WellKnownMcpHeaderNames"/> predicates compare field-name content without case.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#case-sensitivity">Specification</see>: "Clients and servers MUST use case-insensitive comparisons for header names."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="expected">The literal field name.</param>
     /// <param name="tabledValue">The catalog string.</param>
@@ -377,7 +378,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#schema-extension">Specification</see>: "The `x-mcp-header` property specifies the name portion used to construct the header name `Mcp-Param-{name}`."
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#schema-extension">Specification</see>: "MUST NOT be empty"
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#schema-extension">Specification</see>: "MUST match HTTP field-name token syntax"
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="name">The supplied header name.</param>
     /// <param name="isExpectedParameter">Whether the name identifies a parameter header.</param>
@@ -400,14 +400,24 @@ internal sealed class McpProtocolVocabularyTests
 
 
     /// <summary>
-    /// The encoding delimiters in <see cref="WellKnownMcpHeaderNames"/> spell the transport's sentinel.
+    /// <see cref="WellKnownMcpHeaderNames.ParameterHeaderPrefix"/> spells the name portion that precedes a parameter header's name.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#schema-extension">Specification</see>:
+    /// "The `x-mcp-header` property specifies the name portion used to construct the header name `Mcp-Param-{name}`."
+    /// </summary>
+    [TestMethod]
+    public void ParameterHeaderPrefixSpellsTheSchemaExtensionName()
+    {
+        Assert.AreEqual("Mcp-Param-", WellKnownMcpHeaderNames.ParameterHeaderPrefix);
+    }
+
+
+    /// <summary>
+    /// The encoding delimiters in <see cref="WellKnownMcpHeaderNames"/> spell the transport's Base64 sentinel.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#value-encoding">Specification</see>: "Mcp-Param-{Name}: =?base64?{Base64EncodedValue}?="
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     [TestMethod]
     public void ParameterHeaderEncodingSpellsTheBase64Sentinel()
     {
-        Assert.AreEqual("Mcp-Param-", WellKnownMcpHeaderNames.ParameterHeaderPrefix);
         Assert.AreEqual("=?base64?", WellKnownMcpHeaderNames.Base64SentinelPrefix);
         Assert.AreEqual("?=", WellKnownMcpHeaderNames.Base64SentinelSuffix);
     }
@@ -416,7 +426,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The second label alone chooses the reservation recognized by <see cref="WellKnownMcpMetaKeys.IsReservedPrefix"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "Any prefix where the second label is `modelcontextprotocol` or `mcp` is reserved for MCP use."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="prefix">The complete prefix.</param>
     /// <param name="isExpectedReserved">Whether the prefix belongs to MCP.</param>
@@ -436,7 +445,6 @@ internal sealed class McpProtocolVocabularyTests
     /// A prefix needs the specified syntax and a second label before <see cref="WellKnownMcpMetaKeys.IsReservedPrefix"/> can reserve it.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "If specified, MUST be a series of labels separated by dots (`.`), followed by a slash (`/`)."
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "Labels MUST start with a letter and end with a letter or digit; interior characters can be letters, digits, or hyphens (`-`)."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="prefix">The input without the required prefix shape or second label.</param>
     [TestMethod]
@@ -444,7 +452,6 @@ internal sealed class McpProtocolVocabularyTests
     [DataRow("")]
     [DataRow("mcp/")]
     [DataRow("dev.mcp")]
-    [DataRow("dev.mcp/key")]
     [DataRow(".mcp/")]
     [DataRow("1dev.mcp/")]
     [DataRow("dev.mcp./")]
@@ -457,9 +464,48 @@ internal sealed class McpProtocolVocabularyTests
 
 
     /// <summary>
+    /// A complete received key is reserved by <see cref="WellKnownMcpMetaKeys.IsReservedKey"/> when its prefix has a reserved second label.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "valid `_meta` key names have two segments: an optional **prefix**, and a **name**."
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "Any prefix where the second label is `modelcontextprotocol` or `mcp` is **reserved** for MCP use."
+    /// </summary>
+    /// <param name="key">The complete key as received.</param>
+    /// <param name="isExpectedReserved">Whether the key's prefix belongs to MCP.</param>
+    [TestMethod]
+    [DataRow("io.modelcontextprotocol/protocolVersion", true)]
+    [DataRow("dev.mcp/key", true)]
+    [DataRow("org.modelcontextprotocol.api/x", true)]
+    [DataRow("com.mcp.tools/y", true)]
+    [DataRow("com.example.mcp/x", false)]
+    [DataRow("com.example/x", false)]
+    public void ReservedMetaKeysAreRecognizedByTheirPrefix(string key, bool isExpectedReserved)
+    {
+        Assert.AreEqual(isExpectedReserved, WellKnownMcpMetaKeys.IsReservedKey(key));
+    }
+
+
+    /// <summary>
+    /// A complete received key without a prefix is reserved by <see cref="WellKnownMcpMetaKeys.IsReservedKey"/> only when the specification names it.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "The following `_meta` keys are reserved by this specification:"
+    /// with the row "`progressToken`", and "As an exception to the prefix requirement above, the keys `traceparent`, `tracestate`, and `baggage` are reserved".
+    /// </summary>
+    /// <param name="key">The complete key as received.</param>
+    /// <param name="isExpectedReserved">Whether the specification names the key.</param>
+    [TestMethod]
+    [DataRow("progressToken", true)]
+    [DataRow("traceparent", true)]
+    [DataRow("tracestate", true)]
+    [DataRow("baggage", true)]
+    [DataRow("customKey", false)]
+    [DataRow(null, false)]
+    public void UnprefixedMetaKeysAreReservedOnlyWhenNamed(string? key, bool isExpectedReserved)
+    {
+        Assert.AreEqual(isExpectedReserved, WellKnownMcpMetaKeys.IsReservedKey(key));
+    }
+
+
+    /// <summary>
     /// The local ordinal reservation policy of <see cref="WellKnownMcpMetaKeys"/> preserves second-label case.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "Any prefix where the second label is `modelcontextprotocol` or `mcp` is reserved for MCP use."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="prefix">The complete prefix.</param>
     /// <param name="isExpectedReserved">Whether the second label is the literal reserved label.</param>
@@ -476,7 +522,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The <see cref="WellKnownMcpMetaKeys"/> catalog spells the protocol fields literally.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "The following `_meta` keys are reserved by this specification:"
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="expected">The literal name.</param>
     /// <param name="tabledValue">The catalog string.</param>
@@ -493,7 +538,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The <see cref="WellKnownMcpMetaKeys"/> predicates apply the local ordinal JSON-member policy.
     /// <see href="https://www.jsonrpc.org/specification#conventions">JSON-RPC 2.0 §2</see>: "All member names exchanged between the Client and the Server that are considered for matching of any kind should be considered to be case-sensitive."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="expected">The literal name.</param>
     /// <param name="tabledValue">The catalog string.</param>
@@ -513,9 +557,10 @@ internal sealed class McpProtocolVocabularyTests
 
 
     /// <summary>
-    /// The <see cref="WellKnownMcpMethodNames"/> catalog transcribes the request and notification schema set.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#completerequest">Completion request</see>: "A request from the client to the server, to ask for completion options."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// The <see cref="WellKnownMcpMethodNames"/> catalog spells each schema interface's constant <c>method</c> member.
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#jsonrpcrequest-method">Schema</see>: <c>method: string</c>
+    /// on <c>JSONRPCRequest</c>, fixed per interface, for example
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#calltoolrequest-method">CallToolRequest</see>: <c>method: "tools/call"</c>.
     /// </summary>
     /// <param name="expected">The literal name.</param>
     /// <param name="tabledValue">The catalog string.</param>
@@ -532,7 +577,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The <see cref="WellKnownMcpMethodNames"/> predicates preserve the method's case-sensitive identity.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#case-sensitivity">Specification</see>: "Header values (such as method names) are case-sensitive."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="expected">The literal name.</param>
     /// <param name="tabledValue">The catalog string.</param>
@@ -554,9 +598,10 @@ internal sealed class McpProtocolVocabularyTests
 
 
     /// <summary>
-    /// The local storage contract for <see cref="WellKnownMcpMethodNames"/> and the other catalogs keeps UTF-8 literals equal to interned string values.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#completerequest">Completion request</see>: "A request from the client to the server, to ask for completion options."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// The local storage contract for <see cref="WellKnownMcpMethodNames"/> and the other catalogs keeps UTF-8 literals equal to interned string values,
+    /// so a reader of the UTF-8 wire bytes and a reader of strings name the same member.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>:
+    /// "JSON text exchanged between systems that are not part of a closed ecosystem MUST be encoded using UTF-8".
     /// </summary>
     [TestMethod]
     public void CatalogNamesKeepUtf8TwinsAndInternedStrings()
@@ -587,7 +632,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The local trace-key aliases use the same catalog instances as <see cref="WellKnownHttpHeaderNames"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "the keys `traceparent`, `tracestate`, and `baggage` are reserved"
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     [TestMethod]
     public void TraceMetaKeysShareTheHeaderCatalogNames()
@@ -602,7 +646,6 @@ internal sealed class McpProtocolVocabularyTests
     /// The local <see cref="McpProtocolRevision.Parse"/> contract accepts real Gregorian dates in exactly YYYY-MM-DD form.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation">Specification</see>: "Every request declares the protocol version it is using in its _meta field."
     /// The date format and calendar validation are local parser rules.
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="text">The literal revision text.</param>
     [TestMethod]
@@ -624,7 +667,6 @@ internal sealed class McpProtocolVocabularyTests
     /// The local <see cref="McpProtocolRevision.Parse"/> contract returns an invalid-format result for malformed date input.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation">Specification</see>: "Every request declares the protocol version it is using in its _meta field."
     /// Null, whitespace, non-ASCII digits and invalid Gregorian dates are input failures.
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="text">The malformed revision text.</param>
     [TestMethod]
@@ -652,7 +694,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The local record equality contract compares the text held by <see cref="McpProtocolRevision"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#case-sensitivity">Specification</see>: "Header values (such as method names) are case-sensitive."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="leftText">The first date text.</param>
     /// <param name="rightText">The separately allocated second date text.</param>
@@ -676,7 +717,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The local <see cref="McpProtocolRevision"/> default is distinct from named protocol revisions.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation">Specification</see>: "Every request declares the protocol version it is using in its _meta field."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     [TestMethod]
     public void DefaultRevisionCarriesNoRevisionText()
@@ -692,7 +732,6 @@ internal sealed class McpProtocolVocabularyTests
     /// <summary>
     /// The named <see cref="McpErrorSituation"/> values set the explicit ordering of the literal status matrices.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Specification</see>: "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code `-32602` (Invalid params)."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static McpErrorSituation[] GetSituations() =>
     [
@@ -706,8 +745,8 @@ internal sealed class McpProtocolVocabularyTests
 
     /// <summary>
     /// The local UTF-8 storage assertion checks a literal name against both forms, including <see cref="McpProtocolRevision"/>.
-    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/schema#completerequest">Completion request</see>: "A request from the client to the server, to ask for completion options."
-    /// MCP 2026-07-28 is the current revision. The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>:
+    /// "JSON text exchanged between systems that are not part of a closed ecosystem MUST be encoded using UTF-8".
     /// </summary>
     /// <param name="expected">The literal expected wire text.</param>
     /// <param name="tabledValue">The interned string value.</param>

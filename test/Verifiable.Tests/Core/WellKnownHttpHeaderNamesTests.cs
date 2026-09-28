@@ -136,7 +136,6 @@ internal sealed class WellKnownHttpHeaderNamesTests
             Assert.AreEqual(entry.WireValue, entry.TabledValue,
                 $"{entry.FieldName} must read \"{entry.WireValue}\" verbatim as its defining specification spells it.");
         }
-
     }
 
 
@@ -192,7 +191,6 @@ internal sealed class WellKnownHttpHeaderNamesTests
             Assert.IsTrue(entry.Predicate(entry.UpperCasedValue),
                 $"Field names are case-insensitive (RFC 9110 Section 5.1), so the predicate for {entry.FieldName} must recognize \"{entry.UpperCasedValue}\".");
         }
-
     }
 
 
@@ -221,9 +219,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
                 Assert.IsFalse(entries[i].Predicate(entries[j].LowerCasedValue),
                     $"The predicate for {entries[i].FieldName} must reject \"{entries[j].LowerCasedValue}\" in any casing.");
             }
-
         }
-
     }
 
 
@@ -252,7 +248,6 @@ internal sealed class WellKnownHttpHeaderNamesTests
             Assert.AreSame(entry.TabledValue, WellKnownHttpHeaderNames.GetCanonicalizedValue(received),
                 $"\"{received}\" must canonicalize onto the interned {entry.FieldName} constant, since field names are case-insensitive (RFC 9110 Section 5.1).");
         }
-
     }
 
 

@@ -6,9 +6,9 @@ namespace Verifiable.Core.Mcp;
 /// The closed current error catalog, with revision-aware rules and situation-specific status metadata.
 /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error Codes</see>:
 /// "MCP defines the following error codes:"
-/// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
 /// </summary>
 /// <remarks>
+/// MCP 2026-07-28 is the current revision.
 /// <see cref="IsDefinedIn(int, McpProtocolRevision)"/> also identifies the two codes defined in
 /// 2025-11-25 and retired in the current revision. They are deliberately absent from the current catalog.
 /// <see cref="IsForbiddenIn(int, McpProtocolRevision)"/> describes allocation for new implementations,
@@ -20,112 +20,96 @@ public sealed record McpErrorCode
     /// <summary>
     /// The UTF-8 source of <see cref="ParseError"/>'s <see cref="Name"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "Invalid JSON was received by the server."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> ParseErrorNameUtf8 => "Parse error"u8;
 
     /// <summary>
     /// The Parse error error (-32700), with <see cref="Name"/> interned from <see cref="ParseErrorNameUtf8"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "Invalid JSON was received by the server."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode ParseError { get; } = new(-32700, ParseErrorNameUtf8);
 
     /// <summary>
     /// The UTF-8 source of <see cref="InvalidRequest"/>'s <see cref="Name"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "The JSON sent is not a valid Request object."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> InvalidRequestNameUtf8 => "Invalid Request"u8;
 
     /// <summary>
     /// The Invalid Request error (-32600), with <see cref="Name"/> interned from <see cref="InvalidRequestNameUtf8"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "The JSON sent is not a valid Request object."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode InvalidRequest { get; } = new(-32600, InvalidRequestNameUtf8);
 
     /// <summary>
     /// The UTF-8 source of <see cref="MethodNotFound"/>'s <see cref="Name"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "The method does not exist / is not available."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> MethodNotFoundNameUtf8 => "Method not found"u8;
 
     /// <summary>
     /// The Method not found error (-32601), with <see cref="Name"/> interned from <see cref="MethodNotFoundNameUtf8"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "The method does not exist / is not available."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode MethodNotFound { get; } = new(-32601, MethodNotFoundNameUtf8);
 
     /// <summary>
     /// The UTF-8 source of <see cref="InvalidParams"/>'s <see cref="Name"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "Invalid method parameter(s)."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> InvalidParamsNameUtf8 => "Invalid params"u8;
 
     /// <summary>
     /// The Invalid params error (-32602), with <see cref="Name"/> interned from <see cref="InvalidParamsNameUtf8"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "Invalid method parameter(s)."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode InvalidParams { get; } = new(-32602, InvalidParamsNameUtf8);
 
     /// <summary>
     /// The UTF-8 source of <see cref="InternalError"/>'s <see cref="Name"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "Internal JSON-RPC error."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> InternalErrorNameUtf8 => "Internal error"u8;
 
     /// <summary>
     /// The Internal error error (-32603), with <see cref="Name"/> interned from <see cref="InternalErrorNameUtf8"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">Error definition</see>: "Internal JSON-RPC error."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode InternalError { get; } = new(-32603, InternalErrorNameUtf8);
 
     /// <summary>
     /// The UTF-8 source of <see cref="HeaderMismatch"/>'s <see cref="Name"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error definition</see>: "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> HeaderMismatchNameUtf8 => "HeaderMismatch"u8;
 
     /// <summary>
     /// The HeaderMismatch error (-32020), with <see cref="Name"/> interned from <see cref="HeaderMismatchNameUtf8"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error definition</see>: "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode HeaderMismatch { get; } = new(-32020, HeaderMismatchNameUtf8);
 
     /// <summary>
     /// The UTF-8 source of <see cref="MissingRequiredClientCapability"/>'s <see cref="Name"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error definition</see>: "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> MissingRequiredClientCapabilityNameUtf8 => "MissingRequiredClientCapability"u8;
 
     /// <summary>
     /// The MissingRequiredClientCapability error (-32021), with <see cref="Name"/> interned from <see cref="MissingRequiredClientCapabilityNameUtf8"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error definition</see>: "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode MissingRequiredClientCapability { get; } = new(-32021, MissingRequiredClientCapabilityNameUtf8);
 
     /// <summary>
     /// The UTF-8 source of <see cref="UnsupportedProtocolVersion"/>'s <see cref="Name"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error definition</see>: "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     private static ReadOnlySpan<byte> UnsupportedProtocolVersionNameUtf8 => "UnsupportedProtocolVersion"u8;
 
     /// <summary>
     /// The UnsupportedProtocolVersion error (-32022), with <see cref="Name"/> interned from <see cref="UnsupportedProtocolVersionNameUtf8"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error definition</see>: "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorCode UnsupportedProtocolVersion { get; } = new(-32022, UnsupportedProtocolVersionNameUtf8);
 
@@ -133,7 +117,6 @@ public sealed record McpErrorCode
     /// The integer identifier of this error, used by <see cref="HttpStatusIn"/>.
     /// <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>:
     /// "A Number that indicates the error type that occurred."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public int Code { get; }
 
@@ -142,7 +125,6 @@ public sealed record McpErrorCode
     /// The interned defining name derived from <see cref="NameUtf8"/>; callers may choose a more detailed error message.
     /// <see href="https://www.jsonrpc.org/specification#error_object">JSON-RPC 2.0 §5.1</see>:
     /// "A String providing a short description of the error."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public string Name { get; }
 
@@ -151,7 +133,6 @@ public sealed record McpErrorCode
     /// The defining UTF-8 literal whose interned string is <see cref="Name"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error Codes</see>:
     /// "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public ReadOnlySpan<byte> NameUtf8 => Code switch
     {
@@ -171,7 +152,6 @@ public sealed record McpErrorCode
     /// Creates a catalog value with an interned <see cref="Name"/> from its UTF-8 literal.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error Codes</see>:
     /// "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="code">The defining integer identifier.</param>
     /// <param name="name">The UTF-8 spelling of the defining name.</param>
@@ -186,7 +166,6 @@ public sealed record McpErrorCode
     /// Whether <see cref="Code"/> is defined by the named revision, using <see cref="IsDefinedIn(int, McpProtocolRevision)"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error Codes</see>:
     /// "MCP defines the following error codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="revision">The revision whose known definitions are queried.</param>
     public bool IsDefinedIn(McpProtocolRevision revision) => IsDefinedIn(Code, revision);
@@ -196,7 +175,6 @@ public sealed record McpErrorCode
     /// Whether the named revision forbids new use of <see cref="Code"/>, using <see cref="IsForbiddenIn(int, McpProtocolRevision)"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes">Error Codes</see>:
     /// "Implementations of this protocol version MUST NOT emit these codes:"
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="revision">The revision whose known allocation rules are queried.</param>
     public bool IsForbiddenIn(McpProtocolRevision revision) => IsForbiddenIn(Code, revision);
@@ -208,7 +186,6 @@ public sealed record McpErrorCode
     /// "MCP uses the standard JSON-RPC 2.0 error codes (-32700, -32600 to -32603) for general protocol failures."
     /// The same section names "resource not found (2025-11-25 and earlier; replaced by -32602)"
     /// and "URL elicitation required (2025-11-25 only)."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="code">A received or proposed integer error code.</param>
     /// <param name="revision">The revision; an unknown or default revision has no cataloged definitions.</param>
@@ -230,7 +207,6 @@ public sealed record McpErrorCode
     /// For 2026-07-28, the first sentence applies to -32000 through -32019 and the second to -32020 through -32099;
     /// together they include the explicitly retired -32002 and -32042. JSON-RPC reserves the remaining undefined codes
     /// from -32768 through -32100 in both revisions. A false result for an unknown revision is unjudged, not permission.
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="code">The integer code proposed for new use.</param>
     /// <param name="revision">The revision whose allocation rules are queried.</param>
@@ -252,7 +228,7 @@ public sealed record McpErrorCode
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Metadata</see>:
     /// "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 (Invalid params). On HTTP, the response status MUST be 400 Bad Request."
     /// The missing-client-capability rule in that section also states: "On HTTP, the response status MUST be 400 Bad Request."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
+    /// The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// Every 2025-11-25 answer is null, as are unknown revisions, mismatched code/situation pairs and a null situation.
     /// </summary>
     /// <param name="revision">The revision under which the request is processed.</param>
@@ -274,15 +250,16 @@ public sealed record McpErrorCode
 /// A closed failure situation that constrains <see cref="McpErrorCode.HttpStatusIn"/>.
 /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Metadata</see>:
 /// "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 (Invalid params)."
-/// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
 /// </summary>
+/// <remarks>
+/// MCP 2026-07-28 is the current revision.
+/// </remarks>
 public sealed record McpErrorSituation
 {
     /// <summary>
     /// A local descriptive name distinguishing situations for <see cref="McpErrorCode.HttpStatusIn"/>; it is not a wire token.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Metadata</see>:
     /// "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 (Invalid params)."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public string Name { get; }
 
@@ -291,7 +268,6 @@ public sealed record McpErrorSituation
     /// Creates a closed situation distinguished by <see cref="Name"/> for status lookup.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Metadata</see>:
     /// "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 (Invalid params)."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     /// <param name="name">The local descriptive name, not a wire spelling.</param>
     private McpErrorSituation(string name)
@@ -303,36 +279,30 @@ public sealed record McpErrorSituation
     /// The UnsupportedProtocolVersion situation for <see cref="McpErrorCode.HttpStatusIn"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#protocol-version-header">Failure condition</see>:
     /// "If the server does not implement the requested protocol version (whether the version is unknown to the server, or is a known version the server has chosen not to support), it MUST respond with 400 Bad Request and an UnsupportedProtocolVersionError listing its supported versions."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorSituation UnsupportedProtocolVersion { get; } = new(nameof(UnsupportedProtocolVersion));
 
     /// <summary>
     /// The HeaderMismatch situation for <see cref="McpErrorCode.HttpStatusIn"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#server-validation">Failure condition</see>: "The HTTP headers do not match the corresponding values in the request body, or required headers are missing/malformed."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorSituation HeaderMismatch { get; } = new(nameof(HeaderMismatch));
 
     /// <summary>
     /// The MissingRequiredClientCapability situation for <see cref="McpErrorCode.HttpStatusIn"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Failure condition</see>: "A server MUST NOT rely on capabilities the client has not declared."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorSituation MissingRequiredClientCapability { get; } = new(nameof(MissingRequiredClientCapability));
 
     /// <summary>
     /// The MissingRequiredMetaField situation for <see cref="McpErrorCode.HttpStatusIn"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta">Failure condition</see>: "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 (Invalid params)."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorSituation MissingRequiredMetaField { get; } = new(nameof(MissingRequiredMetaField));
 
     /// <summary>
     /// The UnknownMethod situation for <see cref="McpErrorCode.HttpStatusIn"/>.
     /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#protocol-version-header">Failure condition</see>: "If the server does not implement the requested RPC method, it MUST respond with 404 Not Found and a JSON-RPC error with code -32601 (Method not found)."
-    /// MCP 2026-07-28 is current; The 2025-11-25 transport page specifies no HTTP status pairing for the cataloged JSON-RPC request-error codes.
     /// </summary>
     public static McpErrorSituation UnknownMethod { get; } = new(nameof(UnknownMethod));
-
 }

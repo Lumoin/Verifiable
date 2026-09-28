@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Cryptography.Text;
+using Verifiable.JCose;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
@@ -47,7 +48,7 @@ namespace Verifiable.OAuth;
 ///   <item>
 ///     <description>
 ///       <c>transport.content_type</c> — response <c>Content-Type</c> header.
-///       Relevant when detecting RFC 9457 <c>application/problem+json</c> responses.
+///       Relevant when detecting RFC 9457 <see cref="WellKnownMediaTypes.Application.ProblemJson"/> responses.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -131,13 +132,19 @@ public readonly struct HttpResponseData: IEquatable<HttpResponseData>
 
     /// <summary>
     /// Returns <see langword="true"/> when the <c>transport.content_type</c>
-    /// metadata entry indicates the response body is an RFC 9457
-    /// <c>application/problem+json</c> document.
+    /// metadata entry names the RFC 9457 <see cref="WellKnownMediaTypes.Application.ProblemJson"/>
+    /// media type. The comparison is <see cref="WellKnownMediaTypes.Application.IsProblemJson"/>:
+    /// the <c>type/subtype</c> case-insensitively with any parameters dropped, so a value that
+    /// merely contains the text, such as <c>application/problem+jsonx</c> or a parameter carrying
+    /// it, names a different media type.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3">RFC 9457 §3</see>:
+    /// "When serialized in a JSON document, that format is identified with the "application/problem+json" media type."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 §8.3.1</see>:
+    /// "The type and subtype tokens are case-insensitive."
     /// </summary>
     public bool IsProblemJson =>
-        GetMetadata(HttpResponseDataKeys.ContentType)
-            ?.Contains("application/problem+json", System.StringComparison.OrdinalIgnoreCase)
-        ?? false;
+        GetMetadata(HttpResponseDataKeys.ContentType) is string contentType
+        && WellKnownMediaTypes.Application.IsProblemJson(contentType);
 
 
     /// <inheritdoc/>
