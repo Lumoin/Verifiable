@@ -5,57 +5,73 @@ using System.Text;
 namespace Verifiable.Core.Text;
 
 /// <summary>
-/// Inspects or visibly escapes code points selected by a <see cref="TextHygieneRule"/>.
-/// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>
-/// defines Cf as "a format control character". Unicode data is the running runtime's, so
-/// Unassigned and PrivateUse answers can differ between runtimes. Input errors are data;
-/// only null arguments are rejected by this primitive. Caller collectors and writers can throw.
+/// Finds, in text a partner supplied, the code points that act rather than read when shown (the classes a
+/// <see cref="TextHygieneRule"/> selects), and reports them as data or writes them as visible escapes. Every class
+/// but <see cref="TextHygieneClass.Tag"/> comes from the running runtime's Unicode data, so a code point assigned in a
+/// later Unicode version reads as Cn on an older runtime and passes <see cref="TextHygieneRule.Default"/>; the remarks
+/// of <see cref="TextHygieneClass"/> name the code points that act when shown and that no class covers, which pass
+/// every rule. Input errors are data: only null arguments are rejected, and the caller's collector or
+/// writer may throw. Time is linear in the input and the primitive allocates nothing: <c>CollectFindings</c> adds at
+/// most one finding per input unit, and <see cref="EscapeVisibly"/> writes at most six characters per input unit, so a
+/// caller holding hostile input caps the input or passes a bounded collector or writer.
 /// </summary>
 public static class TextHygiene
 {
     /// <summary>
-    /// The six characters in a visible UTF-16 escape: a reverse solidus, u, and four hexadecimal digits.
-    /// Used by <see cref="WriteEscape"/> to obtain only caller-owned storage, including for Cs,
-    /// "a surrogate code point", in
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>.
+    /// The number of characters in one visible escape: a reverse solidus, the letter u and four hexadecimal digits.
+    /// <see cref="WriteEscape"/> asks the caller's writer for exactly this much storage.
     /// </summary>
     private static int EscapeLength { get; } = 6;
 
     /// <summary>
-    /// Inspects UTF-16 for the first category selected by <see cref="TextHygieneRule"/>.
-    /// Cs is "a surrogate code point" in
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>;
-    /// a lone code unit is reported without throwing.
+    /// U+005C REVERSE SOLIDUS, the first character of every escape. <see cref="EscapeVisibly"/> escapes it wherever
+    /// it occurs in the input, so every reverse solidus in the output begins an escape the primitive wrote.
+    /// </summary>
+    private static char ReverseSolidus { get; } = '\\';
+
+    /// <summary>
+    /// U+000D CARRIAGE RETURN, which shares the exception of a line feed that directly follows it (a CRLF line break).
+    /// </summary>
+    private static int CarriageReturn { get; } = 0x000D;
+
+    /// <summary>
+    /// U+000A LINE FEED, whose exception a directly preceding carriage return shares.
+    /// </summary>
+    private static int LineFeed { get; } = 0x000A;
+
+    /// <summary>
+    /// Inspects UTF-16 text for the first occurrence of a class the rule selects. The occurrence is the inspection's
+    /// answer, not an error of it, so clean text answers null. A lone surrogate code unit is an occurrence of
+    /// <see cref="TextHygieneClass.UnpairedSurrogate"/> and is never thrown.
     /// </summary>
     /// <param name="text">The complete UTF-16 input.</param>
-    /// <param name="rule">The categories to select and code points to allow.</param>
-    /// <returns>Success with true for clean input, or the first finding at a UTF-16 code-unit offset.</returns>
+    /// <param name="rule">The classes to select and the code points to allow.</param>
+    /// <returns>The first occurrence, its <see cref="TextHygieneFinding.Offset"/> a UTF-16 code-unit index; null when the text is clean.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="rule"/> is null.</exception>
-    public static Result<bool, TextHygieneFinding> Inspect(ReadOnlySpan<char> text, TextHygieneRule rule)
+    public static TextHygieneFinding? Inspect(ReadOnlySpan<char> text, TextHygieneRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
         int offset = 0;
         while(offset < text.Length)
         {
             TextHygieneFinding? finding = ReadNext(text, offset, rule, out int consumed);
-            if(finding is { } value)
+            if(finding.HasValue)
             {
-                return Result<bool, TextHygieneFinding>.Failure(value);
+                return finding;
             }
 
             offset += consumed;
         }
 
-        return Result<bool, TextHygieneFinding>.Success(true);
+        return null;
     }
 
     /// <summary>
-    /// Appends every selected UTF-16 occurrence to the caller's <see cref="ICollection{T}"/> in input order.
-    /// Cf is "a format control character" in
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>.
+    /// Appends every occurrence the rule selects in UTF-16 text to the caller's <see cref="ICollection{T}"/>, in input
+    /// order, so the caller can reveal each one; at most one occurrence per input code unit.
     /// </summary>
     /// <param name="text">The complete UTF-16 input.</param>
-    /// <param name="rule">The categories to select and code points to allow.</param>
+    /// <param name="rule">The classes to select and the code points to allow.</param>
     /// <param name="collector">The destination, which is neither cleared nor replaced.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rule"/> or <paramref name="collector"/> is null.</exception>
     public static void CollectFindings(ReadOnlySpan<char> text, TextHygieneRule rule, ICollection<TextHygieneFinding> collector)
@@ -73,46 +89,41 @@ public static class TextHygiene
 
             offset += consumed;
         }
-
     }
 
     /// <summary>
-    /// Inspects UTF-8 for the first selected occurrence using <see cref="Rune.DecodeFromUtf8"/>.
-    /// Unlike Cf, "a format control character" in
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>,
-    /// an ill-formed sequence has no scalar and is classified as <see cref="TextHygieneClass.IllFormedEncoding"/>.
+    /// Inspects UTF-8 bytes for the first occurrence of a class the rule selects. Each ill-formed maximal subpart,
+    /// a truncated final sequence included, is one <see cref="TextHygieneClass.IllFormedEncoding"/> occurrence, and
+    /// decoding resumes at the next byte after it, so a well-formed sequence that follows is never swallowed.
     /// </summary>
-    /// <param name="text">The complete UTF-8 input; a truncated final sequence is ill-formed.</param>
-    /// <param name="rule">The categories to select and code points to allow.</param>
-    /// <returns>Success with true for clean input, or the first finding at a byte offset.</returns>
+    /// <param name="text">The complete UTF-8 input.</param>
+    /// <param name="rule">The classes to select and the code points to allow.</param>
+    /// <returns>The first occurrence, its <see cref="TextHygieneFinding.Offset"/> a byte offset; null when the bytes are clean.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="rule"/> is null.</exception>
-    public static Result<bool, TextHygieneFinding> Inspect(ReadOnlySpan<byte> text, TextHygieneRule rule)
+    public static TextHygieneFinding? Inspect(ReadOnlySpan<byte> text, TextHygieneRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
         int offset = 0;
         while(offset < text.Length)
         {
             TextHygieneFinding? finding = ReadNext(text, offset, rule, out int consumed);
-            if(finding is { } value)
+            if(finding.HasValue)
             {
-                return Result<bool, TextHygieneFinding>.Failure(value);
+                return finding;
             }
 
             offset += consumed;
         }
 
-        return Result<bool, TextHygieneFinding>.Success(true);
+        return null;
     }
 
     /// <summary>
-    /// Appends every selected UTF-8 occurrence at its byte offset to the caller's <see cref="ICollection{T}"/>.
-    /// <see cref="Rune.DecodeFromUtf8"/> determines how many bytes each scalar or malformed subpart consumes;
-    /// categories follow <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44,
-    /// Table 12</see>, including Cf, "a format control character".
-    /// No replacement scalar is classified for malformed bytes.
+    /// Appends every occurrence the rule selects in UTF-8 bytes to the caller's <see cref="ICollection{T}"/>, in input
+    /// order and at byte offsets; each ill-formed maximal subpart is one occurrence. At most one occurrence per byte.
     /// </summary>
-    /// <param name="text">The complete UTF-8 input; a truncated final sequence is ill-formed.</param>
-    /// <param name="rule">The categories to select and code points to allow.</param>
+    /// <param name="text">The complete UTF-8 input.</param>
+    /// <param name="rule">The classes to select and the code points to allow.</param>
     /// <param name="collector">The destination, which is neither cleared nor replaced.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rule"/> or <paramref name="collector"/> is null.</exception>
     public static void CollectFindings(ReadOnlySpan<byte> text, TextHygieneRule rule, ICollection<TextHygieneFinding> collector)
@@ -130,84 +141,82 @@ public static class TextHygiene
 
             offset += consumed;
         }
-
     }
 
     /// <summary>
-    /// Writes flagged scalars as visible uppercase UTF-16 escapes and other text unchanged into the
-    /// caller's <see cref="IBufferWriter{T}"/>, allocating no buffer. A supplementary scalar becomes two escapes;
-    /// a lone surrogate becomes one. <see href="https://www.unicode.org/reports/tr9/#Explicit_Directional_Overrides">UAX #9,
-    /// Section 2.2</see> says overrides "are to be avoided wherever possible, because of security concerns."
-    /// This is display escaping, not a serialization format or confusable analysis.
+    /// Writes UTF-16 text into the caller's <see cref="IBufferWriter{T}"/> with every occurrence the rule selects
+    /// replaced by the visible text of its escape: a reverse solidus, u and four uppercase hexadecimal digits per UTF-16
+    /// code unit, so a supplementary scalar becomes two escapes and a lone surrogate one. Every reverse solidus in the
+    /// input is written as its escape too, whatever the rule, so the output is injective: every reverse solidus in it
+    /// begins an escape this method wrote, and the six input characters of a typed escape never read as an escaped
+    /// code point. Everything else is written unchanged, one run at a time. The output is for a reader, not a
+    /// serialization format, and it is not confusable analysis.
     /// </summary>
     /// <param name="text">The complete UTF-16 input.</param>
-    /// <param name="rule">The categories to escape and code points to leave unchanged.</param>
+    /// <param name="rule">The classes to escape and the code points to leave unchanged.</param>
     /// <param name="writer">The destination owning all output storage.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rule"/> or <paramref name="writer"/> is null.</exception>
     public static void EscapeVisibly(ReadOnlySpan<char> text, TextHygieneRule rule, IBufferWriter<char> writer)
     {
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(writer);
+        int runStart = 0;
         int offset = 0;
         while(offset < text.Length)
         {
             TextHygieneFinding? finding = ReadNext(text, offset, rule, out int consumed);
-            ReadOnlySpan<char> units = text.Slice(offset, consumed);
-            if(finding.HasValue)
+            bool isEscaped = finding.HasValue || text[offset] == ReverseSolidus;
+            if(isEscaped)
             {
-                foreach(char unit in units)
+                WriteRun(text[runStart..offset], writer);
+                foreach(char unit in text.Slice(offset, consumed))
                 {
                     WriteEscape(unit, writer);
                 }
 
-            }
-            else
-            {
-                writer.Write(units);
+                runStart = offset + consumed;
             }
 
             offset += consumed;
         }
 
+        WriteRun(text[runStart..], writer);
     }
 
     /// <summary>
-    /// Reads one scalar or lone UTF-16 code unit for <see cref="Inspect(ReadOnlySpan{char}, TextHygieneRule)"/>.
-    /// Cs means "a surrogate code point" in
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>.
+    /// Reads one scalar, or one lone surrogate code unit, of UTF-16 input and selects it under the rule.
     /// </summary>
     /// <param name="text">The complete input with a nonempty suffix at the offset.</param>
     /// <param name="offset">The current UTF-16 code-unit index.</param>
-    /// <param name="rule">The category and exception selection.</param>
-    /// <param name="consumed">One lone code unit or the decoded scalar's UTF-16 length.</param>
-    /// <returns>The selected occurrence, or null when this input unit is allowed.</returns>
+    /// <param name="rule">The class and exception selection.</param>
+    /// <param name="consumed">One for a lone code unit, otherwise the decoded scalar's UTF-16 length.</param>
+    /// <returns>The selected occurrence, or null when the input unit is not selected.</returns>
     private static TextHygieneFinding? ReadNext(ReadOnlySpan<char> text, int offset, TextHygieneRule rule, out int consumed)
     {
         OperationStatus status = Rune.DecodeFromUtf16(text[offset..], out Rune rune, out consumed);
-        bool isDecoded = status == OperationStatus.Done;
-        if(!isDecoded)
+        if(status != OperationStatus.Done)
         {
             consumed = 1;
+
+            return SelectFinding(offset, consumed, text[offset], TextHygieneClass.UnpairedSurrogate, isBeforeLineFeed: false, rule);
         }
 
-        int codePoint = isDecoded ? rune.Value : text[offset];
-        TextHygieneClass? category = isDecoded ? Classify(rune) : TextHygieneClass.UnpairedSurrogate;
+        int next = offset + consumed;
+        bool isBeforeLineFeed = next < text.Length && text[next] == LineFeed;
 
-        return SelectFinding(offset, codePoint, category, rule);
+        return SelectFinding(offset, consumed, rune.Value, Classify(rune), isBeforeLineFeed, rule);
     }
 
     /// <summary>
-    /// Reads one scalar or malformed subpart for <see cref="Inspect(ReadOnlySpan{byte}, TextHygieneRule)"/>.
-    /// <see cref="Rune.DecodeFromUtf8"/> supplies consumption, including a truncated final subpart;
-    /// encoding failures stay distinct from the scalar categories of
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>,
-    /// which calls Cf "a format control character".
+    /// Reads one scalar, or one ill-formed maximal subpart, of UTF-8 input and selects it under the rule.
+    /// <see cref="Rune.DecodeFromUtf8"/> reports the length of the maximal subpart it could not decode; at least one
+    /// byte is consumed, so every call makes progress.
     /// </summary>
     /// <param name="text">The complete input with a nonempty suffix at the offset.</param>
     /// <param name="offset">The current byte offset.</param>
-    /// <param name="rule">The category and exception selection.</param>
-    /// <param name="consumed">The decoder's consumed bytes, with at least one byte of progress.</param>
-    /// <returns>The selected occurrence; -1 denotes the absence of a code point for malformed bytes.</returns>
+    /// <param name="rule">The class and exception selection.</param>
+    /// <param name="consumed">The bytes of the scalar or of the maximal subpart.</param>
+    /// <returns>The selected occurrence, or null when the input unit is not selected.</returns>
     private static TextHygieneFinding? ReadNext(ReadOnlySpan<byte> text, int offset, TextHygieneRule rule, out int consumed)
     {
         OperationStatus status = Rune.DecodeFromUtf8(text[offset..], out Rune rune, out consumed);
@@ -216,37 +225,49 @@ public static class TextHygiene
             consumed = Math.Max(consumed, 1);
 
             return rule.Classes.Contains(TextHygieneClass.IllFormedEncoding)
-                ? new TextHygieneFinding(offset, -1, TextHygieneClass.IllFormedEncoding)
+                ? TextHygieneFinding.ForIllFormedEncoding(offset, consumed)
                 : null;
         }
 
-        return SelectFinding(offset, rune.Value, Classify(rune), rule);
+        int next = offset + consumed;
+        bool isBeforeLineFeed = next < text.Length && text[next] == LineFeed;
+
+        return SelectFinding(offset, consumed, rune.Value, Classify(rune), isBeforeLineFeed, rule);
     }
 
     /// <summary>
-    /// Applies <see cref="TextHygieneRule"/> exceptions before category selection so allowed code points pass.
-    /// For example, Cc is "a C0 or C1 control code" in
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>,
-    /// but <see cref="TextHygieneRule.DisplayText"/> allows three layout controls.
+    /// Selects an occurrence when the rule names its class and no exception covers its code point. A carriage return
+    /// directly followed by a line feed is exempt whenever the line feed is, because the pair is one line break.
     /// </summary>
-    private static TextHygieneFinding? SelectFinding(int offset, int codePoint, TextHygieneClass? category, TextHygieneRule rule)
+    /// <param name="offset">The index of the first input unit.</param>
+    /// <param name="length">The input units the code point spans.</param>
+    /// <param name="codePoint">The scalar value or lone code unit.</param>
+    /// <param name="category">The class, or null when no class covers the code point.</param>
+    /// <param name="isBeforeLineFeed">Whether the next input unit is a line feed.</param>
+    /// <param name="rule">The class and exception selection.</param>
+    /// <returns>The occurrence, or null when it is not selected.</returns>
+    private static TextHygieneFinding? SelectFinding(int offset, int length, int codePoint, TextHygieneClass? category, bool isBeforeLineFeed, TextHygieneRule rule)
     {
-        return category is { } value && rule.Classes.Contains(value) && !rule.AllowedCodePoints.Contains(codePoint)
-            ? new TextHygieneFinding(offset, codePoint, value)
+        bool isAllowed = rule.AllowedCodePoints.Contains(codePoint)
+            || (codePoint == CarriageReturn && isBeforeLineFeed && rule.AllowedCodePoints.Contains(LineFeed));
+
+        return category is { } value && rule.Classes.Contains(value) && !isAllowed
+            ? TextHygieneFinding.ForCodePoint(offset, length, codePoint, value)
             : null;
     }
 
     /// <summary>
-    /// Maps <see cref="Rune.GetUnicodeCategory"/> using the running runtime's Unicode data.
-    /// <see href="https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt">Blocks.txt</see> lists
-    /// "E0000..E007F; Tags"; that whole block takes precedence over
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see> categories.
+    /// Classifies a scalar: first by the fixed range of the Tags block, which does not depend on the runtime; then by
+    /// <see cref="Rune.GetUnicodeCategory"/>, the running runtime's general category.
     /// </summary>
+    /// <param name="rune">The decoded scalar.</param>
+    /// <returns>The class, or null when no class covers the scalar.</returns>
     private static TextHygieneClass? Classify(Rune rune)
     {
-        return rune.Value is >= 0xE0000 and <= 0xE007F
-            ? TextHygieneClass.Tag
-            : Rune.GetUnicodeCategory(rune) switch
+        return rune.Value switch
+        {
+            >= 0xE0000 and <= 0xE007F => TextHygieneClass.Tag,
+            _ => Rune.GetUnicodeCategory(rune) switch
             {
                 UnicodeCategory.Control => TextHygieneClass.Control,
                 UnicodeCategory.Format => TextHygieneClass.Format,
@@ -255,22 +276,35 @@ public static class TextHygiene
                 UnicodeCategory.PrivateUse => TextHygieneClass.PrivateUse,
                 UnicodeCategory.OtherNotAssigned => TextHygieneClass.Unassigned,
                 _ => null
-            };
+            }
+        };
     }
 
     /// <summary>
-    /// Writes one six-character escape directly to <see cref="IBufferWriter{T}"/> storage.
-    /// Four uppercase hexadecimal digits expose the UTF-16 unit, including Cs,
-    /// "a surrogate code point", in
-    /// <see href="https://www.unicode.org/reports/tr44/#General_Category_Values">UAX #44, Table 12</see>.
+    /// Writes a run of unescaped input into the caller's writer, asking it for no storage when the run is empty.
     /// </summary>
+    /// <param name="run">The characters to copy unchanged.</param>
+    /// <param name="writer">The destination owning the storage.</param>
+    private static void WriteRun(ReadOnlySpan<char> run, IBufferWriter<char> writer)
+    {
+        if(!run.IsEmpty)
+        {
+            writer.Write(run);
+        }
+    }
+
+    /// <summary>
+    /// Writes the visible escape of one UTF-16 code unit, a reverse solidus, u and four uppercase hexadecimal digits,
+    /// straight into storage the caller's writer provides.
+    /// </summary>
+    /// <param name="unit">The code unit to escape.</param>
+    /// <param name="writer">The destination owning the storage.</param>
     private static void WriteEscape(char unit, IBufferWriter<char> writer)
     {
         Span<char> destination = writer.GetSpan(EscapeLength);
-        destination[0] = '\\';
+        destination[0] = ReverseSolidus;
         destination[1] = 'u';
         _ = ((int)unit).TryFormat(destination[2..EscapeLength], out _, "X4", CultureInfo.InvariantCulture);
         writer.Advance(EscapeLength);
     }
-
 }
