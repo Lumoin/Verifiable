@@ -44,13 +44,32 @@ internal static class LoopbackKestrel
     /// </summary>
     internal static TimeSpan KeepAliveTimeout { get; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// The request-line and request-header budget every loopback listener presents via
+    /// <see cref="KestrelServerLimits.MaxRequestLineSize"/> and
+    /// <see cref="KestrelServerLimits.MaxRequestHeadersTotalSize"/>: four times
+    /// <see cref="Verifiable.JCose.Jws.DefaultMaxJwsLength"/>, so a compact JWS longer than the longest one
+    /// the library verifies, presented in a header or a query parameter, reaches the endpoint over the
+    /// wire and the endpoint's own refusal of it is what a test observes, not the listener's.
+    /// </summary>
+    internal static int MaxRequestHeadSize { get; } = 4 * Verifiable.JCose.Jws.DefaultMaxJwsLength;
+
+    /// <summary>
+    /// The input buffer every loopback listener presents via <see cref="KestrelServerLimits.MaxRequestBufferSize"/>:
+    /// twice <see cref="MaxRequestHeadSize"/>, since Kestrel requires the buffer to hold the longest
+    /// request line and header block it accepts.
+    /// </summary>
+    internal static long MaxRequestBufferSize { get; } = 2L * MaxRequestHeadSize;
+
 
     /// <summary>
     /// Configures <paramref name="options"/> for a loopback HTTPS listener bound to
     /// <see cref="IPAddress.Loopback"/> on an OS-assigned port, presenting <paramref name="certificate"/>:
     /// disables the minimum-data-rate guards, widens <see cref="KestrelServerLimits.RequestHeadersTimeout"/>
     /// and <see cref="KestrelServerLimits.KeepAliveTimeout"/> to <see cref="RequestHeadersTimeout"/> and
-    /// <see cref="KeepAliveTimeout"/>, and widens the TLS handshake budget to <see cref="HandshakeTimeout"/>.
+    /// <see cref="KeepAliveTimeout"/>, widens the request line and header block to
+    /// <see cref="MaxRequestHeadSize"/> and the input buffer to <see cref="MaxRequestBufferSize"/>, and
+    /// widens the TLS handshake budget to <see cref="HandshakeTimeout"/>.
     /// Every loopback host bootstrap in this repository calls this instead of a bare
     /// <c>Listen</c>/<c>UseHttps</c> pair, so none of them individually re-derives Kestrel's
     /// public-internet defaults for a fixture that has no public-internet threat model.
@@ -85,6 +104,9 @@ internal static class LoopbackKestrel
         options.Limits.MinResponseDataRate = null;
         options.Limits.RequestHeadersTimeout = RequestHeadersTimeout;
         options.Limits.KeepAliveTimeout = KeepAliveTimeout;
+        options.Limits.MaxRequestBufferSize = MaxRequestBufferSize;
+        options.Limits.MaxRequestLineSize = MaxRequestHeadSize;
+        options.Limits.MaxRequestHeadersTotalSize = MaxRequestHeadSize;
 
         options.Listen(IPAddress.Loopback, port: 0, listen =>
         {

@@ -4,7 +4,7 @@ namespace Verifiable.OAuth.Server;
 
 /// <summary>
 /// The kind of presented object a <c>jti</c> (or a one-time value handled the same way) identifies,
-/// the domain <see cref="JtiReplayGuard.CorrelationKey"/> keeps its replay records apart by.
+/// the domain <see cref="JtiReplayGuard.CorrelationKey(JtiReplayPurpose, string, string?, string)"/> keeps its replay records apart by.
 /// </summary>
 /// <remarks>
 /// Each specification scopes the uniqueness of its identifier to its own kind of object: a request
@@ -27,7 +27,9 @@ public enum JtiReplayPurpose
 
     /// <summary>
     /// The <c>jti</c> of a DPoP proof at the token endpoint or at a protected resource of the same
-    /// authorization server (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 §11.1</see>).
+    /// authorization server, recorded per target URI
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 §11.1</see>: "In the
+    /// context of the target URI, servers can store the jti value of each DPoP proof").
     /// </summary>
     DpopProof,
 

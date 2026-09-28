@@ -495,6 +495,68 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>: "If the protected
+    /// resource request does not include authentication credentials or does not contain an access token
+    /// that enables access to the protected resource, the resource server MUST include the HTTP
+    /// "WWW-Authenticate" response header field". The <c>realm</c> the challenge names is an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 §5.6.4</see> quoted-string
+    /// ("qdtext = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text"). An issuer configured with Unicode
+    /// text, in its path (<c>https://issuer.example/</c> followed by U+79DF U+6237) or in its host
+    /// (<c>https://b</c> U+00FC <c>cher.example/tenant</c>), is written there in its URI form, as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 §3.1</see> maps an IRI: the
+    /// UTF-8 octets of each path character as "%HH" (<c>%E7%A7%9F%E6%88%B7</c>) and the host by the IDNA
+    /// ToASCII operation (<c>xn--bcher-kva.example</c>, RFC 3492's encoding of the label). A request to the
+    /// Deferred Credential endpoint sent over the wire with no <c>Authorization</c> header is answered 401,
+    /// with an empty body and the one challenge <c>Bearer realm="&lt;that URI&gt;", DPoP algs="…"</c>.
+    /// </summary>
+    /// <param name="issuerRow">Where the configured issuer holds Unicode text.</param>
+    [TestMethod]
+    [DataRow(UnicodePathIssuerRow)]
+    [DataRow(UnicodeHostIssuerRow)]
+    public async Task ProtectedEndpointChallengesARequestWithoutCredentialsUnderAUnicodeIssuerAsync(string issuerRow)
+    {
+        (Uri configuredIssuer, string expectedRealm) = issuerRow switch
+        {
+            UnicodePathIssuerRow => (
+                new Uri("https://issuer.example/" + string.Concat((char)0x79DF, (char)0x6237)),
+                "https://issuer.example/%E7%A7%9F%E6%88%B7"),
+            UnicodeHostIssuerRow => (
+                new Uri("https://b" + (char)0x00FC + "cher.example/tenant"),
+                "https://xn--bcher-kva.example/tenant"),
+            _ => throw new ArgumentOutOfRangeException(nameof(issuerRow), issuerRow, "Unknown issuer row.")
+        };
+        Assert.IsTrue(IssuerIdentifierValidation.IsValidIssuerShape(configuredIssuer),
+            "The configured issuer is one the server accepts as an issuer identifier.");
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer served = host.Host("default");
+        ClientRecord unicodeIssuerRegistration = served.Registrations[material.Registration.TenantId.Value] with
+        {
+            IssuerUri = configuredIssuer
+        };
+        served.Registrations[unicodeIssuerRegistration.TenantId.Value] = unicodeIssuerRegistration;
+        served.Registrations[unicodeIssuerRegistration.ClientId] = unicodeIssuerRegistration;
+
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, DeferredEndpointRow, authorization: null, ProtectedRequestBody(DeferredEndpointRow)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.NonValidated.TryGetValues("WWW-Authenticate", out HeaderStringValues challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(
+            $"Bearer realm=\"{expectedRealm}\", DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            Assert.ContainsSingle(challenges));
+        Assert.AreEqual(string.Empty, body, "RFC 6750 §3.1: no error code or other error information.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "If the
     /// mechanism used to attempt authentication could be established unambiguously, then the
     /// corresponding challenge SHOULD be used to deliver error information". An access token whose
@@ -537,6 +599,12 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
     /// <summary>The row addressing the Notification Endpoint.</summary>
     private const string NotificationEndpointRow = "oid4vci-notification";
+
+    /// <summary>The row whose configured issuer holds Unicode text in its path.</summary>
+    private const string UnicodePathIssuerRow = "unicode-path-issuer";
+
+    /// <summary>The row whose configured issuer holds Unicode text in its host.</summary>
+    private const string UnicodeHostIssuerRow = "unicode-host-issuer";
 
 
     /// <summary>

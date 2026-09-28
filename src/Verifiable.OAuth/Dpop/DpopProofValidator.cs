@@ -354,6 +354,21 @@ public static class DpopProofValidator
 
 
     /// <summary>
+    /// The form of a target URI the <c>htu</c> comparison of <see cref="IsSameTargetUri"/> reads: the
+    /// normalized scheme, host, port and path of an absolute <c>http</c> or <c>https</c> URI, so a replay
+    /// record kept per target (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449
+    /// §11.1</see>) names one target by one string whatever its spelling. A value that is not such a URI
+    /// is returned unchanged and compared as written.
+    /// </summary>
+    /// <param name="targetUri">The target URI of a served request.</param>
+    /// <returns>The normalized target.</returns>
+    internal static string NormalizeTargetUri(string targetUri) =>
+        Uri.TryCreate(targetUri, UriKind.Absolute, out Uri? uri) && IsHttpScheme(uri)
+            ? NormalizedTarget(uri)
+            : targetUri;
+
+
+    /// <summary>
     /// The scheme, host, port and path of <paramref name="uri"/> read with
     /// <see cref="UriFormat.SafeUnescaped"/>, with the hexadecimal digits of every percent-encoding
     /// left in them uppercased (RFC 3986 §6.2.2.1).

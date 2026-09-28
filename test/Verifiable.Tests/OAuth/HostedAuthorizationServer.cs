@@ -1181,8 +1181,8 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 
             ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
             {
-                //DPoP replay lookup is keyed specifically by flow kind: the AS
-                //pre-composes "{issuer}:{jti}" and asks under FlowKind.JtiReplay.
+                //Replay lookup is keyed specifically by flow kind: the AS pre-composes
+                //the JtiReplayGuard.CorrelationKey and asks under FlowKind.JtiReplay.
                 //Other flows fall through to the general secondary indexes.
                 if(flowKind == FlowKind.JtiReplay)
                 {

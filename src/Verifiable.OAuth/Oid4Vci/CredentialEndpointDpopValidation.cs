@@ -201,10 +201,11 @@ internal static class CredentialEndpointDpopValidation
                 $"DPoP nonce invalid: {nonceResult.FailureReason}.", cancellationToken).ConfigureAwait(false);
         }
 
-        //jti replay — the same shared (issuer, jti) correlation store, RFC 9449 §11.1.
-        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-            server, context, registration.TenantId, JtiReplayPurpose.DpopProof,
-            issuerUri.OriginalString, proofResult.Claims.Jti,
+        //jti replay — the same shared correlation store, the proof's jti recorded in the context of
+        //the target URI this request is served at (RFC 9449 §11.1).
+        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultDpopProofAsync(
+            server, context, registration.TenantId,
+            issuerUri.OriginalString, htu, proofResult.Claims.Jti,
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
 
@@ -286,10 +287,59 @@ internal static class CredentialEndpointDpopValidation
         Uri issuerUri = await ResolveIssuerAsync(server, registration, context, cancellationToken)
             .ConfigureAwait(false);
         string challenge = BuildMissingCredentialsChallenge(
-            BearerTokenChallenge.BuildChallenge(realm: issuerUri.OriginalString));
+            BearerTokenChallenge.BuildChallenge(realm: HeaderSafeIssuer(issuerUri)));
 
         return ServerHttpResponse.Unauthorized()
             .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
+    }
+
+
+    /// <summary>
+    /// The issuer in a form the <c>realm</c> quoted-string can carry. The realm's value is an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 §5.6.4</see>
+    /// quoted-string, whose characters are HTAB, SP and visible US-ASCII ("qdtext = HTAB / SP / %x21 /
+    /// %x23-5B / %x5D-7E / obs-text", <c>"</c> and <c>\</c> through quoted-pair), while an issuer accepted by
+    /// <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/> may hold Unicode text. An issuer written
+    /// in that repertoire is used as written. Otherwise it is mapped to its URI form as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 §3.1</see> maps an IRI: a
+    /// non-ASCII host is written in its IDNA ASCII form ("Replace the ireg-name part of the IRI by the
+    /// part converted using the ToASCII operation specified in section 4.1 of [RFC3490] on each
+    /// dot-separated label"), and every other non-ASCII character is written as the percent-encoding of
+    /// its UTF-8 octets ("Convert the character to a sequence of one or more octets using UTF-8" and
+    /// "Convert each octet to %HH, where HH is the hexadecimal notation of the octet value").
+    /// </summary>
+    /// <param name="issuerUri">The issuer the request is served under.</param>
+    /// <returns>The issuer text, in visible US-ASCII.</returns>
+    private static string HeaderSafeIssuer(Uri issuerUri)
+    {
+        string original = issuerUri.OriginalString;
+        if(IsVisibleAscii(original))
+        {
+            return original;
+        }
+
+        Uri asciiHost = IsVisibleAscii(issuerUri.Host)
+            ? issuerUri
+            : new UriBuilder(issuerUri) { Host = issuerUri.IdnHost }.Uri;
+
+        return asciiHost.AbsoluteUri;
+    }
+
+
+    /// <summary>Whether every character of <paramref name="value"/> is a visible US-ASCII character (%x21-7E).</summary>
+    /// <param name="value">The text.</param>
+    /// <returns><see langword="true"/> when the text holds visible US-ASCII only.</returns>
+    private static bool IsVisibleAscii(string value)
+    {
+        foreach(char c in value)
+        {
+            if(c is < '!' or > '~')
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
 

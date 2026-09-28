@@ -385,8 +385,8 @@ internal sealed class DpopProofValidatorTests
     /// makes it longer than <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS the library
     /// verifies, is answered by <see cref="DpopProofValidator.ValidateAsync"/> as a failure,
     /// <see cref="DpopProofValidationFailureReason.Malformed"/>, never an exception. The validator is
-    /// called directly: an HTTP server's own header limit refuses such a request before any endpoint
-    /// runs, while the validator is public and reachable from any transport.
+    /// public and is called directly here; <see cref="UserInfoEndpointTests.UserInfoRefusesADpopProofLongerThanTheVerifiedMaximumAsync"/>
+    /// presents such a proof to an endpoint over the wire.
     /// </summary>
     [TestMethod]
     public async Task ValidateAsyncAnswersAProofLongerThanTheVerifiedMaximumAsMalformedAsync()

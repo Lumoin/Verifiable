@@ -443,6 +443,199 @@ internal sealed class ResourceServerEndToEndTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 §4.1.4</see>: "The
+    /// processing of the "exp" claim requires that the current date/time MUST be before the expiration
+    /// date/time listed in the "exp" claim.", and §2 NumericDate: "other than that non-integer values can be
+    /// represented." An access token whose <c>exp</c> is a quarter of a second after the resource server's
+    /// clock (the clock half a second past a whole second, the <c>exp</c> three quarters past it) has not
+    /// expired: the resource server validating it with <see cref="Verifiable.OAuth.JwsAccessTokenValidator"/>
+    /// serves it over the wire with 200 and the token's <c>sub</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task AccessTokenWhoseFractionalExpIsAfterTheClockIsServed()
+    {
+        long wholeSecond = NowInstant.ToUnixTimeSeconds();
+        FakeTimeProvider time = new(DateTimeOffset.FromUnixTimeSeconds(wholeSecond).AddMilliseconds(500));
+
+        TokenPresentation presentation = await PresentTokenAsync(time, payload =>
+        {
+            payload[WellKnownJwtClaimNames.Exp] = wholeSecond + 0.75;
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, presentation.Status, presentation.Body);
+        using JsonDocument document = JsonDocument.Parse(presentation.Body);
+        Assert.AreEqual(Subject, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">RFC 7519 §4.1.5</see>: "The
+    /// processing of the "nbf" claim requires that the current date/time MUST be after or equal to the
+    /// not-before date/time listed in the "nbf" claim.", and §2 NumericDate: "other than that non-integer
+    /// values can be represented." An access token whose <c>nbf</c> lies a quarter of a second beyond the
+    /// resource server's clock extended by its 60-second tolerance (the clock half a second past a whole
+    /// second, the <c>nbf</c> sixty seconds and three quarters past it) is not yet valid: it is refused over
+    /// the wire with 401 and the challenge <c>Bearer realm="protected", error="invalid_token",
+    /// error_description="Access token nbf is in the future.", resource_metadata="…"</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task AccessTokenWhoseFractionalNbfIsBeyondTheToleranceIsRefused()
+    {
+        long wholeSecond = NowInstant.ToUnixTimeSeconds();
+        FakeTimeProvider time = new(DateTimeOffset.FromUnixTimeSeconds(wholeSecond).AddMilliseconds(500));
+
+        TokenPresentation presentation = await PresentTokenAsync(time, payload =>
+        {
+            payload[WellKnownJwtClaimNames.Nbf] = wholeSecond + 60.75;
+        }).ConfigureAwait(false);
+
+        AssertInvalidTokenChallenge(presentation, "Access token nbf is in the future.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 §2</see> NumericDate: "A JSON
+    /// numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified
+    /// UTC date/time ... other than that non-integer values can be represented." An access token whose
+    /// <c>exp</c> is 253402300799.5, half a second into 9999-12-31T23:59:59Z, names a representable
+    /// instant after the clock: the resource server serves it over the wire with 200 and the token's
+    /// <c>sub</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task AccessTokenWhoseExpIsWithinTheLastRepresentableSecondIsServed()
+    {
+        FakeTimeProvider time = new(NowInstant);
+
+        TokenPresentation presentation = await PresentTokenAsync(time, payload =>
+        {
+            payload[WellKnownJwtClaimNames.Exp] = 253402300799.5;
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, presentation.Status, presentation.Body);
+        using JsonDocument document = JsonDocument.Parse(presentation.Body);
+        Assert.AreEqual(Subject, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 §2</see> NumericDate counts
+    /// seconds from 1970-01-01T00:00:00Z, "other than that non-integer values can be represented", so
+    /// -0.5 names 1969-12-31T23:59:59.5Z and -0.25 the quarter second after it. An access token whose
+    /// <c>iat</c> is -0.5 and <c>exp</c> -0.25 has a positive lifetime that ended long before the clock: it
+    /// is refused over the wire with 401 and the challenge <c>Bearer realm="protected",
+    /// error="invalid_token", error_description="Access token has expired.", resource_metadata="…"</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task AccessTokenWhoseNegativeFractionalClaimsNameAnEndedLifetimeIsRefusedAsExpired()
+    {
+        FakeTimeProvider time = new(NowInstant);
+
+        TokenPresentation presentation = await PresentTokenAsync(time, payload =>
+        {
+            payload[WellKnownJwtClaimNames.Iat] = -0.5;
+            payload[WellKnownJwtClaimNames.Exp] = -0.25;
+        }).ConfigureAwait(false);
+
+        AssertInvalidTokenChallenge(presentation, "Access token has expired.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>: "Resource servers
+    /// receiving a JWT access token MUST validate it in the following manner", the signature step among
+    /// them. An access token from the trusted issuer whose signature segment makes it longer than
+    /// <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS the library verifies, cannot be
+    /// validated: presented over the wire, the resource server validating it with
+    /// <see cref="Verifiable.OAuth.JwsAccessTokenValidator"/> refuses it with 401 and the challenge
+    /// <c>Bearer realm="protected", error="invalid_token", error_description="Access token exceeds the
+    /// longest compact JWS this validator verifies.", resource_metadata="…"</c>, never a server error.
+    /// </summary>
+    [TestMethod]
+    public async Task AccessTokenLongerThanTheVerifiedMaximumReturns401()
+    {
+        FakeTimeProvider time = new(NowInstant);
+
+        TokenPresentation presentation = await PresentTokenAsync(
+            time, alterPayload: static _ => { }, lengthenSignatureBy: Jws.DefaultMaxJwsLength).ConfigureAwait(false);
+
+        AssertInvalidTokenChallenge(presentation, "Access token exceeds the longest compact JWS this validator verifies.");
+    }
+
+
+    /// <summary>
+    /// What a resource server answered one presentation with, read before the server was stopped.
+    /// </summary>
+    /// <param name="Status">The response status.</param>
+    /// <param name="Challenges">Every <c>WWW-Authenticate</c> value of the response.</param>
+    /// <param name="Body">The response body.</param>
+    /// <param name="MetadataUrl">The resource server's metadata URL the challenge names.</param>
+    private sealed record TokenPresentation(HttpStatusCode Status, IReadOnlyList<string> Challenges, string Body, string MetadataUrl);
+
+
+    /// <summary>
+    /// Starts a resource server on <paramref name="time"/>, signs an access token from the trusted issuer
+    /// whose claims are issued a minute before that clock and expire five minutes after it, rewritten by
+    /// <paramref name="alterPayload"/>, and presents it under the <c>Bearer</c> scheme over the wire,
+    /// its signature segment lengthened by <paramref name="lengthenSignatureBy"/> characters.
+    /// </summary>
+    /// <param name="time">The resource server's clock.</param>
+    /// <param name="alterPayload">Rewrites the token's claims before signing.</param>
+    /// <param name="lengthenSignatureBy">The number of characters appended to the signed token.</param>
+    /// <returns>The response.</returns>
+    private async Task<TokenPresentation> PresentTokenAsync(
+        FakeTimeProvider time, Action<JwtPayload> alterPayload, int lengthenSignatureBy = 0)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DateTimeOffset now = time.GetUtcNow();
+
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(keys.PublicKey),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: now - TimeSpan.FromMinutes(1),
+            expiresAt: now + TimeSpan.FromMinutes(5),
+            issuer: Issuer,
+            audience: [Audience]);
+        alterPayload(payload);
+        string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false)
+            + new string('A', lengthenSignatureBy);
+
+        using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        IReadOnlyList<string> challenges = response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? values)
+            ? [.. values]
+            : [];
+
+        return new TokenPresentation(response.StatusCode, challenges, body, rs.MetadataUrl!.OriginalString);
+    }
+
+
+    /// <summary>
+    /// Asserts a presentation was refused: 401, one <c>WWW-Authenticate</c> value equal to
+    /// <c>Bearer realm="protected", error="invalid_token", error_description="<paramref name="description"/>",
+    /// resource_metadata="…"</c>, and no claim served.
+    /// </summary>
+    /// <param name="presentation">The response.</param>
+    /// <param name="description">The validator's failure description the challenge carries.</param>
+    private static void AssertInvalidTokenChallenge(TokenPresentation presentation, string description)
+    {
+        Assert.AreEqual(HttpStatusCode.Unauthorized, presentation.Status, presentation.Body);
+        Assert.AreEqual(
+            $"Bearer realm=\"protected\", error=\"invalid_token\", error_description=\"{description}\", resource_metadata=\"{presentation.MetadataUrl}\"",
+            Assert.ContainsSingle(presentation.Challenges));
+        Assert.IsFalse(presentation.Body.Contains("\"sub\"", StringComparison.Ordinal), "A refused request is served no claim.");
+    }
+
+
+    /// <summary>
     /// Asserts a refusal of a presented token over the wire: 401, one <c>WWW-Authenticate</c> value equal
     /// to the challenge the resource server writes, <c>Bearer realm="protected", error="invalid_token",
     /// error_description="<paramref name="description"/>", resource_metadata="…"</c>, and no claim served.

@@ -796,10 +796,8 @@ internal sealed class EndSessionLogoutTests
     /// any operations requiring the information that failed to correctly validate MUST be aborted". A
     /// hint that is an ID Token this server issued with its signature segment lengthened past
     /// <see cref="Verifiable.JCose.Jws.DefaultMaxJwsLength"/>, the longest compact JWS the library
-    /// verifies, cannot be validated: the end-session request is answered 400 <c>invalid_request</c>,
-    /// never a server fault, and the session stays live. The request is dispatched in-process, since
-    /// the endpoint answers GET and an HTTP server refuses a request line of that length before any
-    /// endpoint runs; a host on another transport reaches the endpoint with it.
+    /// verifies, cannot be validated: the end-session request sent over the wire is answered 400
+    /// <c>invalid_request</c>, never redirected and never a server fault, and the session stays live.
     /// </summary>
     [TestMethod]
     public async Task EndSessionRefusesAHintLongerThanTheVerifiedMaximumAsync()
@@ -814,16 +812,12 @@ internal sealed class EndSessionLogoutTests
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
         string oversizedHint = idToken + new string('A', Verifiable.JCose.Jws.DefaultMaxJwsLength);
 
-        ServerHttpResponse response = await EndSessionAsync(host, material, new RequestFields
-        {
-            [OAuthRequestParameterNames.IdTokenHint] = oversizedHint,
-            [OAuthRequestParameterNames.PostLogoutRedirectUri] = RegisteredPostLogout,
-            [OAuthRequestParameterNames.State] = "o1"
-        }).ConfigureAwait(false);
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, oversizedHint, "o1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(400, response.StatusCode, response.Body);
-        Assert.IsNull(response.Location, "A refused hint must not redirect.");
-        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "A refused hint must not redirect.");
+        using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual(
             "id_token_hint exceeds the longest compact JWS this server verifies.",

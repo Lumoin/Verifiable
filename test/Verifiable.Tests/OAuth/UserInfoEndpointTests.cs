@@ -15,6 +15,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.States;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -209,9 +210,8 @@ internal sealed class UserInfoEndpointTests
     /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
     /// token issued by this server with its signature segment lengthened past
     /// <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS the library verifies, is malformed:
-    /// UserInfo answers it 401 <c>invalid_token</c> with <c>Bearer error="invalid_token"</c>, never a
-    /// server fault. The request is dispatched in-process, since an HTTP server refuses a header of that
-    /// length before any endpoint runs; a host on another transport reaches the endpoint with it.
+    /// presented in the <c>Authorization</c> header over the wire, UserInfo answers it 401
+    /// <c>invalid_token</c> with <c>Bearer error="invalid_token"</c>, never a server fault.
     /// </summary>
     [TestMethod]
     public async Task UserInfoRefusesAnAccessTokenLongerThanTheVerifiedMaximumAsync()
@@ -225,17 +225,46 @@ internal sealed class UserInfoEndpointTests
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
         string oversizedToken = accessToken + new string('A', Jws.DefaultMaxJwsLength);
 
-        ServerHttpResponse response = await DispatchUserInfoAsync(
-            host, material, WellKnownHttpMethods.Post, authorizationHeader: "Bearer " + oversizedToken)
-            .ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, oversizedToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, response.StatusCode, response.Body);
-        Assert.IsTrue(response.Headers.TryGetValue("WWW-Authenticate", out string? challenge));
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenge);
-        using JsonDocument document = JsonDocument.Parse(response.Body);
-        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual(
             "Access token exceeds the longest compact JWS this server verifies.",
+            document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see> item 2: "The DPoP
+    /// HTTP request header field value is a single and well-formed JWT." A DPoP proof whose signature
+    /// segment makes it longer than <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS the
+    /// library verifies, presented over the wire at UserInfo with the DPoP-bound access token it was built
+    /// for, cannot be validated: UserInfo answers 401 with <c>DPoP error="invalid_dpop_proof"</c> and the
+    /// description naming the proof malformed, never a server fault.
+    /// </summary>
+    [TestMethod]
+    public async Task UserInfoRefusesADpopProofLongerThanTheVerifiedMaximumAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        string oversizedProof = proof + new string('A', Jws.DefaultMaxJwsLength);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: oversizedProof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), "invalid_dpop_proof");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(
+            "DPoP proof validation failed: Malformed.",
             document.RootElement.GetProperty("error_description").GetString());
     }
 
@@ -1244,6 +1273,77 @@ internal sealed class UserInfoEndpointTests
         string body = await replay.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRefused(replay, body, HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), "invalid_dpop_proof");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 §11.1</see>: "In the
+    /// context of the target URI, servers can store the jti value of each DPoP proof for the time window
+    /// in which the respective DPoP proof JWT would be accepted to prevent multiple uses of the same DPoP
+    /// proof. HTTP requests to the same URI for which the jti value has been seen before would be
+    /// declined." The client's token request carries a DPoP proof to the token endpoint over the wire;
+    /// a second, independently signed proof carrying the same <c>jti</c>, its <c>htu</c> naming UserInfo
+    /// with the right <c>ath</c> and nonce, is presented at UserInfo over the wire and served 200 with the
+    /// End-User's <c>sub</c>, since UserInfo is another target URI; the same UserInfo proof presented
+    /// again is declined with 401 and <c>DPoP error="invalid_dpop_proof"</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task UserInfoServesAProofWhoseJtiATokenEndpointProofCarriedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //Every DPoP proof jti the server records while the token is issued, in order; the token request
+        //is the last request of the flow that carries a proof.
+        SaveServerFlowStateDelegate save = host.Server.OAuth().SaveFlowStateAsync!;
+        List<string> recordedProofJtis = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SaveFlowStateAsync = (tenantId, correlationKey, state, stepCount, ctx, ct) =>
+            {
+                if(state is JtiSeenState { Purpose: JtiReplayPurpose.DpopProof } proofRecord)
+                {
+                    lock(recordedProofJtis)
+                    {
+                        recordedProofJtis.Add(proofRecord.Jti);
+                    }
+                }
+
+                return save(tenantId, correlationKey, state, stepCount, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        string boundAccessToken = await IssueDpopBoundAccessTokenAsync(host, material, fixture).ConfigureAwait(false);
+        string tokenEndpointProofJti;
+        lock(recordedProofJtis)
+        {
+            Assert.IsNotEmpty(recordedProofJtis, "The token endpoint records the jti of the proof it accepted.");
+            tokenEndpointProofJti = recordedProofJtis[^1];
+        }
+
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceAsync(host, material, boundAccessToken).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            fixture.DpopKey, "POST", userInfoUrl.ToString(), boundAccessToken, nonce, TimeProvider.GetUtcNow(),
+            TestContext.CancellationToken, jti: tokenEndpointProofJti).ConfigureAwait(false);
+
+        using HttpResponseMessage atUserInfo = await SendUserInfoOverWireAsync(
+            host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string servedBody = await atUserInfo.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.OK, atUserInfo.StatusCode, servedBody);
+        using JsonDocument served = JsonDocument.Parse(servedBody);
+        Assert.AreEqual(SubjectId, served.RootElement.GetProperty("sub").GetString());
+
+        using HttpResponseMessage atUserInfoAgain = await SendUserInfoOverWireAsync(
+            host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string replayBody = await atUserInfoAgain.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        AssertRefused(atUserInfoAgain, replayBody, HttpStatusCode.Unauthorized,
+            ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), "invalid_dpop_proof");
     }
 
 

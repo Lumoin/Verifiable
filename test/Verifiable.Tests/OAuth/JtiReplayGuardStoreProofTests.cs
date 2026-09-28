@@ -41,6 +41,12 @@ internal sealed class JtiReplayGuardStoreProofTests
     /// <summary>A representative <c>jti</c> value within the guard's length bound.</summary>
     private const string Jti = "a-unique-jti-value";
 
+    /// <summary>The token endpoint target URI a DPoP proof is presented at.</summary>
+    private const string TokenEndpointTarget = "https://issuer.example.com/token";
+
+    /// <summary>A protected resource target URI of the same server, distinct from <see cref="TokenEndpointTarget"/>.</summary>
+    private const string UserInfoTarget = "https://issuer.example.com/userinfo";
+
     /// <summary>The per-test fake clock; anchored to the canonical epoch so timestamps are deterministic.</summary>
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
@@ -248,7 +254,7 @@ internal sealed class JtiReplayGuardStoreProofTests
 
     /// <summary>
     /// RFC 7523 §3 rule 7 keys the used-<c>jti</c> set by <c>(issuer, jti)</c>; the guard composes that
-    /// key once through <see cref="JtiReplayGuard.CorrelationKey"/>, and the flow state a host indexes
+    /// key once through <see cref="JtiReplayGuard.CorrelationKey(JtiReplayPurpose, string, string?, string)"/>, and the flow state a host indexes
     /// under composes its own key through the same function via
     /// <see cref="JtiSeenState.CorrelationKey"/>, so the two never diverge.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523, Section 3</see>.
@@ -256,7 +262,7 @@ internal sealed class JtiReplayGuardStoreProofTests
     [TestMethod]
     public void CorrelationKeyMatchesJtiSeenStateCorrelationKey()
     {
-        string guardKey = JtiReplayGuard.CorrelationKey(JtiReplayPurpose.DpopProof, Issuer, Jti);
+        string guardKey = JtiReplayGuard.CorrelationKey(JtiReplayPurpose.DpopProof, Issuer, TokenEndpointTarget, Jti);
         JtiSeenState state = new()
         {
             FlowId = "flow-id",
@@ -266,6 +272,7 @@ internal sealed class JtiReplayGuardStoreProofTests
             Kind = FlowKind.JtiReplay,
             Purpose = JtiReplayPurpose.DpopProof,
             Issuer = Issuer,
+            Target = TokenEndpointTarget,
             Jti = Jti,
             SeenAt = TimeProvider.GetUtcNow()
         };
@@ -354,6 +361,40 @@ internal sealed class JtiReplayGuardStoreProofTests
 
 
     /// <summary>
+    /// RFC 9449 §11.1: "In the context of the target URI, servers can store the jti value of each DPoP
+    /// proof for the time window in which the respective DPoP proof JWT would be accepted to prevent
+    /// multiple uses of the same DPoP proof. HTTP requests to the same URI for which the jti value has
+    /// been seen before would be declined." Two DPoP proofs of one issuer carrying one <c>jti</c>, one at
+    /// the token endpoint and one at UserInfo, are two first uses; each presented again at its own target
+    /// is a replay, and so is the UserInfo proof presented again at a spelling of its target that differs
+    /// only in the case of the host.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task CorrectStoreKeepsDpopProofTargetsApart()
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        using EndpointServer server = BuildServer(store);
+        ExchangeContext context = BuildContext(JtiReplayPolicy.Required);
+
+        JtiReplayOutcome atTokenEndpoint = await ConsultDpopProofAsync(server, context, TokenEndpointTarget).ConfigureAwait(false);
+        JtiReplayOutcome atUserInfo = await ConsultDpopProofAsync(server, context, UserInfoTarget).ConfigureAwait(false);
+        JtiReplayOutcome atTokenEndpointAgain = await ConsultDpopProofAsync(server, context, TokenEndpointTarget).ConfigureAwait(false);
+        JtiReplayOutcome atUserInfoAgain = await ConsultDpopProofAsync(server, context, UserInfoTarget).ConfigureAwait(false);
+        JtiReplayOutcome atUserInfoRespelled = await ConsultDpopProofAsync(
+            server, context, "https://ISSUER.example.com/userinfo").ConfigureAwait(false);
+
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, atTokenEndpoint);
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, atUserInfo,
+            "A proof at another target URI is not a replay of the token endpoint's proof.");
+        Assert.AreEqual(JtiReplayOutcome.Replayed, atTokenEndpointAgain);
+        Assert.AreEqual(JtiReplayOutcome.Replayed, atUserInfoAgain);
+        Assert.AreEqual(JtiReplayOutcome.Replayed, atUserInfoRespelled,
+            "A target spelled with its host in another case is the same target URI.");
+    }
+
+
+    /// <summary>
     /// RFC 9449 §11.1: "servers can store the jti value of each DPoP proof for the time window in which
     /// the respective DPoP proof JWT would be accepted to prevent multiple uses of the same DPoP proof."
     /// Two presentations of one <c>jti</c> both read "not seen"; the first finishes its consultation,
@@ -411,7 +452,8 @@ internal sealed class JtiReplayGuardStoreProofTests
 
     /// <summary>
     /// Consults the guard for the given <paramref name="issuer"/>/<paramref name="jti"/> with a
-    /// five-minute recording window off the fake clock, carrying the test's cancellation token.
+    /// five-minute recording window off the fake clock, carrying the test's cancellation token. A DPoP
+    /// proof is consulted at <see cref="TokenEndpointTarget"/>, the target URI its record is kept under.
     /// </summary>
     /// <param name="server">The minimal server carrying the wired store and clock.</param>
     /// <param name="context">The exchange context carrying the resolved policy.</param>
@@ -428,9 +470,25 @@ internal sealed class JtiReplayGuardStoreProofTests
     {
         DateTimeOffset expiresAt = TimeProvider.GetUtcNow().AddMinutes(5);
 
-        return JtiReplayGuard.ConsultAsync(
-            server, context, Tenant, purpose, issuer, jti, expiresAt, TestContext.CancellationToken);
+        return purpose == JtiReplayPurpose.DpopProof
+            ? JtiReplayGuard.ConsultDpopProofAsync(
+                server, context, Tenant, issuer, TokenEndpointTarget, jti, expiresAt, TestContext.CancellationToken)
+            : JtiReplayGuard.ConsultAsync(
+                server, context, Tenant, purpose, issuer, jti, expiresAt, TestContext.CancellationToken);
     }
+
+
+    /// <summary>
+    /// Consults the guard for a DPoP proof carrying <see cref="Jti"/> under <see cref="Issuer"/> at
+    /// <paramref name="targetUri"/>, with a five-minute recording window off the fake clock.
+    /// </summary>
+    /// <param name="server">The minimal server carrying the wired store and clock.</param>
+    /// <param name="context">The exchange context carrying the resolved policy.</param>
+    /// <param name="targetUri">The target URI the proof is presented at.</param>
+    /// <returns>The replay outcome.</returns>
+    private ValueTask<JtiReplayOutcome> ConsultDpopProofAsync(EndpointServer server, ExchangeContext context, string targetUri) =>
+        JtiReplayGuard.ConsultDpopProofAsync(
+            server, context, Tenant, Issuer, targetUri, Jti, TimeProvider.GetUtcNow().AddMinutes(5), TestContext.CancellationToken);
 
 
     /// <summary>

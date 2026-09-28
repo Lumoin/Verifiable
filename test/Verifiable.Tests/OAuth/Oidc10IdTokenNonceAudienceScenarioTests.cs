@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
@@ -40,6 +38,9 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     //Test-local claim id for the deployment contributor adding a second audience; the
     //WellKnownClaimIds registry holds the library-shipped ones.
     private static ClaimId SecondAudienceClaimId { get; } = ClaimId.Create(9110, "TestSecondAudience");
+
+    /// <summary>The test-local claim id of the deployment contributor that sets one ID Token claim's value.</summary>
+    private static ClaimId IdTokenClaimValueClaimId { get; } = ClaimId.Create(9111, "TestIdTokenClaimValue");
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -270,11 +271,11 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">RFC 7519 §4.1.5</see>: "The
     /// "nbf" (not before) claim identifies the time before which the JWT MUST NOT be accepted for
-    /// processing." An id_token the relying party receives in the token response over the real wire,
-    /// re-signed under the issuer's key with an <c>nbf</c> no instant is represented for
-    /// (253402300800, one second after 9999-12-31T23:59:59Z), names a time that cannot be checked:
-    /// <see cref="Oidc10IdTokenValidator.ValidateAsync"/> rejects it with
-    /// <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, never as an ID Token carrying no
+    /// processing." The issuer's deployment contributes an <c>nbf</c> no instant is represented for
+    /// (253402300800, one second after 9999-12-31T23:59:59Z) to the ID Token it signs; the relying party
+    /// receives that id_token in the token response over the real wire and validates it as received. It
+    /// names a time that cannot be checked: <see cref="Oidc10IdTokenValidator.ValidateAsync"/> rejects it
+    /// with <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, never as an ID Token carrying no
     /// <c>nbf</c>.
     /// </summary>
     [TestMethod]
@@ -284,13 +285,12 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await ApplyIdTokenClaimContributorAsync(host, WellKnownJwtClaimNames.Nbf, 253402300800L).ConfigureAwait(false);
 
         (string idToken, string issuer) = await DriveCodeExchangeOverWireForIdTokenAsync(host, material).ConfigureAwait(false);
-        string farNotBeforeIdToken = await ResignIdTokenPayloadAsync(
-            host, idToken, material.SigningKeyId, payload => payload["nbf"] = 253402300800L).ConfigureAwait(false);
 
         Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
-            farNotBeforeIdToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer)
+            idToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer)
             .ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess);
@@ -302,10 +302,10 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     /// <summary>
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
     /// §2</see>: <c>auth_time</c>'s "value is a JSON number representing the number of seconds from
-    /// 1970-01-01T00:00:00Z as measured in UTC until the date/time." An id_token the relying party receives
-    /// in the token response over the real wire, re-signed under the issuer's key with an
-    /// <c>auth_time</c> of 9223372036854775807, a value no instant is represented for, is rejected by
-    /// <see cref="Oidc10IdTokenValidator.ValidateAsync"/> with
+    /// 1970-01-01T00:00:00Z as measured in UTC until the date/time." The issuer's deployment contributes
+    /// an <c>auth_time</c> of 9223372036854775807, a value no instant is represented for, to the ID Token
+    /// it signs; the relying party receives that id_token in the token response over the real wire and
+    /// validates it as received: <see cref="Oidc10IdTokenValidator.ValidateAsync"/> rejects it with
     /// <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, never surfaced as an absent
     /// <c>auth_time</c> a <c>max_age</c> check would misread.
     /// </summary>
@@ -316,13 +316,12 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await ApplyIdTokenClaimContributorAsync(host, WellKnownJwtClaimNames.AuthTime, long.MaxValue).ConfigureAwait(false);
 
         (string idToken, string issuer) = await DriveCodeExchangeOverWireForIdTokenAsync(host, material).ConfigureAwait(false);
-        string farAuthTimeIdToken = await ResignIdTokenPayloadAsync(
-            host, idToken, material.SigningKeyId, payload => payload["auth_time"] = long.MaxValue).ConfigureAwait(false);
 
         Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
-            farAuthTimeIdToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer)
+            idToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer)
             .ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess);
@@ -359,24 +358,32 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
 
 
     /// <summary>
-    /// Re-signs an ID Token under <paramref name="keyId"/> with its payload rewritten by
-    /// <paramref name="alterPayload"/>, through <see cref="CompactJwsResigning.ResignWithPayloadAsync"/>.
+    /// Replaces the host's claim issuer with the standard rules plus a deployment contributor that sets
+    /// <paramref name="claimName"/> to <paramref name="claimValue"/> in every ID Token the host signs, so
+    /// the value reaches the relying party inside a token the issuer itself issued over the wire.
     /// </summary>
-    /// <param name="host">The host holding the key's private half.</param>
-    /// <param name="idToken">The issued ID Token.</param>
-    /// <param name="keyId">The key the rebuilt token is signed under.</param>
-    /// <param name="alterPayload">Rewrites the parsed payload.</param>
-    /// <returns>The re-signed ID Token.</returns>
-    private static async Task<string> ResignIdTokenPayloadAsync(
-        TestHostShell host, string idToken, KeyId keyId, Action<JsonObject> alterPayload)
+    /// <param name="host">The host whose claim issuer is replaced.</param>
+    /// <param name="claimName">The ID Token claim the contributor sets.</param>
+    /// <param name="claimValue">The value it sets.</param>
+    private async Task ApplyIdTokenClaimContributorAsync(TestHostShell host, string claimName, object claimValue)
     {
-        string[] parts = idToken.Split('.');
-        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
-        JsonObject payload = JsonNode.Parse(payloadOwner.Memory.Span)!.AsObject();
-        alterPayload(payload);
+        List<ClaimDelegate<ClaimContributionTarget>> rules = ContributionProfiles.StandardRules();
+        rules.Add(new ClaimDelegate<ClaimContributionTarget>(
+            new ClaimDelegateAsync<ClaimContributionTarget>((target, _) => ValueTask.FromResult<List<Claim>>(
+                target is IdTokenTarget
+                    ?
+                    [
+                        new Claim(IdTokenClaimValueClaimId, ClaimOutcome.Success,
+                            new ClaimContributionContext(claimName, claimValue), Claim.NoSubClaims)
+                    ]
+                    : [new Claim(IdTokenClaimValueClaimId, ClaimOutcome.NotApplicable)])),
+            [IdTokenClaimValueClaimId]));
 
-        return await CompactJwsResigning.ResignWithPayloadAsync(host, idToken, keyId, payload.ToJsonString())
-            .ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
+                WellKnownAssessorIds.ClaimContributors, rules, TimeProvider);
+        }).ConfigureAwait(false);
     }
 
 

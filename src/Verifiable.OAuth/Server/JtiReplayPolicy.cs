@@ -16,7 +16,7 @@ namespace Verifiable.OAuth.Server;
 /// <c>private_key_jwt</c> client assertion (RFC 7523 §2.2), and the SIOPv2 self-issued response
 /// nonce (SIOPv2 §11.2). Every path shares the same <see cref="Verifiable.Server.ServerIntegration.ResolveCorrelationKeyAsync"/> /
 /// <see cref="Verifiable.Server.ServerIntegration.SaveFlowStateAsync"/> store, keyed by
-/// <see cref="JtiReplayGuard.CorrelationKey"/> under <see cref="JtiReplayFlowKind.Instance"/>. A
+/// <see cref="JtiReplayGuard.CorrelationKey(JtiReplayPurpose, string, string?, string)"/> under <see cref="JtiReplayFlowKind.Instance"/>. A
 /// non-null resolution at that key signals the <c>jti</c> has been seen before; a null
 /// resolution signals first use, which the guard records before returning — and then proves,
 /// by resolving the same key again and requiring it to equal the flow id it just saved. This
@@ -52,7 +52,7 @@ public enum JtiReplayPolicy
 {
     /// <summary>
     /// <c>jti</c> required and checked against the <see cref="JtiReplayGuard"/> store keyed by
-    /// <see cref="JtiReplayGuard.CorrelationKey"/>; rejection on repeat, and on a store that
+    /// <see cref="JtiReplayGuard.CorrelationKey(JtiReplayPurpose, string, string?, string)"/>; rejection on repeat, and on a store that
     /// cannot prove it recorded the first use.
     /// </summary>
     Required,

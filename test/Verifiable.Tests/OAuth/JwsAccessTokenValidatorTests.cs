@@ -62,8 +62,9 @@ internal sealed class JwsAccessTokenValidatorTests
     /// names; an access token longer than <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS
     /// the library verifies, cannot be validated. <see cref="JwsAccessTokenValidator.ValidateAsync"/>
     /// answers it as <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, never an exception.
-    /// The validator is called directly: an HTTP server's own header limit refuses such a request before
-    /// the resource runs, while the validator is public and reachable from any transport.
+    /// The validator is public and is called directly here;
+    /// <see cref="ResourceServerEndToEndTests.AccessTokenLongerThanTheVerifiedMaximumReturns401"/> presents
+    /// such a token to a resource server over the wire.
     /// </summary>
     [TestMethod]
     public async Task ValidatorAnswersATokenLongerThanTheVerifiedMaximumAsMalformedAsync()

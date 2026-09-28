@@ -209,13 +209,13 @@ internal static class DpopTokenEndpointValidation
                 .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
         }
 
-        //JTI replay check — the same shared (issuer, jti) correlation store the JAR path
-        //uses, governed by JtiReplayPolicy: Required fails closed when no store is wired, and
-        //the read and first-use record happen as one unit (RFC 9449 §11.1). Runs only after
-        //structural and cryptographic checks pass.
-        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-            server, context, registration.TenantId, JtiReplayPurpose.DpopProof,
-            issuerUri.OriginalString, proofResult.Claims.Jti,
+        //JTI replay check — the same shared correlation store the JAR path uses, the proof's jti
+        //recorded in the context of this request's target URI (RFC 9449 §11.1), governed by
+        //JtiReplayPolicy: Required fails closed when no store is wired, and the read and first-use
+        //record happen as one unit. Runs only after structural and cryptographic checks pass.
+        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultDpopProofAsync(
+            server, context, registration.TenantId,
+            issuerUri.OriginalString, tokenEndpointHtu, proofResult.Claims.Jti,
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
 
@@ -473,13 +473,13 @@ internal static class DpopTokenEndpointValidation
                 .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
         }
 
-        //JTI replay check — the same shared (issuer, jti) correlation store the JAR path
-        //uses, governed by JtiReplayPolicy: Required fails closed when no store is wired, and
-        //the read and first-use record happen as one unit (RFC 9449 §11.1). Runs only after
-        //structural and cryptographic checks pass.
-        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-            server, context, registration.TenantId, JtiReplayPurpose.DpopProof,
-            issuerUri.OriginalString, proofResult.Claims.Jti,
+        //JTI replay check — the same shared correlation store the JAR path uses, the proof's jti
+        //recorded in the context of this request's target URI (RFC 9449 §11.1), governed by
+        //JtiReplayPolicy: Required fails closed when no store is wired, and the read and first-use
+        //record happen as one unit. Runs only after structural and cryptographic checks pass.
+        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultDpopProofAsync(
+            server, context, registration.TenantId,
+            issuerUri.OriginalString, tokenEndpointHtu, proofResult.Claims.Jti,
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
 
