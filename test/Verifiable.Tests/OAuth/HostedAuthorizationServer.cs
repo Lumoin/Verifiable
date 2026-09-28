@@ -89,6 +89,23 @@ internal readonly record struct GrantOrderObservation(
 
 
 /// <summary>
+/// One call the library made to the host's <see cref="ServerVerificationKeyResolverDelegate"/>, as
+/// <see cref="HostedAuthorizationServer.VerificationKeyResolutions"/> records it: the key asked for,
+/// the <see cref="KeyUsageContext"/> the key is expected under, and the tenant the call is scoped to.
+/// A row reads these to prove which usage a library call site names, the resolver's documented
+/// contract; the resolver itself answers every held key regardless, so the library's own admission
+/// stays what decides verification.
+/// </summary>
+/// <param name="KeyId">The key identifier the library asked the resolver for.</param>
+/// <param name="Usage">The usage the library stated the key is expected under.</param>
+/// <param name="TenantId">The tenant the library scoped the resolution to.</param>
+internal readonly record struct VerificationKeyResolution(
+    KeyId KeyId,
+    KeyUsageContext Usage,
+    TenantId TenantId);
+
+
+/// <summary>
 /// Per-host state for a single test-fixture <c>AuthorizationServer</c>
 /// deployment: registrations, key stores, flow-handle indexes, and the
 /// associated HTTPS host + HttpClient when the host is serving requests.
@@ -349,6 +366,24 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
     public ConcurrentDictionary<KeyId, PublicKeyMemory> VerificationKeys { get; } = new();
     public ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys { get; } = new();
     public ConcurrentDictionary<string, string> RegistrationAccessTokens { get; } = new();
+
+    /// <summary>
+    /// Every call the library made to this host's verification-key resolver, in arrival order. The
+    /// resolver records a call before it answers from <see cref="VerificationKeys"/>, so a row can read
+    /// the usage and tenant a call site named for the request under test.
+    /// </summary>
+    public ConcurrentQueue<VerificationKeyResolution> VerificationKeyResolutions { get; } = new();
+
+
+    /// <summary>
+    /// The recorded resolutions of <paramref name="keyId"/>, in arrival order.
+    /// </summary>
+    /// <param name="keyId">The key identifier a row names.</param>
+    /// <returns>The entries of <see cref="VerificationKeyResolutions"/> whose key is <paramref name="keyId"/>.</returns>
+    public ImmutableArray<VerificationKeyResolution> ResolutionsOf(KeyId keyId)
+    {
+        return [.. VerificationKeyResolutions.Where(resolution => resolution.KeyId == keyId)];
+    }
 
 
     //HTTPS host state — populated when StartHttpHostAsync runs against this host.
@@ -1456,10 +1491,16 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
                     host.SigningKeys.TryGetValue(keyId, out PrivateKeyMemory? key)
                         ? key : null),
 
+            //The resolver records the call, then answers any held key by its identifier: the
+            //admission of a key for a usage is the library's to prove, the recorded usage the row's.
             VerificationKeyResolver = (keyId, usage, tenantId, ctx, ct) =>
-                ValueTask.FromResult(
+            {
+                host.VerificationKeyResolutions.Enqueue(new VerificationKeyResolution(keyId, usage, tenantId));
+
+                return ValueTask.FromResult(
                     host.VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
-                        ? key : null),
+                        ? key : null);
+            },
 
             DecryptionKeyResolver = (keyId, ctx, ct) =>
                 ValueTask.FromResult(

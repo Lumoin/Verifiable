@@ -2137,8 +2137,10 @@ public static class AuthCodeEndpoints
                 OAuthErrors.ServerError, "VerificationKeyResolver is not configured."));
         }
 
+        //RFC 9101 §6.2: the request object is verified under a key associated with the client, asked
+        //for under the usage of the slot its identifier was read from.
         PublicKeyMemory? signingPublicKey = await resolver(
-            verificationKeyId, KeyUsageContext.None, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+            verificationKeyId, KeyUsageContext.JarSigning, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
         if(signingPublicKey is null)
         {

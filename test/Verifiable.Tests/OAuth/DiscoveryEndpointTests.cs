@@ -1,9 +1,13 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Net;
 using System.Text.Json;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Tests.TestInfrastructure;
@@ -219,6 +223,92 @@ internal sealed class DiscoveryEndpointTests
         List<string> values = EnumerateStrings(algs);
         Assert.Contains(WellKnownJwaValues.Es256, values,
             "P-256 IdTokenIssuance signing key must surface as ES256 in id_token_signing_alg_values_supported.");
+    }
+
+
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: every
+    /// resolution states the <see cref="KeyUsageContext"/> the key is expected under, and a publishing
+    /// site names the set it publishes. The design follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
+    /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
+    /// fail to validate other kinds of JWTs." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC 7517 §4.2</see>: "The "use"
+    /// (public key use) parameter identifies the intended use of the public key." A registration that
+    /// lists one P-256 key for each of its ID Token, authorization-response and introspection-response
+    /// sets, with the capabilities that put the authorize and introspection endpoints on its chain,
+    /// serves its OpenID Provider metadata over the wire with 200, the row's algorithm field
+    /// <c>["ES256"]</c>, and the resolver asked for the row's key exactly once, under the row's usage.
+    /// The rows: <c>id_token_signing_alg_values_supported</c> under
+    /// <see cref="KeyUsageContext.IdTokenIssuance"/>; <c>authorization_signing_alg_values_supported</c>
+    /// under <see cref="KeyUsageContext.AuthorizationResponseSigning"/>;
+    /// <c>introspection_signing_alg_values_supported</c> under
+    /// <see cref="KeyUsageContext.IntrospectionResponseSigning"/>.
+    /// </summary>
+    /// <param name="algorithmField">The metadata member the row's key set derives its algorithms into.</param>
+    [TestMethod]
+    [DataRow("id_token_signing_alg_values_supported")]
+    [DataRow("authorization_signing_alg_values_supported")]
+    [DataRow("introspection_signing_alg_values_supported")]
+    public async Task DiscoveryResolvesSigningKeysUnderTheirAdvertisedUsageAsync(string algorithmField)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+            WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthTokenIntrospection);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
+
+        //The introspection endpoint joins the chain only once its seams are wired, and the
+        //discovery document advertises introspection-response algorithms only for an endpoint on it.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
+        }).ConfigureAwait(false);
+
+        KeyId idTokenKeyId = host.AllocateSigningKey();
+        KeyId authorizationResponseKeyId = host.AllocateSigningKey();
+        KeyId introspectionResponseKeyId = host.AllocateSigningKey();
+        await host.UpdateSigningKeysAsync(material.Registration.TenantId.Value, new Dictionary<KeyUsageContext, SigningKeySet>
+        {
+            [KeyUsageContext.AccessTokenIssuance] = material.Registration.SigningKeys[KeyUsageContext.AccessTokenIssuance],
+            [KeyUsageContext.IdTokenIssuance] = new SigningKeySet { Current = [idTokenKeyId] },
+            [KeyUsageContext.AuthorizationResponseSigning] = new SigningKeySet { Current = [authorizationResponseKeyId] },
+            [KeyUsageContext.IntrospectionResponseSigning] = new SigningKeySet { Current = [introspectionResponseKeyId] }
+        }).ConfigureAwait(false);
+
+        (KeyId rowKeyId, KeyUsageContext rowUsage) = algorithmField switch
+        {
+            "id_token_signing_alg_values_supported" => (idTokenKeyId, KeyUsageContext.IdTokenIssuance),
+            "authorization_signing_alg_values_supported" => (authorizationResponseKeyId, KeyUsageContext.AuthorizationResponseSigning),
+            "introspection_signing_alg_values_supported" => (introspectionResponseKeyId, KeyUsageContext.IntrospectionResponseSigning),
+            _ => throw new ArgumentOutOfRangeException(nameof(algorithmField), algorithmField, "Unknown algorithm field row.")
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri discoveryUrl = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.MetadataDiscovery, material.Registration.TenantId.Value));
+
+        hosted.VerificationKeyResolutions.Clear();
+        using HttpResponseMessage response = await hosted.SharedHttpClient!.GetAsync(discoveryUrl, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsTrue(document.RootElement.TryGetProperty(algorithmField, out JsonElement algorithms),
+            $"The document advertises {algorithmField}. Body: {body}");
+        Assert.AreEqual("ES256", Assert.ContainsSingle(EnumerateStrings(algorithms)));
+
+        VerificationKeyResolution resolution = Assert.ContainsSingle(hosted.ResolutionsOf(rowKeyId));
+        Assert.AreEqual(rowUsage, resolution.Usage);
     }
 
 

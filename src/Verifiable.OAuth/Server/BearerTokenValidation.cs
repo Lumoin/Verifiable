@@ -247,8 +247,12 @@ public static class BearerTokenValidation
     /// names "Use different keys for different kinds of JWTs. Then the keys used to validate one kind of
     /// JWT will fail to validate other kinds of JWTs." among the ways to keep the validation rules of the
     /// kinds this issuer produces mutually exclusive. A key the resolver holds but the registration does
-    /// not list for access tokens is refused with a fixed description that names no key; a listed key the
-    /// resolver cannot produce is refused as unknown.
+    /// not list for access tokens is refused with a fixed description that names no key. The resolver is
+    /// then asked for the admitted key under the same usage,
+    /// <see cref="KeyUsageContext.AccessTokenIssuance"/>, so a key store that keeps keys apart per kind
+    /// answers only a key it holds for access tokens; a listed key the resolver does not produce for that
+    /// usage is refused as unknown. The admission stays the library's guarantee: the usage lets the
+    /// resolver narrow what verifies, never widen it.
     /// </remarks>
     private static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateCoreAsync(
         string bearerToken,
@@ -349,18 +353,18 @@ public static class BearerTokenValidation
 
             //RFC 8725 §3.12: an access token verifies as this server's own only under a key the
             //registration lists for access-token issuance, in any rotation slot. The admission runs
-            //before the resolver, which answers any key it holds by kid, so a client's assertion key,
-            //another registration's key or another token kind's key never verifies an access token
-            //here. The description names no key.
+            //before the resolver, which may answer any key it holds by kid, so a client's assertion
+            //key, another registration's key or another token kind's key never verifies an access
+            //token here. The description names no key.
             if(!IssuedKeyAdmission.IsListedFor(registration, KeyUsageContext.AccessTokenIssuance, new KeyId(kid)))
             {
                 return (null, RefuseToken(
                     "Access token is not signed by a key this server issues access tokens with."));
             }
 
-            //3. Resolve the verification key.
+            //3. Resolve the verification key under the usage the admission names.
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver(
-                new KeyId(kid), KeyUsageContext.None, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+                new KeyId(kid), KeyUsageContext.AccessTokenIssuance, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
             if(publicKey is null)
             {

@@ -62,7 +62,14 @@ public static class JwsAccessTokenValidator
     /// <param name="accessToken">The compact-serialised JWS access token.</param>
     /// <param name="expectedIssuer">The expected <c>iss</c> value; compared by ordinal equality.</param>
     /// <param name="expectedAudience">The expected <c>aud</c> value; required to be present in the claim.</param>
-    /// <param name="resolveVerificationKey">Resolves the public verification key for the header's <c>kid</c>.</param>
+    /// <param name="resolveVerificationKey">
+    /// Resolves the public verification key for the header's <c>kid</c>, asked under
+    /// <see cref="KeyUsageContext.AccessTokenIssuance"/>: the kind this validator verifies, and the only
+    /// usage signal a resource server has, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see> "does not provide
+    /// a mechanism for identifying a specific key as the one used to sign JWT access tokens". A resolver
+    /// that keeps keys apart per kind answers <see langword="null"/> for a key it holds for another usage.
+    /// </param>
     /// <param name="verifySignature">The signature-verification primitive threaded into <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>.</param>
     /// <param name="parser">JSON parser for header and payload segments.</param>
     /// <param name="base64UrlDecoder">Base64url decoder.</param>
@@ -108,7 +115,7 @@ public static class JwsAccessTokenValidator
             timeProvider,
             memoryPool,
             iatSkew,
-            KeyUsageContext.None,
+            KeyUsageContext.AccessTokenIssuance,
             tenantId,
             context,
             expectedAuthorizedParty,
@@ -187,7 +194,7 @@ public static class JwsAccessTokenValidator
     /// <param name="accessToken">The compact-serialised JWS access token.</param>
     /// <param name="expectedIssuer">The expected <c>iss</c> value; compared by ordinal equality.</param>
     /// <param name="expectedAudience">The expected <c>aud</c> value; required to be present in the claim.</param>
-    /// <param name="resolveVerificationKey">Resolves the public verification key for the header's <c>kid</c>.</param>
+    /// <param name="resolveVerificationKey">Resolves the public verification key for the header's <c>kid</c> under <paramref name="usage"/>.</param>
     /// <param name="verifySignature">The signature-verification primitive threaded into <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>.</param>
     /// <param name="parser">JSON parser for header and payload segments.</param>
     /// <param name="base64UrlDecoder">Base64url decoder.</param>
@@ -195,9 +202,10 @@ public static class JwsAccessTokenValidator
     /// <param name="memoryPool">Memory pool for transient decoded buffers and pooled signing-input bytes.</param>
     /// <param name="iatSkew">Tolerance for an <c>iat</c> claim slightly in the future.</param>
     /// <param name="usage">
-    /// The <see cref="KeyUsageContext"/> passed to <paramref name="resolveVerificationKey"/> — the
-    /// kind of token this call verifies. <see cref="KeyUsageContext.None"/> until each profile names
-    /// its own usage.
+    /// The <see cref="KeyUsageContext"/> passed to <paramref name="resolveVerificationKey"/>: the kind
+    /// of token this call verifies, <see cref="KeyUsageContext.AccessTokenIssuance"/> from
+    /// <see cref="ValidateAsync"/> and <see cref="KeyUsageContext.IdTokenIssuance"/> from
+    /// <see cref="Oidc10IdTokenValidator.ValidateAsync"/>.
     /// </param>
     /// <param name="tenantId">Tenant identifier threaded to the key resolver.</param>
     /// <param name="context">Per-request context bag threaded to the key resolver.</param>

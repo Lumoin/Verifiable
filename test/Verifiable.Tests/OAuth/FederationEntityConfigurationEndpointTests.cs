@@ -308,6 +308,55 @@ internal sealed class FederationEntityConfigurationEndpointTests
     }
 
 
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: every
+    /// resolution states the <see cref="KeyUsageContext"/> the key is expected under, and a publishing
+    /// site names the set it publishes. The design follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC 7517 §4.2</see>: "The "use"
+    /// (public key use) parameter identifies the intended use of the public key." The Entity
+    /// Configuration fetched over the wire is answered 200, and the resolver is asked for each key the
+    /// registration publishes for federation entity signatures exactly once, under
+    /// <see cref="KeyUsageContext.FederationEntitySignature"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task EntityConfigurationResolvesPublishedKeysUnderFederationEntitySignatureAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        Uri federationEntityId = new("https://usage-verifier.example.com");
+        const string ClientId = "https://usage-verifier.example.com";
+        Uri baseUri = new("https://usage-verifier.example.com");
+
+        using VerifierKeyMaterial keys = await app.RegisterFederationCapableClientAsync(
+            ClientId,
+            baseUri,
+            federationEntityId,
+            federationKeys,
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = keys.Registration.TenantId.Value;
+        List<KeyId> publishedKeyIds = [.. keys.Registration.SigningKeys[KeyUsageContext.FederationEntitySignature].PublishedKeys];
+        Assert.IsNotEmpty(publishedKeyIds, "The registration publishes a federation entity signing key.");
+
+        host.VerificationKeyResolutions.Clear();
+
+        _ = await AssertEndpointReturnsAsync(host,
+            $"/connect/{segment}/.well-known/openid-federation",
+            expectedContentType: WellKnownMediaTypes.Application.EntityStatementJwt).ConfigureAwait(false);
+
+        foreach(KeyId publishedKeyId in publishedKeyIds)
+        {
+            VerificationKeyResolution resolution = Assert.ContainsSingle(host.ResolutionsOf(publishedKeyId));
+            Assert.AreEqual(KeyUsageContext.FederationEntitySignature, resolution.Usage);
+        }
+    }
+
+
     //Reads metadata.openid_provider.client_registration_types_supported out of a
     //parsed Entity Configuration as a list of string tokens.
     private static List<string> ExtractClientRegistrationTypes(EntityStatement statement)

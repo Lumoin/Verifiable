@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Net;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -11,8 +12,9 @@ namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Confirms that the
-/// <see cref="TenantId"/> parameter added to
-/// <see cref="ServerSigningKeyResolverDelegate"/> and
+/// <see cref="TenantId"/> parameter of
+/// <see cref="ServerSigningKeyResolverDelegate"/>,
+/// <see cref="ServerVerificationKeyResolverDelegate"/> and
 /// <see cref="ResolveServerHmacKeyDelegate"/> actually carries the
 /// registration's tenant identifier through to the application's
 /// resolver implementation.
@@ -53,7 +55,7 @@ internal sealed class TenantIdThreadingTests
         using VerifierKeyMaterial keys = await host.RegisterDpopClientAsync(
             clientId, clientBase, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        await DriveCodeExchangeAsync(host, keys).ConfigureAwait(false);
+        _ = await DriveCodeExchangeAsync(host, keys).ConfigureAwait(false);
 
         Assert.IsNotEmpty(observed,
             "Signing resolver must be invoked at least once during token issuance.");
@@ -67,29 +69,50 @@ internal sealed class TenantIdThreadingTests
     }
 
 
+    /// <summary>
+    /// A local contract of this library, labelled as such: the per-tenant key isolation
+    /// <see cref="ServerVerificationKeyResolverDelegate"/> documents, "The tenantId parameter enables
+    /// per-tenant key isolation". An access token issued to a registration and presented as a Bearer
+    /// token at that registration's UserInfo endpoint over the wire is served 200, and every resolution
+    /// of the token's key is scoped to the registration's own tenant.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#middle-layer-cryptographic-primitive-delegates">Cryptographic delegates §3</see>.
+    /// </summary>
     [TestMethod]
     public async Task VerificationResolverReceivesRegistrationTenantId()
     {
-        //The verification resolver is invoked when validating inbound JARs.
-        //Driving a code exchange doesn't hit it; the OID4VP-side or JAR
-        //paths do. The structural confirmation is sufficient:
-        //the lambda installed on the test host has the new signature and
-        //the build passes. The threaded value is exercised end-to-end by
-        //the broader test suite's JAR-receiving paths.
         await using TestHostShell host = new(TimeProvider);
-        ServerVerificationKeyResolverDelegate resolver =
-            host.Server.OAuth().Cryptography.VerificationKeyResolver!;
+        string clientId = "https://client.example.com";
+        Uri clientBase = new(clientId);
+        _ = host.SeedTestSubject(subject: "subject-1");
 
-        //Smoke: call the resolver directly with a fabricated tenant to
-        //confirm the delegate accepts the five-parameter shape.
-        PublicKeyMemory? key = await resolver(
-            "kid-never-issued",
-            KeyUsageContext.None,
-            new TenantId("some-tenant"),
-            [],
-            TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial keys = await host.RegisterDpopClientAsync(
+            clientId, clientBase, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        Assert.IsNull(key, "Unknown kid must return null.");
+        InProcessAuthCodeDriveResult drive = await DriveCodeExchangeAsync(host, keys).ConfigureAwait(false);
+        using JsonDocument tokenBody = JsonDocument.Parse(drive.TokenResponse.Body);
+        string accessToken = tokenBody.RootElement.GetProperty("access_token").GetString()!;
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri userInfoUrl = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, keys.Registration.TenantId.Value));
+        using HttpRequestMessage request = new(HttpMethod.Post, userInfoUrl);
+        _ = request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {accessToken}");
+
+        hosted.VerificationKeyResolutions.Clear();
+        using HttpResponseMessage response = await hosted.SharedHttpClient!.SendAsync(request, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+
+        ImmutableArray<VerificationKeyResolution> resolutions = hosted.ResolutionsOf(keys.SigningKeyId);
+        Assert.IsNotEmpty(resolutions, "UserInfo resolves the access token's key.");
+        foreach(VerificationKeyResolution resolution in resolutions)
+        {
+            Assert.AreEqual(keys.Registration.TenantId, resolution.TenantId,
+                "Every verification-resolver invocation must receive the registration's tenant identifier.");
+        }
     }
 
 
@@ -139,11 +162,19 @@ internal sealed class TenantIdThreadingTests
     }
 
 
-    private async Task DriveCodeExchangeAsync(TestHostShell host, VerifierKeyMaterial keys)
+    /// <summary>
+    /// Drives the authorization-code flow for <c>subject-1</c> with the <c>openid</c> scope through
+    /// <paramref name="keys"/>'s registration, so the token endpoint signs an access token and an ID
+    /// Token under the registration's keys.
+    /// </summary>
+    /// <param name="host">The host serving the flow.</param>
+    /// <param name="keys">The registration the flow runs under.</param>
+    /// <returns>The drive's result, whose token response carries the issued tokens.</returns>
+    private async Task<InProcessAuthCodeDriveResult> DriveCodeExchangeAsync(TestHostShell host, VerifierKeyMaterial keys)
     {
         Uri redirectUri = new("https://client.example.com/callback");
 
-        _ = await InProcessAuthCodeDriver.DriveAsync(
+        return await InProcessAuthCodeDriver.DriveAsync(
             host, keys, "subject-1", redirectUri,
             new InProcessAuthCodeDriveOptions { Scope = WellKnownScopes.OpenId },
             TestContext.CancellationToken).ConfigureAwait(false);

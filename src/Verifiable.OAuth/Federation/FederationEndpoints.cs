@@ -1862,7 +1862,10 @@ public static class FederationEndpoints
     /// <see cref="KeyUsageContext.FederationEntitySignature"/>
     /// <see cref="SigningKeySet.PublishedKeys"/>. Each
     /// <see cref="KeyId"/> resolves through the
-    /// <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/>;
+    /// <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/>
+    /// under <see cref="KeyUsageContext.FederationEntitySignature"/>, the
+    /// usage of the set being published, and a key the resolver does not
+    /// produce for that usage is left out of the set;
     /// the JWK conversion goes through
     /// <see cref="CryptoFormatConversions.DefaultAlgorithmToJwkConverter"/>
     /// so the key's tag drives the JWK <c>kty</c> / <c>crv</c> / <c>n</c> /
@@ -1882,7 +1885,7 @@ public static class FederationEndpoints
         foreach(KeyId keyId in federationKeys.PublishedKeys)
         {
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver!(
-                keyId, KeyUsageContext.None, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+                keyId, KeyUsageContext.FederationEntitySignature, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             if(publicKey is null)
             {
                 continue;

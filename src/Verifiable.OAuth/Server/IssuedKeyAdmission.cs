@@ -33,10 +33,13 @@ namespace Verifiable.OAuth.Server;
 /// admission.
 /// </para>
 /// <para>
-/// The <see cref="ServerVerificationKeyResolverDelegate"/> resolves a key by its identifier alone and
-/// names no usage, so it can answer a key the application holds for another purpose (a client's
-/// assertion key, another registration's key, the key of another token kind); this admission runs
-/// before the resolver and refuses such a key whatever the resolver would answer.
+/// The <see cref="ServerVerificationKeyResolverDelegate"/> is told the usage the key is expected
+/// under, the same <see cref="KeyUsageContext"/> this admission checks, so an application's key store
+/// that keeps keys apart per kind answers only a key it holds for that usage. A resolver may still
+/// answer by the key identifier alone and return a key the application holds for another purpose (a
+/// client's assertion key, another registration's key, the key of another token kind); this admission
+/// runs first and refuses such a key whatever the resolver would answer. The admission stays the
+/// library's guarantee: the usage lets a resolver narrow what verifies, never widen it.
 /// </para>
 /// </remarks>
 internal static class IssuedKeyAdmission

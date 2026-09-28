@@ -862,6 +862,47 @@ internal sealed class EndSessionLogoutTests
     }
 
 
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: every
+    /// resolution states the <see cref="KeyUsageContext"/> the key is expected under. The design follows
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 §2</see>: "When an id_token_hint parameter is present, the OP MUST validate that it was
+    /// the issuer of the ID Token." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "If more
+    /// than one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST be
+    /// written such that they are mutually exclusive, rejecting JWTs of the wrong kind." An ID Token this
+    /// server issued, presented as <c>id_token_hint</c> at the end-session endpoint over the wire with
+    /// the registered <c>post_logout_redirect_uri</c> and a <c>state</c>, redirects 302 to
+    /// "https://client.example.com/post-logout" with the <c>state</c>, and the resolver is asked for the
+    /// hint's key under <see cref="KeyUsageContext.IdTokenIssuance"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task EndSessionResolvesTheHintKeyUnderIdTokenIssuanceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-R").ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        hosted.VerificationKeyResolutions.Clear();
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, idToken, "r1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Found, response.StatusCode, body);
+        Assert.AreEqual("https://client.example.com/post-logout?state=r1", response.Headers.Location?.OriginalString);
+        Assert.HasCount(1, terminated, "An ID Token hint ends the session exactly once.");
+
+        VerificationKeyResolution resolution = Assert.ContainsSingle(hosted.ResolutionsOf(material.SigningKeyId));
+        Assert.AreEqual(KeyUsageContext.IdTokenIssuance, resolution.Usage);
+    }
+
+
     /// <summary>The client identifier of the second registration whose signing key the foreign-key hint borrows.</summary>
     private const string OtherClientId = "https://other.client.example.com";
 

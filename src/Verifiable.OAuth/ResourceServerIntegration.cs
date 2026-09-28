@@ -37,7 +37,15 @@ public sealed class ResourceServerIntegration
 
     /// <summary>
     /// Resolves a public verification key by the access token header's
-    /// <c>kid</c>. Required.
+    /// <c>kid</c>, asked under
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.AccessTokenIssuance"/>
+    /// by <see cref="JwsAccessTokenValidator.ValidateAsync"/>: the resource
+    /// server has no other marker of the access-token key, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>
+    /// "does not provide a mechanism for identifying a specific key as the
+    /// one used to sign JWT access tokens". A resolver that keeps keys apart
+    /// per kind answers <see langword="null"/> for a key it holds for another
+    /// usage. Required.
     /// </summary>
     public required ServerVerificationKeyResolverDelegate ResolveVerificationKeyAsync { get; init; }
 

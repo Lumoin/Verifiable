@@ -1731,6 +1731,113 @@ internal sealed class UserInfoEndpointTests
     }
 
 
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: every
+    /// resolution states the <see cref="KeyUsageContext"/> the key is expected under, so a key store can
+    /// keep keys apart per kind. The design follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "If more
+    /// than one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST be
+    /// written such that they are mutually exclusive, rejecting JWTs of the wrong kind." and "Use
+    /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
+    /// fail to validate other kinds of JWTs." An access token issued to the registration and presented at
+    /// UserInfo over the wire as a Bearer token is served 200 with the End-User's <c>sub</c>, and the
+    /// resolver is asked for the token's key exactly once, under
+    /// <see cref="KeyUsageContext.AccessTokenIssuance"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task UserInfoResolvesTheAccessTokenKeyUnderAccessTokenIssuanceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        hosted.VerificationKeyResolutions.Clear();
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+
+        VerificationKeyResolution resolution = Assert.ContainsSingle(hosted.ResolutionsOf(material.SigningKeyId));
+        Assert.AreEqual(KeyUsageContext.AccessTokenIssuance, resolution.Usage);
+    }
+
+
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: a resolver
+    /// answers null for a key it does not hold for the usage it is asked under, and the refusal is the
+    /// library's answer to that null. The design follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
+    /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
+    /// fail to validate other kinds of JWTs." A resolver that holds the registration's key for access
+    /// tokens serves the access token at UserInfo over the wire with 200 and the End-User's <c>sub</c>;
+    /// a resolver that holds the same key only for ID Tokens answers nothing for an access token, and
+    /// UserInfo refuses it with 401 <c>invalid_token</c> and <c>Bearer error="invalid_token"</c>.
+    /// </summary>
+    /// <param name="row">Which usage the row's resolver holds the key under: <see cref="HeldForAccessTokensRow"/> or <see cref="HeldForIdTokensRow"/>.</param>
+    [TestMethod]
+    [DataRow(HeldForAccessTokensRow)]
+    [DataRow(HeldForIdTokensRow)]
+    public async Task UserInfoAnswersOnlyWhenTheResolverHoldsTheKeyForAccessTokensAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+
+        KeyUsageContext heldUsage = row switch
+        {
+            HeldForAccessTokensRow => KeyUsageContext.AccessTokenIssuance,
+            HeldForIdTokensRow => KeyUsageContext.IdTokenIssuance,
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown usage row.")
+        };
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Cryptography.VerificationKeyResolver = (keyId, usage, tenantId, ctx, ct) =>
+                ValueTask.FromResult(
+                    usage == heldUsage && hosted.VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
+                        ? key : null);
+        }).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(row == HeldForAccessTokensRow)
+        {
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+            using JsonDocument served = JsonDocument.Parse(body);
+            Assert.AreEqual(SubjectId, served.RootElement.GetProperty("sub").GetString());
+
+            return;
+        }
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        using JsonDocument refused = JsonDocument.Parse(body);
+        Assert.AreEqual(
+            "No verification key found for kid '" + material.SigningKeyId.Value + "'.",
+            refused.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>The resolver row that holds the registration's key for access tokens only.</summary>
+    private const string HeldForAccessTokensRow = "held-for-access-tokens";
+
+    /// <summary>The resolver row that holds the registration's key for ID Tokens only.</summary>
+    private const string HeldForIdTokensRow = "held-for-id-tokens";
+
+
     /// <summary>The <c>htu</c> row naming a path below the UserInfo path.</summary>
     private const string HtuOtherPathRow = "htu-other-path";
 

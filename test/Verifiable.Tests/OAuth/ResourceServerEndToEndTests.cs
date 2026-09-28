@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.Dpop;
@@ -73,6 +75,55 @@ internal sealed class ResourceServerEndToEndTests
         Assert.AreEqual(Subject, doc.RootElement.GetProperty("sub").GetString());
         Assert.AreEqual(Issuer, doc.RootElement.GetProperty("iss").GetString());
         Assert.AreEqual(ClientId, doc.RootElement.GetProperty("client_id").GetString());
+    }
+
+
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: every
+    /// resolution states the <see cref="KeyUsageContext"/> the key is expected under, and the resource
+    /// server's validator names the kind it verifies. The design follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>: "An authorization
+    /// server MAY elect to use different keys to sign OpenID Connect ID Tokens and JWT access tokens. This
+    /// specification does not provide a mechanism for identifying a specific key as the one used to sign
+    /// JWT access tokens." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
+    /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
+    /// fail to validate other kinds of JWTs." An access token presented as a Bearer token at the
+    /// protected resource over the wire is served 200, and the resource server's resolver is asked for
+    /// its key once, under <see cref="KeyUsageContext.AccessTokenIssuance"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task ResourceServerResolvesTheAccessTokenKeyUnderAccessTokenIssuanceAsync()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        FakeTimeProvider time = new(NowInstant);
+        ConcurrentQueue<KeyUsageContext> recordedUsages = new();
+
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(keys.PublicKey, recordedUsages),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
+        string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreEqual(Subject, doc.RootElement.GetProperty("sub").GetString());
+        Assert.AreEqual(KeyUsageContext.AccessTokenIssuance, Assert.ContainsSingle(recordedUsages));
     }
 
 
@@ -670,9 +721,23 @@ internal sealed class ResourceServerEndToEndTests
     }
 
 
-    private static ServerVerificationKeyResolverDelegate BuildResolver(PublicKeyMemory publicKey) =>
-        (kid, usage, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
-            string.Equals(kid.Value, Kid, StringComparison.Ordinal) ? publicKey : null);
+    /// <summary>
+    /// The resource server's verification-key resolver: answers <paramref name="publicKey"/> for the
+    /// key id <see cref="Kid"/> and nothing for any other, and, when <paramref name="recordedUsages"/> is
+    /// given, first records the usage each call states.
+    /// </summary>
+    /// <param name="publicKey">The key the resolver holds.</param>
+    /// <param name="recordedUsages">Receives the usage of every call, or <see langword="null"/> to record nothing.</param>
+    /// <returns>The resolver.</returns>
+    private static ServerVerificationKeyResolverDelegate BuildResolver(
+        PublicKeyMemory publicKey, ConcurrentQueue<KeyUsageContext>? recordedUsages = null) =>
+        (kid, usage, tenant, ctx, ct) =>
+        {
+            recordedUsages?.Enqueue(usage);
+
+            return ValueTask.FromResult<PublicKeyMemory?>(
+                string.Equals(kid.Value, Kid, StringComparison.Ordinal) ? publicKey : null);
+        };
 
 
     /// <summary>

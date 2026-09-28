@@ -56,7 +56,13 @@ public static class Oidc10IdTokenValidator
     /// <param name="idToken">The compact-serialised JWS ID Token.</param>
     /// <param name="expectedIssuer">The expected <c>iss</c> value; compared by ordinal equality.</param>
     /// <param name="expectedAudience">The expected <c>aud</c> value (the relying party's <c>client_id</c>); required to be present.</param>
-    /// <param name="resolveVerificationKey">Resolves the public verification key for the header's <c>kid</c>.</param>
+    /// <param name="resolveVerificationKey">
+    /// Resolves the public verification key for the header's <c>kid</c>, asked under
+    /// <see cref="KeyUsageContext.IdTokenIssuance"/>, the kind this validator verifies
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
+    /// different keys for different kinds of JWTs."). A resolver that keeps keys apart per kind answers
+    /// <see langword="null"/> for a key it holds for another usage.
+    /// </param>
     /// <param name="verifySignature">The signature-verification primitive.</param>
     /// <param name="parser">JSON parser for header and payload segments.</param>
     /// <param name="base64UrlDecoder">Base64url decoder.</param>
@@ -121,7 +127,7 @@ public static class Oidc10IdTokenValidator
             timeProvider,
             memoryPool,
             iatSkew,
-            KeyUsageContext.None,
+            KeyUsageContext.IdTokenIssuance,
             tenantId,
             context,
             expectedAuthorizedParty,

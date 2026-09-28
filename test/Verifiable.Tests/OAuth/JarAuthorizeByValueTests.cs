@@ -4,6 +4,7 @@ using System.Net;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
@@ -775,6 +776,54 @@ internal sealed class JarAuthorizeByValueTests
         //must round-trip onto the redirect.
         Assert.Contains("state=state-jar-direct-01", response.Location!, StringComparison.Ordinal,
             $"The JAR-by-value success redirect must echo the request object's state. Location: {response.Location}");
+    }
+
+
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: every
+    /// resolution states the <see cref="KeyUsageContext"/> the key is expected under. The design follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.2">RFC 9101 §6.2</see>: "The
+    /// authorization server MUST validate the signature of the JWS-signed [RFC7515] Request Object. If a
+    /// "kid" Header Parameter is present, the key identified MUST be the key used and MUST be a key
+    /// associated with the client. The signature MUST be validated using a key associated with the
+    /// client". A signed request object sent by value to the authorize endpoint over the wire is answered
+    /// 302 with a <c>code</c> on the registered redirect URI, and the resolver is asked for the
+    /// registration's request-object key under <see cref="KeyUsageContext.JarSigning"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task JarByValueResolvesTheRegisteredKeyUnderJarSigningAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        KeyId jarKeyId = material.Registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri uri = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + $"?client_id={Uri.EscapeDataString(ClientId)}&request={Uri.EscapeDataString(compactJar)}");
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        hosted.VerificationKeyResolutions.Clear();
+
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, uri, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Found, response.StatusCode, body);
+        string location = response.Headers.Location!.OriginalString;
+        Assert.StartsWith(RegisteredRedirectUri.OriginalString + "?", location, StringComparison.Ordinal);
+        Assert.Contains("code=", location, StringComparison.Ordinal);
+
+        VerificationKeyResolution resolution = Assert.ContainsSingle(hosted.ResolutionsOf(jarKeyId));
+        Assert.AreEqual(KeyUsageContext.JarSigning, resolution.Usage);
     }
 
 

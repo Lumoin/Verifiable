@@ -228,6 +228,13 @@ public static class EndSessionEndpoints
     /// separates an ID Token from an ID-JAG (typed <c>oauth-id-jag+jwt</c>). Both refusals answer one
     /// fixed description that names neither the <c>typ</c> nor the key.
     /// </para>
+    /// <para>
+    /// The <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/> is asked for the admitted
+    /// key under <see cref="KeyUsageContext.IdTokenIssuance"/>, the usage the key rule names, so a key
+    /// store that keeps keys apart per kind answers only a key it holds for ID Tokens; a hint whose key the
+    /// resolver does not produce for that usage is refused. The key rule stays the library's guarantee:
+    /// the usage lets the resolver narrow what verifies, never widen it.
+    /// </para>
     /// </remarks>
     private static async ValueTask<(string? Subject, string? SessionId, ServerHttpResponse? Error)> VerifyIdTokenHintAsync(
         EndpointServer server,
@@ -292,7 +299,8 @@ public static class EndSessionEndpoints
             //only when its typ is absent or JWT (an access token, a logout token or an ID-JAG types
             //itself otherwise) and its kid is listed for ID Token issuance. The ID-JAG shares the ID
             //Token key, so the typ rule is what turns it away. Both rules run before the resolver,
-            //which answers any key it holds by kid, and share one description naming neither value.
+            //which may answer any key it holds by kid, and share one description naming neither value.
+            //The resolver is then asked under the usage the key rule names.
             bool isIdTokenType = !header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
                 || (typObj is string typ && WellKnownJwkValues.IsTypeJwt(typ));
             if(!isIdTokenType
@@ -303,7 +311,7 @@ public static class EndSessionEndpoints
             }
 
             PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver!(
-                new KeyId(kid), KeyUsageContext.None, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+                new KeyId(kid), KeyUsageContext.IdTokenIssuance, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             if(publicKey is null)
             {
                 return (null, null, ServerHttpResponse.BadRequest(

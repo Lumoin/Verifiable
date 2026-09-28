@@ -941,20 +941,32 @@ public static class MetadataEndpoints
 
 
     /// <summary>
-    /// Derives <c>id_token_signing_alg_values_supported</c> from the
-    /// registration's <see cref="Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance"/> signing
-    /// keys. Each <see cref="KeyId"/> in the rotation-aware
+    /// Derives the signing algorithms a discovery field advertises from the
+    /// registration's current signing keys of <paramref name="usage"/>:
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance"/> for
+    /// <c>id_token_signing_alg_values_supported</c>,
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.AuthorizationResponseSigning"/> for
+    /// <c>authorization_signing_alg_values_supported</c> and
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.IntrospectionResponseSigning"/> for
+    /// <c>introspection_signing_alg_values_supported</c>. Each <see cref="KeyId"/> in the
     /// <see cref="SigningKeySet"/> is resolved through the verification-key
-    /// resolver and its <c>Tag</c> mapped to a JWA
-    /// identifier via <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/>.
+    /// resolver under <paramref name="usage"/>, the set being published, and its
+    /// <c>Tag</c> mapped to a JWA identifier via
+    /// <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/>.
     /// The set is deduplicated by ordinal equality and stable across the
     /// rotation-slot order.
     /// </summary>
+    /// <param name="usage">The key set whose algorithms are derived, and the usage every resolution names.</param>
+    /// <param name="server">The server whose cryptography holds the verification-key resolver.</param>
+    /// <param name="registration">The registration whose signing keys are read.</param>
+    /// <param name="context">The per-request context threaded to the resolver.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The distinct JWA identifiers, or an empty list when none resolve.</returns>
     /// <remarks>
-    /// Returns an empty list when the registration has no IdTokenIssuance
-    /// signing keys configured (the OIDC ID Token producer would not run for
-    /// such a registration anyway). The discovery emitter omits the field
-    /// entirely in that case rather than emitting an empty array.
+    /// Returns an empty list when the registration has no signing keys of
+    /// <paramref name="usage"/> configured, or when the resolver produces none
+    /// of them for that usage. The discovery emitter omits the field entirely
+    /// in that case rather than emitting an empty array.
     /// </remarks>
     private static async ValueTask<IReadOnlyList<string>> ResolveSigningAlgValuesAsync(
         Verifiable.Cryptography.Context.KeyUsageContext usage,
@@ -980,7 +992,7 @@ public static class MetadataEndpoints
         foreach(KeyId keyId in signingKeySet.Current)
         {
             Verifiable.Cryptography.PublicKeyMemory? key =
-                await resolver(keyId, Verifiable.Cryptography.Context.KeyUsageContext.None, registration.TenantId, context, cancellationToken)
+                await resolver(keyId, usage, registration.TenantId, context, cancellationToken)
                     .ConfigureAwait(false);
             if(key is null) { continue; }
 

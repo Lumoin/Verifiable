@@ -71,8 +71,13 @@ public sealed class AuthorizationServerCryptography: WiringComponent
 
 
     /// <summary>
-    /// Resolves a public verification key by identifier. Required when the composition declares no
-    /// capabilities, or declares one other than discovery and the key set; discovery reads it only when present.
+    /// Resolves a public verification key by identifier for the
+    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/> the library asks it under: the
+    /// <see cref="SigningKeySet"/> slot of the token or artefact being verified or published (access
+    /// tokens, ID Token hints, request objects, the discovery document's algorithm lists, the federation
+    /// entity configuration's key set). A resolver answers <see langword="null"/> for a key it does not
+    /// hold for that usage. Required when the composition declares no capabilities, or declares one other
+    /// than discovery and the key set; discovery reads it only when present.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws

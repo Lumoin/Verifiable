@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -83,6 +84,38 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         Assert.IsNotNull(result.Claims.AuthTime, "auth_time must be surfaced — the AS always establishes it at authorize time.");
         Assert.AreEqual(EstablishedAcr, result.Claims.Acr);
         Assert.AreEqual(EstablishedSessionId, result.Claims.Sid);
+    }
+
+
+    /// <summary>
+    /// The verification-key resolver's documented contract, a contract of this library: every
+    /// resolution states the <see cref="KeyUsageContext"/> the key is expected under, and the relying
+    /// party's ID Token validator names the kind it verifies. The design follows
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "If more
+    /// than one kind of JWT can be issued by the same issuer, the validation rules for those JWTs MUST be
+    /// written such that they are mutually exclusive, rejecting JWTs of the wrong kind." An ID Token
+    /// issued through the authorization-code exchange validates at the relying party, and the relying
+    /// party's resolver is asked for its key once, under <see cref="KeyUsageContext.IdTokenIssuance"/>.
+    /// The row is a unit row: the relying-party validator runs in the client and serves no wire of its
+    /// own.
+    /// </summary>
+    [TestMethod]
+    public async Task IdTokenValidatorResolvesUnderIdTokenIssuanceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string idToken = await DriveCodeExchangeForIdTokenAsync(
+            host, material, nonce: null, stampSessionId: false).ConfigureAwait(false);
+
+        ConcurrentQueue<KeyUsageContext> recordedUsages = new();
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+            idToken, material, expectedNonce: null, trustedAudiences: null, recordedUsages: recordedUsages).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"The ID Token must validate; got {result.FailureReason}: {result.FailureDescription}");
+        Assert.AreEqual(KeyUsageContext.IdTokenIssuance, Assert.ContainsSingle(recordedUsages));
     }
 
 
@@ -452,7 +485,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     /// The relying party's validation from wire bytes only: full signature verification plus the
     /// §3.1.3.7 issuer/audience checks, with the caller-supplied nonce and trusted-audience
     /// expectations under test. The verification key resolves by the token's kid, the way a
-    /// deployment resolves against the fetched JWKS.
+    /// deployment resolves against the fetched JWKS. When <paramref name="recordedUsages"/> is given,
+    /// the resolver first records the usage each call states.
     /// </summary>
     private async Task<Oidc10IdTokenValidationResult> ValidateAsRelyingPartyAsync(
         string idToken,
@@ -460,12 +494,17 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         string? expectedNonce,
         IReadOnlyCollection<string>? trustedAudiences,
         string? expectedIssuerOverride = null,
-        string? expectedAudienceOverride = null)
+        string? expectedAudienceOverride = null,
+        ConcurrentQueue<KeyUsageContext>? recordedUsages = null)
     {
-        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
-            ValueTask.FromResult<PublicKeyMemory?>(
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct)
+        {
+            recordedUsages?.Enqueue(usage);
+
+            return ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);
+        }
 
         return await Oidc10IdTokenValidator.ValidateAsync(
             idToken,
