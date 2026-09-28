@@ -141,12 +141,20 @@ public static class DpopJwkUtilities
     /// §3.2.2: "The benefit of including only the JWK required members is that the JWK Thumbprint of any
     /// JWK representing the key remains the same, regardless of any other attributes that are present."
     /// The members are <c>crv</c>, <c>kty</c>, <c>x</c>, <c>y</c> for an EC key and <c>e</c>,
-    /// <c>kty</c>, <c>n</c> for an RSA key (RFC 7638 §3.2), <c>crv</c>, <c>kty</c>, <c>x</c> for an OKP
-    /// key (<see href="https://www.rfc-editor.org/rfc/rfc8037#section-2">RFC 8037 §2</see>) and
-    /// <c>alg</c>, <c>kty</c>, <c>pub</c> for an AKP key. Any other member a received JWK carries (a
-    /// <c>kid</c>, an <c>alg</c>, a <c>use</c>) is left out, so a proof's embedded JWK matches the
-    /// <c>cnf.jkt</c> its key was bound under whatever metadata it carries. A JWK of another <c>kty</c>
-    /// is hashed over all its members. Composes
+    /// <c>kty</c>, <c>n</c> for an RSA key (RFC 7638 §3.2: "the required members for an elliptic curve
+    /// public key for the curves specified in Section 6.2.1.1 of RFC 7518 [JWA], in lexicographic order,
+    /// are: "crv" "kty" "x" "y"" and "The required members for an RSA public key, in lexicographic order,
+    /// are: "e" "kty" "n""), <c>crv</c>, <c>kty</c>, <c>x</c> for an OKP key
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8037#section-2">RFC 8037 §2</see>: "When calculating
+    /// JWK Thumbprints [RFC7638], the three public key fields are included in the hash input in
+    /// lexicographic order: "crv", "kty", and "x".") and <c>alg</c>, <c>kty</c>,
+    /// <c>pub</c> for an AKP key
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-cose-dilithium-11#section-6">draft-ietf-cose-dilithium-11
+    /// §6</see>: "When computing the JWK Thumbprint as described in [RFC7638], the required parameters for
+    /// algorithm key pairs are: "kty" "alg" "pub""). Any other member a received JWK carries (a
+    /// <c>kid</c>, a <c>use</c>, and an <c>alg</c> for every family but AKP, where <c>alg</c> is required)
+    /// is left out, so a proof's embedded JWK matches the <c>cnf.jkt</c> its key was bound under whatever
+    /// metadata it carries. A JWK of another <c>kty</c> is hashed over all its members. Composes
     /// <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool, IDictionary{string, string})"/>,
     /// which sorts the members lexicographically per RFC 7638 §3.1, writes the canonical JSON and hashes
     /// with SHA-256.
@@ -173,7 +181,8 @@ public static class DpopJwkUtilities
 
 
     /// <summary>
-    /// Copies the members RFC 7638 §3.2 requires for <paramref name="jwk"/>'s <c>kty</c> into a fresh
+    /// Copies the members the thumbprint rule of <paramref name="jwk"/>'s <c>kty</c> requires (RFC 7638
+    /// §3.2 for EC and RSA, RFC 8037 §2 for OKP, draft-ietf-cose-dilithium-11 §6 for AKP) into a fresh
     /// dictionary (the form <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool, IDictionary{string, string})"/>
     /// takes), or every member when the <c>kty</c> is absent or of no family listed here.
     /// </summary>

@@ -1207,7 +1207,16 @@ public static class Oid4VciEndpoints
     }
 
 
-    /// <summary>Whether a compact <c>jwt</c> proof's JOSE header carries a <c>key_attestation</c> member.</summary>
+    /// <summary>
+    /// Whether a compact <c>jwt</c> proof's JOSE header carries a <c>key_attestation</c> member. The
+    /// proof is presented, unverified input: a header segment the decoder rejects (not base64url) carries
+    /// no member, so the answer is <see langword="false"/> and the proof is refused by the proof
+    /// validation that follows, never raised as a server fault.
+    /// </summary>
+    /// <param name="jwtProof">The compact <c>jwt</c> proof.</param>
+    /// <param name="decoder">The base64url decoder.</param>
+    /// <param name="pool">The pool the header is decoded into.</param>
+    /// <returns><see langword="true"/> when the decoded header names <c>key_attestation</c>.</returns>
     private static bool JwtProofHasKeyAttestationHeader(string jwtProof, DecodeDelegate decoder, BaseMemoryPool pool)
     {
         int firstDot = jwtProof.IndexOf('.', StringComparison.Ordinal);
@@ -1217,10 +1226,17 @@ public static class Oid4VciEndpoints
         }
 
         string headerSegment = jwtProof.AsSpan(0, firstDot).ToString();
-        using IMemoryOwner<byte> headerOwner = decoder(headerSegment, pool);
+        try
+        {
+            using IMemoryOwner<byte> headerOwner = decoder(headerSegment, pool);
 
-        return JwkJsonReader.ContainsKey(
-            headerOwner.Memory.Span, AttestationProofParameterNames.KeyAttestationUtf8);
+            return JwkJsonReader.ContainsKey(
+                headerOwner.Memory.Span, AttestationProofParameterNames.KeyAttestationUtf8);
+        }
+        catch(Exception ex) when(ex is FormatException or ArgumentException)
+        {
+            return false;
+        }
     }
 
 

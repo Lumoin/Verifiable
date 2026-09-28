@@ -964,7 +964,7 @@ internal sealed class IdJagGrantTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
             }).ConfigureAwait(false);
 
             PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> dpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();

@@ -128,6 +128,16 @@ public delegate ValueTask<(FlowState? State, int StepCount)> LoadServerFlowState
 /// claim itself mutating the persisted state or step count.
 /// </para>
 /// <para>
+/// A claim of a <c>(tenant, correlationKey, expectedStepCount)</c> is retained apart from the record
+/// <see cref="SaveServerFlowStateDelegate"/> writes: a later save of the same key, at the same step
+/// or any other, never makes a claimed step claimable again. A caller may save before it claims —
+/// the <c>jti</c> replay guard records a first presentation and then claims it, so a concurrent
+/// presentation that lost the claim can still save the same record afterwards — and exactly one
+/// caller still receives <see langword="true"/> only when the save cannot erase the claim. A store
+/// that keeps the claim as a mark on the saved record, cleared or re-armed by the next save, breaks
+/// this contract.
+/// </para>
+/// <para>
 /// Refresh rotation and grant revocation share this seam. Revocation claims a grant's loaded
 /// live refresh step before deletion; a failed claim permits one re-read of the grant to retry
 /// whatever it still reports live. Deletion must not permit a stale caller to claim the same

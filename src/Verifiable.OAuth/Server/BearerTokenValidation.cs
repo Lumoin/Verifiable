@@ -281,6 +281,14 @@ public static class BearerTokenValidation
                 "AuthorizationServerCryptography.VerificationKeyResolver is not configured."));
         }
 
+        //A token longer than the compact JWS the signature verification accepts
+        //(Jws.DefaultMaxJwsLength) is malformed input, refused before it is parsed rather than
+        //raised as an exception from that verification.
+        if(bearerToken.Length > Jws.DefaultMaxJwsLength)
+        {
+            return (null, RefuseToken("Access token exceeds the longest compact JWS this server verifies."));
+        }
+
         //1. Structural parse — three base64url-separated parts, header is
         //   well-formed JSON.
         UnverifiedJwsMessage unverified;
@@ -495,7 +503,7 @@ public static class BearerTokenValidation
     /// refusal's description can carry presented text outside the §3 attribute charset; the description
     /// travels in the response body.
     /// </summary>
-    private static string InvalidTokenChallenge { get; } =
+    internal static string InvalidTokenChallenge { get; } =
         BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InvalidToken);
 
 

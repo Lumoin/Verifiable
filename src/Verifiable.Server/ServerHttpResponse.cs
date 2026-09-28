@@ -176,6 +176,23 @@ public sealed record ServerHttpResponse
         };
 
 
+    /// <summary>
+    /// Returns a 401 Unauthorized with an empty body and no error code: the answer to a request that
+    /// carries no usable authentication information, for which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see> says "the
+    /// resource server SHOULD NOT include an error code or other error information." The caller attaches
+    /// the <c>WWW-Authenticate</c> challenge RFC 6750 §3 requires.
+    /// </summary>
+    /// <returns>The 401 response.</returns>
+    public static ServerHttpResponse Unauthorized() =>
+        new()
+        {
+            StatusCode = (int)HttpStatusCode.Unauthorized,
+            Body = string.Empty,
+            ContentType = string.Empty
+        };
+
+
     /// <summary>Returns a 403 Forbidden with an OAuth error JSON body.</summary>
     public static ServerHttpResponse Forbidden(string error, string description) =>
         new()

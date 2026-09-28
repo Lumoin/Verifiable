@@ -33,6 +33,15 @@ internal sealed class DpopEndToEndTests
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 §6.1</see>: "The value of
+    /// the jkt member MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256
+    /// Thumbprint (according to [RFC7638]) of the DPoP public key (in JWK format) to which the access
+    /// token is bound." A client
+    /// driving PAR, authorize and the token request with a DPoP proof, answering the token endpoint's one
+    /// nonce challenge, receives a DPoP-bound access token whose <c>cnf.jkt</c> is its key's thumbprint,
+    /// and a proof it then builds for a resource call validates with that same thumbprint.
+    /// </summary>
     [TestMethod]
     public async Task TokenIssuanceAndResourceCallValidateUnderDpopProtocol()
     {
@@ -166,28 +175,8 @@ internal sealed class DpopEndToEndTests
         //bound to the access token and validates it. The validator's
         //JwkThumbprint must match the binding the AS recorded.
         const string resourceUrl = "https://rs.example.com/api/profile";
-        string ath = await DpopProofValidator.ComputeAthAsync(
-            accessToken,
-            TestHostShell.Base64UrlEncoder,
-            TestHostShell.MemoryPool,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        DpopProofClaims resourceClaims = new()
-        {
-            Htm = WellKnownHttpMethods.Get,
-            Htu = resourceUrl,
-            Iat = TimeProvider.GetUtcNow(),
-            Jti = Guid.NewGuid().ToString("N"),
-            Ath = ath
-        };
-
-        string resourceProof = await DpopProofConstruction.BuildAsync(
-            resourceClaims,
-            fixture.DpopKey,
-            TestHostShell.Base64UrlEncoder,
-            DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
-            TestHostShell.MemoryPool,
+        string resourceProof = await ResourceDpopProofs.BuildAsync(
+            fixture.DpopKey, WellKnownHttpMethods.Get, resourceUrl, accessToken, nonce: null, TimeProvider.GetUtcNow(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult rsResult = await DpopProofValidator.ValidateAsync(

@@ -2327,7 +2327,7 @@ public static class AuthCodeEndpoints
         if(!string.IsNullOrEmpty(requestObject.Jti))
         {
             JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-                server, context, registration.TenantId,
+                server, context, registration.TenantId, JtiReplayPurpose.RequestObject,
                 requestObject.Iss, requestObject.Jti,
                 requestObject.Exp + context.ClockSkewTolerance,
                 cancellationToken).ConfigureAwait(false);
@@ -5827,7 +5827,7 @@ public static class AuthCodeEndpoints
                     //the recorded window floors at the library's own clock-skew tolerance, never
                     //shorter than what the JAR and private_key_jwt callers honour.
                     JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-                        server, context, registration.TenantId,
+                        server, context, registration.TenantId, JtiReplayPurpose.AuthorizationGrantAssertion,
                         assertionIssuer, assertionJti, assertionExpiry + context.ClockSkewTolerance, ct).ConfigureAwait(false);
 
                     ServerHttpResponse? jtiFailure = jtiOutcome switch

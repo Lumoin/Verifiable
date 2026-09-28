@@ -57,6 +57,37 @@ internal sealed class JwsAccessTokenValidatorTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>: "Resource servers
+    /// receiving a JWT access token MUST validate it in the following manner" and the signature step it
+    /// names; an access token longer than <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS
+    /// the library verifies, cannot be validated. <see cref="JwsAccessTokenValidator.ValidateAsync"/>
+    /// answers it as <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, never an exception.
+    /// The validator is called directly: an HTTP server's own header limit refuses such a request before
+    /// the resource runs, while the validator is public and reachable from any transport.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidatorAnswersATokenLongerThanTheVerifiedMaximumAsMalformedAsync()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
+        string oversizedToken = token + new string('A', Jws.DefaultMaxJwsLength);
+
+        JwsAccessTokenValidationResult result = await ValidateAsync(oversizedToken, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, result.FailureReason);
+    }
+
+
+    /// <summary>
     /// Pins that the validator accepts a bare-string <c>aud</c> — RFC 7519 §4.1.3's single-audience
     /// MAY special case — even though this library's own producer
     /// (<see cref="Verifiable.JCose.JwtPayloadExtensions.ForAccessToken"/>) always emits the array

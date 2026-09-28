@@ -319,7 +319,7 @@ public static class SiopVerifierExecutor
                         : now + WellKnownDpopValues.DefaultReplayWindow;
 
                     JtiReplayOutcome nonceReplayOutcome = await JtiReplayGuard.ConsultAsync(
-                        server, context, tenantId.Value,
+                        server, context, tenantId.Value, JtiReplayPurpose.SelfIssuedResponseNonce,
                         expectedAudience, expectedNonce,
                         replayExpiresAt, cancellationToken).ConfigureAwait(false);
 

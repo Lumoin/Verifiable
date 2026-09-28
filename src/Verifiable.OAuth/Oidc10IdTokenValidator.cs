@@ -2,6 +2,7 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth;
 
@@ -151,10 +152,19 @@ public static class Oidc10IdTokenValidator
                 "ID Token nonce is missing or does not equal the expected nonce (OIDC Core §3.1.3.7).");
         }
 
-        DateTimeOffset? authTime = JwsAccessTokenValidator.TryReadEpochSeconds(
-            payload, WellKnownJwtClaimNames.AuthTime, out DateTimeOffset authTimeValue)
-            ? authTimeValue
-            : null;
+        //OIDC Core §2: auth_time's "value is a JSON number representing the number of seconds from
+        //1970-01-01T00:00:00Z as measured in UTC until the date/time". A present auth_time no instant
+        //can be read from is refused, never surfaced as an absent one a max_age check would misread.
+        NumericDateReadResult authTimeRead = JwsAccessTokenValidator.TryReadEpochSeconds(
+            payload, WellKnownJwtClaimNames.AuthTime, out DateTimeOffset authTimeValue);
+        if(authTimeRead == NumericDateReadResult.Malformed)
+        {
+            return Oidc10IdTokenValidationResult.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "ID Token auth_time claim is not a NumericDate naming a representable instant.");
+        }
+
+        DateTimeOffset? authTime = authTimeRead == NumericDateReadResult.Value ? authTimeValue : null;
         _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Acr, out string? acr);
         IReadOnlyList<string>? amr = JwsAccessTokenValidator.TryReadStringList(
             payload, WellKnownJwtClaimNames.Amr, out IReadOnlyList<string> amrValues)

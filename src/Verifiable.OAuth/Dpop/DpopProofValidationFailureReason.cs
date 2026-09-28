@@ -18,7 +18,10 @@ public enum DpopProofValidationFailureReason
 
     /// <summary>
     /// The <c>alg</c> header is missing, not an acceptable algorithm, or not an algorithm of the key the
-    /// <c>jwk</c> header carries (RFC 9449 §4.3 items 5 and 6).
+    /// <c>jwk</c> header carries, so it does not accurately represent the algorithm the signature is
+    /// validated under (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-5.2">RFC 7515 §5.2</see>
+    /// step 8: "which MUST be accurately represented by the value of the "alg" (algorithm) Header
+    /// Parameter").
     /// </summary>
     InvalidAlg,
 

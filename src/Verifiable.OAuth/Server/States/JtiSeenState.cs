@@ -3,8 +3,8 @@ using System.Diagnostics;
 namespace Verifiable.OAuth.Server.States;
 
 /// <summary>
-/// A degenerate flow state recording that a specific <c>(issuer, jti)</c>
-/// pair has been observed within the replay window. Used as the value
+/// A degenerate flow state recording that a specific <c>(purpose, issuer, jti)</c>
+/// triple has been observed within the replay window. Used as the value
 /// type behind the JTI secondary index built by the application's
 /// <see cref="SaveServerFlowStateDelegate"/>.
 /// </summary>
@@ -14,22 +14,25 @@ namespace Verifiable.OAuth.Server.States;
 /// application's storage TTL on the secondary index; records older than
 /// the window expire naturally.
 /// </remarks>
-[DebuggerDisplay("JtiSeenState Issuer={Issuer,nq} Jti={Jti,nq} SeenAt={SeenAt}")]
+[DebuggerDisplay("JtiSeenState Purpose={Purpose} Issuer={Issuer,nq} Jti={Jti,nq} SeenAt={SeenAt}")]
 public sealed record JtiSeenState: FlowState
 {
+    /// <summary>The kind of object the <c>jti</c> identifies.</summary>
+    public required JtiReplayPurpose Purpose { get; init; }
+
     /// <summary>The issuer URI string the jti was observed under.</summary>
     public required string Issuer { get; init; }
 
-    /// <summary>The jti value from the DPoP proof.</summary>
+    /// <summary>The presented <c>jti</c> value.</summary>
     public required string Jti { get; init; }
 
     /// <summary>When the jti was first observed.</summary>
     public required DateTimeOffset SeenAt { get; init; }
 
     /// <summary>
-    /// The one <c>(issuer, jti)</c> correlation key this state is indexed under, composed
+    /// The one <c>(purpose, issuer, jti)</c> correlation key this state is indexed under, composed
     /// through <see cref="JtiReplayGuard.CorrelationKey"/> so a host's save switch never
     /// re-derives the shape by hand.
     /// </summary>
-    public string CorrelationKey => JtiReplayGuard.CorrelationKey(Issuer, Jti);
+    public string CorrelationKey => JtiReplayGuard.CorrelationKey(Purpose, Issuer, Jti);
 }

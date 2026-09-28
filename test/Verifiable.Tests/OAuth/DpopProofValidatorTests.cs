@@ -326,6 +326,83 @@ internal sealed class DpopProofValidatorTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see>: "servers SHOULD
+    /// employ syntax-based normalization (Section 6.2.2 of [RFC3986]) ... before comparing the htu
+    /// claim." and <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986
+    /// §6.2.2.1</see>: "the hexadecimal digits within a percent-encoding triplet (e.g., "%3a" versus
+    /// "%3A") are case-insensitive". A proof whose <c>htu</c> writes an encoded reserved character with
+    /// lower-case hexadecimal digits where the request URI writes them in upper case names the same
+    /// target, and the validator accepts it. The validator is called directly, since a protected
+    /// endpoint's path carries no encoded reserved character a request could vary.
+    /// </summary>
+    /// <param name="htu">The proof's <c>htu</c>.</param>
+    /// <param name="requestUrl">The target URI of the request.</param>
+    [TestMethod]
+    [DataRow("https://rs.example.com/a%3ab", "https://rs.example.com/a%3Ab")]
+    [DataRow("https://rs.example.com/a%2fb", "https://rs.example.com/a%2Fb")]
+    public async Task ValidateAsyncMatchesAnHtuWhosePercentEncodingDiffersOnlyInHexCaseAsync(string htu, string requestUrl)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims() with { Htu = htu }).ConfigureAwait(false);
+        DpopProofValidationResult result = await ValidateAsync(proof, httpUrl: requestUrl).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"The htu names the same target; got {result.FailureReason}.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2.2">RFC 3986 §2.2</see>: "URIs that
+    /// differ in the replacement of a reserved character with its corresponding percent-encoded octet are
+    /// not equivalent." and <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449
+    /// §4.3</see> item 9: "The htu claim matches the HTTP URI value for the HTTP request". A proof whose
+    /// <c>htu</c> encodes a reserved character (<c>%3A</c>, <c>%2F</c>) where the request URI carries
+    /// the character itself names another target and is refused with
+    /// <see cref="DpopProofValidationFailureReason.HtuMismatch"/>.
+    /// </summary>
+    /// <param name="htu">The proof's <c>htu</c>.</param>
+    /// <param name="requestUrl">The target URI of the request.</param>
+    [TestMethod]
+    [DataRow("https://rs.example.com/a%3Ab", "https://rs.example.com/a:b")]
+    [DataRow("https://rs.example.com/a%2Fb", "https://rs.example.com/a/b")]
+    public async Task ValidateAsyncRefusesAnHtuEncodingAReservedCharacterTheRequestCarriesLiterallyAsync(string htu, string requestUrl)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims() with { Htu = htu }).ConfigureAwait(false);
+        DpopProofValidationResult result = await ValidateAsync(proof, httpUrl: requestUrl).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopProofValidationFailureReason.HtuMismatch, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see> item 2: "The DPoP
+    /// HTTP request header field value is a single and well-formed JWT." A proof whose signature segment
+    /// makes it longer than <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS the library
+    /// verifies, is answered by <see cref="DpopProofValidator.ValidateAsync"/> as a failure,
+    /// <see cref="DpopProofValidationFailureReason.Malformed"/>, never an exception. The validator is
+    /// called directly: an HTTP server's own header limit refuses such a request before any endpoint
+    /// runs, while the validator is public and reachable from any transport.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidateAsyncAnswersAProofLongerThanTheVerifiedMaximumAsMalformedAsync()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
+        string oversizedProof = proof + new string('A', Jws.DefaultMaxJwsLength);
+
+        DpopProofValidationResult result = await ValidateAsync(oversizedProof).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopProofValidationFailureReason.Malformed, result.FailureReason);
+    }
+
+
     //RFC 9449 §4.2 non-ECDSA algorithms — proof built with RS256 / PS256 /
     //EdDSA must pass validation when paired with the matching verification
     //delegate. End-to-end shape: real key material, real construction with
@@ -452,18 +529,30 @@ internal sealed class DpopProofValidatorTests
     }
 
 
+    /// <summary>
+    /// Validates <paramref name="proof"/> with <see cref="DpopProofValidator.ValidateAsync"/> against a
+    /// POST to <paramref name="httpUrl"/> (the default token URL when none is given) on the fake clock.
+    /// </summary>
+    /// <param name="proof">The compact DPoP proof.</param>
+    /// <param name="expectedNonce">The nonce the server provided, or <see langword="null"/>.</param>
+    /// <param name="nonceRequired">Whether the request requires a nonce.</param>
+    /// <param name="accessToken">The access token <c>ath</c> is checked against, or <see langword="null"/>.</param>
+    /// <param name="verifier">The verification function, or <see langword="null"/> for P-256.</param>
+    /// <param name="httpUrl">The target URI of the request, or <see langword="null"/> for the default.</param>
+    /// <returns>The validation result.</returns>
     private async Task<DpopProofValidationResult> ValidateAsync(
         string proof,
         string? expectedNonce = null,
         bool nonceRequired = false,
         string? accessToken = null,
-        VerificationDelegate? verifier = null)
+        VerificationDelegate? verifier = null,
+        string? httpUrl = null)
     {
         DpopProofValidationRequest request = new()
         {
             Proof = proof,
             HttpMethod = DefaultMethod,
-            HttpUrl = DefaultUrl,
+            HttpUrl = httpUrl ?? DefaultUrl,
             ExpectedNonce = expectedNonce,
             NonceRequired = nonceRequired,
             AccessToken = accessToken

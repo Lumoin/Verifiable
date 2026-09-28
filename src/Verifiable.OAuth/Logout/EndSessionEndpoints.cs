@@ -237,6 +237,16 @@ public static class EndSessionEndpoints
         CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
+
+        //A hint longer than the compact JWS the signature verification accepts
+        //(Jws.DefaultMaxJwsLength) is malformed input, refused before it is parsed rather than
+        //raised as an exception from that verification.
+        if(idTokenHint.Length > Jws.DefaultMaxJwsLength)
+        {
+            return (null, null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "id_token_hint exceeds the longest compact JWS this server verifies."));
+        }
+
         UnverifiedJwsMessage unverified;
         try
         {

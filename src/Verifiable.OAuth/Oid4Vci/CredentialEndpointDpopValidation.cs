@@ -38,10 +38,14 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>'s Figure 24.
 /// </para>
 /// <para>
-/// Every refusal of a presented token is a 401 carrying one challenge in the scheme the request was
-/// authenticated under, per RFC 9449 §7.2: "If the mechanism used to attempt authentication could be
-/// established unambiguously, then the corresponding challenge SHOULD be used to deliver error
-/// information". A <c>DPoP</c> challenge carries the <c>error</c> RFC 9449 §7.1 names
+/// Every refusal of a presented token is a 401 carrying one challenge, in the scheme the request was
+/// authenticated under. Sending a single challenge is this library's choice; RFC 9449 §7.2 governs a
+/// resource that elects to send several ("If a protected resource supporting both Bearer and DPoP
+/// schemes elects to respond with multiple WWW-Authenticate challenges, attention should be paid to
+/// which challenge(s) should deliver the actual error information.") and says which one carries the
+/// error: "If the mechanism used to attempt authentication could be established unambiguously, then
+/// the corresponding challenge SHOULD be used to deliver error information". The single challenge
+/// sent is that corresponding one. A <c>DPoP</c> challenge carries the <c>error</c> RFC 9449 §7.1 names
 /// (<c>invalid_token</c> for the token or its binding, <c>invalid_dpop_proof</c> for a proof that
 /// fails a §4.3 check, <c>use_dpop_nonce</c> for a missing or stale nonce) and the <c>algs</c>
 /// parameter §7.1 says SHOULD be included, listing
@@ -62,14 +66,6 @@ internal static class CredentialEndpointDpopValidation
     /// </summary>
     private static string AcceptedProofAlgorithms { get; } =
         string.Join(' ', WellKnownDpopValues.SupportedSigningAlgorithms);
-
-
-    /// <summary>
-    /// The <c>Bearer error="invalid_token"</c> challenge a token refused under the <c>Bearer</c> scheme
-    /// carries, composed by <see cref="BearerTokenChallenge.BuildChallenge"/>.
-    /// </summary>
-    private static string BearerInvalidTokenChallenge { get; } =
-        BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InvalidToken);
 
 
     /// <summary>
@@ -207,7 +203,7 @@ internal static class CredentialEndpointDpopValidation
 
         //jti replay — the same shared (issuer, jti) correlation store, RFC 9449 §11.1.
         JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-            server, context, registration.TenantId,
+            server, context, registration.TenantId, JtiReplayPurpose.DpopProof,
             issuerUri.OriginalString, proofResult.Claims.Jti,
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
@@ -270,8 +266,10 @@ internal static class CredentialEndpointDpopValidation
 
     /// <summary>
     /// Answers a request to an OID4VCI protected endpoint that carries no usable <c>Authorization</c>
-    /// header: 401 <c>invalid_token</c> in the body and the challenge of
-    /// <see cref="BuildMissingCredentialsChallenge"/> whose <c>Bearer</c> part names the issuer the
+    /// header: 401 with an empty body, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see> says the
+    /// resource server "SHOULD NOT include an error code or other error information", and the challenge
+    /// of <see cref="BuildMissingCredentialsChallenge"/> whose <c>Bearer</c> part names the issuer the
     /// request is served under as its <c>realm</c> (the endpoints require no single scope).
     /// </summary>
     /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
@@ -290,8 +288,7 @@ internal static class CredentialEndpointDpopValidation
         string challenge = BuildMissingCredentialsChallenge(
             BearerTokenChallenge.BuildChallenge(realm: issuerUri.OriginalString));
 
-        return ServerHttpResponse
-            .Unauthorized(OAuthErrors.InvalidToken, "Missing or malformed Authorization header.")
+        return ServerHttpResponse.Unauthorized()
             .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
     }
 
@@ -327,7 +324,7 @@ internal static class CredentialEndpointDpopValidation
         ServerHttpResponse.Unauthorized(error, description)
             .WithHeader(
                 WellKnownHttpHeaderNames.WwwAuthenticate,
-                isDpopPresentation ? BuildDpopChallenge(error) : BearerInvalidTokenChallenge);
+                isDpopPresentation ? BuildDpopChallenge(error) : BearerTokenValidation.InvalidTokenChallenge);
 
 
     /// <summary>
@@ -367,6 +364,11 @@ internal static class CredentialEndpointDpopValidation
     /// <c>ResolveIssuerAsync</c> seam when wired and the default resolver otherwise; its authority is
     /// the one the proof's <c>htu</c> is compared against.
     /// </summary>
+    /// <param name="server">The authorization server holding the resolver seam.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The issuer.</returns>
     private static async ValueTask<Uri> ResolveIssuerAsync(
         EndpointServer server,
         ClientRecord registration,

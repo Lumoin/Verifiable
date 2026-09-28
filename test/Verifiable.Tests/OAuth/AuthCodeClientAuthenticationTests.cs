@@ -1096,7 +1096,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -1793,7 +1793,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -2175,7 +2175,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(

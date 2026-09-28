@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
@@ -191,6 +192,40 @@ internal sealed class Oid4VciKeyAttestationTests
 
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode, response.Body);
         Assert.Contains(Oid4VciCredentialErrors.InvalidProof, response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OID4VCI
+    /// 1.0 §8.3.1.2</see>: "invalid_proof: The proofs parameter in the Credential Request is invalid: (1)
+    /// if the field is missing, or (2) one of the provided key proofs is invalid, or (3) if at least one
+    /// of the key proofs does not contain a c_nonce value". A Credential Request sent over the wire to a configuration that declares
+    /// <c>key_attestations_required</c>, whose one <c>jwt</c> proof's header segment is not base64url
+    /// (<c>!!!!.e30.AA</c>), carries an invalid key proof: it is refused with 400 <c>invalid_proof</c>,
+    /// never a server fault.
+    /// </summary>
+    [TestMethod]
+    public async Task AttestationRequiredRefusesAProofWhoseHeaderIsNotBase64UrlAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIssuerAsync(host, keyAttestationsRequired: true).ConfigureAwait(false);
+        string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Uri credentialUrl = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, material.Registration.TenantId.Value));
+        using StringContent content = new(
+            CredentialRequestBody("jwt", "!!!!.e30.AA"), Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, credentialUrl) { Content = content };
+        _ = request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + accessToken);
+
+        using HttpResponseMessage response = await host.Host("default").SharedHttpClient!
+            .SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(Oid4VciCredentialErrors.InvalidProof, document.RootElement.GetProperty("error").GetString());
     }
 
 

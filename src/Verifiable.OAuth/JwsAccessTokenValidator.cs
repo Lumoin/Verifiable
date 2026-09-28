@@ -234,7 +234,16 @@ public static class JwsAccessTokenValidator
         ArgumentNullException.ThrowIfNull(memoryPool);
         ArgumentNullException.ThrowIfNull(context);
 
-        //1. Structural parse — reject obviously malformed input cheaply.
+        //1. Structural parse — reject obviously malformed input cheaply. A token longer than the
+        //compact JWS the signature verification accepts (Jws.DefaultMaxJwsLength) is refused here,
+        //before any split or decode, rather than raised as an exception from that verification.
+        if(accessToken.Length > Jws.DefaultMaxJwsLength)
+        {
+            return SignedJwtValidationOutcome.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "Access token exceeds the longest compact JWS this validator verifies.");
+        }
+
         string[] parts = accessToken.Split('.');
         if(parts.Length != 3
             || string.IsNullOrEmpty(parts[0])
@@ -423,18 +432,28 @@ public static class JwsAccessTokenValidator
             }
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset exp))
+        NumericDateReadResult expRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset exp);
+        if(expRead != NumericDateReadResult.Value)
         {
-            return SignedJwtValidationOutcome.Failure(
-                JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
-                "Access token is missing the exp claim.");
+            return expRead == NumericDateReadResult.Absent
+                ? SignedJwtValidationOutcome.Failure(
+                    JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
+                    "Access token is missing the exp claim.")
+                : SignedJwtValidationOutcome.Failure(
+                    JwsAccessTokenValidationFailureReason.Malformed,
+                    "Access token exp claim is not a NumericDate naming a representable instant.");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
+        NumericDateReadResult iatRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat);
+        if(iatRead != NumericDateReadResult.Value)
         {
-            return SignedJwtValidationOutcome.Failure(
-                JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
-                "Access token is missing the iat claim.");
+            return iatRead == NumericDateReadResult.Absent
+                ? SignedJwtValidationOutcome.Failure(
+                    JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
+                    "Access token is missing the iat claim.")
+                : SignedJwtValidationOutcome.Failure(
+                    JwsAccessTokenValidationFailureReason.Malformed,
+                    "Access token iat claim is not a NumericDate naming a representable instant.");
         }
 
         //Structural temporal consistency, independent of the current clock: a token whose exp is at or
@@ -461,8 +480,20 @@ public static class JwsAccessTokenValidator
                 "Access token iat is in the future beyond the skew tolerance.");
         }
 
+        //RFC 7519 §4.1.5: "The "nbf" (not before) claim identifies the time before which the JWT MUST
+        //NOT be accepted for processing." An absent nbf sets no such time; a present one no instant can
+        //be read from names a time that cannot be checked, so the token is refused rather than read
+        //as carrying no nbf.
         DateTimeOffset? nbf = null;
-        if(TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out DateTimeOffset nbfValue))
+        NumericDateReadResult nbfRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out DateTimeOffset nbfValue);
+        if(nbfRead == NumericDateReadResult.Malformed)
+        {
+            return SignedJwtValidationOutcome.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "Access token nbf claim is not a NumericDate naming a representable instant.");
+        }
+
+        if(nbfRead == NumericDateReadResult.Value)
         {
             if(nbfValue > now + iatSkew)
             {
@@ -583,21 +614,23 @@ public static class JwsAccessTokenValidator
 
     /// <summary>
     /// Reads the NumericDate claim <paramref name="claimName"/> (RFC 7519 §2, seconds since the Unix
-    /// epoch) of a verified payload as an instant. A value that is not a number, or that names no
+    /// epoch) of a verified payload as an instant. An absent claim is
+    /// <see cref="NumericDateReadResult.Absent"/>; a present value that is not a number, or that names no
     /// instant a <see cref="DateTimeOffset"/> can hold (<see cref="JwtTemporalChecks.IsRepresentableUnixSeconds"/>),
-    /// is reported as unreadable, so the caller refuses the token as malformed instead of an exception
-    /// escaping from the conversion.
+    /// is <see cref="NumericDateReadResult.Malformed"/>, so every caller, the optional <c>nbf</c> and
+    /// <c>auth_time</c> ones included, refuses the token as malformed instead of reading the value as
+    /// absent or letting an exception escape from the conversion.
     /// </summary>
     /// <param name="payload">The verified payload.</param>
     /// <param name="claimName">The NumericDate claim to read.</param>
-    /// <param name="value">The instant when the claim is present and representable.</param>
-    /// <returns><see langword="true"/> when the claim is present and names a representable instant.</returns>
-    internal static bool TryReadEpochSeconds(JwtPayload payload, string claimName, out DateTimeOffset value)
+    /// <param name="value">The instant when the result is <see cref="NumericDateReadResult.Value"/>.</param>
+    /// <returns>Whether the claim is absent, holds an instant, or is malformed.</returns>
+    internal static NumericDateReadResult TryReadEpochSeconds(JwtPayload payload, string claimName, out DateTimeOffset value)
     {
         value = default;
         if(!payload.TryGetValue(claimName, out object? raw))
         {
-            return false;
+            return NumericDateReadResult.Absent;
         }
 
         long? seconds = raw switch
@@ -613,12 +646,12 @@ public static class JwsAccessTokenValidator
 
         if(seconds is not long unixSeconds || !JwtTemporalChecks.IsRepresentableUnixSeconds(unixSeconds))
         {
-            return false;
+            return NumericDateReadResult.Malformed;
         }
 
         value = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
 
-        return true;
+        return NumericDateReadResult.Value;
     }
 
 

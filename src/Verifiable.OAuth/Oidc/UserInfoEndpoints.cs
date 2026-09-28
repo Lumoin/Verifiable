@@ -51,8 +51,9 @@ namespace Verifiable.OAuth.Oidc;
 /// <para>
 /// Every refusal carries one <c>WWW-Authenticate</c> value (RFC 6750 §3). A request without usable
 /// credentials is answered <c>Bearer scope="openid", DPoP algs="…"</c>, naming both schemes and no
-/// error (RFC 6750 §3.1, RFC 9449 §7.2). A refusal of a presented token carries the challenge of the
-/// scheme it was presented under, per RFC 9449 §7.2: "If the mechanism used to attempt
+/// error (RFC 6750 §3.1, RFC 9449 §7.2), and an empty body. A refusal of a presented token carries
+/// one challenge, of the scheme it was presented under: a single challenge is this library's choice,
+/// and it is the one RFC 9449 §7.2 names for the error: "If the mechanism used to attempt
 /// authentication could be established unambiguously, then the corresponding challenge SHOULD be
 /// used to deliver error information".
 /// </para>
@@ -102,19 +103,6 @@ public static class UserInfoEndpoints
         return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(
             [BuildUserInfo(WellKnownHttpMethods.Get), BuildUserInfo(WellKnownHttpMethods.Post)]);
     };
-
-
-    /// <summary>
-    /// The <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> challenge
-    /// UserInfo answers a presented token it refuses as invalid with, <c>Bearer error="invalid_token"</c>:
-    /// "If the protected resource request does not include authentication credentials or does not
-    /// contain an access token that enables access to the protected resource, the resource server MUST
-    /// include the HTTP "WWW-Authenticate" response header field". Composed by
-    /// <see cref="BearerTokenChallenge.BuildChallenge"/>, the same composition
-    /// <see cref="BearerTokenValidation"/> attaches to its own refusals.
-    /// </summary>
-    private static string InvalidTokenChallenge { get; } =
-        BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InvalidToken);
 
 
     /// <summary>
@@ -186,12 +174,12 @@ public static class UserInfoEndpoints
                 //RFC 6750 §2.1 and RFC 9449 §7.1 — the access token rides on the
                 //Authorization header under the Bearer scheme, or under the DPoP scheme when
                 //it is bound to the client's DPoP key.
+                //RFC 6750 §3.1: a request without usable credentials is answered with the
+                //challenge alone, no error code and no other error information.
                 if(!BearerTokenValidation.TryExtractAccessToken(
                     context, out string? accessToken, out bool isDpopPresentation))
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidToken,
-                        "Missing or malformed Authorization header.")
+                    return (null, ServerHttpResponse.Unauthorized()
                         .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, MissingCredentialsChallenge));
                 }
 
@@ -245,7 +233,7 @@ public static class UserInfoEndpoints
                         "Validated access token does not carry a sub claim.")
                         .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, isDpopPresentation
                             ? CredentialEndpointDpopValidation.BuildDpopChallenge(OAuthErrors.InvalidToken)
-                            : InvalidTokenChallenge));
+                            : BearerTokenValidation.InvalidTokenChallenge));
                 }
 
                 //One-time OidcClaims resolution before the contributor walk —

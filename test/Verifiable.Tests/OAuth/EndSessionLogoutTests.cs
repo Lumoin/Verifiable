@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
@@ -790,6 +791,48 @@ internal sealed class EndSessionLogoutTests
 
 
     /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">RP-Initiated
+    /// Logout 1.0 §4</see>: "If any of the validation procedures defined in this specification fail,
+    /// any operations requiring the information that failed to correctly validate MUST be aborted". A
+    /// hint that is an ID Token this server issued with its signature segment lengthened past
+    /// <see cref="Verifiable.JCose.Jws.DefaultMaxJwsLength"/>, the longest compact JWS the library
+    /// verifies, cannot be validated: the end-session request is answered 400 <c>invalid_request</c>,
+    /// never a server fault, and the session stays live. The request is dispatched in-process, since
+    /// the endpoint answers GET and an HTTP server refuses a request line of that length before any
+    /// endpoint runs; a host on another transport reaches the endpoint with it.
+    /// </summary>
+    [TestMethod]
+    public async Task EndSessionRefusesAHintLongerThanTheVerifiedMaximumAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
+        string oversizedHint = idToken + new string('A', Verifiable.JCose.Jws.DefaultMaxJwsLength);
+
+        ServerHttpResponse response = await EndSessionAsync(host, material, new RequestFields
+        {
+            [OAuthRequestParameterNames.IdTokenHint] = oversizedHint,
+            [OAuthRequestParameterNames.PostLogoutRedirectUri] = RegisteredPostLogout,
+            [OAuthRequestParameterNames.State] = "o1"
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.IsNull(response.Location, "A refused hint must not redirect.");
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "id_token_hint exceeds the longest compact JWS this server verifies.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsEmpty(terminated, "An oversized hint must not end the session.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
     /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
     /// fail to validate other kinds of JWTs." A registration whose access tokens and ID Tokens are
@@ -810,7 +853,7 @@ internal sealed class EndSessionLogoutTests
         _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
-        _ = await IssuanceKeySeparation.SeparateIdTokenKeyAsync(host, material).ConfigureAwait(false);
+        _ = await IssuanceKeySeparation.ListFreshKeyAsync(host, material, KeyUsageContext.IdTokenIssuance).ConfigureAwait(false);
 
         List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
 

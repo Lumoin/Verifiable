@@ -182,6 +182,15 @@ internal sealed class ResourceServerEndToEndTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 §7.1</see>: "a resource
+    /// server MUST check that a DPoP proof was also received in the DPoP header field of the HTTP
+    /// request, check the DPoP proof according to the rules in Section 4.3, and check that the public key
+    /// of the DPoP proof matches the public key to which the access token is bound". An access token
+    /// bound by <c>cnf.jkt</c> to a key, presented over the wire under the <c>DPoP</c> scheme with a proof
+    /// signed by that key, is served: 200 with the token's <c>cnf</c>, and the proof's <c>jti</c> is
+    /// recorded.
+    /// </summary>
     [TestMethod]
     public async Task DpopBoundProtectedRequestWithMatchingProofReturns200()
     {
@@ -216,29 +225,8 @@ internal sealed class ResourceServerEndToEndTests
         string token = await BuildAccessTokenAsync(asKeys.PrivateKey, payload).ConfigureAwait(false);
 
         string resourceUrl = new Uri(rs.HttpBaseAddress!, "/protected").ToString();
-        string ath = await DpopProofValidator.ComputeAthAsync(
-            token,
-            TestSetup.Base64UrlEncoder,
-            BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        DpopProofClaims proofClaims = new()
-        {
-            Htm = "GET",
-            Htu = resourceUrl,
-            Iat = NowInstant,
-            Jti = Guid.NewGuid().ToString("N"),
-            Ath = ath
-        };
-
-        string proof = await DpopProofConstruction.BuildAsync(
-            proofClaims,
-            dpopKey,
-            TestSetup.Base64UrlEncoder,
-            DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
-            BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
@@ -260,6 +248,12 @@ internal sealed class ResourceServerEndToEndTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 §11.1</see>: "HTTP
+    /// requests to the same URI for which the jti value has been seen before would be declined." A proof
+    /// the resource server served once, presented again over the wire with the same token, is refused
+    /// with 401 and a challenge carrying <c>invalid_dpop_proof</c>.
+    /// </summary>
     [TestMethod]
     public async Task DpopBoundProofReplayedReturns401()
     {
@@ -294,23 +288,8 @@ internal sealed class ResourceServerEndToEndTests
         string token = await BuildAccessTokenAsync(asKeys.PrivateKey, payload).ConfigureAwait(false);
 
         string resourceUrl = new Uri(rs.HttpBaseAddress!, "/protected").ToString();
-        string ath = await DpopProofValidator.ComputeAthAsync(
-            token, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        DpopProofClaims proofClaims = new()
-        {
-            Htm = "GET",
-            Htu = resourceUrl,
-            Iat = NowInstant,
-            Jti = Guid.NewGuid().ToString("N"),
-            Ath = ath
-        };
-
-        string proof = await DpopProofConstruction.BuildAsync(
-            proofClaims, dpopKey, TestSetup.Base64UrlEncoder,
-            DpopTestSupport.Serializer, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
-            BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
 
@@ -372,13 +351,8 @@ internal sealed class ResourceServerEndToEndTests
         string token = await BuildAccessTokenAsync(keys.PrivateKey, payload, kid: " ").ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
-        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
-        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
-        string challenge = challenges.Single();
-        Assert.StartsWith("Bearer ", challenge, challenge);
-        Assert.Contains("error=\"invalid_token\"", challenge);
+        await AssertInvalidTokenChallengeAsync(rs, response, "JWS header is missing the kid member.").ConfigureAwait(false);
     }
 
 
@@ -417,13 +391,75 @@ internal sealed class ResourceServerEndToEndTests
         string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+
+        await AssertInvalidTokenChallengeAsync(
+            rs, response, "Access token exp claim is not a NumericDate naming a representable instant.").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">RFC 7519 §4.1.5</see>: "The
+    /// "nbf" (not before) claim identifies the time before which the JWT MUST NOT be accepted for
+    /// processing." An access token otherwise valid and signed by the trusted issuer whose <c>nbf</c> is a
+    /// NumericDate no instant is represented for (9223372036854775807, or 253402300800, one second after
+    /// 9999-12-31T23:59:59Z) names a time that cannot be checked: the resource server validating it with
+    /// <see cref="Verifiable.OAuth.JwsAccessTokenValidator"/> refuses it over the wire with 401 and the
+    /// challenge <c>Bearer realm="protected", error="invalid_token", error_description="…"</c>, and never
+    /// serves it as a token carrying no <c>nbf</c>.
+    /// </summary>
+    /// <param name="notBefore">The presented <c>nbf</c>.</param>
+    [TestMethod]
+    [DataRow(long.MaxValue)]
+    [DataRow(253402300800L)]
+    public async Task AccessTokenWithUnrepresentableNbfReturns401(long notBefore)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        FakeTimeProvider time = new(NowInstant);
+
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(keys.PublicKey),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromMinutes(5),
+            issuer: Issuer,
+            audience: [Audience]);
+        payload[WellKnownJwtClaimNames.Nbf] = notBefore;
+        string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+
+        await AssertInvalidTokenChallengeAsync(
+            rs, response, "Access token nbf claim is not a NumericDate naming a representable instant.").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Asserts a refusal of a presented token over the wire: 401, one <c>WWW-Authenticate</c> value equal
+    /// to the challenge the resource server writes, <c>Bearer realm="protected", error="invalid_token",
+    /// error_description="<paramref name="description"/>", resource_metadata="…"</c>, and no claim served.
+    /// </summary>
+    /// <param name="rs">The running resource server whose metadata URL the challenge names.</param>
+    /// <param name="response">The wire response.</param>
+    /// <param name="description">The validator's failure description the challenge carries.</param>
+    private async Task AssertInvalidTokenChallengeAsync(TestResourceServerShell rs, HttpResponseMessage response, string description)
+    {
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
-        string challenge = challenges.Single();
-        Assert.StartsWith("Bearer ", challenge, challenge);
-        Assert.Contains("error=\"invalid_token\"", challenge);
+        Assert.AreEqual(
+            $"Bearer realm=\"protected\", error=\"invalid_token\", error_description=\"{description}\", resource_metadata=\"{rs.MetadataUrl!.OriginalString}\"",
+            challenges.Single());
+        Assert.IsFalse(body.Contains("\"sub\"", StringComparison.Ordinal), "A refused request is served no claim.");
     }
 
 

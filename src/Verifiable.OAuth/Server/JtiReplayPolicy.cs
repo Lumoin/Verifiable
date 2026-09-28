@@ -41,9 +41,10 @@ namespace Verifiable.OAuth.Server;
 /// </description></item>
 /// </list>
 /// <para>
-/// The cross-issuer composite key <c>(issuer, jti)</c> defends against the case where the
-/// same <c>jti</c> appears under different issuers — a bare <c>jti</c> alone would conflate
-/// independent issuers and create false-positive rejections.
+/// The composite key <c>(purpose, issuer, jti)</c> defends against the case where the same
+/// <c>jti</c> appears under different issuers or on different kinds of object
+/// (<see cref="JtiReplayPurpose"/>) — a bare <c>jti</c> alone would conflate them and create
+/// false-positive rejections.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JtiReplayPolicy={ToString(),nq}")]

@@ -1,6 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
@@ -201,6 +205,8 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             host, material, bearer: null,
             $"{{\"transaction_id\":\"{TransactionId}\"}}").ConfigureAwait(false);
         Assert.AreEqual(401, noBearer.StatusCode, noBearer.Body);
+        Assert.IsTrue(noBearer.Headers.TryGetValue(WellKnownHttpHeaderNames.WwwAuthenticate, out string? noBearerChallenge));
+        Assert.AreEqual(MissingCredentialsChallenge(host, material), noBearerChallenge);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         ServerHttpResponse noTransaction = await DispatchDeferredAsync(
@@ -365,6 +371,8 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             $"{{\"notification_id\":\"{NotificationId}\",\"event\":\"credential_accepted\"}}")
             .ConfigureAwait(false);
         Assert.AreEqual(401, noBearer.StatusCode, noBearer.Body);
+        Assert.IsTrue(noBearer.Headers.TryGetValue(WellKnownHttpHeaderNames.WwwAuthenticate, out string? noBearerChallenge));
+        Assert.AreEqual(MissingCredentialsChallenge(host, material), noBearerChallenge);
 
         ServerHttpResponse missingEvent = await DispatchNotificationAsync(
             host, material, bearer,
@@ -448,6 +456,165 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         Assert.EndsWith("deferred_credential", deferredEndpoint);
         Assert.IsNotNull(notificationEndpoint);
         Assert.EndsWith("notification", notificationEndpoint);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>: "If the protected
+    /// resource request does not include authentication credentials or does not contain an access token
+    /// that enables access to the protected resource, the resource server MUST include the HTTP
+    /// "WWW-Authenticate" response header field", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">§3.1</see>: "If the request lacks
+    /// any authentication information ... the resource server SHOULD NOT include an error code or other
+    /// error information." A request to the Deferred Credential or the Notification endpoint sent over the
+    /// wire with no <c>Authorization</c> header is refused with 401, an empty body and the one challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", DPoP algs="…"</c>, naming both schemes and no error.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    [TestMethod]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointChallengesARequestWithoutCredentialsForBothSchemesAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, endpointName, authorization: null, ProtectedRequestBody(endpointName)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The header is read as sent: the client's typed view splits one field value into its challenges.
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.NonValidated.TryGetValues("WWW-Authenticate", out HeaderStringValues challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(MissingCredentialsChallenge(host, material), Assert.ContainsSingle(challenges));
+        Assert.AreEqual(string.Empty, body, "RFC 6750 §3.1: no error code or other error information.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "If the
+    /// mechanism used to attempt authentication could be established unambiguously, then the
+    /// corresponding challenge SHOULD be used to deliver error information". An access token whose
+    /// signature does not verify, presented under the <c>DPoP</c> scheme at the Deferred Credential or
+    /// the Notification endpoint over the wire, is refused with 401 <c>invalid_token</c> and the one
+    /// challenge <c>DPoP error="invalid_token", algs="…"</c>, never a <c>Bearer</c> one.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    [TestMethod]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointAnswersARefusedDpopPresentationWithADpopChallengeAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+
+        string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
+        int signatureStart = accessToken.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((accessToken.Length - signatureStart) / 2);
+        char flipped = accessToken[tamperIndex] == 'A' ? 'B' : 'A';
+        string tampered = string.Concat(accessToken.AsSpan(0, tamperIndex), flipped.ToString(), accessToken.AsSpan(tamperIndex + 1));
+
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, endpointName, "DPoP " + tampered, ProtectedRequestBody(endpointName)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_token"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>The row addressing the Deferred Credential Endpoint.</summary>
+    private const string DeferredEndpointRow = "oid4vci-deferred-credential";
+
+    /// <summary>The row addressing the Notification Endpoint.</summary>
+    private const string NotificationEndpointRow = "oid4vci-notification";
+
+
+    /// <summary>
+    /// The endpoint name a wire row addresses.
+    /// </summary>
+    /// <param name="row">The row.</param>
+    /// <returns>The endpoint name.</returns>
+    private static string EndpointNameOf(string row) => row switch
+    {
+        DeferredEndpointRow => WellKnownEndpointNames.Oid4VciDeferredCredential,
+        NotificationEndpointRow => WellKnownEndpointNames.Oid4VciNotification,
+        _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown endpoint row.")
+    };
+
+
+    /// <summary>A well-formed request body for the endpoint a wire row addresses.</summary>
+    /// <param name="row">The row.</param>
+    /// <returns>The JSON body.</returns>
+    private static string ProtectedRequestBody(string row) => row switch
+    {
+        DeferredEndpointRow => $"{{\"transaction_id\":\"{TransactionId}\"}}",
+        NotificationEndpointRow => $"{{\"notification_id\":\"{NotificationId}\",\"event\":\"credential_accepted\"}}",
+        _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown endpoint row.")
+    };
+
+
+    /// <summary>
+    /// The challenge the protected endpoints answer a request without usable credentials with:
+    /// <c>Bearer realm="&lt;issuer&gt;", DPoP algs="…"</c>, the realm being the issuer the server holds
+    /// for the registration.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The literal <c>WWW-Authenticate</c> value.</returns>
+    private static string MissingCredentialsChallenge(TestHostShell host, VerifierKeyMaterial material) =>
+        $"Bearer realm=\"{host.Host("default").Registrations[material.Registration.TenantId.Value].IssuerUri!.OriginalString}\", "
+        + $"DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"";
+
+
+    /// <summary>
+    /// Wires the deferred-issuance and notification seams so both endpoints are on the chain.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    private static async Task WireProtectedEndpointSeamsAsync(TestHostShell host) =>
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
+            candidateIntegration.ProcessCredentialNotificationAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialNotificationDecision.Accept);
+        }).ConfigureAwait(false);
+
+
+    /// <summary>
+    /// POSTs <paramref name="jsonBody"/> to the endpoint a wire row addresses over the host's loopback
+    /// HTTPS listener, with <paramref name="authorization"/> as the <c>Authorization</c> header when given.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration whose endpoint path is addressed.</param>
+    /// <param name="row">The endpoint row.</param>
+    /// <param name="authorization">The <c>Authorization</c> header, or <see langword="null"/> for none.</param>
+    /// <param name="jsonBody">The JSON request body.</param>
+    /// <returns>The wire response; the caller disposes it.</returns>
+    private async Task<HttpResponseMessage> SendProtectedOverWireAsync(
+        TestHostShell host, VerifierKeyMaterial material, string row, string? authorization, string jsonBody)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri url = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(EndpointNameOf(row), material.Registration.TenantId.Value));
+
+        using StringContent content = new(jsonBody, Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, url) { Content = content };
+        if(authorization is not null)
+        {
+            _ = request.Headers.TryAddWithoutValidation("Authorization", authorization);
+        }
+
+        return await host.Host("default").SharedHttpClient!.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

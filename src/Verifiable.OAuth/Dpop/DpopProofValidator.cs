@@ -45,6 +45,14 @@ public static class DpopProofValidator
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
+        //The length bound the library's JWS verification applies (Jws.DefaultMaxJwsLength), checked
+        //before any split or decode: a longer proof is malformed input, answered as a failure rather
+        //than raised as an exception from the verification below.
+        if(request.Proof.Length > Jws.DefaultMaxJwsLength)
+        {
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
+        }
+
         //Structural parse first — reject obviously malformed input cheaply.
         string[] parts = request.Proof.Split('.');
         if(parts.Length != 3
@@ -95,8 +103,10 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
-        //RFC 9449 §4.3 item 3: "All required claims per Section 4.2 are contained in the JWT." An
-        //empty jti identifies nothing the replay guard can track; it is a malformed proof.
+        //RFC 9449 §4.2, jti: "The value MUST be assigned such that there is a negligible probability
+        //that the same value will be assigned to any other DPoP proof used in the same context during
+        //the time window of validity." An empty jti is a value every such proof could carry; it
+        //identifies nothing the replay guard can track, so the proof is malformed.
         if(string.IsNullOrEmpty(claims.Jti))
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
@@ -133,10 +143,12 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
-        //RFC 9449 §4.3 items 5 and 6: the alg names an algorithm acceptable per local policy and the
-        //signature verifies with the public key in jwk. The key reconstructed from the jwk fixes the
-        //algorithm family the verification runs under, so a declared alg of another family (an RSA
-        //alg over an EC key, a curve other than the key's) is refused before any verification.
+        //RFC 7515 §5.2 step 8: "Validate the JWS Signature against the JWS Signing Input ... in the
+        //manner defined for the algorithm being used, which MUST be accurately represented by the value
+        //of the "alg" (algorithm) Header Parameter". The key reconstructed from the jwk fixes the
+        //algorithm the verification runs under, so a declared alg that is not an algorithm of that key
+        //(an RSA alg over an EC key, a curve other than the key's) does not accurately represent it and
+        //is refused before any verification.
         if(!IsAlgorithmOfKey(header.Alg, publicKey.Tag.Get<CryptoAlgorithm>()))
         {
             publicKey.Dispose();
@@ -313,10 +325,16 @@ public static class DpopProofValidator
     /// any query and fragment parts.", and "To reduce the likelihood of false negatives, servers SHOULD
     /// employ syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization
     /// (Section 6.2.3 of [RFC3986]) before comparing the htu claim." Both values are parsed as absolute
-    /// <c>http</c> or <c>https</c> URIs, whose parser lowercases the scheme and host, drops a default
-    /// port, removes dot segments and gives an empty path the root; the scheme, host, port and path are
-    /// then compared ordinally with unreserved percent-encodings decoded, so the path's case stays
-    /// significant and the query and fragment take no part.
+    /// <c>http</c> or <c>https</c> URIs. The parser lowercases the scheme and host, drops a default
+    /// port and any userinfo, removes dot segments and gives an empty path the root; the scheme, host,
+    /// port and path are then read with <see cref="UriFormat.SafeUnescaped"/>, which keeps the
+    /// percent-encoding of a reserved character (and of <c>%</c> itself) and decodes every other one.
+    /// The hexadecimal digits of each percent-encoding kept are uppercased, per RFC 3986 §6.2.2.1: "For
+    /// all URIs, the hexadecimal digits within a percent-encoding triplet (e.g., "%3a" versus "%3A") are
+    /// case-insensitive and therefore should be normalized to use uppercase letters for the digits A-F." The two
+    /// strings are then compared ordinally, so the path's case stays significant, an encoded reserved
+    /// character never equals its literal form, a host in Unicode and in punycode compare as written,
+    /// and the query and fragment take no part.
     /// </summary>
     /// <param name="presentedHtu">The proof's <c>htu</c> claim.</param>
     /// <param name="expectedHtu">The target URI of the request being served.</param>
@@ -331,7 +349,40 @@ public static class DpopProofValidator
             return false;
         }
 
-        return Uri.Compare(presented, expected, TargetUriComponents, UriFormat.SafeUnescaped, StringComparison.Ordinal) == 0;
+        return string.Equals(NormalizedTarget(presented), NormalizedTarget(expected), StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// The scheme, host, port and path of <paramref name="uri"/> read with
+    /// <see cref="UriFormat.SafeUnescaped"/>, with the hexadecimal digits of every percent-encoding
+    /// left in them uppercased (RFC 3986 §6.2.2.1).
+    /// </summary>
+    /// <param name="uri">The parsed absolute URI.</param>
+    /// <returns>The normalized target.</returns>
+    private static string NormalizedTarget(Uri uri)
+    {
+        string target = uri.GetComponents(TargetUriComponents, UriFormat.SafeUnescaped);
+        if(!target.Contains('%', StringComparison.Ordinal))
+        {
+            return target;
+        }
+
+        return string.Create(target.Length, target, static (destination, source) =>
+        {
+            source.AsSpan().CopyTo(destination);
+            for(int i = 0; i + 2 < destination.Length; i++)
+            {
+                if(destination[i] == '%'
+                    && char.IsAsciiHexDigit(destination[i + 1])
+                    && char.IsAsciiHexDigit(destination[i + 2]))
+                {
+                    destination[i + 1] = char.ToUpperInvariant(destination[i + 1]);
+                    destination[i + 2] = char.ToUpperInvariant(destination[i + 2]);
+                    i += 2;
+                }
+            }
+        });
     }
 
 

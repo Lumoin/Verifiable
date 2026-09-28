@@ -5,9 +5,10 @@ namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
 /// Builds the DPoP proofs a test presents with an access token at a protected resource
-/// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see> and §7.1), and
-/// reads the resource nonce a challenge carries, so every resource-side test builds its proofs the
-/// same way and varies only the member it names.
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see> and §7.1), reads
+/// the resource nonce a challenge carries, and spells the literal <c>DPoP</c> challenges the library's
+/// resources answer with, so every resource-side test builds its proofs and states its expected
+/// challenges the same way and varies only the member it names.
 /// </summary>
 /// <remarks>
 /// A proof carries <c>htm</c>, <c>htu</c>, <c>iat</c>, <c>jti</c>, the <c>ath</c> hash of the
@@ -18,6 +19,20 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 internal static class ResourceDpopProofs
 {
+    /// <summary>
+    /// The <c>algs</c> value of every <c>DPoP</c> challenge the library's resources answer with, written
+    /// out: RFC 9449 §7.1 "The value of the parameter is a space-delimited list of JWS alg (Algorithm)
+    /// header values".
+    /// </summary>
+    public static string AcceptedProofAlgorithms { get; } = "ES256 ES384 ES512 RS256 RS384 RS512 PS256 PS384 PS512 EdDSA";
+
+
+    /// <summary>The literal <c>DPoP</c> challenge carrying <paramref name="error"/> and the <c>algs</c> parameter.</summary>
+    /// <param name="error">The challenge's <c>error</c>.</param>
+    /// <returns>The <c>WWW-Authenticate</c> value.</returns>
+    public static string DpopChallenge(string error) => $"DPoP error=\"{error}\", algs=\"{AcceptedProofAlgorithms}\"";
+
+
     /// <summary>
     /// Builds and signs a DPoP proof for a request to a protected resource.
     /// </summary>

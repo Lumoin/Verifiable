@@ -947,7 +947,7 @@ internal sealed class ClientCredentialsGrantTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
 
                 //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; MachineScope
                 //carries no ScopeToAudience mapping, so a fixed resource-server audience stands in.

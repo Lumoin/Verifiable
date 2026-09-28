@@ -1346,6 +1346,156 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>, <c>jti</c>: "The
+    /// value MUST be assigned such that there is a negligible probability that the same value will be
+    /// assigned to any other DPoP proof used in the same context", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 §3</see> item 7: "The
+    /// authorization server MAY ensure that JWTs are not replayed by maintaining the set of used "jti"
+    /// values". Each identifier is unique among objects of its own kind. A jwt-bearer token request over
+    /// the wire, under a registration whose profile mandates DPoP, whose DPoP proof and whose validated
+    /// assertion carry the same <c>jti</c> under the same issuer (the authorization server's own) presents
+    /// two distinct objects, neither a replay of the other: the access token is issued, 200 with
+    /// <c>token_type</c> <c>DPoP</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task DpopProofAndAssertionSharingAnIdentifierAreBothFirstUsesAsync()
+    {
+        const string SharedJti = "shared-identifier-001";
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        DateTimeOffset assertionExpiration = TimeProvider.GetUtcNow() + TimeSpan.FromMinutes(5);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+
+            //The assertion is issued by the authorization server's own issuer and carries the very jti
+            //the DPoP proof of the same request carries.
+            candidateIntegration.ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>
+                ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant
+                {
+                    Subject = AssertionSubject,
+                    Scope = GrantedScope,
+                    Jti = SharedJti,
+                    Issuer = registration.IssuerUri!.OriginalString,
+                    Expiration = assertionExpiration
+                });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = app.AlignRegistrationToHostHttpBase("default", material.Registration);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+            OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+            {
+                Assertion = "eyJhbGciOiJFUzI1NiJ9.shared-identifier-assertion.signature"
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+            //The nonce-less first proof is challenged before any jti is recorded; the retry's proof,
+            //carrying the nonce, carries the shared jti.
+            async Task<string> BuildProofAsync(string? nonce) =>
+                await DpopProofConstruction.BuildAsync(
+                    new DpopProofClaims
+                    {
+                        Htm = WellKnownHttpMethods.Post,
+                        Htu = tokenUrl.OriginalString,
+                        Iat = TimeProvider.GetUtcNow(),
+                        Jti = nonce is null ? Guid.NewGuid().ToString("N") : SharedJti,
+                        Nonce = nonce
+                    },
+                    dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+                    MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+
+            (HttpResponseMessage response, string body) = await OAuthTestTransport.PostFormWithDpopNonceRetryAsync(
+                host.SharedHttpClient!, tokenUrl, form, BuildProofAsync, TestContext.CancellationToken).ConfigureAwait(false);
+            using(response)
+            {
+                Assert.AreEqual(200, (int)response.StatusCode, body);
+                using JsonDocument doc = JsonDocument.Parse(body);
+                Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, doc.RootElement.GetProperty("token_type").GetString());
+            }
+        }
+        finally
+        {
+            holderKeys.PublicKey.Dispose();
+            holderKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 §3</see> item 7: "The
+    /// authorization server MAY ensure that JWTs are not replayed by maintaining the set of used "jti"
+    /// values for the length of time for which the JWT would be considered valid", a set kept per issuer.
+    /// Two jwt-bearer token requests over the wire whose validated assertions are two distinct
+    /// <c>(issuer, jti)</c> pairs that both carry colons, the issuer <c>https://idp.example.com/x</c> with
+    /// the <c>jti</c> <c>b:c</c> and the issuer <c>https://idp.example.com/x:b</c> with the <c>jti</c>
+    /// <c>c</c>, are both first uses: each is answered 200 with an access token.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionsWhoseIssuerAndJtiBothCarryColonsAreTwoFirstUsesAsync()
+    {
+        const string FirstAssertion = "eyJhbGciOiJFUzI1NiJ9.colon-issuer-one.signature";
+        const string SecondAssertion = "eyJhbGciOiJFUzI1NiJ9.colon-issuer-two.signature";
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        DateTimeOffset assertionExpiration = TimeProvider.GetUtcNow() + TimeSpan.FromMinutes(5);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>
+                ValueTask.FromResult<JwtBearerGrant?>(assertion switch
+                {
+                    FirstAssertion => new JwtBearerGrant
+                    {
+                        Subject = AssertionSubject,
+                        Scope = GrantedScope,
+                        Issuer = "https://idp.example.com/x",
+                        Jti = "b:c",
+                        Expiration = assertionExpiration
+                    },
+                    SecondAssertion => new JwtBearerGrant
+                    {
+                        Subject = AssertionSubject,
+                        Scope = GrantedScope,
+                        Issuer = "https://idp.example.com/x:b",
+                        Jti = "c",
+                        Expiration = assertionExpiration
+                    },
+                    _ => null
+                });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        foreach(string assertion in new[] { FirstAssertion, SecondAssertion })
+        {
+            OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+            {
+                Assertion = assertion
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(200, (int)response.StatusCode, $"{assertion}: {body}");
+        }
+    }
+
+
+    /// <summary>
     /// Wires the client_secret_post authentication seam (RFC 6749 §2.3.1): the application owns the
     /// secret store and the comparison; this test glue checks the form field against the registered
     /// client's secret. Required only because some tests present credentials (§3.1) — the grant itself

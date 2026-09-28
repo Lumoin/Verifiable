@@ -256,7 +256,7 @@ internal sealed class JtiReplayGuardStoreProofTests
     [TestMethod]
     public void CorrelationKeyMatchesJtiSeenStateCorrelationKey()
     {
-        string guardKey = JtiReplayGuard.CorrelationKey(Issuer, Jti);
+        string guardKey = JtiReplayGuard.CorrelationKey(JtiReplayPurpose.DpopProof, Issuer, Jti);
         JtiSeenState state = new()
         {
             FlowId = "flow-id",
@@ -264,13 +264,148 @@ internal sealed class JtiReplayGuardStoreProofTests
             EnteredAt = TimeProvider.GetUtcNow(),
             ExpiresAt = TimeProvider.GetUtcNow().AddMinutes(5),
             Kind = FlowKind.JtiReplay,
+            Purpose = JtiReplayPurpose.DpopProof,
             Issuer = Issuer,
             Jti = Jti,
             SeenAt = TimeProvider.GetUtcNow()
         };
 
         Assert.AreEqual(guardKey, state.CorrelationKey,
-            "The state's CorrelationKey must equal JtiReplayGuard.CorrelationKey(issuer, jti) — one composition, one home.");
+            "The state's CorrelationKey must equal JtiReplayGuard.CorrelationKey(purpose, issuer, jti) — one composition, one home.");
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §11.1: "servers can store the jti value of each DPoP proof for the time window in which
+    /// the respective DPoP proof JWT would be accepted to prevent multiple uses of the same DPoP proof."
+    /// A store wired with the correlation read, the save and the identifier generator but no atomic claim
+    /// cannot decide which of several concurrent presentations is the first use; it is present and
+    /// defective, so under both <see cref="JtiReplayPolicy.Required"/> and
+    /// <see cref="JtiReplayPolicy.OptionalIfStorePresent"/> the guard answers
+    /// <see cref="JtiReplayOutcome.StoreUnavailable"/> before writing anything.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>.
+    /// </summary>
+    /// <param name="policy">The replay policy the consultation runs under.</param>
+    [TestMethod]
+    [DataRow(JtiReplayPolicy.Required)]
+    [DataRow(JtiReplayPolicy.OptionalIfStorePresent)]
+    public async Task StoreWithoutAnAtomicClaimFailsClosed(JtiReplayPolicy policy)
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        using EndpointServer server = BuildServer(store, isClaimWired: false);
+        ExchangeContext context = BuildContext(policy);
+
+        JtiReplayOutcome outcome = await ConsultAsync(server, context, Issuer, Jti).ConfigureAwait(false);
+
+        Assert.AreEqual(JtiReplayOutcome.StoreUnavailable, outcome,
+            "RFC 9449 §11.1: a store that cannot claim the first use is defective under every policy.");
+        Assert.AreEqual(0, store.SaveCallCount, "A store that cannot claim is never written.");
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §4.2, <c>jti</c>: "The value MUST be assigned such that there is a negligible probability
+    /// that the same value will be assigned to any other DPoP proof used in the same context" — a
+    /// <c>jti</c> is unique among objects of its own kind. The same <c>(issuer, jti)</c> recorded for a
+    /// request object is a first use when presented next as a DPoP proof, and the proof's own repeat is
+    /// refused as a replay.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449, Section 4.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task CorrectStoreIsolatesPurposes()
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        using EndpointServer server = BuildServer(store);
+        ExchangeContext context = BuildContext(JtiReplayPolicy.Required);
+
+        JtiReplayOutcome requestObject = await ConsultAsync(server, context, Issuer, Jti, JtiReplayPurpose.RequestObject).ConfigureAwait(false);
+        JtiReplayOutcome dpopProof = await ConsultAsync(server, context, Issuer, Jti, JtiReplayPurpose.DpopProof).ConfigureAwait(false);
+        JtiReplayOutcome dpopProofRepeat = await ConsultAsync(server, context, Issuer, Jti, JtiReplayPurpose.DpopProof).ConfigureAwait(false);
+
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, requestObject);
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, dpopProof,
+            "A DPoP proof sharing a request object's identifiers is not a replay of it.");
+        Assert.AreEqual(JtiReplayOutcome.Replayed, dpopProofRepeat);
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3 rule 7 keeps the used-<c>jti</c> set per issuer. Two distinct presentations whose
+    /// issuer and <c>jti</c> both carry colons, the issuer <c>https://i/x</c> with the <c>jti</c>
+    /// <c>b:c</c> and the issuer <c>https://i/x:b</c> with the <c>jti</c> <c>c</c>, are two records:
+    /// both are first uses, and each repeat is refused.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523, Section 3</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task CorrectStoreKeepsColonBearingIssuersApart()
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        using EndpointServer server = BuildServer(store);
+        ExchangeContext context = BuildContext(JtiReplayPolicy.Required);
+
+        JtiReplayOutcome first = await ConsultAsync(server, context, "https://i/x", "b:c").ConfigureAwait(false);
+        JtiReplayOutcome second = await ConsultAsync(server, context, "https://i/x:b", "c").ConfigureAwait(false);
+        JtiReplayOutcome secondRepeat = await ConsultAsync(server, context, "https://i/x:b", "c").ConfigureAwait(false);
+
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, first);
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, second, "Another issuer's jti is never the first issuer's record.");
+        Assert.AreEqual(JtiReplayOutcome.Replayed, secondRepeat);
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §11.1: "servers can store the jti value of each DPoP proof for the time window in which
+    /// the respective DPoP proof JWT would be accepted to prevent multiple uses of the same DPoP proof."
+    /// Two presentations of one <c>jti</c> both read "not seen"; the first finishes its consultation,
+    /// record and claim included, and only then does the second save the same record. A store whose claim
+    /// is kept apart from the record a save writes (the <c>ClaimServerFlowStateDelegate</c> contract)
+    /// still answers the second claim with a refusal: exactly one presentation is a first use and the
+    /// other is a replay.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ALateSaveOfTheSecondPresentationDoesNotReopenTheClaimedFirstUse()
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        TaskCompletionSource bothRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource oneFinished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0;
+        int saves = 0;
+        store.AfterFirstRead = async ct =>
+        {
+            if(Interlocked.Increment(ref reads) == 2)
+            {
+                _ = bothRead.TrySetResult();
+            }
+
+            await bothRead.Task.WaitAsync(ct).ConfigureAwait(false);
+        };
+
+        //The second save waits until the other consultation has finished. The one consultation that can
+        //finish meanwhile is the one that saved first, so no wait depends on the guard claiming.
+        store.BeforeSave = async ct =>
+        {
+            if(Interlocked.Increment(ref saves) == 2)
+            {
+                await oneFinished.Task.WaitAsync(ct).ConfigureAwait(false);
+            }
+        };
+        using EndpointServer server = BuildServer(store);
+
+        async Task<JtiReplayOutcome> PresentAsync()
+        {
+            JtiReplayOutcome outcome = await ConsultAsync(server, BuildContext(JtiReplayPolicy.Required), Issuer, Jti)
+                .ConfigureAwait(false);
+            _ = oneFinished.TrySetResult();
+
+            return outcome;
+        }
+
+        JtiReplayOutcome[] outcomes = await Task.WhenAll(PresentAsync(), PresentAsync()).ConfigureAwait(false);
+
+        _ = Assert.ContainsSingle(outcomes.Where(outcome => outcome == JtiReplayOutcome.FirstUse),
+            $"Exactly one presentation is the first use; outcomes: {string.Join(", ", outcomes)}.");
+        _ = Assert.ContainsSingle(outcomes.Where(outcome => outcome == JtiReplayOutcome.Replayed));
     }
 
 
@@ -282,16 +417,19 @@ internal sealed class JtiReplayGuardStoreProofTests
     /// <param name="context">The exchange context carrying the resolved policy.</param>
     /// <param name="issuer">The issuer the <c>jti</c> is presented under.</param>
     /// <param name="jti">The presented <c>jti</c> value.</param>
+    /// <param name="purpose">The kind of object the <c>jti</c> identifies.</param>
+    /// <returns>The replay outcome.</returns>
     private ValueTask<JtiReplayOutcome> ConsultAsync(
         EndpointServer server,
         ExchangeContext context,
         string issuer,
-        string jti)
+        string jti,
+        JtiReplayPurpose purpose = JtiReplayPurpose.DpopProof)
     {
         DateTimeOffset expiresAt = TimeProvider.GetUtcNow().AddMinutes(5);
 
         return JtiReplayGuard.ConsultAsync(
-            server, context, Tenant, issuer, jti, expiresAt, TestContext.CancellationToken);
+            server, context, Tenant, purpose, issuer, jti, expiresAt, TestContext.CancellationToken);
     }
 
 
@@ -302,13 +440,15 @@ internal sealed class JtiReplayGuardStoreProofTests
     /// the clock are exercised by <see cref="JtiReplayGuard.ConsultAsync"/>.
     /// </summary>
     /// <param name="store">The in-memory store whose delegates back the integration.</param>
-    private EndpointServer BuildServer(InMemoryJtiStore store)
+    /// <param name="isClaimWired">Whether the store's atomic claim is wired.</param>
+    /// <returns>The server.</returns>
+    private EndpointServer BuildServer(InMemoryJtiStore store, bool isClaimWired = true)
     {
         AuthorizationServerIntegration integration = new()
         {
             SaveFlowStateAsync = store.SaveAsync,
             ResolveCorrelationKeyAsync = store.ResolveAsync,
-            ClaimFlowStateAsync = store.ClaimAsync,
+            ClaimFlowStateAsync = isClaimWired ? store.ClaimAsync : null,
             GenerateIdentifierAsync = DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
             MemoryPool = BaseMemoryPool.Shared
         };
@@ -368,8 +508,14 @@ internal sealed class JtiReplayGuardStoreProofTests
         /// <summary>The flow id the foreign-answer behaviour resolves instead of the saved key.</summary>
         private const string ForeignFlowId = "a-foreign-unrelated-flow-id";
 
-        /// <summary>The <c>(issuer, jti)</c> key to saved-flow-id index, keyed ordinally.</summary>
+        /// <summary>The correlation key to saved-flow-id index, keyed ordinally.</summary>
         private Dictionary<string, string> JtiIndex { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The <c>(flow id, step)</c> pairs already claimed, kept apart from the records a save writes.</summary>
+        private HashSet<(string FlowId, int StepCount)> ClaimedSteps { get; } = [];
+
+        /// <summary>Serializes access to the index and the claimed steps across concurrent consultations.</summary>
+        private Lock Gate { get; } = new();
 
         /// <summary>The resolver behaviour this store exhibits after a save.</summary>
         private JtiStoreBehavior Behavior { get; }
@@ -382,16 +528,31 @@ internal sealed class JtiReplayGuardStoreProofTests
         }
 
         /// <summary>The number of times <see cref="SaveAsync"/> has been invoked.</summary>
-        public int SaveCallCount { get; private set; }
+        public int SaveCallCount => Volatile.Read(ref saveCallCount);
 
         /// <summary>The number of times <see cref="ResolveAsync"/> has been invoked.</summary>
-        public int ResolveCallCount { get; private set; }
+        public int ResolveCallCount => Volatile.Read(ref resolveCallCount);
+
+        /// <summary>
+        /// Runs after a <c>FlowKind.JtiReplay</c> read that found no record, before the read returns, so a
+        /// test can hold concurrent consultations at the point where each has read "not seen".
+        /// </summary>
+        public Func<CancellationToken, Task>? AfterFirstRead { get; set; }
+
+        /// <summary>Runs before each save writes its record, so a test can order one save after another consultation.</summary>
+        public Func<CancellationToken, Task>? BeforeSave { get; set; }
+
+        /// <summary>The backing count of <see cref="SaveCallCount"/>, a field so it can be incremented atomically.</summary>
+        private int saveCallCount;
+
+        /// <summary>The backing count of <see cref="ResolveCallCount"/>, a field so it can be incremented atomically.</summary>
+        private int resolveCallCount;
 
         /// <summary>
         /// Records a <see cref="JtiSeenState"/> under its own <see cref="JtiSeenState.CorrelationKey"/>,
         /// as a host's save switch does. The stored value is the saved flow id under
         /// <see cref="JtiStoreBehavior.ResolvesWhatItSaved"/>, or an unrelated id under
-        /// <see cref="JtiStoreBehavior.ResolvesForeignFlowId"/>.
+        /// <see cref="JtiStoreBehavior.ResolvesForeignFlowId"/>. A save never touches a claim.
         /// </summary>
         /// <param name="tenantId">The tenant the state is scoped to; accepted to match the delegate shape.</param>
         /// <param name="correlationKey">The key the state is saved under (also the saved flow id).</param>
@@ -399,7 +560,8 @@ internal sealed class JtiReplayGuardStoreProofTests
         /// <param name="stepCount">The step count; accepted to match the delegate shape.</param>
         /// <param name="context">The request context; accepted to match the delegate shape.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public ValueTask SaveAsync(
+        /// <returns>A task that completes when the record is written.</returns>
+        public async ValueTask SaveAsync(
             TenantId tenantId,
             string correlationKey,
             FlowState state,
@@ -407,19 +569,27 @@ internal sealed class JtiReplayGuardStoreProofTests
             ExchangeContext context,
             CancellationToken cancellationToken)
         {
-            SaveCallCount++;
+            _ = Interlocked.Increment(ref saveCallCount);
+            if(BeforeSave is not null)
+            {
+                await BeforeSave(cancellationToken).ConfigureAwait(false);
+            }
+
             if(state is JtiSeenState jti)
             {
-                JtiIndex[jti.CorrelationKey] = Behavior switch
+                string saved = Behavior switch
                 {
                     JtiStoreBehavior.ResolvesForeignFlowId => ForeignFlowId,
                     JtiStoreBehavior.ResolvesWhatItSaved => correlationKey,
                     JtiStoreBehavior.NeverResolvesJtiReplay => correlationKey,
                     _ => correlationKey
                 };
-            }
 
-            return ValueTask.CompletedTask;
+                lock(Gate)
+                {
+                    JtiIndex[jti.CorrelationKey] = saved;
+                }
+            }
         }
 
         /// <summary>
@@ -432,45 +602,63 @@ internal sealed class JtiReplayGuardStoreProofTests
         /// <param name="externalHandle">The correlation key to resolve.</param>
         /// <param name="context">The request context; accepted to match the delegate shape.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public ValueTask<string?> ResolveAsync(
+        /// <returns>The saved flow id, or <see langword="null"/>.</returns>
+        public async ValueTask<string?> ResolveAsync(
             TenantId tenantId,
             FlowKind flowKind,
             string externalHandle,
             ExchangeContext context,
             CancellationToken cancellationToken)
         {
-            ResolveCallCount++;
+            _ = Interlocked.Increment(ref resolveCallCount);
             bool isJtiReplayResolvable =
                 flowKind == FlowKind.JtiReplay
                 && Behavior != JtiStoreBehavior.NeverResolvesJtiReplay;
-            if(isJtiReplayResolvable)
+            if(!isJtiReplayResolvable)
             {
-                return ValueTask.FromResult<string?>(
-                    JtiIndex.TryGetValue(externalHandle, out string? id) ? id : null);
+                return null;
             }
 
-            return ValueTask.FromResult<string?>(null);
-        }
+            string? id;
+            lock(Gate)
+            {
+                id = JtiIndex.TryGetValue(externalHandle, out string? saved) ? saved : null;
+            }
 
-        /// <summary>The <c>(flow id, step)</c> pairs already claimed, keyed ordinally on the flow id.</summary>
-        private HashSet<(string FlowId, int StepCount)> ClaimedSteps { get; } = [];
+            if(id is null && AfterFirstRead is not null)
+            {
+                await AfterFirstRead(cancellationToken).ConfigureAwait(false);
+            }
+
+            return id;
+        }
 
         /// <summary>
         /// Claims one step of a saved record exactly once, as a host's atomic claim does: the first claim
-        /// of a <c>(flow id, step)</c> pair succeeds and every later one is refused.
+        /// of a <c>(flow id, step)</c> pair succeeds and every later one is refused, whatever was saved in
+        /// between.
         /// </summary>
         /// <param name="tenantId">The tenant; accepted to match the delegate shape.</param>
         /// <param name="flowId">The record's flow id.</param>
         /// <param name="expectedStepCount">The step claimed.</param>
         /// <param name="context">The request context; accepted to match the delegate shape.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>Whether this caller won the claim.</returns>
         public ValueTask<bool> ClaimAsync(
             TenantId tenantId,
             string flowId,
             int expectedStepCount,
             ExchangeContext context,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(ClaimedSteps.Add((flowId, expectedStepCount)));
+            CancellationToken cancellationToken)
+        {
+            bool isClaimed;
+            lock(Gate)
+            {
+                isClaimed = ClaimedSteps.Add((flowId, expectedStepCount));
+            }
+
+            return ValueTask.FromResult(isClaimed);
+        }
     }
 }
 

@@ -257,6 +257,103 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>: "Resource servers
+    /// use an HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and
+    /// DPoP-Nonce value to accomplish this." and §8: "The client will typically retry the request with
+    /// the new nonce value supplied upon receiving a use_dpop_nonce error with an accompanying nonce
+    /// value." Pre-Authorized Code → DPoP-bound token → Credential Request over real
+    /// Kestrel HTTP, where the server rotates its nonce key after the token was issued (the old key
+    /// archived), so the nonce the wallet carries from the token endpoint is not one the Credential
+    /// Endpoint accepts. The Credential Endpoint answers the first request with its 401 nonce challenge;
+    /// the wallet retries exactly once with the nonce that challenge supplied, and the Credential is issued.
+    /// </summary>
+    [TestMethod]
+    public async Task IssuesCredentialAfterRetryingOnTheCredentialEndpointNonceChallengeOverRealWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+
+        string credentialPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.Oid4VciCredential, material.Registration.TenantId.Value);
+        int credentialProofPresentations = 0;
+        bool isNonceKeyRotated = false;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience.
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
+
+            ValidateDpopProofDelegate validateProof = candidateIntegration.ValidateDpopProofAsync!;
+            candidateIntegration.ValidateDpopProofAsync = (request, ct) =>
+            {
+                if(request.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal))
+                {
+                    _ = Interlocked.Increment(ref credentialProofPresentations);
+                }
+
+                return validateProof(request, ct);
+            };
+
+            //The wallet asks the Nonce Endpoint for its c_nonce after the token response and before the
+            //Credential Request: the server rotates its DPoP nonce key there, archiving the key the
+            //token endpoint's nonce was minted under.
+            IssueCredentialNonceDelegate issueCredentialNonce = candidateIntegration.IssueCredentialNonceAsync!;
+            candidateIntegration.IssueCredentialNonceAsync = (context, ct) =>
+            {
+                if(!isNonceKeyRotated)
+                {
+                    isNonceKeyRotated = true;
+                    _ = host.RotateDpopHmacKey("test-hmac-2");
+                    host.ArchiveRetiringDpopHmacKey(new KeyId("test-hmac-1"));
+                }
+
+                return issueCredentialNonce(context, ct);
+            };
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey walletDpopKey = new(walletDpopKeys, WellKnownJwaValues.Es256);
+
+        static ValueTask<string> ConstructWalletDpopProofAsync(
+            DpopProofClaims claims, DpopKey key, CancellationToken ct) =>
+            DpopProofConstruction.BuildAsync(
+                claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async, Pool, ct);
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host, constructDpopProofAsync: ConstructWalletDpopProofAsync, dpopKey: walletDpopKey);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> resultOutcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(isNonceKeyRotated, "The nonce key must have been rotated between the token response and the Credential Request.");
+        Assert.IsTrue(resultOutcome.IsSuccess,
+            $"The issuance must succeed after the wallet answers the Credential Endpoint's 401 nonce challenge; got {(resultOutcome.IsSuccess ? string.Empty : resultOutcome.Error.Kind + " " + resultOutcome.Error.StatusCode + " " + resultOutcome.Error.ErrorCode)}.");
+        Assert.IsTrue(resultOutcome.Value.IsIssued);
+        Assert.AreEqual(IssuedCredential, resultOutcome.Value.Credentials[0]);
+        Assert.AreEqual(2, credentialProofPresentations,
+            "Exactly one retry: the first proof carries the rotated-out nonce and is challenged, the second carries the challenge's nonce.");
+    }
+
+
+    /// <summary>
     /// Pre-Authorized Code → §10 ECDH-ES encrypted response: the wallet asks for response
     /// encryption, the issuer seam composes the JWE with real ECDH-ES + AES-GCM, and the wallet's
     /// DecryptResponse drop-out opens it and reads the credential.
@@ -1106,6 +1203,115 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsFalse(outcome.IsSuccess, "A repeated challenge must be surfaced as a failure after ONE retry, not dialed a third time.");
         Assert.AreEqual(Oid4VciRequestFailureKind.ErrorResponse, outcome.Error.Kind);
         Assert.AreEqual(400, outcome.Error.StatusCode);
+        Assert.AreEqual(OAuthErrors.UseDpopNonce, outcome.Error.ErrorCode);
+        Assert.AreEqual(2, credentialInvocations, "A repeated challenge must be surfaced as a failure after ONE retry, not dialed a third time.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>: "Resource servers
+    /// use an HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and
+    /// DPoP-Nonce value to accomplish this." A Credential Endpoint answering the first request with that
+    /// form (401, <c>WWW-Authenticate: DPoP error="use_dpop_nonce", algs="…"</c> and a
+    /// <c>DPoP-Nonce</c>) is retried exactly once, with the nonce embedded in a fresh proof.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialRequestRetriesOnceOnAResourceNonceChallengeAndUsesTheSecondAnswer()
+    {
+        Uri nonceEndpoint = new("https://issuer.example.com/nonce");
+        Uri credentialEndpoint = new("https://issuer.example.com/credential");
+
+        var dpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(dpopKeys, WellKnownJwaValues.Es256);
+
+        int credentialInvocations = 0;
+        string? secondProofNonceClaim = null;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendFormPost: (_, _, _, _, _) =>
+                ValueTask.FromResult(JsonResponse(200, "{\"access_token\":\"tok\",\"token_type\":\"DPoP\"}")),
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                if(endpoint == nonceEndpoint)
+                {
+                    return ValueTask.FromResult(JsonResponse(200, "{\"c_nonce\":\"c-nonce\"}"));
+                }
+
+                credentialInvocations++;
+
+                return credentialInvocations == 1
+                    ? ValueTask.FromResult(JsonResponse(
+                        401, "{\"error\":\"use_dpop_nonce\"}",
+                        (WellKnownHttpHeaderNames.WwwAuthenticate, ResourceDpopProofs.DpopChallenge("use_dpop_nonce")),
+                        (WellKnownHttpHeaderNames.DPoPNonce, "rs-nonce-1")))
+                    : ValueTask.FromResult(JsonResponse(200, "{\"credentials\":[{\"credential\":\"cred-after-retry\"}]}"));
+            },
+            constructDpopProofAsync: (claims, _, _) =>
+            {
+                if(credentialInvocations == 1 && claims.Htu == credentialEndpoint.GetLeftPart(UriPartial.Path))
+                {
+                    secondProofNonceClaim = claims.Nonce;
+                }
+
+                return ValueTask.FromResult("fake-dpop-proof");
+            },
+            dpopKey: dpopKey);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueViaTokenEndpointAsync(
+            walletClient, new Uri("https://issuer.example.com/token"), nonceEndpoint, credentialEndpoint)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(2, credentialInvocations, "Exactly one retry: the credential endpoint must be dialed twice, not three times.");
+        Assert.AreEqual("rs-nonce-1", secondProofNonceClaim, "The retry's proof must embed the nonce the first challenge supplied.");
+        Assert.IsTrue(outcome.IsSuccess, "The retried credential request must succeed.");
+        Assert.AreEqual("cred-after-retry", outcome.Value.Credentials[0]);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>'s resource form of the
+    /// nonce challenge (401, <c>WWW-Authenticate: DPoP error="use_dpop_nonce", algs="…"</c> and a
+    /// <c>DPoP-Nonce</c>) answered again after the one allowed retry is surfaced as the failure value,
+    /// status 401 and error <c>use_dpop_nonce</c>: never a third request.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialRequestFailsOnASecondResourceNonceChallengeRatherThanRetryingAgain()
+    {
+        Uri nonceEndpoint = new("https://issuer.example.com/nonce");
+        Uri credentialEndpoint = new("https://issuer.example.com/credential");
+
+        var dpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(dpopKeys, WellKnownJwaValues.Es256);
+
+        int credentialInvocations = 0;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendFormPost: (_, _, _, _, _) =>
+                ValueTask.FromResult(JsonResponse(200, "{\"access_token\":\"tok\",\"token_type\":\"DPoP\"}")),
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                if(endpoint == nonceEndpoint)
+                {
+                    return ValueTask.FromResult(JsonResponse(200, "{\"c_nonce\":\"c-nonce\"}"));
+                }
+
+                credentialInvocations++;
+
+                return ValueTask.FromResult(JsonResponse(
+                    401, "{\"error\":\"use_dpop_nonce\"}",
+                    (WellKnownHttpHeaderNames.WwwAuthenticate, ResourceDpopProofs.DpopChallenge("use_dpop_nonce")),
+                    (WellKnownHttpHeaderNames.DPoPNonce, $"rs-nonce-{credentialInvocations}")));
+            },
+            constructDpopProofAsync: (_, _, _) => ValueTask.FromResult("fake-dpop-proof"),
+            dpopKey: dpopKey);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueViaTokenEndpointAsync(
+            walletClient, new Uri("https://issuer.example.com/token"), nonceEndpoint, credentialEndpoint)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A repeated challenge must be surfaced as a failure after ONE retry, not dialed a third time.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.ErrorResponse, outcome.Error.Kind);
+        Assert.AreEqual(401, outcome.Error.StatusCode);
         Assert.AreEqual(OAuthErrors.UseDpopNonce, outcome.Error.ErrorCode);
         Assert.AreEqual(2, credentialInvocations, "A repeated challenge must be surfaced as a failure after ONE retry, not dialed a third time.");
     }

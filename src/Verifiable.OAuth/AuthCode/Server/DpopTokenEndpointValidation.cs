@@ -214,7 +214,7 @@ internal static class DpopTokenEndpointValidation
         //the read and first-use record happen as one unit (RFC 9449 §11.1). Runs only after
         //structural and cryptographic checks pass.
         JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-            server, context, registration.TenantId,
+            server, context, registration.TenantId, JtiReplayPurpose.DpopProof,
             issuerUri.OriginalString, proofResult.Claims.Jti,
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
@@ -478,7 +478,7 @@ internal static class DpopTokenEndpointValidation
         //the read and first-use record happen as one unit (RFC 9449 §11.1). Runs only after
         //structural and cryptographic checks pass.
         JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
-            server, context, registration.TenantId,
+            server, context, registration.TenantId, JtiReplayPurpose.DpopProof,
             issuerUri.OriginalString, proofResult.Claims.Jti,
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);

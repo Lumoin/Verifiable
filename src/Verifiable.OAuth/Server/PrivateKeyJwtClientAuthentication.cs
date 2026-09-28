@@ -15,7 +15,8 @@ namespace Verifiable.OAuth.Server;
 /// <summary>
 /// Consults a <c>jti</c> replay store for a client-authentication assertion, governed by the
 /// same <see cref="JtiReplayPolicy"/>/<see cref="JtiReplayGuard"/> axis the JAR and DPoP paths
-/// use. Its parameter shape matches <see cref="JtiReplayGuard.ConsultAsync"/> exactly, so a
+/// use. Its parameter shape matches <see cref="JtiReplayGuard.ConsultClientAssertionAsync"/>
+/// exactly, which records the <c>jti</c> under <see cref="JtiReplayPurpose.ClientAssertion"/>, so a
 /// caller wires that method directly as this delegate.
 /// </summary>
 /// <param name="server">The authorization server (its integration store and clock).</param>
@@ -291,8 +292,8 @@ public static class PrivateKeyJwtClientAuthentication
     /// <param name="checkJtiReplayAsync">
     /// Replay-defense hook consulted after the claim rules pass, or <see langword="null"/> to skip
     /// replay defense (the caller relies on a different mechanism). Pass
-    /// <see cref="JtiReplayGuard.ConsultAsync"/> directly to reuse the library's <c>(issuer, jti)</c>
-    /// store.
+    /// <see cref="JtiReplayGuard.ConsultClientAssertionAsync"/> directly to reuse the library's
+    /// replay store.
     /// </param>
     /// <param name="resolveJwksUriAsync">
     /// The OPTIONAL key-set resolution seam for a registration that carries a

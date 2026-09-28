@@ -301,8 +301,14 @@ internal sealed class Oid4VciCredentialEndpointTests
 
 
     /// <summary>
-    /// §8.3.1.1: a Credential Request with no access token is rejected with RFC 6750
-    /// <c>invalid_token</c> (401) before the issuance seam is consulted.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.1">OID4VCI
+    /// 1.0 §8.3.1.1</see>: "If the Credential Request does not contain an Access Token that enables
+    /// issuance of a requested Credential, the Credential Endpoint returns an authorization error
+    /// response such as defined in Section 3 of [RFC6750]." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>: "If the
+    /// request lacks any authentication information ... the resource server SHOULD NOT include an error
+    /// code or other error information." A Credential Request with no access token is answered 401 with
+    /// an empty body and a <c>WWW-Authenticate</c> challenge, before the issuance seam is consulted.
     /// </summary>
     [TestMethod]
     public async Task MissingBearerTokenIsUnauthorizedBeforeTheSeam()
@@ -332,7 +338,9 @@ internal sealed class Oid4VciCredentialEndpointTests
             host, material, bearer: null, CredentialRequestBody(HolderProof)).ConfigureAwait(false);
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
-        Assert.Contains(OAuthErrors.InvalidToken, response.Body);
+        Assert.AreEqual(string.Empty, response.Body, "RFC 6750 §3.1: no error code or other error information.");
+        Assert.IsTrue(response.Headers.ContainsKey(WellKnownHttpHeaderNames.WwwAuthenticate),
+            "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
         Assert.IsFalse(seamCalled, "The issuance seam must not be consulted without a valid access token.");
     }
 

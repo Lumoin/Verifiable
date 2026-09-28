@@ -921,7 +921,11 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         //RFC 9449 §9: the resource answers the unproven request with 401, a DPoP challenge and the
         //nonce the proof then carries.
         Assert.AreEqual(HttpStatusCode.Unauthorized, noProofResponse.StatusCode, noProofBody);
-        Assert.Contains(OAuthErrors.UseDpopNonce, noProofBody);
+        Assert.IsTrue(noProofResponse.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 9449 §9: the nonce challenge carries a WWW-Authenticate: DPoP value.");
+        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        using JsonDocument noProofDocument = JsonDocument.Parse(noProofBody);
+        Assert.AreEqual("use_dpop_nonce", noProofDocument.RootElement.GetProperty("error").GetString());
         string resourceNonce = ResourceDpopProofs.ReadNonce(noProofResponse);
 
         string credentialProof = await ResourceDpopProofs.BuildAsync(
