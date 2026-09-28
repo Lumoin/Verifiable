@@ -76,8 +76,17 @@ internal static class AuthCodeFlowDriver
     /// <param name="redirectUri">The redirect URI the PAR request declares.</param>
     /// <param name="subjectId">The authenticated subject the authorize hop asserts via <see cref="AuthorizationServerHttpApplication.TestSubjectHeaderName"/>.</param>
     /// <param name="pinnedBrowserClient">The pinned, auto-redirect-disabled client the authorize GET rides on.</param>
-    /// <param name="scope">The space-separated scope list to request, or <see langword="null"/> to request none.</param>
-    /// <param name="additionalParFields">Further PAR form fields (resource indicators, authorization_details, ...).</param>
+    /// <param name="scope">
+    /// The space-separated scope list to request, or <see langword="null"/> to take the scope entry of
+    /// <paramref name="additionalParFields"/> and, when that names none either, the driver's own
+    /// <c>openid</c> (<see cref="ComposeParFields"/>); the OAuth client library adds no scope of its own.
+    /// </param>
+    /// <param name="additionalParFields">
+    /// Further PAR form fields (authorization_details, issuer_state, ...). The client library drops
+    /// the names its start composes itself from these on a public registration, <c>resource</c> among
+    /// them, so a drive that names resource indicators names them through the client's own
+    /// <c>resource</c> argument rather than here.
+    /// </param>
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2), required when
     /// <paramref name="registration"/>'s <see cref="ClientRegistration.AuthenticationMethod"/> is
@@ -193,14 +202,6 @@ internal static class AuthCodeFlowDriver
         Assert.IsTrue(parResult.IsSuccess,
             $"Confidential PAR must succeed over the real wire. Status={parHttpResponse.StatusCode} Body={parHttpResponse.Body}");
 
-        //The raw push sends a resource field of additionalParFields as given, so the saved state
-        //carries it for the code redemption exactly as StartParAsync's state carries its resource.
-        ImmutableArray<string> resource =
-            additionalParFields.Fields.TryGetValue(OAuthRequestParameterNames.Resource, out string? resourceField)
-            && !string.IsNullOrWhiteSpace(resourceField)
-                ? [resourceField]
-                : [];
-
         ParResponse parResponse = parResult.Value;
         ParCompletedState parCompleted = new()
         {
@@ -212,7 +213,6 @@ internal static class AuthCodeFlowDriver
             Pkce = pkce,
             RedirectUri = redirectUri,
             Scopes = scopes,
-            Resource = resource,
             Par = parResponse
         };
 
@@ -432,8 +432,15 @@ internal static class AuthCodeFlowDriver
     /// <param name="redirectUri">The redirect URI the PAR request declares.</param>
     /// <param name="subjectId">The authenticated subject the authorize hop asserts via <see cref="AuthorizationServerHttpApplication.TestSubjectHeaderName"/>.</param>
     /// <param name="pinnedBrowserClient">The pinned, auto-redirect-disabled client the authorize GET rides on.</param>
-    /// <param name="scope">The space-separated scope list to request, or <see langword="null"/> to request none.</param>
-    /// <param name="additionalParFields">Further PAR form fields (resource indicators, authorization_details, ...).</param>
+    /// <param name="scope">
+    /// The space-separated scope list to request, or <see langword="null"/> to take the scope entry of
+    /// <paramref name="additionalParFields"/> and, when that names none either, the driver's own
+    /// <c>openid</c> (<see cref="ComposeParFields"/>); the OAuth client library adds no scope of its own.
+    /// </param>
+    /// <param name="additionalParFields">
+    /// Further PAR form fields (authorization_details, issuer_state, ...), as
+    /// <see cref="DriveParAndAuthorizeAsync"/> takes them.
+    /// </param>
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2), required when
     /// <paramref name="registration"/>'s <see cref="ClientRegistration.AuthenticationMethod"/> is
@@ -517,10 +524,13 @@ internal static class AuthCodeFlowDriver
     /// <c>scope</c> parameter merged in when <paramref name="scope"/> is non-null. An explicit
     /// <c>scope</c> argument wins over a <c>scope</c> entry in the additional fields. When neither
     /// names a scope, this driver names <see cref="WellKnownScopes.OpenId"/> itself: it is the
-    /// test driver's own default for a caller that does not care which scope a drive requests, kept
-    /// independent of whatever scope the OAuth client library falls back to when a request carries
-    /// none.
+    /// test driver's own default for a caller that does not care which scope a drive requests. The
+    /// OAuth client library adds no scope of its own, so without this default a drive would send no
+    /// <c>scope</c> at all.
     /// </summary>
+    /// <param name="scope">The caller's explicit scope, or <see langword="null"/>.</param>
+    /// <param name="additionalParFields">The caller's further PAR form fields.</param>
+    /// <returns>The PAR form fields with the effective <c>scope</c> merged in.</returns>
     private static OAuthFormEncodedFields ComposeParFields(string? scope, OAuthFormEncodedFields additionalParFields)
     {
         string effectiveScope = scope

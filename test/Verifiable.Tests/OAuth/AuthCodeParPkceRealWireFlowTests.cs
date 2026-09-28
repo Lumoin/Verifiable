@@ -4770,19 +4770,25 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see>: "Parameters
-    /// sent without a value MUST be treated as if they were omitted from the request." A caller whose
-    /// <c>scope</c> field is blank names no scope, so the request carries no <c>scope</c> parameter at
-    /// all rather than <c>scope=</c>.
+    /// sent without a value MUST be treated as if they were omitted from the request.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see> defines the
+    /// value as "scope = scope-token *( SP scope-token )" with "scope-token = 1*( %x21 / %x23-5B /
+    /// %x5D-7E )", so a value made only of white space names no scope token. A caller whose
+    /// <c>scope</c> field is empty or white space only names no scope, and the request carries no
+    /// <c>scope</c> parameter at all rather than a <c>scope</c> holding no token.
     /// </summary>
     /// <param name="start">Which start carries the request: <see cref="PushedStart"/> or <see cref="DirectStart"/>.</param>
+    /// <param name="scope">The blank value the caller gives as its <c>scope</c> field: empty, or a tab alone.</param>
     [TestMethod]
-    [DataRow(PushedStart)]
-    [DataRow(DirectStart)]
-    public async Task ABlankScopeFieldSendsNoScopeParameterAsync(string start)
+    [DataRow(PushedStart, "")]
+    [DataRow(DirectStart, "")]
+    [DataRow(PushedStart, "\t")]
+    [DataRow(DirectStart, "\t")]
+    public async Task ABlankScopeFieldSendsNoScopeParameterAsync(string start, string scope)
     {
         OAuthFormEncodedFields blankScope = new(new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [OAuthRequestParameterNames.Scope] = string.Empty
+            [OAuthRequestParameterNames.Scope] = scope
         });
 
         RequestFields received = await DriveStartToCallbackAndReadReceivedRequestAsync(start, blankScope)
@@ -4821,9 +4827,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>: "If the client
     /// omits the scope parameter when requesting authorization, the authorization server MUST either
-    /// process the request using a pre-defined default value or fail the request". Under the FAPI 2.0
-    /// policy the server requires a scope on the request, so a pushed request whose caller names none
-    /// reaches the server without one and is refused there, not filled in by the client.
+    /// process the request using a pre-defined default value or fail the request indicating an invalid
+    /// scope." Under the FAPI 2.0 policy the server has no default scope, so a pushed request whose
+    /// caller names none reaches the server without one and the server fails it: the client reports
+    /// the refusal, is given no <c>request_uri</c>, and keeps no flow, and the server records no
+    /// pushed request.
     /// </summary>
     [TestMethod]
     public async Task AFapiRegistrationRefusesAPushedRequestWithoutScopeAsync()
@@ -4832,22 +4840,28 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities).ConfigureAwait(false);
 
-        (OAuthClient client, ClientRegistration registration, _) =
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
                 material.Registration,
                 RedirectUri.OriginalString,
                 profile: PolicyProfile.Fapi20,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
+        HostedAuthorizationServer hosted = host.Host("default");
+        int flowCountBefore = hosted.FlowStates.Count;
+
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
             registration, RedirectUri, OAuthFormEncodedFields.Empty, [], resource: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, parResult.Outcome,
-            $"A pushed request without scope must be refused under a scope-requiring policy. " +
+            $"A pushed request without scope must be refused under a policy with no default scope. " +
             $"ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
-        Assert.AreEqual("invalid_request", parResult.ErrorCode);
-        Assert.AreEqual("scope is required under the active policy.", parResult.ErrorDescription);
+        Assert.IsNull(parResult.RedirectUri,
+            "A refused pushed request issues no request_uri, so the client has no authorization redirect.");
+        Assert.IsEmpty(clientFlowStore, "A refused pushed request must leave the client no flow to continue.");
+        Assert.HasCount(flowCountBefore, hosted.FlowStates,
+            "A refused pushed request must issue no request_uri and record no pushed request.");
     }
 
 
@@ -4857,7 +4871,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// the resource owner", and <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749
     /// §3.1</see>: "Parameters sent without a value MUST be treated as if they were omitted from the
     /// request." A refresh whose caller gives a blank scope sends no <c>scope</c> parameter, never
-    /// <c>scope=</c>, and receives the originally granted scope.
+    /// <c>scope=</c>, and the refresh response names the originally granted scope, <c>openid</c>, the
+    /// scope the authorization request named.
     /// </summary>
     [TestMethod]
     public async Task ABlankRefreshScopeSendsNoScopeParameterAsync()
@@ -4903,6 +4918,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.IsFalse(refreshRequest.ContainsKey(OAuthRequestParameterNames.Scope),
             $"A blank refresh scope must send no scope parameter, never scope=; the server received scope " +
             $"[{string.Join(", ", refreshRequest.GetValues(OAuthRequestParameterNames.Scope).Select(value => $"'{value}'"))}].");
+        Assert.AreEqual("openid", (string)refreshResult.Body![OAuthRequestParameterNames.Scope],
+            "A refresh that names no scope is granted the scope originally granted.");
     }
 
 
@@ -4912,15 +4929,16 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// Claims of the object."; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749
     /// §3.1</see>: "Parameters sent without a value MUST be treated as if they were omitted from the
     /// request." A signed request object whose caller gives a blank scope carries no <c>scope</c> claim
-    /// rather than an empty one.
+    /// rather than an empty one, and the server accepts it and issues an authorization code.
     /// </summary>
     /// <param name="start">
-    /// Which start carries the request object: <see cref="PushedStart"/> pushes it (RFC 9126 §3), and
-    /// <see cref="DirectStart"/> passes it by value on the authorization endpoint's query (RFC 9101 §5.1).
+    /// Which start carries the request object: <see cref="PushedRequestObjectStart"/> pushes it
+    /// (RFC 9126 §3), and <see cref="RequestObjectByValueStart"/> passes it by value on the
+    /// authorization endpoint's query (RFC 9101 §5.1).
     /// </param>
     [TestMethod]
-    [DataRow(PushedStart)]
-    [DataRow(DirectStart)]
+    [DataRow(PushedRequestObjectStart)]
+    [DataRow(RequestObjectByValueStart)]
     public async Task ABlankRequestObjectScopeSignsNoScopeClaimAsync(string start)
     {
         await using TestHostShell host = new(TimeProvider);
@@ -4932,26 +4950,17 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
         ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
 
-        (OAuthClient client, ClientRegistration registration, _) =
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
                 material.Registration,
                 RedirectUri.OriginalString,
                 profile: PolicyProfile.Rfc6749WithPkce,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-        JwtHeaderSerializer headerSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!;
-        JwtPayloadSerializer payloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!;
+        _ = await DriveRequestObjectStartAuthorizeAndCallbackAsync(
+            start, host, client, registration, clientFlowStore, material, scope: string.Empty, resource: null).ConfigureAwait(false);
 
-        string requestObject = start switch
-        {
-            PushedStart => await StartJarParAndReadReceivedRequestObjectAsync(
-                client, registration, material, headerSerializer, payloadSerializer, accepted).ConfigureAwait(false),
-            DirectStart => await StartJarAuthorizeAndReadRequestObjectAsync(
-                client, registration, material, headerSerializer, payloadSerializer).ConfigureAwait(false),
-            _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown authorization request start.")
-        };
-
-        using JsonDocument claims = DecodePayload(requestObject);
+        using JsonDocument claims = DecodeReceivedRequestObject(accepted);
         Assert.IsFalse(claims.RootElement.TryGetProperty(OAuthRequestParameterNames.Scope, out JsonElement scopeClaim),
             $"A blank scope must sign no scope claim; the request object carried scope {scopeClaim.GetRawText()}. " +
             $"Claims: {claims.RootElement}");
@@ -4959,82 +4968,19 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
-    /// Starts a pushed authorization request carrying a signed request object whose caller gives a
-    /// blank scope, and returns the compact request object as the server received it in the pushed
-    /// body's <c>request</c> parameter.
+    /// Decodes the claims of the one signed request object the server accepted: the <c>request</c>
+    /// parameter of the pushed body of a pushed start, or of the authorization request of a start
+    /// that passes the object by value. The request that completes a pushed start carries only
+    /// <c>client_id</c> and <c>request_uri</c>, so exactly one accepted request carries
+    /// <c>request</c>.
     /// </summary>
-    /// <param name="client">The client SDK instance the start is issued through.</param>
-    /// <param name="registration">The registration identifying the authorization server to the client.</param>
-    /// <param name="material">The registered client's request-object signing key material.</param>
-    /// <param name="headerSerializer">Serializes the request object's protected header.</param>
-    /// <param name="payloadSerializer">Serializes the request object's claims.</param>
     /// <param name="accepted">The parameters of every request the server accepted, in arrival order.</param>
-    /// <returns>The compact request object the server received.</returns>
-    private async Task<string> StartJarParAndReadReceivedRequestObjectAsync(
-        OAuthClient client,
-        ClientRegistration registration,
-        VerifierKeyMaterial material,
-        JwtHeaderSerializer headerSerializer,
-        JwtPayloadSerializer payloadSerializer,
-        ConcurrentQueue<RequestFields> accepted)
+    /// <returns>The claims of the request object as the server received it.</returns>
+    private static JsonDocument DecodeReceivedRequestObject(ConcurrentQueue<RequestFields> accepted)
     {
-        AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarParAsync(
-            registration,
-            new AuthCodeStartJarParOptions
-            {
-                Scope = string.Empty,
-                SigningKey = material.SigningPrivateKey,
-                SigningKeyId = material.SigningKeyId.Value,
-                RedirectUri = RedirectUri,
-                HeaderSerializer = headerSerializer,
-                PayloadSerializer = payloadSerializer,
-                MemoryPool = BaseMemoryPool.Shared
-            },
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome,
-            $"The pushed request object must be accepted. ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        RequestFields carrying = accepted.Single(received => received.ContainsKey(OAuthRequestParameterNames.Request));
 
-        RequestFields pushed = accepted.Single(received => received.ContainsKey(OAuthRequestParameterNames.Request));
-
-        return pushed[OAuthRequestParameterNames.Request];
-    }
-
-
-    /// <summary>
-    /// Starts an authorization request passing a signed request object by value whose caller gives a
-    /// blank scope, and returns the compact request object from the <c>request</c> parameter of the
-    /// authorization redirect the client composes for the user agent.
-    /// </summary>
-    /// <param name="client">The client SDK instance the start is issued through.</param>
-    /// <param name="registration">The registration identifying the authorization server to the client.</param>
-    /// <param name="material">The registered client's request-object signing key material.</param>
-    /// <param name="headerSerializer">Serializes the request object's protected header.</param>
-    /// <param name="payloadSerializer">Serializes the request object's claims.</param>
-    /// <returns>The compact request object the authorization redirect carries.</returns>
-    private async Task<string> StartJarAuthorizeAndReadRequestObjectAsync(
-        OAuthClient client,
-        ClientRegistration registration,
-        VerifierKeyMaterial material,
-        JwtHeaderSerializer headerSerializer,
-        JwtPayloadSerializer payloadSerializer)
-    {
-        AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarAuthorizeAsync(
-            registration,
-            new AuthCodeStartJarAuthorizeOptions
-            {
-                Scope = string.Empty,
-                SigningKey = material.SigningPrivateKey,
-                SigningKeyId = material.SigningKeyId.Value,
-                RedirectUri = RedirectUri,
-                HeaderSerializer = headerSerializer,
-                PayloadSerializer = payloadSerializer,
-                MemoryPool = BaseMemoryPool.Shared
-            },
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome,
-            $"A request object by value must redirect. ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
-
-        return ParseQuery(result.RedirectUri!)[OAuthRequestParameterNames.Request];
+        return DecodePayload(carrying[OAuthRequestParameterNames.Request]);
     }
 
 
@@ -5152,7 +5098,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 hosted, client, registration, clientFlowStore, host.ServerCertificate,
                 OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken, requested).ConfigureAwait(false),
             PushedRequestObjectStart or RequestObjectByValueStart => await DriveRequestObjectStartAuthorizeAndCallbackAsync(
-                start, host, client, registration, clientFlowStore, material, requested).ConfigureAwait(false),
+                start, host, client, registration, clientFlowStore, material, WellKnownScopes.OpenId, requested).ConfigureAwait(false),
             AutomatonPath => await DriveAutomatonToCodeReceivedAsync(
                 host, client, registration, segment, requested).ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown authorization request start.")
@@ -5171,6 +5117,189 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.AreEqual("https://cal.example.com/", sentResource[0]);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
             $"The code redemption must succeed. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Multiple
+    /// "resource" parameters MAY be used to indicate that the requested token is intended to be used
+    /// at multiple resources."; <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC
+    /// 8707 §2.1</see>: "For an authorization request sent as a JSON Web Token (JWT), such as when
+    /// using the JWT Secured Authorization Request [JWT-SAR], a single "resource" parameter value is
+    /// represented as a JSON string while multiple values are represented as an array of strings.";
+    /// and the resource parameter "MUST be included in both authorization requests and token
+    /// requests"
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#resource-parameter-implementation">MCP
+    /// authorization, Resource Parameter Implementation</see>). A flow whose caller names two
+    /// resources sends both, in the caller's order, on its authorization request (two
+    /// <c>resource</c> parameters, or a request object whose <c>resource</c> claim is the array of
+    /// the two) and, when the code redemption's caller names none, on its token request as two
+    /// <c>resource</c> parameters in the same order, and the token endpoint answers it.
+    /// </summary>
+    /// <param name="start">
+    /// Which start carries the authorization request: <see cref="PushedStart"/>,
+    /// <see cref="DirectStart"/>, <see cref="PushedRequestObjectStart"/>,
+    /// <see cref="RequestObjectByValueStart"/>, or the <see cref="AutomatonPath"/>, whose caller
+    /// composes the pushed request itself.
+    /// </param>
+    [TestMethod]
+    [DataRow(PushedStart)]
+    [DataRow(DirectStart)]
+    [DataRow(PushedRequestObjectStart)]
+    [DataRow(RequestObjectByValueStart)]
+    [DataRow(AutomatonPath)]
+    public async Task EveryRequestedResourceTravelsInOrderOnTheAuthorizationAndTokenRequestsAsync(string start)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: ResourceJourneyCapabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await ComposeResourceJourneyClientAsync(host, material).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        IReadOnlyList<string> requested = ["https://cal.example.com/", "https://contacts.example.com/"];
+
+        string flowId = start switch
+        {
+            PushedStart => await DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, segment, host.ServerCertificate,
+                TestContext.CancellationToken, resource: requested).ConfigureAwait(false),
+            DirectStart => await DriveDirectStartAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, host.ServerCertificate,
+                OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken, requested).ConfigureAwait(false),
+            PushedRequestObjectStart or RequestObjectByValueStart => await DriveRequestObjectStartAuthorizeAndCallbackAsync(
+                start, host, client, registration, clientFlowStore, material, WellKnownScopes.OpenId, requested).ConfigureAwait(false),
+            AutomatonPath => await DriveAutomatonToCodeReceivedAsync(
+                host, client, registration, segment, requested).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown authorization request start.")
+        };
+
+        List<string?> authorizationResource = start switch
+        {
+            PushedRequestObjectStart or RequestObjectByValueStart => ReadReceivedRequestObjectResourceArray(accepted),
+            _ => [.. accepted
+                .Single(received => received.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
+                .GetValues(OAuthRequestParameterNames.Resource)]
+        };
+        Assert.HasCount(2, authorizationResource,
+            $"The authorization request must name both resources the caller named; the server received resource " +
+            $"[{string.Join(", ", authorizationResource)}].");
+        Assert.AreEqual("https://cal.example.com/", authorizationResource[0]);
+        Assert.AreEqual("https://contacts.example.com/", authorizationResource[1]);
+
+        AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        RequestFields tokenRequest = accepted.Single(received =>
+            received.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+            && string.Equals(grantType, "authorization_code", StringComparison.Ordinal));
+        List<string> sentResource = [.. tokenRequest.GetValues(OAuthRequestParameterNames.Resource)];
+        Assert.HasCount(2, sentResource,
+            $"A code redemption whose caller names no resource must name every resource the authorization request named; " +
+            $"the server received resource [{string.Join(", ", sentResource)}].");
+        Assert.AreEqual("https://cal.example.com/", sentResource[0]);
+        Assert.AreEqual("https://contacts.example.com/", sentResource[1]);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"The code redemption must succeed. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>: "For an
+    /// authorization request sent as a JSON Web Token (JWT), such as when using the JWT Secured
+    /// Authorization Request [JWT-SAR], a single "resource" parameter value is represented as a JSON
+    /// string while multiple values are represented as an array of strings." A request object whose
+    /// caller names one resource carries the <c>resource</c> claim as that one JSON string, as the
+    /// server receives it.
+    /// </summary>
+    /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
+    [TestMethod]
+    [DataRow(PushedRequestObjectStart)]
+    [DataRow(RequestObjectByValueStart)]
+    public async Task ARequestObjectNamingOneResourceSignsItAsAJsonStringAsync(string start)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: ResourceJourneyCapabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await ComposeResourceJourneyClientAsync(host, material).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+
+        _ = await DriveRequestObjectStartAuthorizeAndCallbackAsync(
+            start, host, client, registration, clientFlowStore, material, WellKnownScopes.OpenId,
+            ["https://cal.example.com/"]).ConfigureAwait(false);
+
+        using JsonDocument claims = DecodeReceivedRequestObject(accepted);
+        Assert.IsTrue(claims.RootElement.TryGetProperty(OAuthRequestParameterNames.Resource, out JsonElement resourceClaim),
+            $"The request object must carry the resource claim. Claims: {claims.RootElement}");
+        Assert.AreEqual(JsonValueKind.String, resourceClaim.ValueKind,
+            $"One resource must be signed as a JSON string. Claims: {claims.RootElement}");
+        Assert.AreEqual("https://cal.example.com/", resourceClaim.GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: the resource
+    /// value "MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 §2</see>: "A URI is
+    /// composed from a limited set of characters consisting of digits, letters, and a few graphic
+    /// symbols.", so no resource indicator holds a white-space character. The entries a request
+    /// object signs are the entries the flow keeps and the code redemption sends, so a request object
+    /// start whose resource list holds an entry with white space in it, inside or around the URI, is
+    /// refused by the client before anything is signed or sent: the start answers
+    /// <c>invalid_request</c>, the server receives no request, and the client keeps no flow.
+    /// </summary>
+    /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
+    /// <param name="entry">The one resource entry the caller names: two URIs with a space between them, or one URI padded with spaces.</param>
+    [TestMethod]
+    [DataRow(PushedRequestObjectStart, "https://cal.example.com/ https://contacts.example.com/")]
+    [DataRow(RequestObjectByValueStart, "https://cal.example.com/ https://contacts.example.com/")]
+    [DataRow(PushedRequestObjectStart, " https://cal.example.com/ ")]
+    [DataRow(RequestObjectByValueStart, " https://cal.example.com/ ")]
+    public async Task ARequestObjectStartRefusesAResourceEntryHoldingWhiteSpaceBeforeSendingAsync(string start, string entry)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: ResourceJourneyCapabilities).ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await ComposeResourceJourneyClientAsync(host, material).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult startResult = await StartRequestObjectAsync(
+            start, host, client, registration, material, WellKnownScopes.OpenId, [entry]).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, startResult.Outcome,
+            $"A request object start naming a resource entry that holds white space must be refused before anything is sent. " +
+            $"ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription} RedirectUri={startResult.RedirectUri}");
+        Assert.AreEqual("invalid_request", startResult.ErrorCode);
+        Assert.IsNull(startResult.RedirectUri, "A refused start composes no authorization redirect.");
+        Assert.IsEmpty(accepted, $"A refused start must send nothing; the server received {accepted.Count} request(s).");
+        Assert.IsEmpty(clientFlowStore, "A refused start must store no flow.");
+    }
+
+
+    /// <summary>
+    /// Reads the <c>resource</c> claim of the one signed request object the server accepted
+    /// (<see cref="DecodeReceivedRequestObject"/>) and returns its members, asserting that the claim
+    /// is a JSON array, the form <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC
+    /// 8707 §2.1</see> gives several indicators.
+    /// </summary>
+    /// <param name="accepted">The parameters of every request the server accepted, in arrival order.</param>
+    /// <returns>The members of the <c>resource</c> array, in order.</returns>
+    private static List<string?> ReadReceivedRequestObjectResourceArray(ConcurrentQueue<RequestFields> accepted)
+    {
+        using JsonDocument claims = DecodeReceivedRequestObject(accepted);
+        Assert.IsTrue(claims.RootElement.TryGetProperty(OAuthRequestParameterNames.Resource, out JsonElement resourceClaim),
+            $"The request object must carry the resource claim. Claims: {claims.RootElement}");
+        Assert.AreEqual(JsonValueKind.Array, resourceClaim.ValueKind,
+            $"Several resources must be signed as a JSON array. Claims: {claims.RootElement}");
+
+        return [.. resourceClaim.EnumerateArray().Select(static member => member.GetString())];
     }
 
 
@@ -5222,10 +5351,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
     /// <summary>
     /// Starts an authorization request carrying a signed request object that names
-    /// <paramref name="resource"/> and the <c>openid</c> scope, pushed or by value as
+    /// <paramref name="scope"/> and <paramref name="resource"/>, pushed or by value as
     /// <paramref name="start"/> names, and drives it over the real wire through the authorize leg to
-    /// an authorization code accepted at the callback. Returns the flow identifier ready for the code
-    /// redemption.
+    /// an authorization code accepted at the callback (<see cref="GetAuthorizeRedirectAndCallbackAsync"/>).
+    /// Returns the flow identifier ready for the code redemption.
     /// </summary>
     /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
     /// <param name="host">The host serving the registration over the real wire.</param>
@@ -5233,7 +5362,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <param name="registration">The registration identifying the authorization server to the client.</param>
     /// <param name="clientFlowStore">The client-local flow-state store the start writes the flow into.</param>
     /// <param name="material">The registration's request-object signing key material.</param>
-    /// <param name="resource">The RFC 8707 resource indicators the request object names.</param>
+    /// <param name="scope">The scope the request object names; blank names none.</param>
+    /// <param name="resource">The RFC 8707 resource indicators the request object names, or <see langword="null"/> for none.</param>
     /// <returns>The flow identifier ready for the code redemption.</returns>
     private async Task<string> DriveRequestObjectStartAuthorizeAndCallbackAsync(
         string start,
@@ -5242,18 +5372,58 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         ClientRegistration registration,
         Dictionary<string, FlowState> clientFlowStore,
         VerifierKeyMaterial material,
-        IReadOnlyList<string> resource)
+        string scope,
+        IReadOnlyList<string>? resource)
+    {
+        AuthCodeFlowEndpointResult startResult = await StartRequestObjectAsync(
+            start, host, client, registration, material, scope, resource).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
+            $"The request object start must redirect. ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+
+        string flowId = clientFlowStore.Keys.Single();
+
+        return await GetAuthorizeRedirectAndCallbackAsync(
+            host.Host("default"), client, registration, host.ServerCertificate, startResult.RedirectUri!, flowId,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Starts an authorization request carrying a signed request object that names
+    /// <paramref name="scope"/> and <paramref name="resource"/>, through
+    /// <see cref="AuthCodeClient.StartJarParAsync(ClientRegistration, AuthCodeStartJarParOptions, CancellationToken)"/>
+    /// for <see cref="PushedRequestObjectStart"/> or
+    /// <see cref="AuthCodeClient.StartJarAuthorizeAsync(ClientRegistration, AuthCodeStartJarAuthorizeOptions, CancellationToken)"/>
+    /// for <see cref="RequestObjectByValueStart"/>, signed with the registration's key and the host's
+    /// own serializers, and returns the client's answer unasserted.
+    /// </summary>
+    /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
+    /// <param name="host">The host whose serializers encode the request object.</param>
+    /// <param name="client">The client SDK instance the start is issued through.</param>
+    /// <param name="registration">The registration identifying the authorization server to the client.</param>
+    /// <param name="material">The registration's request-object signing key material.</param>
+    /// <param name="scope">The scope the request object names; blank names none.</param>
+    /// <param name="resource">The RFC 8707 resource indicators the request object names, or <see langword="null"/> for none.</param>
+    /// <returns>The client's answer to the start.</returns>
+    private async Task<AuthCodeFlowEndpointResult> StartRequestObjectAsync(
+        string start,
+        TestHostShell host,
+        OAuthClient client,
+        ClientRegistration registration,
+        VerifierKeyMaterial material,
+        string scope,
+        IReadOnlyList<string>? resource)
     {
         JwtHeaderSerializer headerSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!;
         JwtPayloadSerializer payloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!;
 
-        AuthCodeFlowEndpointResult startResult = start switch
+        return start switch
         {
             PushedRequestObjectStart => await client.AuthCode.StartJarParAsync(
                 registration,
                 new AuthCodeStartJarParOptions
                 {
-                    Scope = WellKnownScopes.OpenId,
+                    Scope = scope,
                     Resource = resource,
                     SigningKey = material.SigningPrivateKey,
                     SigningKeyId = material.SigningKeyId.Value,
@@ -5267,7 +5437,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 registration,
                 new AuthCodeStartJarAuthorizeOptions
                 {
-                    Scope = WellKnownScopes.OpenId,
+                    Scope = scope,
                     Resource = resource,
                     SigningKey = material.SigningPrivateKey,
                     SigningKeyId = material.SigningKeyId.Value,
@@ -5279,14 +5449,6 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                 TestContext.CancellationToken).ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown request object start.")
         };
-        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
-            $"The request object start must redirect. ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
-
-        string flowId = clientFlowStore.Keys.Single();
-
-        return await GetAuthorizeRedirectAndCallbackAsync(
-            host.Host("default"), client, registration, host.ServerCertificate, startResult.RedirectUri!, flowId,
-            TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

@@ -1059,13 +1059,33 @@ public static class AuthCodeFlowHandlers
     /// <summary>
     /// Handles a JAR-bearing Pushed Authorization Request per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see> +
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>. The
-    /// client signs a JAR with the AuthCode claims (PKCE challenge, redirect
-    /// URI, scope, state, nonce) and POSTs to the PAR endpoint with the outer
-    /// <c>client_id</c> + <c>request</c> body fields. Persists
-    /// <see cref="ParCompletedState"/> with the PKCE verifier and returns the
-    /// authorize redirect URI carrying the issued <c>request_uri</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>. The client signs a request
+    /// object whose claims are <c>client_id</c>, <c>response_type</c>, <c>redirect_uri</c>,
+    /// <c>scope</c> only when <see cref="AuthCodeStartJarParOptions.Scope"/> names a value (RFC 6749
+    /// §3.1), <c>resource</c> only when <see cref="AuthCodeStartJarParOptions.Resource"/> names an
+    /// indicator (a JSON string for one and an array for several, RFC 8707 §2.1), <c>state</c>,
+    /// <c>nonce</c>, the PKCE challenge and its method, <c>iat</c>, <c>nbf</c>, <c>exp</c>,
+    /// <c>iss</c> and <c>aud</c> (<see cref="AuthCodeJarSigning"/>), and POSTs it to the PAR endpoint
+    /// with the outer <c>client_id</c> + <c>request</c> body fields. Persists
+    /// <see cref="ParCompletedState"/> with the PKCE verifier and the same resource indicators the
+    /// object signs, and returns the authorize redirect URI carrying the issued <c>request_uri</c>.
     /// </summary>
+    /// <remarks>
+    /// A resource entry holding any white-space character is refused before anything is signed,
+    /// sent or stored (<see cref="HasResourceEntryHoldingWhiteSpace"/>): an RFC 8707 §2 indicator is
+    /// one absolute URI, and the entries the object signs are exactly the entries the flow state
+    /// keeps and the code redemption sends.
+    /// </remarks>
+    /// <param name="jarOptions">The caller's per-call inputs: the scope, the resource indicators, the signing key and the serializers.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> with the authorize redirect URI on success;
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> with <c>ErrorCode</c>
+    /// <c>invalid_request</c> when a resource entry holds white space.
+    /// </returns>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleJarParAsync(
         AuthCodeStartJarParOptions jarOptions,
         OAuthClientInfrastructure infrastructure,
@@ -1077,6 +1097,11 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(infrastructure);
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
+
+        if(HasResourceEntryHoldingWhiteSpace(jarOptions.Resource))
+        {
+            return BuildResourceEntryHoldingWhiteSpaceRefusal();
+        }
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
             await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
@@ -1196,12 +1221,34 @@ public static class AuthCodeFlowHandlers
 
     /// <summary>
     /// Handles a JAR-by-value direct authorization per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.1">RFC 9101 §6.1</see>.
-    /// The client signs a JAR with the AuthCode claims and the handler builds
-    /// a redirect URL carrying <c>request=&lt;compact-jws&gt;</c> alongside
-    /// the outer <c>client_id</c>. The PKCE verifier is persisted so the
-    /// eventual token exchange can complete.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.1">RFC 9101 §6.1</see>. The client
+    /// signs a request object whose claims are <c>client_id</c>, <c>response_type</c>,
+    /// <c>redirect_uri</c>, <c>scope</c> only when <see cref="AuthCodeStartJarAuthorizeOptions.Scope"/>
+    /// names a value (RFC 6749 §3.1), <c>resource</c> only when
+    /// <see cref="AuthCodeStartJarAuthorizeOptions.Resource"/> names an indicator (a JSON string for
+    /// one and an array for several, RFC 8707 §2.1), <c>state</c>, <c>nonce</c>, the PKCE challenge
+    /// and its method, <c>iat</c>, <c>nbf</c>, <c>exp</c>, <c>iss</c> and <c>aud</c>
+    /// (<see cref="AuthCodeJarSigning"/>), and the handler builds a redirect URL carrying
+    /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>. The PKCE verifier and
+    /// the same resource indicators the object signs are persisted so the eventual token exchange can
+    /// complete and name them.
     /// </summary>
+    /// <remarks>
+    /// A resource entry holding any white-space character is refused before anything is signed or
+    /// stored (<see cref="HasResourceEntryHoldingWhiteSpace"/>): an RFC 8707 §2 indicator is one
+    /// absolute URI, and the entries the object signs are exactly the entries the flow state keeps
+    /// and the code redemption sends.
+    /// </remarks>
+    /// <param name="jarOptions">The caller's per-call inputs: the scope, the resource indicators, the signing key and the serializers.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> with the authorization redirect URI on
+    /// success; <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> with <c>ErrorCode</c>
+    /// <c>invalid_request</c> when a resource entry holds white space.
+    /// </returns>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleJarAuthorizeAsync(
         AuthCodeStartJarAuthorizeOptions jarOptions,
         OAuthClientInfrastructure infrastructure,
@@ -1213,6 +1260,11 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(infrastructure);
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
+
+        if(HasResourceEntryHoldingWhiteSpace(jarOptions.Resource))
+        {
+            return BuildResourceEntryHoldingWhiteSpaceRefusal();
+        }
 
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
             await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
@@ -1373,12 +1425,51 @@ public static class AuthCodeFlowHandlers
     /// The <see cref="AuthCodeRequestObject.Resource"/> value of a request object naming
     /// <paramref name="resource"/>: the indicators space-joined, the form that property carries, or
     /// <see langword="null"/> when the request names none, so the object then carries no
-    /// <c>resource</c> claim.
+    /// <c>resource</c> claim. The join is undone exactly by the signing's split on the space, entry
+    /// for entry and in order, because both request-object starts refuse an entry holding white space
+    /// before they get here (<see cref="HasResourceEntryHoldingWhiteSpace"/>).
     /// </summary>
-    /// <param name="resource">The resource indicators the request names.</param>
+    /// <param name="resource">The resource indicators the request names, none of them holding white space.</param>
     /// <returns>The space-joined indicators, or <see langword="null"/> when there are none.</returns>
     private static string? JoinRequestObjectResource(ImmutableArray<string> resource) =>
         resource.IsDefaultOrEmpty ? null : string.Join(' ', resource);
+
+
+    /// <summary>
+    /// Whether any entry of the caller's resource list holds a white-space character
+    /// (<see cref="char.IsWhiteSpace(char)"/>) anywhere in it, a blank entry included.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: the value "MUST
+    /// be an absolute URI, as specified by Section 4.3 of [RFC3986]", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 §2</see>: "A URI is
+    /// composed from a limited set of characters consisting of digits, letters, and a few graphic
+    /// symbols.", so such an entry is no indicator. A request object signs its indicators through the
+    /// space-joined <see cref="AuthCodeRequestObject.Resource"/>, which would sign an entry holding a
+    /// space as several indicators and a padded entry trimmed while the flow state and the code
+    /// redemption keep the entry as given; the request-object starts refuse it instead.
+    /// </summary>
+    /// <param name="resource">The caller's resource indicators, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when an entry holds white space.</returns>
+    private static bool HasResourceEntryHoldingWhiteSpace(IReadOnlyList<string>? resource) =>
+        resource is not null
+        && resource.Any(static entry => entry is not null && entry.Any(char.IsWhiteSpace));
+
+
+    /// <summary>
+    /// The answer of a request-object start whose resource list holds an entry with white space
+    /// (<see cref="HasResourceEntryHoldingWhiteSpace"/>): the same shape the client gives any start it
+    /// cannot compose, <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> with
+    /// <c>invalid_request</c> and a fixed description, given before anything is signed, sent or
+    /// stored.
+    /// </summary>
+    /// <returns>The refusal of the start.</returns>
+    private static AuthCodeFlowEndpointResult BuildResourceEntryHoldingWhiteSpaceRefusal() => new()
+    {
+        Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+        ErrorCode = OAuthErrors.InvalidRequest,
+        ErrorDescription =
+            "A resource entry holds white space; each entry must be one absolute URI " +
+            "(RFC 8707 §2), so the request object is not signed and nothing is sent."
+    };
 
 
     private static Uri BuildJarAuthorizeRedirectUri(
@@ -1444,7 +1535,11 @@ public static class AuthCodeFlowHandlers
     /// <summary>
     /// The scope values the caller names in its <c>scope</c> field, split on the space delimiter of
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>, and empty
-    /// when the field is absent or blank. RFC 6749 §4.1.1 makes <c>scope</c> "OPTIONAL" and §3.3
+    /// when the field is absent, empty or made only of white space of any kind: §3.3's
+    /// "scope-token = 1*( %x21 / %x23-5B / %x5D-7E )" admits no white space, so such a value names no
+    /// scope token, and §3.1 reads "Parameters sent without a value MUST be treated as if they were
+    /// omitted from the request.", the reading the request-object and refresh encoders give a blank
+    /// scope as well. RFC 6749 §4.1.1 makes <c>scope</c> "OPTIONAL" and §3.3
     /// leaves the default for an omitted scope to the authorization server ("If the client omits the
     /// scope parameter when requesting authorization, the authorization server MUST either process the
     /// request using a pre-defined default value or fail the request indicating an invalid scope."),
@@ -1456,8 +1551,9 @@ public static class AuthCodeFlowHandlers
     /// <returns>The named scope values, in the caller's order; empty when the caller names none.</returns>
     private static ImmutableArray<string> ReadRequestedScopes(IReadOnlyDictionary<string, string> fields) =>
         fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
-            ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
-            : [];
+            && !string.IsNullOrWhiteSpace(scopeValue)
+                ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
+                : [];
 
 
     /// <summary>
