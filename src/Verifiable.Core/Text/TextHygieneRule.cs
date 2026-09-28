@@ -49,9 +49,10 @@ public sealed class TextHygieneRule
     /// <summary>
     /// Gets the rule for text a reader must not be misled by: controls, format characters, line and paragraph
     /// separators, the Tags block, unpaired surrogates and ill-formed UTF-8. It passes the variation selectors, the
-    /// default-ignorable code points outside Cf, combining marks, whitespace look-alikes, U+2800 and confusable
-    /// characters, which no class covers (see <see cref="TextHygieneClass"/>), and a code point assigned after the
-    /// running runtime's Unicode version, which reads as Cn.
+    /// assigned default-ignorable code points outside Cf, combining marks, whitespace look-alikes, U+2800 and
+    /// confusable characters, which no class covers (see <see cref="TextHygieneClass"/>), and a code point assigned
+    /// after the running runtime's Unicode version, which reads as Cn. The reserved default-ignorable code points
+    /// are <see cref="TextHygieneClass.Unassigned"/>, a class <see cref="Default"/> does not select, so they pass too.
     /// </summary>
     public static TextHygieneRule Default { get; } = new(
         new[]

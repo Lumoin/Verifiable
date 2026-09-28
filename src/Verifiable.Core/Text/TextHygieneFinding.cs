@@ -5,9 +5,12 @@ namespace Verifiable.Core.Text;
 /// <summary>
 /// One occurrence of a <see cref="TextHygieneClass"/> selected by a <see cref="TextHygieneRule"/>: where it is,
 /// how many input units it spans, and which code point it holds. An occurrence is the answer of an inspection, not
-/// an error of it. Only <see cref="TextHygiene"/> creates one, and <see cref="CodePoint"/> is derived from
-/// <see cref="Class"/>, so it is null exactly when <see cref="Class"/> is
-/// <see cref="TextHygieneClass.IllFormedEncoding"/> for every value of the type.
+/// an error of it, and <see cref="CodePoint"/> is derived from <see cref="Class"/>, so it is null exactly when
+/// <see cref="Class"/> is <see cref="TextHygieneClass.IllFormedEncoding"/> for every value of the type. This is a
+/// value type, so its default value exists, with <see cref="Offset"/> and <see cref="Length"/> both zero; no
+/// inspection ever produces that value, because every occurrence <see cref="TextHygiene"/> reports has a
+/// <see cref="Length"/> of at least one. <see cref="ForCodePoint"/> and <see cref="ForIllFormedEncoding"/> are the
+/// only way <see cref="TextHygiene"/> builds an occurrence with a positive length.
 /// </summary>
 public readonly record struct TextHygieneFinding
 {

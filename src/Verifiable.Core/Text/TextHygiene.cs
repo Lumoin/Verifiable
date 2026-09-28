@@ -6,14 +6,17 @@ namespace Verifiable.Core.Text;
 
 /// <summary>
 /// Finds, in text a partner supplied, the code points that act rather than read when shown (the classes a
-/// <see cref="TextHygieneRule"/> selects), and reports them as data or writes them as visible escapes. Every class
-/// but <see cref="TextHygieneClass.Tag"/> comes from the running runtime's Unicode data, so a code point assigned in a
-/// later Unicode version reads as Cn on an older runtime and passes <see cref="TextHygieneRule.Default"/>; the remarks
-/// of <see cref="TextHygieneClass"/> name the code points that act when shown and that no class covers, which pass
-/// every rule. Input errors are data: only null arguments are rejected, and the caller's collector or
-/// writer may throw. Time is linear in the input and the primitive allocates nothing: <c>CollectFindings</c> adds at
-/// most one finding per input unit, and <see cref="EscapeVisibly"/> writes at most six characters per input unit, so a
-/// caller holding hostile input caps the input or passes a bounded collector or writer.
+/// <see cref="TextHygieneRule"/> selects), and reports them as data or writes them as visible escapes. Of a decoded
+/// scalar's class, only <see cref="TextHygieneClass.Tag"/> is a fixed range; every other class comes from the running
+/// runtime's Unicode category data, so a code point assigned in a later Unicode version reads as Cn on an older
+/// runtime and passes <see cref="TextHygieneRule.Default"/>. <see cref="TextHygieneClass.UnpairedSurrogate"/> and
+/// <see cref="TextHygieneClass.IllFormedEncoding"/> come from the decoding itself, an isolated surrogate code unit or
+/// an ill-formed maximal subpart, and carry no runtime category. The remarks of <see cref="TextHygieneClass"/> name
+/// the code points that act when shown and that no class covers, which pass every rule. Input errors are data: only
+/// null arguments are rejected, and the caller's collector or writer may throw. Time is linear in the input and the
+/// primitive allocates nothing: <c>CollectFindings</c> adds at most one finding per input unit, and
+/// <see cref="EscapeVisibly"/> writes at most six characters per input unit, so a caller holding hostile input caps
+/// the input or passes a bounded collector or writer.
 /// </summary>
 public static class TextHygiene
 {

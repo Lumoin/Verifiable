@@ -197,6 +197,27 @@ internal sealed class TextHygieneTests
     }
 
     /// <summary>
+    /// <see cref="TextHygiene.EscapeVisibly"/> reserves and advances the caller's writer once for a whole run of
+    /// several clean scalars, not once per scalar, so a partner's large adversarial input is written without one
+    /// allocation request per code unit. This pins <see cref="TextHygiene"/>'s documented allocation and per-run
+    /// writing behavior.
+    /// <see href="https://www.unicode.org/reports/tr9/#Explicit_Directional_Overrides">UAX #9, Section 2.2</see>
+    /// says of the format characters this primitive escapes: "They are to be avoided wherever possible, because of
+    /// security concerns," the concern a caller holding hostile input relies on a bounded writer to contain.
+    /// </summary>
+    [TestMethod]
+    public void EscapeVisiblyReservesOnceForARunOfCleanScalars()
+    {
+        CountingBufferWriter writer = new();
+
+        TextHygiene.EscapeVisibly("abc".AsSpan(), TextHygieneRule.Default, writer);
+
+        Assert.AreEqual(1, writer.ReservationCount, "A clean run must ask the writer for storage once.");
+        Assert.AreEqual(1, writer.AdvanceCount, "A clean run must advance the writer once.");
+        Assert.AreEqual("abc", new string(writer.WrittenSpan), "The run must be written unchanged.");
+    }
+
+    /// <summary>
     /// <see cref="TextHygiene"/> collectors report every occurrence in input order, at offsets and lengths in the
     /// input's unit.
     /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see>
@@ -287,7 +308,8 @@ internal sealed class TextHygieneTests
         Assert.HasCount(2, findings, "The lone lead byte and the following override are occurrences.");
         Assert.AreEqual(0, findings[0].Offset, "The ill-formed subpart starts the input.");
         Assert.AreEqual(TextHygieneClass.IllFormedEncoding, findings[0].Class, "The lone lead byte is ill-formed.");
-        Assert.IsNull(findings[0].CodePoint, "An ill-formed sequence holds no code point.");
+        int? codePoint = findings[0].CodePoint;
+        Assert.IsNull(codePoint, "An ill-formed sequence holds no code point.");
         Assert.AreEqual(1, findings[1].Offset, "The override follows the one-byte subpart.");
         Assert.AreEqual(0x202E, findings[1].CodePoint, "The override keeps its code point.");
         Assert.AreEqual(TextHygieneClass.Format, findings[1].Class, "The override is a format character.");
@@ -328,7 +350,6 @@ internal sealed class TextHygieneTests
     [DataRow(new[] { 0xDC00 }, new[] { 0 })]
     [DataRow(new[] { 0xD800, 0xD800 }, new[] { 0, 1 })]
     [DataRow(new[] { 0xDC00, 0xD800 }, new[] { 0, 1 })]
-    [DataRow(new[] { 0xD800, 0xD800, 0xDC00 }, new[] { 0 })]
     public void Utf16InspectionReportsEachLoneSurrogate(int[] units, int[] offsets)
     {
         StringBuilder builder = new();
@@ -350,6 +371,28 @@ internal sealed class TextHygieneTests
         }
 
         AssertFinding(findings[^1], units.Length, 1, 0x202E, TextHygieneClass.Format);
+    }
+
+    /// <summary>
+    /// UTF-16 inspection reports a lone surrogate and resumes decoding at the next code unit, so a well-formed pair
+    /// immediately following it is inspected on its own and never swallowed together with the lone code unit.
+    /// Unicode core <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G25660">D91</see>
+    /// states "Because surrogate code points are not Unicode scalar values, isolated UTF-16 code units in the range"
+    /// of surrogates "are ill-formed", so only the isolated code unit is an occurrence; the pair that follows decodes
+    /// to its own scalar and is reported under whatever class that scalar has.
+    /// </summary>
+    [TestMethod]
+    public void Utf16InspectionRecoversAfterALoneSurrogate()
+    {
+        string text = TextOf(0xD800) + TextOf(0xE0041) + TextOf(0x202E);
+        List<TextHygieneFinding> findings = [];
+
+        TextHygiene.CollectFindings(text.AsSpan(), TextHygieneRule.Default, findings);
+
+        Assert.HasCount(3, findings, "The lone surrogate, the following pair and the override are each occurrences.");
+        AssertFinding(findings[0], 0, 1, 0xD800, TextHygieneClass.UnpairedSurrogate);
+        AssertFinding(findings[1], 1, 2, 0xE0041, TextHygieneClass.Tag);
+        AssertFinding(findings[2], 3, 1, 0x202E, TextHygieneClass.Format);
     }
 
     /// <summary>
@@ -562,6 +605,47 @@ internal sealed class TextHygieneTests
     }
 
     /// <summary>
+    /// <see cref="TextHygieneFinding"/>'s default value, which no inspection produces, is a zero-length occurrence at
+    /// offset zero whose class is <see cref="TextHygieneClass.Control"/>, the enumeration's first and so default,
+    /// member.
+    /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see> defines Cc as
+    /// "a C0 or C1 control code".
+    /// </summary>
+    [TestMethod]
+    public void DefaultValueIsAZeroLengthControlAtOffsetZero()
+    {
+        TextHygieneFinding finding = default;
+
+        Assert.AreEqual(0, finding.Offset, "The default value's offset is zero.");
+        Assert.AreEqual(0, finding.Length, "The default value's length is zero.");
+        Assert.AreEqual(0, finding.CodePoint, "The default value's stored code point is zero.");
+        Assert.AreEqual(TextHygieneClass.Control, finding.Class, "The default value's class is the enumeration's first member.");
+        Assert.AreEqual(new Rune(0), finding.Scalar, "U+0000 is a valid scalar value.");
+    }
+
+    /// <summary>
+    /// Every occurrence <see cref="TextHygiene"/> reports over mixed input has a length of at least one input unit,
+    /// whatever its class, so <see cref="TextHygieneFinding"/>'s unproduced zero-length default is never mistaken
+    /// for a real occurrence.
+    /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see> defines the general
+    /// categories the classes this input exercises are drawn from.
+    /// </summary>
+    [TestMethod]
+    public void EveryProducedFindingHasAPositiveLength()
+    {
+        string text = TextOf(0x202E) + "a" + TextOf(0xD800) + "b" + TextOf(0xE0041);
+        List<TextHygieneFinding> findings = [];
+
+        TextHygiene.CollectFindings(text.AsSpan(), TextHygieneRule.Strict, findings);
+
+        Assert.IsNotEmpty(findings, "The mixed input must produce findings.");
+        foreach(TextHygieneFinding finding in findings)
+        {
+            Assert.IsGreaterThanOrEqualTo(1, finding.Length, "A produced occurrence never has a zero length.");
+        }
+    }
+
+    /// <summary>
     /// Asserts that the rule reports the code point with its class and length at the start, the middle and the end of
     /// a text, through inspection and collection, in UTF-16 and, for a scalar, in UTF-8.
     /// </summary>
@@ -676,5 +760,67 @@ internal sealed class TextHygieneTests
         Assert.IsTrue(creation.IsSuccess, "The test's rule must be valid.");
 
         return creation.Value;
+    }
+
+    /// <summary>
+    /// A caller-owned <see cref="IBufferWriter{T}"/> that counts its own reservation and advance calls, so a test
+    /// can tell one reservation over a run of scalars from one reservation per scalar. It delegates every write to
+    /// an inner <see cref="ArrayBufferWriter{T}"/> and adds no behavior beyond the count.
+    /// </summary>
+    private sealed class CountingBufferWriter: IBufferWriter<char>
+    {
+        /// <summary>
+        /// Gets the storage this counting writer hands out.
+        /// </summary>
+        private ArrayBufferWriter<char> Inner { get; } = new();
+
+        /// <summary>
+        /// Gets how many times <see cref="GetSpan"/> or <see cref="GetMemory"/> reserved storage.
+        /// </summary>
+        public int ReservationCount { get; private set; }
+
+        /// <summary>
+        /// Gets how many times <see cref="Advance"/> committed written storage.
+        /// </summary>
+        public int AdvanceCount { get; private set; }
+
+        /// <summary>
+        /// Gets the characters committed so far, in the order they were written.
+        /// </summary>
+        public ReadOnlySpan<char> WrittenSpan => Inner.WrittenSpan;
+
+        /// <summary>
+        /// Commits <paramref name="count"/> characters of the last reservation, counting the call.
+        /// </summary>
+        /// <param name="count">The characters the caller wrote into the reserved storage.</param>
+        public void Advance(int count)
+        {
+            AdvanceCount++;
+            Inner.Advance(count);
+        }
+
+        /// <summary>
+        /// Reserves at least <paramref name="sizeHint"/> characters as writable memory, counting the call.
+        /// </summary>
+        /// <param name="sizeHint">The minimum characters the caller needs.</param>
+        /// <returns>The reserved storage.</returns>
+        public Memory<char> GetMemory(int sizeHint = 0)
+        {
+            ReservationCount++;
+
+            return Inner.GetMemory(sizeHint);
+        }
+
+        /// <summary>
+        /// Reserves at least <paramref name="sizeHint"/> characters as a writable span, counting the call.
+        /// </summary>
+        /// <param name="sizeHint">The minimum characters the caller needs.</param>
+        /// <returns>The reserved storage.</returns>
+        public Span<char> GetSpan(int sizeHint = 0)
+        {
+            ReservationCount++;
+
+            return Inner.GetSpan(sizeHint);
+        }
     }
 }
