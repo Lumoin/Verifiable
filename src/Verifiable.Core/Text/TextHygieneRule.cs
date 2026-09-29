@@ -34,9 +34,21 @@ public sealed class TextHygieneRule
     /// <see cref="TextHygieneClass.Format"/>, <see cref="TextHygieneClass.Tag"/> and
     /// <see cref="TextHygieneClass.UnpairedSurrogate"/> (a value in D800..DFFF exempts that lone UTF-16 code unit),
     /// and exempting U+2028 or U+2029 exempts a whole class; these are the caller's choice, so a caller that exempts
-    /// U+202E shows the reader a real override. A carriage return directly followed by a line feed is one line break
-    /// and is exempt whenever the line feed is. An ill-formed UTF-8 subpart has no code point, so no exception
-    /// reaches <see cref="TextHygieneClass.IllFormedEncoding"/>. The set is an immutable snapshot.
+    /// U+202E shows the reader a real override. A caller that exempts an opener (U+202A, U+202B, U+202D, U+202E,
+    /// U+2066 to U+2068) exempts its terminator (U+202C, U+2069) with it, because the library pairs nothing: UAX #9,
+    /// <see href="https://www.unicode.org/reports/tr9/#Terminating_Explicit_Directional_Embeddings_and_Overrides">Section 2.3</see>,
+    /// states "The following character terminates the scope of the last LRE, RLE, LRO, or RLO whose scope has not
+    /// yet been terminated.", so a rule that exempts U+202E but not U+202C (and, for the isolates, U+2069 in
+    /// <see href="https://www.unicode.org/reports/tr9/#Terminating_Explicit_Directional_Isolates">Section 2.5</see>)
+    /// reports the terminator and passes the opener, which leaves the directional scope open. Exempting the pair
+    /// leaves an opener that the input never terminates open all the same, so a reader is safe from an open scope
+    /// only when the opener is not exempted. The scope reaches the end of the paragraph: UAX #9,
+    /// <see href="https://www.unicode.org/reports/tr9/#X8">rule X8</see>, states "All explicit directional
+    /// embeddings, overrides and isolates are completely terminated at the end of each paragraph.", and the paragraph
+    /// includes any text the application renders after the output in it.
+    /// A carriage return directly followed by a line feed is one line break and is exempt whenever the line feed is.
+    /// An ill-formed UTF-8 subpart has no code point, so no exception reaches
+    /// <see cref="TextHygieneClass.IllFormedEncoding"/>. The set is an immutable snapshot.
     /// </summary>
     public IReadOnlySet<int> AllowedCodePoints { get; }
 

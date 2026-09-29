@@ -22,9 +22,22 @@ internal sealed class TextHygieneTests
     /// <see href="https://www.unicode.org/reports/tr9/#Explicit_Directional_Overrides">UAX #9, Section 2.2</see> describes
     /// RLO as "Force following characters to be treated as strong right-to-left characters." and
     /// <see href="https://www.unicode.org/reports/tr9/#Explicit_Directional_Isolates">Section 2.4</see> describes LRI as
-    /// "Treat the following text as isolated and left-to-right." Unicode core
+    /// "Treat the following text as isolated and left-to-right." The other explicit formatting characters have rows
+    /// too: <see href="https://www.unicode.org/reports/tr9/#Explicit_Directional_Embeddings">Section 2.1</see>
+    /// describes RLE as "Treat the following text as embedded right-to-left.", Section 2.2 describes LRO as
+    /// "Force following characters to be treated as strong left-to-right characters.",
+    /// <see href="https://www.unicode.org/reports/tr9/#Terminating_Explicit_Directional_Embeddings_and_Overrides">Section 2.3</see>
+    /// describes PDF, the terminator of the embeddings and overrides, as "End the scope of the last LRE, RLE, RLO, or
+    /// LRO.", and Section 2.4 describes RLI as "Treat the following text as isolated and right-to-left." and FSI as
+    /// "Treat the following text as isolated and in the direction of its first strong directional character that is
+    /// not inside a nested isolate." Unicode core
     /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G25660">D91</see> states
     /// "isolated UTF-16 code units" in the surrogate range "are ill-formed", so a lone high or low surrogate is reported.
+    /// The format characters that
+    /// <see href="https://www.unicode.org/reports/tr44/#Default_Ignorable_Code_Point">UAX #44</see> subtracts from
+    /// Default_Ignorable_Code_Point, "FFF9..FFFB (Interlinear annotation format characters)" and "13430..1343F
+    /// (Egyptian hieroglyph format characters)", are in category Cf all the same, so their rows are reported as
+    /// <see cref="TextHygieneClass.Format"/>; U+13430 is the first of the Egyptian hieroglyph format controls.
     /// </summary>
     /// <param name="codePoint">The scalar or lone surrogate code unit.</param>
     /// <param name="expectedClass">Its independently specified classification.</param>
@@ -33,9 +46,12 @@ internal sealed class TextHygieneTests
     [DataRow(0x202E, TextHygieneClass.Format)]
     [DataRow(0x2066, TextHygieneClass.Format)]
     [DataRow(0x2069, TextHygieneClass.Format)]
+    [DataRow(0x202B, TextHygieneClass.Format)]
+    [DataRow(0x202C, TextHygieneClass.Format)]
+    [DataRow(0x202D, TextHygieneClass.Format)]
+    [DataRow(0x2067, TextHygieneClass.Format)]
+    [DataRow(0x2068, TextHygieneClass.Format)]
     [DataRow(0x200B, TextHygieneClass.Format)]
-    [DataRow(0x200C, TextHygieneClass.Format)]
-    [DataRow(0x200D, TextHygieneClass.Format)]
     [DataRow(0x200E, TextHygieneClass.Format)]
     [DataRow(0x200F, TextHygieneClass.Format)]
     [DataRow(0x00AD, TextHygieneClass.Format)]
@@ -46,6 +62,7 @@ internal sealed class TextHygieneTests
     [DataRow(0x2064, TextHygieneClass.Format)]
     [DataRow(0xFFF9, TextHygieneClass.Format)]
     [DataRow(0xFFFB, TextHygieneClass.Format)]
+    [DataRow(0x13430, TextHygieneClass.Format)]
     [DataRow(0x2028, TextHygieneClass.LineSeparator)]
     [DataRow(0x2029, TextHygieneClass.ParagraphSeparator)]
     [DataRow(0x0007, TextHygieneClass.Control)]
@@ -83,6 +100,55 @@ internal sealed class TextHygieneTests
     public void DefaultRuleLeavesReadableTextAlone(string text)
     {
         AssertClean(text, TextHygieneRule.Default);
+    }
+
+    /// <summary>
+    /// <see cref="TextHygieneRule.Default"/> passes a private-use code point, which
+    /// <see cref="TextHygieneRule.Strict"/> reports as <see cref="TextHygieneClass.PrivateUse"/>.
+    /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see>
+    /// defines Co as "a private-use character", a class the default rule does not select.
+    /// </summary>
+    [TestMethod]
+    public void DefaultRulePassesAPrivateUseCodePointThatStrictReports()
+    {
+        AssertClean(TextOf(0xE000), TextHygieneRule.Default);
+        AssertSelectedInEveryPlacement(0xE000, TextHygieneClass.PrivateUse, TextHygieneRule.Strict);
+    }
+
+    /// <summary>
+    /// <see cref="TextHygieneRule.Default"/> reports the Join_Control characters, the zero width non-joiner and the
+    /// zero width joiner, as <see cref="TextHygieneClass.Format"/>.
+    /// <see href="https://www.unicode.org/reports/tr44/#Join_Control">UAX #44</see> describes Join_Control as
+    /// "Format control characters which have specific functions for control of cursive joining and ligation." The
+    /// membership, U+200C and U+200D, is that of
+    /// <see href="https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt">PropList.txt</see>.
+    /// </summary>
+    /// <param name="codePoint">A Join_Control character.</param>
+    [TestMethod]
+    [DataRow(0x200C)]
+    [DataRow(0x200D)]
+    public void DefaultRuleReportsTheJoinControlCharacters(int codePoint)
+    {
+        AssertSelectedInEveryPlacement(codePoint, TextHygieneClass.Format, TextHygieneRule.Default);
+    }
+
+    /// <summary>
+    /// <see cref="TextHygieneRule.Default"/> reports a Prepended_Concatenation_Mark character as
+    /// <see cref="TextHygieneClass.Format"/>, though the property marks it visible.
+    /// <see href="https://www.unicode.org/reports/tr44/#Prepended_Concatenation_Mark">UAX #44</see> describes
+    /// Prepended_Concatenation_Mark as "A small class of visible format controls, which precede and then span a
+    /// sequence of other characters, usually digits." The membership, of which the rows here sample U+0600,
+    /// U+06DD and U+110BD, is that of
+    /// <see href="https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt">PropList.txt</see>.
+    /// </summary>
+    /// <param name="codePoint">A Prepended_Concatenation_Mark character in general category Cf.</param>
+    [TestMethod]
+    [DataRow(0x0600)]
+    [DataRow(0x06DD)]
+    [DataRow(0x110BD)]
+    public void DefaultRuleReportsAPrependedConcatenationMark(int codePoint)
+    {
+        AssertSelectedInEveryPlacement(codePoint, TextHygieneClass.Format, TextHygieneRule.Default);
     }
 
     /// <summary>
@@ -425,9 +491,13 @@ internal sealed class TextHygieneTests
     /// <see cref="TextHygieneRule.Strict"/> passes the code points that act when shown but that no class covers: the
     /// variation selectors, the assigned default-ignorable code points outside Cf, stacked combining marks, look-alike
     /// spaces and U+2800. This pins the boundary the rule documents; it is not a claim that such text is safe to show.
-    /// <see href="https://www.unicode.org/reports/tr44/#Default_Ignorable_Code_Point">UAX #44</see> describes
-    /// Default_Ignorable_Code_Point as "characters that should be ignored in rendering (unless explicitly supported)",
-    /// generated from "Other_Default_Ignorable_Code_Point + Cf (Format characters) + Variation_Selector", and
+    /// <see href="https://www.unicode.org/reports/tr44/#Default_Ignorable_Code_Point">UAX #44</see> generates
+    /// Default_Ignorable_Code_Point from "Other_Default_Ignorable_Code_Point + Cf (Format characters) +
+    /// Variation_Selector - White_Space - FFF9..FFFB (Interlinear annotation format characters) - 13430..1343F
+    /// (Egyptian hieroglyph format characters) - Prepended_Concatenation_Mark (Exceptional format characters that
+    /// should be visible)" and says of the property that "New characters that should be ignored in rendering (unless
+    /// explicitly supported) will be assigned in these ranges", so the rendering phrase describes characters yet to be
+    /// assigned in the property's ranges, not the property's current members; and
     /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">Table 12</see> defines Mn as "a nonspacing
     /// combining mark (zero advance width)" and Zs as "a space character (of various non-zero widths)".
     /// </summary>
@@ -512,6 +582,80 @@ internal sealed class TextHygieneTests
             Assert.HasCount(1, utf8Findings, "Only the override that is not exempt is an occurrence in UTF-8.");
             AssertFinding(utf8Findings[0], Encoding.UTF8.GetByteCount(exempt), 3, 0x202E, TextHygieneClass.Format);
         }
+    }
+
+    /// <summary>
+    /// A rule built with U+2029 as an exception passes a paragraph separator that
+    /// <see cref="TextHygieneRule.Default"/> reports, so the exception exempts the whole single-code-point class.
+    /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see>
+    /// defines Zp as "U+2029 PARAGRAPH SEPARATOR only".
+    /// </summary>
+    [TestMethod]
+    public void RuleExceptionForAParagraphSeparatorPassesWhatDefaultReports()
+    {
+        TextHygieneRule rule = CreateRule([TextHygieneClass.ParagraphSeparator], [0x2029]);
+
+        AssertClean(TextOf(0x2029), rule);
+        AssertSelectedInEveryPlacement(0x2029, TextHygieneClass.ParagraphSeparator, TextHygieneRule.Default);
+    }
+
+    /// <summary>
+    /// A rule that exempts U+202E but not U+202C reports the terminator and passes the override, so the override's
+    /// directional scope open to the end of the paragraph, which includes any text the application renders after
+    /// the output in it; the visible escape rewrites the terminator and leaves the override unchanged.
+    /// <see href="https://www.unicode.org/reports/tr9/#Terminating_Explicit_Directional_Embeddings_and_Overrides">UAX #9, Section 2.3</see>
+    /// states "The following character terminates the scope of the last LRE, RLE, LRO, or RLO whose scope has not
+    /// yet been terminated." and <see href="https://www.unicode.org/reports/tr9/#X8">rule X8</see> states "All explicit
+    /// directional embeddings, overrides and isolates are completely terminated at the end of each paragraph."
+    /// </summary>
+    [TestMethod]
+    public void RuleThatExemptsAnOverrideButNotItsTerminatorLeavesTheScopeOpen()
+    {
+        TextHygieneRule rule = CreateRule([TextHygieneClass.Format], [0x202E]);
+        string text = "a" + TextOf(0x202E) + "b" + TextOf(0x202C) + "c";
+        List<TextHygieneFinding> findings = [];
+        TextHygiene.CollectFindings(text.AsSpan(), rule, findings);
+        List<TextHygieneFinding> utf8Findings = [];
+        TextHygiene.CollectFindings(Encoding.UTF8.GetBytes(text).AsSpan(), rule, utf8Findings);
+        ArrayBufferWriter<char> writer = new();
+        TextHygiene.EscapeVisibly(text.AsSpan(), rule, writer);
+
+        Assert.HasCount(1, findings, "Only the terminator is an occurrence; the exempt override is not.");
+        AssertFinding(findings[0], 3, 1, 0x202C, TextHygieneClass.Format);
+        Assert.HasCount(1, utf8Findings, "Only the terminator is an occurrence in UTF-8.");
+        AssertFinding(utf8Findings[0], 5, 3, 0x202C, TextHygieneClass.Format);
+        Assert.AreEqual("a" + TextOf(0x202E) + "b" + "\\" + "u202Cc", new string(writer.WrittenSpan), "The override stays and the terminator is written as its escape.");
+    }
+
+    /// <summary>
+    /// A rule that exempts U+2067 (RLI) but not U+2069 (PDI) reports the terminator and passes the isolate initiator,
+    /// so the isolate's scope stays open to the end of the paragraph; inspection returns that same terminator finding
+    /// first, and the visible escape rewrites the terminator and leaves the initiator unchanged.
+    /// <see href="https://www.unicode.org/reports/tr9/#Terminating_Explicit_Directional_Isolates">UAX #9, Section 2.5</see>
+    /// states "The following character terminates the scope of the last LRI, RLI, or FSI whose scope has not yet been
+    /// terminated," and <see href="https://www.unicode.org/reports/tr9/#X8">rule X8</see> states "All explicit
+    /// directional embeddings, overrides and isolates are completely terminated at the end of each paragraph."
+    /// </summary>
+    [TestMethod]
+    public void RuleThatExemptsAnIsolateInitiatorButNotItsTerminatorLeavesTheScopeOpen()
+    {
+        TextHygieneRule rule = CreateRule([TextHygieneClass.Format], [0x2067]);
+        string text = "a" + TextOf(0x2067) + "b" + TextOf(0x2069) + "c";
+        List<TextHygieneFinding> findings = [];
+        TextHygiene.CollectFindings(text.AsSpan(), rule, findings);
+        TextHygieneFinding? inspection = TextHygiene.Inspect(text.AsSpan(), rule);
+        List<TextHygieneFinding> utf8Findings = [];
+        TextHygiene.CollectFindings(Encoding.UTF8.GetBytes(text).AsSpan(), rule, utf8Findings);
+        ArrayBufferWriter<char> writer = new();
+        TextHygiene.EscapeVisibly(text.AsSpan(), rule, writer);
+
+        Assert.HasCount(1, findings, "Only the terminator is an occurrence; the exempt initiator is not.");
+        AssertFinding(findings[0], 3, 1, 0x2069, TextHygieneClass.Format);
+        Assert.IsTrue(inspection.HasValue, "Inspection must report the terminator.");
+        Assert.AreEqual(findings[0], inspection.Value, "Inspection must return the same terminator finding first.");
+        Assert.HasCount(1, utf8Findings, "Only the terminator is an occurrence in UTF-8.");
+        AssertFinding(utf8Findings[0], 5, 3, 0x2069, TextHygieneClass.Format);
+        Assert.AreEqual("a" + TextOf(0x2067) + "b" + "\\" + "u2069c", new string(writer.WrittenSpan), "The initiator stays and the terminator is written as its escape.");
     }
 
     /// <summary>

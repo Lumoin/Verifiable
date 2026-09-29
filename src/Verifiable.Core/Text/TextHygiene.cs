@@ -12,7 +12,13 @@ namespace Verifiable.Core.Text;
 /// runtime and passes <see cref="TextHygieneRule.Default"/>. <see cref="TextHygieneClass.UnpairedSurrogate"/> and
 /// <see cref="TextHygieneClass.IllFormedEncoding"/> come from the decoding itself, an isolated surrogate code unit or
 /// an ill-formed maximal subpart, and carry no runtime category. The remarks of <see cref="TextHygieneClass"/> name
-/// the code points that act when shown and that no class covers, which pass every rule. Input errors are data: only
+/// the code points that act when shown and that no class covers, which pass every rule. Mixed-script and
+/// restriction-level detection
+/// (<see href="https://www.unicode.org/reports/tr39/#Mixed_Script_Detection">UTS #39, Section 5.1</see> and
+/// <see href="https://www.unicode.org/reports/tr39/#Restriction_Level_Detection">Section 5.2</see>) and the
+/// display-side rules of <see href="https://www.unicode.org/reports/tr9/#Conformance">UAX #9</see>, which govern how a
+/// renderer orders text and treats the formatting characters, belong to the application; the primitive classifies
+/// and escapes only. Input errors are data: only
 /// null arguments are rejected, and the caller's collector or writer may throw. Time is linear in the input and the
 /// primitive allocates nothing: <c>CollectFindings</c> adds at most one finding per input unit, and
 /// <see cref="EscapeVisibly"/> writes at most six characters per input unit, so a caller holding hostile input caps
@@ -154,6 +160,15 @@ public static class TextHygiene
     /// begins an escape this method wrote, and the six input characters of a typed escape never read as an escaped
     /// code point. Everything else is written unchanged, one run at a time. The output is for a reader, not a
     /// serialization format, and it is not confusable analysis.
+    /// <see href="https://www.unicode.org/reports/tr9/#X9">UAX #9, Section 3.3.3</see> speaks of the isolates and, by
+    /// comparison, of LRM and RLM: "they are of course zero-width characters and, like LRM and RLM, should not be
+    /// visible in the final output." Under a rule that selects <see cref="TextHygieneClass.Format"/> and does not
+    /// exempt them, this method departs from that on purpose: it makes visible the isolates, the marks LRM, RLM and
+    /// ALM, and the embeddings and overrides alike, so a reader sees what acts on the text.
+    /// <see href="https://www.unicode.org/reports/tr9/#Retaining_Explicit_Formatting_Characters">Section 5.2</see>
+    /// speaks of the embedding and override characters and BNs, and gives the reason for showing them: "retention of
+    /// these formatting characters and BNs is important to users who need to display a graphic representation of
+    /// hidden characters".
     /// </summary>
     /// <param name="text">The complete UTF-16 input.</param>
     /// <param name="rule">The classes to escape and the code points to leave unchanged.</param>

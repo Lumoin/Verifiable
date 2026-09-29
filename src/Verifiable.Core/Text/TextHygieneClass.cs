@@ -28,6 +28,12 @@ namespace Verifiable.Core.Text;
 /// <see cref="Unassigned"/> while the running runtime has not assigned them, so only
 /// <see cref="TextHygieneRule.Strict"/> reports them.
 /// </para>
+/// <para>
+/// The general category comes from the running runtime's Unicode Character Database, whose version is the .NET
+/// release's. <see href="https://www.unicode.org/reports/tr44/#Property_APIs">UAX #44, Section 5.13</see> states:
+/// "an API should be clear about which version of the UCD it supports." This library reports no version of its
+/// own; the version is the one the runtime release documents.
+/// </para>
 /// </remarks>
 public enum TextHygieneClass
 {
@@ -43,6 +49,13 @@ public enum TextHygieneClass
     /// This includes embeddings, overrides and isolates in
     /// <see href="https://www.unicode.org/reports/tr9/#Explicit_Directional_Embeddings">UAX #9, Sections 2.1-2.5</see>
     /// and marks in <see href="https://www.unicode.org/reports/tr9/#Implicit_Directional_Marks">Section 2.6</see>.
+    /// <see cref="TextHygieneRule.Default"/> also reports the Join_Control characters U+200C and U+200D, which
+    /// <see href="https://www.unicode.org/reports/tr44/#Join_Control">UAX #44</see> describes as "Format control
+    /// characters which have specific functions for control of cursive joining and ligation.", and the format
+    /// characters that <see href="https://www.unicode.org/reports/tr44/#Default_Ignorable_Code_Point">UAX #44</see>
+    /// subtracts from Default_Ignorable_Code_Point: U+FFF9..U+FFFB, U+13430..U+1343F and the
+    /// Prepended_Concatenation_Mark characters, "Exceptional format characters that should be visible". Text that
+    /// reads normally can hold these, so <see cref="TextHygieneRule.Default"/> reports readable text too.
     /// The category is the running runtime's: a Cf character assigned in a later Unicode version reads as
     /// <see cref="Unassigned"/> on an older runtime.
     /// </summary>
