@@ -1056,16 +1056,305 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     }
 
 
+    /// <summary>
+    /// An application rule composed after <see cref="ClientIdMetadataMaterialization.Build"/>
+    /// that refuses a document with no <c>client_name</c> through
+    /// <see cref="ClientIdMetadataMaterialization.Refuse"/> answers a pushed authorization request
+    /// with the library's own refusal: 400 <c>invalid_request</c> and the fixed description. Other
+    /// specifications "MAY place additional restrictions on the contents of the Client ID Metadata
+    /// Document accepted by authorization servers implementing their specification"
+    /// (<see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-4">
+    /// draft-ietf-oauth-client-id-metadata-document-02 Section 4</see>). The document here was
+    /// fetched, so the refusal is the application's rule under that sentence, and the shape of the
+    /// refusal is the library's. Guards the shape a consumer rule gets from the library's public refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task AConsumerRuleRefusesInTheLibraryShapeAtThePushedRequestAsync()
+    {
+        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/app");
+        documentHost.Publish("/app",
+            Encoding.UTF8.GetBytes(BuildDocumentJson(documentUri.OriginalString, [RedirectUri])),
+            "application/json");
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        await ComposeClientNameRuleAsync(app).ConfigureAwait(false);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (int statusCode, string body) = await PostToCimdClientAsync(
+            app, stub, WellKnownEndpointNames.AuthCodePar,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.ResponseType] = "code",
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.CodeChallenge] = "adversarial-pkce-challenge-0123456789",
+                [OAuthRequestParameterNames.CodeChallengeMethod] = "S256"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(Bad("invalid_request", "The request could not be processed."), body);
+    }
+
+
+    /// <summary>
+    /// The same application rule answers a token request with the library's own token-endpoint
+    /// refusal: 401 <c>invalid_client</c> and the fixed description. RFC 6749 Section 5.2 defines
+    /// <c>invalid_client</c> as "Client authentication failed (e.g., unknown client, no client
+    /// authentication included, or unsupported authentication method)"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>).
+    /// Guards the shape a consumer rule gets from the library's public refusal.
+    /// </summary>
+    [TestMethod]
+    public async Task AConsumerRuleRefusesInTheLibraryShapeAtTheTokenEndpointAsync()
+    {
+        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/app");
+        documentHost.Publish("/app",
+            Encoding.UTF8.GetBytes(BuildDocumentJson(documentUri.OriginalString, [RedirectUri])),
+            "application/json");
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        await ComposeClientNameRuleAsync(app).ConfigureAwait(false);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (int statusCode, string body) = await PostToCimdClientAsync(
+            app, stub, WellKnownEndpointNames.AuthCodeToken,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.GrantType] = "authorization_code",
+                [OAuthRequestParameterNames.Code] = "adversarial-code-0123456789",
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.CodeVerifier] = "adversarial-verifier-0123456789-0123456789-0123456789"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(Bad("invalid_client", "Client authentication failed."), body);
+    }
+
+
+    /// <summary>
+    /// A token request whose <c>client_id</c> names a document that answers 404 is refused with
+    /// the library's token-endpoint refusal, and the refusal carries the challenge the request's
+    /// authentication asks for. RFC 6749 Section 5.2: "If the client attempted to authenticate via
+    /// the "Authorization" request header field, the authorization server MUST respond with an HTTP
+    /// 401 (Unauthorized) status code and include the "WWW-Authenticate" response header field
+    /// matching the authentication scheme used by the client."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>).
+    /// A request that carries <c>Authorization: Basic</c> is answered 401 with
+    /// <c>WWW-Authenticate: Basic</c> and the fixed description; the same request without the header
+    /// is answered 401 with the same body and no challenge.
+    /// </summary>
+    /// <param name="isBasicAttempted">Whether the request carries <c>Authorization: Basic</c>.</param>
+    /// <param name="expectedChallenge">The <c>WWW-Authenticate</c> value the response carries, or <see langword="null"/> for none.</param>
+    [TestMethod]
+    [DataRow(true, "Basic")]
+    [DataRow(false, null)]
+    public async Task AFailedDocumentFetchAtTheTokenEndpointCarriesTheChallengeOfTheSchemeAttemptedAsync(
+        bool isBasicAttempted,
+        string? expectedChallenge)
+    {
+        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/absent");
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        OutgoingHeaders? headers = isBasicAttempted
+            ? OutgoingHeaders.Empty.WithClientSecretBasic(stub.ClientId, Encoding.UTF8.GetBytes("adversarial-secret-0123456789"))
+            : null;
+
+        (int statusCode, string body, string? challenge) = await PostToCimdClientWithHeadersAsync(
+            app, stub, WellKnownEndpointNames.AuthCodeToken,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.GrantType] = "authorization_code",
+                [OAuthRequestParameterNames.Code] = "adversarial-code-0123456789",
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.CodeVerifier] = "adversarial-verifier-0123456789-0123456789-0123456789"
+            },
+            headers,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(Bad("invalid_client", "Client authentication failed."), body);
+        Assert.AreEqual(expectedChallenge, challenge);
+    }
+
+
+    /// <summary>
+    /// A pushed authorization request that carries <c>grant_type=</c>, the parameter with an
+    /// empty value, is read as if the parameter were omitted: it is not a token request, so the
+    /// abort for a document that answers 404 is the direct 400 <c>invalid_request</c>. RFC 6749
+    /// Section 3.1: "Parameters sent without a value MUST be treated as if they were omitted from
+    /// the request." (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749
+    /// Section 3.1</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyGrantTypeOnAPushedRequestIsReadAsOmittedAsync()
+    {
+        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/absent");
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (int statusCode, string body) = await PostToCimdClientAsync(
+            app, stub, WellKnownEndpointNames.AuthCodePar,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.GrantType] = string.Empty,
+                [OAuthRequestParameterNames.ResponseType] = "code",
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.CodeChallenge] = "adversarial-pkce-challenge-0123456789",
+                [OAuthRequestParameterNames.CodeChallengeMethod] = "S256"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(Bad("invalid_request", "The request could not be processed."), body);
+    }
+
+
+    /// <summary>
+    /// Each fixed description the library answers a refusal with lies inside the character set
+    /// of the <c>error_description</c> parameter: "Values for the "error_description" parameter
+    /// MUST NOT include characters outside the set %x20-21 / %x23-5B / %x5D-7E."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>).
+    /// Guards the two catalog values.
+    /// </summary>
+    /// <param name="description">A description the library answers a refusal with.</param>
+    [TestMethod]
+    [DynamicData(nameof(WellKnownDescriptions))]
+    public void WellKnownOAuthErrorDescriptionsStayWithinTheRfc6749Charset(string description)
+    {
+        Assert.IsTrue(ErrorDescriptionCharset.IsConformant(description), description);
+    }
+
+
     //Shared fixtures and helpers.
+
+    /// <summary>The two catalog descriptions, one case each.</summary>
+    public static IEnumerable<object[]> WellKnownDescriptions { get; } =
+    [
+        [WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed],
+        [WellKnownOAuthErrorDescriptions.RequestNotProcessed]
+    ];
+
+
+    /// <summary>
+    /// The JSON body of an OAuth error response as the library writes it: the error code and its
+    /// description, in that order, with no other member.
+    /// </summary>
+    /// <param name="error">The error code.</param>
+    /// <param name="description">The error description.</param>
+    private static string Bad(string error, string description) =>
+        $"{{\"error\":\"{error}\",\"error_description\":\"{description}\"}}";
+
+
+    /// <summary>
+    /// Composes an application rule after the library's materialization on the <c>"default"</c>
+    /// host: a materialized registration whose document carries no <c>client_name</c> is refused
+    /// through <see cref="ClientIdMetadataMaterialization.Refuse"/>; every other outcome of the
+    /// library's delegate stands.
+    /// </summary>
+    /// <param name="app">The fixture already wired with <see cref="TestHostShell.WireCimdMaterializationAsync"/>.</param>
+    private static async Task ComposeClientNameRuleAsync(TestHostShell app)
+    {
+        HostedAuthorizationServer hosted = app.Host("default");
+        await TestHostShell.AlterAsync(hosted.Server, candidate =>
+        {
+            MaterializeRegistrationDelegate library = candidate.MaterializeRegistrationAsync!;
+            candidate.MaterializeRegistrationAsync = async (registration, context, cancellationToken) =>
+            {
+                RegistrationMaterialization materialization =
+                    await library(registration, context, cancellationToken).ConfigureAwait(false);
+
+                return materialization is { Failure: null, Registration: ClientRecord { ClientName: null } }
+                    ? ClientIdMetadataMaterialization.Refuse(context)
+                    : materialization;
+            };
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Posts <paramref name="fields"/> and the stub's <c>client_id</c> as a form to the named
+    /// endpoint of the <c>"default"</c> host over its loopback HTTPS listener, and returns the
+    /// status code and the response body.
+    /// </summary>
+    /// <param name="app">The fixture, wired and holding <paramref name="stub"/>.</param>
+    /// <param name="stub">The CIMD client the request is made for.</param>
+    /// <param name="endpointName">The endpoint the form is posted to.</param>
+    /// <param name="fields">The form fields besides <c>client_id</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<(int StatusCode, string Body)> PostToCimdClientAsync(
+        TestHostShell app,
+        ClientRecord stub,
+        string endpointName,
+        Dictionary<string, string> fields,
+        CancellationToken cancellationToken)
+    {
+        (int statusCode, string body, _) = await PostToCimdClientWithHeadersAsync(
+            app, stub, endpointName, fields, headers: null, cancellationToken).ConfigureAwait(false);
+
+        return (statusCode, body);
+    }
+
+
+    /// <summary>
+    /// Posts <paramref name="fields"/> and the stub's <c>client_id</c> as a form, with
+    /// <paramref name="headers"/> when supplied, to the named endpoint of the <c>"default"</c>
+    /// host over its loopback HTTPS listener, and returns the status code, the response body and
+    /// the value of the <c>WWW-Authenticate</c> response header, or <see langword="null"/> when
+    /// the response carries none.
+    /// </summary>
+    /// <param name="app">The fixture, wired and holding <paramref name="stub"/>.</param>
+    /// <param name="stub">The CIMD client the request is made for.</param>
+    /// <param name="endpointName">The endpoint the form is posted to.</param>
+    /// <param name="fields">The form fields besides <c>client_id</c>.</param>
+    /// <param name="headers">The request headers, or <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<(int StatusCode, string Body, string? Challenge)> PostToCimdClientWithHeadersAsync(
+        TestHostShell app,
+        ClientRecord stub,
+        string endpointName,
+        Dictionary<string, string> fields,
+        OutgoingHeaders? headers,
+        CancellationToken cancellationToken)
+    {
+        await app.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = app.Host("default");
+        Uri endpoint = TestHostShell.ComposeEndpointUri(hosted.HttpBaseAddress!, stub.TenantId.Value, endpointName);
+        fields[OAuthRequestParameterNames.ClientId] = stub.ClientId;
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            hosted.SharedHttpClient!, endpoint, fields, headers, cancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        string? challenge = response.Headers.TryGetValues(WellKnownHttpHeaderNames.WwwAuthenticate, out IEnumerable<string>? values)
+            ? string.Join(", ", values)
+            : null;
+
+        return ((int)response.StatusCode, body, challenge);
+    }
+
 
     /// <summary>
     /// The span event name <see cref="ClientIdMetadataMaterialization"/> records for a wire
     /// <c>client_id</c> that does not match the registration.
     /// </summary>
-    private const string ClientIdMismatchEventName = ClientIdMetadataMaterialization.ClientIdMismatchEventName;
+    private static string ClientIdMismatchEventName { get; } = ClientIdMetadataMaterialization.ClientIdMismatchEventName;
 
     /// <summary>The span event name for a resolver-side policy denial (see <see cref="ClientIdMismatchEventName"/>).</summary>
-    private const string PolicyDeniedEventName = ClientIdMetadataMaterialization.PolicyDeniedEventName;
+    private static string PolicyDeniedEventName { get; } = ClientIdMetadataMaterialization.PolicyDeniedEventName;
 
     private static ClientIdMetadataDocumentResolverOptions RequirePrivateKeyJwtOptions { get; } = new()
     {

@@ -4354,7 +4354,7 @@ public static class AuthCodeEndpoints
                 if(!isClientAuthenticated)
                 {
                     return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, "Client authentication failed."));
+                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
                 }
 
                 //RFC 6749 §3.3: requested scope tokens must each be allowed for
@@ -4651,7 +4651,7 @@ public static class AuthCodeEndpoints
                 if(!isClientAuthenticated)
                 {
                     return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, "Client authentication failed."));
+                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
                 }
 
                 Uri issuerUri;
@@ -5747,7 +5747,7 @@ public static class AuthCodeEndpoints
                     if(!isClientAuthenticated)
                     {
                         return (null, ClientAuthenticationFailureResponse(
-                            context.IncomingRequest, "Client authentication failed."));
+                            context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
                     }
                 }
                 else
@@ -6167,9 +6167,11 @@ public static class AuthCodeEndpoints
     /// header — the one place every <c>invalid_client</c> response this file answers with, whether
     /// a mismatch against a resolved registration (<see cref="UnknownClientResponse"/>) or any
     /// other identification or authentication failure (<see cref="ClientAuthenticationFailureResponse"/>),
-    /// applies the challenge from. A continuing grant's <c>invalid_grant</c> refusal never calls this.
+    /// applies the challenge from; the refusal <see cref="ClientIdMetadataMaterialization.Refuse"/>
+    /// answers a token-endpoint request with calls it too. A continuing grant's
+    /// <c>invalid_grant</c> refusal never calls this.
     /// </summary>
-    private static ServerHttpResponse AddBasicChallengeIfAttempted(ServerHttpResponse response, IncomingRequest? request)
+    internal static ServerHttpResponse AddBasicChallengeIfAttempted(ServerHttpResponse response, IncomingRequest? request)
     {
         if(request is not null
             && request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
@@ -6374,7 +6376,7 @@ public static class AuthCodeEndpoints
                 request, fields, registration, context, cancellationToken).ConfigureAwait(false);
             if(!arePresentedCredentialsAuthenticated)
             {
-                return ClientAuthenticationFailureResponse(request, "Client authentication failed.");
+                return ClientAuthenticationFailureResponse(request, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed);
             }
 
             return null;
@@ -6398,7 +6400,7 @@ public static class AuthCodeEndpoints
             request, fields, registration, context, cancellationToken).ConfigureAwait(false);
         if(!isClientAuthenticated)
         {
-            return ClientAuthenticationFailureResponse(request, "Client authentication failed.");
+            return ClientAuthenticationFailureResponse(request, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed);
         }
 
         return null;
@@ -8450,7 +8452,7 @@ public static class AuthCodeEndpoints
                 if(!isClientAuthenticated)
                 {
                     return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, "Client authentication failed."));
+                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
                 }
 
                 //RFC 7009 §2.1: token is REQUIRED. The matcher claims every POST to this path
@@ -8547,7 +8549,7 @@ public static class AuthCodeEndpoints
                 if(!isClientAuthenticated)
                 {
                     return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, "Client authentication failed."));
+                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
                 }
 
                 //RFC 7662 §2.1: token is REQUIRED. The matcher claims every POST to this path

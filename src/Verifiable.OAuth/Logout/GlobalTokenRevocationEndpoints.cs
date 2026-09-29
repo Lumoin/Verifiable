@@ -103,7 +103,7 @@ public static class GlobalTokenRevocationEndpoints
                 if(!clientAuthenticated)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                        OAuthErrors.InvalidClient, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
                 }
 
                 IncomingRequest? req = context.IncomingRequest;
