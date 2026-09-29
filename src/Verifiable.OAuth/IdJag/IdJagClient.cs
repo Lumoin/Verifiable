@@ -38,10 +38,17 @@ public sealed record IdJagMintOptions
     /// <summary>Serialises the client-assertion payload claims to UTF-8 JSON bytes.</summary>
     public required JwtPayloadSerializer PayloadSerializer { get; init; }
 
-    /// <summary>The requested Resource Identifier(s) (RFC 8707 / §4.3 <c>resource</c>). MAY be empty.</summary>
+    /// <summary>The requested Resource Identifier(s) (RFC 8707 / §4.3 <c>resource</c>). MAY be empty. The entries are sent as given and unchecked; the application decides whether an entry is acceptable.</summary>
     public IReadOnlyList<string> Resource { get; init; } = [];
 
-    /// <summary>The requested scope (§4.3 <c>scope</c>), or <see langword="null"/>.</summary>
+    /// <summary>
+    /// The requested scope (section 4.3 <c>scope</c>), or <see langword="null"/>. A value of white space only,
+    /// white space being every character <see cref="char.IsWhiteSpace(char)"/> reads as white space,
+    /// holds no <c>scope-token</c> and is no scope: the request carries no <c>scope</c> parameter
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>). Any other
+    /// value is sent as given, its <c>scope-token</c> syntax being the caller's.
+    /// </summary>
     public string? Scope { get; init; }
 
     /// <summary>The requested RFC 9396 <c>authorization_details</c> as a JSON array string (§4.3.3), or <see langword="null"/>.</summary>

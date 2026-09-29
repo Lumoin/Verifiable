@@ -54,17 +54,18 @@ public static class IdJagFlowHandlers
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(options.SubjectTokenType)
         };
 
-        //§4.3 / RFC 8707 §2.1.1: each requested resource becomes its OWN repeated resource occurrence
+        //§4.3 / RFC 8707 section 2: each requested resource becomes its OWN repeated resource occurrence
         //on the wire (OutgoingFormFields.Add) — the genuine RFC 8707 multi-resource wire form the
         //authorization server's own ReadResource/RequestFields.GetValues read expects, never one
-        //occurrence carrying several space-joined URIs (the AS now rejects embedded whitespace in a
-        //single occurrence as malformed). Scope and authorization_details are forwarded only when supplied.
+        //occurrence carrying several space-joined URIs (the AS rejects embedded whitespace in a
+        //single occurrence as malformed). Scope and authorization_details are forwarded only when
+        //supplied; a scope of white space only holds no scope-token (RFC 6749 section 3.3) and is no scope.
         foreach(string resource in options.Resource)
         {
             form.Add(OAuthRequestParameterNames.Resource, resource);
         }
 
-        if(!string.IsNullOrEmpty(options.Scope))
+        if(!string.IsNullOrWhiteSpace(options.Scope))
         {
             form[OAuthRequestParameterNames.Scope] = options.Scope;
         }

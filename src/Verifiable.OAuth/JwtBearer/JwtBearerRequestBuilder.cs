@@ -15,7 +15,15 @@ public sealed record JwtBearerBuilderOptions
     /// <summary>The single JWT presented as the authorization grant (RFC 7523 §2.1 <c>assertion</c>, REQUIRED — "MUST contain a single JWT"). Confidential.</summary>
     public required string Assertion { get; init; }
 
-    /// <summary>The requested scope (RFC 7523 §2.1 / RFC 6749 §3.3 <c>scope</c>, OPTIONAL).</summary>
+    /// <summary>
+    /// The requested scope (RFC 7523 section 2.1 / RFC 6749 section 3.3 <c>scope</c>, OPTIONAL). A value of white
+    /// space only, white space being every character <see cref="char.IsWhiteSpace(char)"/> reads as
+    /// white space, holds no <c>scope-token</c> and is no scope: the request carries no <c>scope</c>
+    /// parameter
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>). Any other
+    /// value is sent as given, its <c>scope-token</c> syntax being the caller's.
+    /// </summary>
     public string? Scope { get; init; }
 
     /// <summary>
@@ -96,7 +104,7 @@ public static class JwtBearerRequestBuilder
             [OAuthRequestParameterNames.Assertion] = options.Assertion
         };
 
-        if(!string.IsNullOrEmpty(options.Scope))
+        if(!string.IsNullOrWhiteSpace(options.Scope))
         {
             form[OAuthRequestParameterNames.Scope] = options.Scope;
         }

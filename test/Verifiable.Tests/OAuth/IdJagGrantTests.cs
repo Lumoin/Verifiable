@@ -585,39 +585,8 @@ internal sealed class IdJagGrantTests
                     TokenEndpoint = tokenEndpoint
                 };
 
-                OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-                    sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
-                    {
-                        dialCount++;
-
-                        return HttpClientTransport.SendFormPostAsync(host.SharedHttpClient!, endpoint, fields, headers, ct);
-                    },
-                    saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
-                    loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                    loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                    parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
-                    parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-                    parseRegistrationResponseAsync: (body, ct) =>
-                        throw new NotImplementedException("This test does not exercise dynamic registration."),
-                    resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                        ValueTask.FromResult(new AuthorizationServerMetadataResolution
-                        {
-                            Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
-                            Metadata = metadata
-                        }),
-                    resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
-                    base64UrlEncoder: TestSetup.Base64UrlEncoder,
-                    memoryPool: BaseMemoryPool.Shared,
-                    timeProvider: TimeProvider,
-                    fillEntropy: TestEntropy.NewCounterStream(),
-                    generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
-                    outboundFetchPolicy: TestHostShell.LoopbackOutboundFetchPolicy,
-                    constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
-                        claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
-                        MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, ct),
-                    dpopKey: dpopKey,
-                    lookupDpopNonce: nonceCache.Lookup,
-                    storeDpopNonce: nonceCache.Store);
+                OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(
+                    host, metadata, _ => dialCount++, dpopKey, nonceCache);
 
                 ClientRegistration registration = new()
                 {
@@ -735,39 +704,8 @@ internal sealed class IdJagGrantTests
                     TokenEndpoint = tokenEndpoint
                 };
 
-                OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-                    sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
-                    {
-                        dialCount++;
-
-                        return HttpClientTransport.SendFormPostAsync(host.SharedHttpClient!, endpoint, fields, headers, ct);
-                    },
-                    saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
-                    loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                    loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                    parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
-                    parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-                    parseRegistrationResponseAsync: (body, ct) =>
-                        throw new NotImplementedException("This test does not exercise dynamic registration."),
-                    resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                        ValueTask.FromResult(new AuthorizationServerMetadataResolution
-                        {
-                            Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
-                            Metadata = metadata
-                        }),
-                    resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
-                    base64UrlEncoder: TestSetup.Base64UrlEncoder,
-                    memoryPool: BaseMemoryPool.Shared,
-                    timeProvider: TimeProvider,
-                    fillEntropy: TestEntropy.NewCounterStream(),
-                    generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
-                    outboundFetchPolicy: TestHostShell.LoopbackOutboundFetchPolicy,
-                    constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
-                        claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
-                        MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, ct),
-                    dpopKey: dpopKey,
-                    lookupDpopNonce: nonceCache.Lookup,
-                    storeDpopNonce: nonceCache.Store);
+                OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(
+                    host, metadata, _ => dialCount++, dpopKey, nonceCache);
 
                 ClientRegistration registration = new()
                 {
@@ -980,40 +918,13 @@ internal sealed class IdJagGrantTests
                 };
 
                 List<string> dialedAssertions = [];
-                OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-                    sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
-                    {
-                        dialedAssertions.Add(fields.First(
-                            field => string.Equals(field.Key, OAuthRequestParameterNames.ClientAssertion, StringComparison.Ordinal)).Value);
-
-                        return HttpClientTransport.SendFormPostAsync(host.SharedHttpClient!, endpoint, fields, headers, ct);
-                    },
-                    saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
-                    loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                    loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                    parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
-                    parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-                    parseRegistrationResponseAsync: (body, ct) =>
-                        throw new NotImplementedException("This test does not exercise dynamic registration."),
-                    resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                        ValueTask.FromResult(new AuthorizationServerMetadataResolution
-                        {
-                            Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
-                            Metadata = metadata
-                        }),
-                    resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
-                    base64UrlEncoder: TestSetup.Base64UrlEncoder,
-                    memoryPool: BaseMemoryPool.Shared,
-                    timeProvider: TimeProvider,
-                    fillEntropy: TestEntropy.NewCounterStream(),
-                    generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
-                    outboundFetchPolicy: TestHostShell.LoopbackOutboundFetchPolicy,
-                    constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
-                        claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
-                        MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, ct),
-                    dpopKey: dpopKey,
-                    lookupDpopNonce: nonceCache.Lookup,
-                    storeDpopNonce: nonceCache.Store);
+                OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(
+                    host,
+                    metadata,
+                    fields => dialedAssertions.Add(fields.First(
+                        field => string.Equals(field.Key, OAuthRequestParameterNames.ClientAssertion, StringComparison.Ordinal)).Value),
+                    dpopKey,
+                    nonceCache);
 
                 ClientRegistration registration = new()
                 {
@@ -1107,30 +1018,8 @@ internal sealed class IdJagGrantTests
                 TokenEndpoint = tokenEndpoint
             };
 
-            //No constructDpopProofAsync / dpopKey: DPoP is NOT wired on this infrastructure.
-            OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-                sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
-                    HttpClientTransport.SendFormPostAsync(host.SharedHttpClient!, endpoint, fields, headers, ct),
-                saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
-                loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
-                parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
-                parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-                parseRegistrationResponseAsync: (body, ct) =>
-                    throw new NotImplementedException("This test does not exercise dynamic registration."),
-                resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                    ValueTask.FromResult(new AuthorizationServerMetadataResolution
-                    {
-                        Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
-                        Metadata = metadata
-                    }),
-                resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
-                base64UrlEncoder: TestSetup.Base64UrlEncoder,
-                memoryPool: BaseMemoryPool.Shared,
-                timeProvider: TimeProvider,
-                fillEntropy: TestEntropy.NewCounterStream(),
-                generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
-                outboundFetchPolicy: TestHostShell.LoopbackOutboundFetchPolicy);
+            //No dpopKey: DPoP is NOT wired on this infrastructure.
+            OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(host, metadata);
 
             ClientRegistration registration = new()
             {
@@ -4457,6 +4346,82 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// An <see cref="IdJagMintOptions.Scope"/> of white space only holds no <c>scope-token</c>, so the
+    /// mint sends no <c>scope</c> parameter. <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749
+    /// section 3.3</see> defines the value as <c>scope = scope-token *( SP scope-token )</c> with
+    /// <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, and neither a space (%x20) nor a tab (%x09)
+    /// is in a <c>scope-token</c>; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749
+    /// section 3.2</see> says "Parameters sent without a value MUST be treated as if they were omitted
+    /// from the request." The mint runs through the library's own <see cref="OAuthClient"/> ID-JAG
+    /// sub-client against the hosted token endpoint under a registration without a DPoP mandate, and
+    /// the fields the endpoint received are exactly those of a mint that names no scope.
+    /// </summary>
+    /// <param name="scope">The white-space-only <see cref="IdJagMintOptions.Scope"/> the mint is given.</param>
+    [TestMethod]
+    [DataRow(" ")]
+    [DataRow("\t")]
+    public async Task AMintScopeOfWhiteSpaceOnlyIsSentAsNoScopeAsync(string scope)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+
+        List<RequestFields> receivedFields = [];
+        (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
+            await StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(app, material, receivedFields).ConfigureAwait(false);
+        using PublicKeyMemory clientPublic = clientKeys.PublicKey;
+        using PrivateKeyMemory clientPrivate = clientKeys.PrivateKey;
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = material.Registration.IssuerUri!,
+            TokenEndpoint = tokenEndpoint
+        };
+        OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(host, metadata);
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(ClientId),
+            AuthorizationServerIssuer = material.Registration.IssuerUri!,
+            AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            Profile = PolicyProfile.Rfc6749WithPkce
+        };
+        OAuthClient client = new(infrastructure);
+
+        Result<TokenResponse, OAuthParseError> result = await client.IdJag.MintAsync(
+            registration,
+            new IdJagMintOptions
+            {
+                Audience = ResourceAsIssuer,
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.IdToken,
+                SigningKey = clientPrivate,
+                SigningKeyId = MintRedeemSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer,
+                Scope = scope
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, result.Error?.Support.Summary);
+        Assert.AreEqual("N_A", result.Value.TokenType);
+        Assert.IsFalse(string.IsNullOrEmpty(result.Value.AccessToken), "The mint must issue a grant.");
+        Assert.HasCount(1, receivedFields);
+        Assert.AreSequenceEqual(
+            [
+                "audience",
+                "client_assertion",
+                "client_assertion_type",
+                "client_id",
+                "grant_type",
+                "requested_token_type",
+                "subject_token",
+                "subject_token_type"
+            ],
+            receivedFields[0].Keys.Order(StringComparer.Ordinal).ToArray());
+    }
+
+
+    /// <summary>
     /// §4.5: a SAML 2.0 Assertion is exchanged for a Refresh Token (<c>requested_token_type</c> =
     /// the refresh_token URN) — the protocol-transition step. The Token Exchange response carries the
     /// Refresh Token in <c>access_token</c> with <c>issued_token_type</c> the refresh_token URN and
@@ -5418,15 +5383,20 @@ internal sealed class IdJagGrantTests
     /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// as the client-credentials validator — the authentication method
     /// <see cref="IdJagFlowHandlers"/> always signs, regardless of <see cref="ClientRegistration.AuthenticationMethod"/>.
+    /// When <paramref name="receivedFields"/> is supplied, the installed validator appends the form
+    /// fields of every request it receives to that list and then delegates to the
+    /// <c>private_key_jwt</c> validator.
     /// </summary>
     /// <param name="app">The host shell to start.</param>
     /// <param name="material">The registered client whose token-endpoint authentication method is declared.</param>
+    /// <param name="receivedFields">The list that collects the form fields the token endpoint received, or <see langword="null"/> to collect nothing.</param>
     /// <returns>
     /// The started host, its resolved token endpoint, and the fresh client signing key (owned by
     /// the caller).
     /// </returns>
     private async Task<(HostedAuthorizationServer Host, Uri TokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ClientKeys)>
-        StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(TestHostShell app, VerifierKeyMaterial material)
+        StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(
+            TestHostShell app, VerifierKeyMaterial material, List<RequestFields>? receivedFields = null)
     {
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         material.Registration = app.AlignRegistrationToHostHttpBase("default", material.Registration);
@@ -5439,10 +5409,19 @@ internal sealed class IdJagGrantTests
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(clientKeys.PublicKey, algorithm, TestSetup.Base64UrlEncoder);
         string jwksJson = BuildClientAssertionJwksJson(jwk, MintRedeemSigningKeyId);
 
+        ValidateClientCredentialsDelegate privateKeyJwtValidator =
+            PrivateKeyJwtClientAuthentication.BuildValidator(additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync =
-                PrivateKeyJwtClientAuthentication.BuildValidator(additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+            candidateIntegration.ValidateClientCredentialsAsync = receivedFields is null
+                ? privateKeyJwtValidator
+                : (request, fields, registration, context, ct) =>
+                {
+                    receivedFields.Add(fields);
+
+                    return privateKeyJwtValidator(request, fields, registration, context, ct);
+                };
             candidateIntegration.ClientAuthenticationMethodsSupported =
                 [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
             candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [algorithm];
@@ -5452,6 +5431,64 @@ internal sealed class IdJagGrantTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return (host, tokenEndpoint, clientKeys);
+    }
+
+
+    /// <summary>
+    /// Composes the client infrastructure the client-composed mint and redeem tests share: form posts
+    /// travel over <paramref name="host"/>'s shared HTTP client to the token endpoint that
+    /// <paramref name="metadata"/> names, and every other seam is the plain test wiring.
+    /// </summary>
+    /// <param name="host">The started authorization server host whose HTTP client carries the form posts.</param>
+    /// <param name="metadata">The authorization server metadata every resolution answers with.</param>
+    /// <param name="onFormPost">Invoked with the form fields of each post before it is sent, or <see langword="null"/> to observe nothing.</param>
+    /// <param name="dpopKey">The DPoP key the proofs are signed with, or <see langword="null"/> to wire no DPoP.</param>
+    /// <param name="nonceCache">The DPoP nonce cache used together with <paramref name="dpopKey"/>, or <see langword="null"/> to wire no DPoP.</param>
+    /// <returns>The composed client infrastructure.</returns>
+    private OAuthClientInfrastructure CreateClientInfrastructure(
+        HostedAuthorizationServer host,
+        AuthorizationServerMetadata metadata,
+        Action<IReadOnlyCollection<KeyValuePair<string, string>>>? onFormPost = null,
+        DpopKey? dpopKey = null,
+        InMemoryDpopNonceCache? nonceCache = null)
+    {
+        bool isDpopWired = dpopKey is not null && nonceCache is not null;
+
+        return OAuthClientInfrastructure.Create(
+            sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
+            {
+                onFormPost?.Invoke(fields);
+
+                return HttpClientTransport.SendFormPostAsync(host.SharedHttpClient!, endpoint, fields, headers, ct);
+            },
+            saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
+            loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("This test does not exercise dynamic registration."),
+            resolveAuthorizationServerMetadataAsync: (_, _, _) =>
+                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                {
+                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    Metadata = metadata
+                }),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: TimeProvider,
+            fillEntropy: TestEntropy.NewCounterStream(),
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
+            outboundFetchPolicy: TestHostShell.LoopbackOutboundFetchPolicy,
+            constructDpopProofAsync: isDpopWired
+                ? (claims, key, ct) => DpopProofConstruction.BuildAsync(
+                    claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
+                    MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, ct)
+                : null,
+            dpopKey: dpopKey,
+            lookupDpopNonce: isDpopWired ? nonceCache!.Lookup : null,
+            storeDpopNonce: isDpopWired ? nonceCache!.Store : null);
     }
 
 

@@ -177,6 +177,55 @@ internal sealed class JwtBearerRequestBuilderTests
     }
 
 
+    /// <summary>
+    /// A <see cref="JwtBearerBuilderOptions.Scope"/> of white space only holds no <c>scope-token</c>,
+    /// so the request the builder produces carries no <c>scope</c> parameter.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see> defines
+    /// the value as <c>scope = scope-token *( SP scope-token )</c> with
+    /// <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, and neither a space (%x20) nor a tab (%x09)
+    /// is in a <c>scope-token</c>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 section 3.2</see> says
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request." The
+    /// request with <c>client_secret_post</c> is posted over the loopback listener to the shipped token
+    /// endpoint, which answers 200, and the fields it received are exactly those of a request that
+    /// names no scope.
+    /// </summary>
+    /// <param name="scope">The white-space-only <see cref="JwtBearerBuilderOptions.Scope"/> the builder is given.</param>
+    [TestMethod]
+    [DataRow(" ")]
+    [DataRow("\t")]
+    public async Task AScopeOfWhiteSpaceOnlyIsSentAsNoScopeAsync(string scope)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        List<RequestFields> receivedFields = [];
+        await WireClientAuthenticationAsync(app, receivedFields).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        Result<OutgoingFormFields, TokenRequestBuilderError> built = JwtBearerRequestBuilder.Build(new JwtBearerBuilderOptions
+        {
+            Assertion = AssertionValue,
+            Scope = scope
+        });
+        Assert.IsTrue(built.IsSuccess);
+        OutgoingFormFields form = built.Value!.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        Assert.HasCount(1, receivedFields);
+        Assert.AreSequenceEqual(
+            ["assertion", "client_id", "client_secret", "grant_type"],
+            receivedFields[0].Keys.Order(StringComparer.Ordinal).ToArray());
+    }
+
+
     /// <summary>Registers a confidential client allowed the <see cref="WellKnownCapabilityIdentifiers.OAuthJwtBearer"/> capability, with the signing keys the RFC 9068 access-token producer needs.</summary>
     private static async Task<VerifierKeyMaterial> RegisterJwtBearerClientAsync(TestHostShell app) =>
         await app.RegisterDpopClientAsync(
@@ -191,15 +240,29 @@ internal sealed class JwtBearerRequestBuilderTests
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
 
-    /// <summary>Wires the <c>client_secret_post</c> (RFC 6749 §2.3.1) authentication seam that checks the request's <c>client_secret</c> form field against the fixture secret.</summary>
-    private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
+    /// <summary>
+    /// Wires the <c>client_secret_post</c> (RFC 6749 section 2.3.1) authentication seam that checks the request's <c>client_secret</c> form field against the fixture secret.
+    /// When <paramref name="receivedFields"/> is supplied, the installed seam appends the form fields of every request it receives to that list and then delegates to the check.
+    /// </summary>
+    /// <param name="app">The host shell whose server receives the seam.</param>
+    /// <param name="receivedFields">The list that collects the form fields the token endpoint received, or <see langword="null"/> to collect nothing.</param>
+    private static async Task WireClientAuthenticationAsync(TestHostShell app, List<RequestFields>? receivedFields = null)
+    {
+        static ValueTask<bool> checkSecret(RequestFields fields) =>
+            ValueTask.FromResult(
+                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            {
+                receivedFields?.Add(fields);
+
+                return checkSecret(fields);
+            };
         }).ConfigureAwait(false);
+    }
 
 
     /// <summary>Wires an assertion-validation seam that accepts any assertion and returns the fixture subject and granted scope.</summary>
