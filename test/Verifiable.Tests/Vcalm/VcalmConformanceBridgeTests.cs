@@ -757,15 +757,78 @@ internal sealed class VcalmConformanceBridgeTests
 
     /// <summary>
     /// An audience differing from this instance's identifier only in letter case is refused: the
-    /// identifier this resource server expects for itself is the configured string, compared exactly.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>: "The JWT access
-    /// token MUST be rejected if "aud" does not contain a resource indicator of the current resource
-    /// server as a valid audience."
+    /// identifier this resource server expects for itself is the configured string, compared exactly
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 section 2</see>:
+    /// "StringOrURI values are compared as case-sensitive strings with no transformations or
+    /// canonicalizations applied."). This instance's own authorization server folds a resource
+    /// indicator's scheme and host to lower case before it becomes <c>aud</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>: "the scheme and host are case-insensitive and therefore should be normalized to
+    /// lowercase"), so a case-variant <c>aud</c> reaches this resource server only from an issuer that
+    /// does not fold; this row re-signs a granted token to produce that condition directly.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 section 4</see>: "The JWT
+    /// access token MUST be rejected if "aud" does not contain a resource indicator of the current
+    /// resource server as a valid audience."
     /// </summary>
     [TestMethod]
     public async Task AudienceCaseVariantIsInvalidToken()
     {
-        await AssertIssueAudienceRefusedAsync(CaseVariantAudience, "urn:uuid:case-variant-audience").ConfigureAwait(false);
+        await using TestHostShell app = new(TimeProvider);
+        ConformanceContext ctx = await StartConformanceHostAsync(app).ConfigureAwait(false);
+        HttpClient http = app.Host("default").SharedHttpClient!;
+        Uri baseAddress = app.Host("default").HttpBaseAddress!;
+
+        string grantedToken = await ObtainClientCredentialsTokenAsync(http, baseAddress, scope: IssueScope)
+            .ConfigureAwait(false);
+        string caseVariantAudienceToken = await ReSignWithAudienceAsync(
+            grantedToken, CaseVariantAudience, ctx.HostMaterial).ConfigureAwait(false);
+        string issueBody = VcalmWireFixtures.BuildIssueRequestBody(
+            ctx.IssuerDid, credentialId: "urn:uuid:case-variant-audience", SerializeCredential);
+
+        await AssertInvalidTokenAsync(
+            http, baseAddress, VcalmConformanceHttpApplication.CredentialsIssuePath, issueBody, caseVariantAudienceToken)
+            .ConfigureAwait(false);
+        AssertNothingReachedStorage();
+    }
+
+
+    /// <summary>
+    /// A client-credentials request naming this instance's resource indicator in another letter case
+    /// is issued this instance's own, already lower-case audience, not the case variant it named:
+    /// this specification asks an implementation to tolerate the uppercase spelling
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#canonical-server-uri">MCP
+    /// 2026-07-28</see>: "implementations SHOULD accept uppercase scheme and host components for
+    /// robustness and interoperability"); the authorization server may map a requested resource value
+    /// to this server's own identifier rather than carry the request's spelling into <c>aud</c>
+    /// unchanged (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section
+    /// 2</see>: "The authorization server may use the exact &quot;resource&quot; value as the audience
+    /// or it may map from that value to a more general URI or abstract identifier for the given
+    /// resource."), and
+    /// the scheme and host this server does map are lowered
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>: "the scheme and host are case-insensitive and therefore should be normalized to
+    /// lowercase"). The issued token then presents at this instance's own issue path and is admitted.
+    /// </summary>
+    [TestMethod]
+    public async Task CaseVariantResourceIndicatorIsIssuedThisInstancesAudience()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        ConformanceContext ctx = await StartConformanceHostAsync(app).ConfigureAwait(false);
+        HttpClient http = app.Host("default").SharedHttpClient!;
+        Uri baseAddress = app.Host("default").HttpBaseAddress!;
+
+        string token = await ObtainClientCredentialsTokenAsync(
+            http, baseAddress, scope: IssueScope, resource: CaseVariantAudience).ConfigureAwait(false);
+        JsonElement audience = DecodeAudienceClaim(token);
+
+        Assert.AreEqual(JsonValueKind.Array, audience.ValueKind,
+            "This class's minted tokens always carry aud as the RFC 7519 section 4.1.3 array shape.");
+        List<string> audienceValues = audience.EnumerateArray().Select(entry => entry.GetString()!).ToList();
+        Assert.HasCount(1, audienceValues);
+        Assert.AreEqual(InstanceAudience, audienceValues[0]);
+
+        await AssertIssuedAsync(http, baseAddress, ctx, token, "urn:uuid:case-variant-resource-indicator")
+            .ConfigureAwait(false);
     }
 
 
@@ -1709,6 +1772,24 @@ internal sealed class VcalmConformanceBridgeTests
         using JsonDocument doc = JsonDocument.Parse(body);
 
         return doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+    }
+
+
+    /// <summary>
+    /// Decodes <paramref name="accessToken"/>'s payload segment and returns its <c>aud</c> claim, so a
+    /// caller can assert both the exact value and the JSON shape the token endpoint minted, without
+    /// re-signing or otherwise altering the token itself.
+    /// </summary>
+    /// <param name="accessToken">The minted access token.</param>
+    /// <returns>The <c>aud</c> claim element, cloned so it outlives the decoded document.</returns>
+    private static JsonElement DecodeAudienceClaim(string accessToken)
+    {
+        string encodedPayload = accessToken.Split('.')[1];
+        using IMemoryOwner<byte> payloadOwner = Pool.Rent(Base64Url.GetMaxDecodedLength(encodedPayload.Length));
+        int payloadLength = Base64Url.DecodeFromChars(encodedPayload, payloadOwner.Memory.Span);
+        using JsonDocument payload = JsonDocument.Parse(payloadOwner.Memory[..payloadLength]);
+
+        return payload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud).Clone();
     }
 
 

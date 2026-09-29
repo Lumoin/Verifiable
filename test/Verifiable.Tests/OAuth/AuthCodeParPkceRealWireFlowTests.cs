@@ -5614,26 +5614,14 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             parFields[OAuthRequestParameterNames.AuthorizationDetails] = authorizationDetails;
         }
 
-        (int ParStatusCode, string ParBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
-            host, segment, parFields, cancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, ParStatusCode, ParBody);
-
-        using JsonDocument parBody = JsonDocument.Parse(ParBody);
-        string requestUri = parBody.RootElement.GetProperty("request_uri").GetString()!;
-
-        HostedAuthorizationServer hosted = host.Host("default");
-        Uri authorizeUrl = new(
-            hosted.HttpBaseAddress!,
-            $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
-            $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(ClientId)}" +
-            $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri)}");
-
-        using HttpResponseMessage authorizeResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
-            host, authorizeUrl, SubjectId, cancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, (int)authorizeResponse.StatusCode,
+        (int parStatusCode, string parBody, Uri? authorizeLocation, int authorizeStatusCode) =
+            await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+                host, segment, ClientId, SubjectId, parFields, cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        Assert.AreEqual(302, authorizeStatusCode,
             "The authorize endpoint must redirect with the authorization code.");
 
-        string location = authorizeResponse.Headers.Location!.ToString();
+        string location = authorizeLocation!.ToString();
 
         return TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Code)
             ?? throw new InvalidOperationException("Authorize redirect Location missing code.");

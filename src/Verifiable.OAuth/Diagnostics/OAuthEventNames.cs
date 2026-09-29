@@ -206,4 +206,31 @@ public static class OAuthEventNames
     /// </summary>
     public static string SeamGrantedScopeExceedsRequest { get; } =
         Utf8Constants.ToInternedString(SeamGrantedScopeExceedsRequestUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="MalformedResourceIndicator"/>.</summary>
+    public static ReadOnlySpan<byte> MalformedResourceIndicatorUtf8 =>
+        "oauth.resource.malformed"u8;
+
+    /// <summary>
+    /// A <c>resource</c> value on an inbound request failed RFC 3986 section 4.3's
+    /// <c>absolute-URI</c> grammar, or carried a fragment component RFC 8707 section 2 forbids, so
+    /// the endpoint refused it with <c>invalid_target</c> before the value reached any
+    /// authorization or token seam. Neither the wire response nor this event carries the refused
+    /// value itself; the failing part's name rides <see cref="ResourceIndicatorFaultTagName"/>
+    /// instead, for deployments that want the detail in their own traces.
+    /// </summary>
+    public static string MalformedResourceIndicator { get; } =
+        Utf8Constants.ToInternedString(MalformedResourceIndicatorUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ResourceIndicatorFaultTagName"/>.</summary>
+    public static ReadOnlySpan<byte> ResourceIndicatorFaultTagNameUtf8 =>
+        "oauth.resource.fault"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the name of the
+    /// first part of the <c>resource</c> value that failed, for a
+    /// <see cref="MalformedResourceIndicator"/> event, never the refused value itself.
+    /// </summary>
+    public static string ResourceIndicatorFaultTagName { get; } =
+        Utf8Constants.ToInternedString(ResourceIndicatorFaultTagNameUtf8);
 }

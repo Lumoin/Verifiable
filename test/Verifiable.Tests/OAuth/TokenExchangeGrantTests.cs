@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
@@ -8,6 +9,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.TokenExchange;
@@ -459,10 +461,16 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// RFC 8707 §2 / RFC 8693 §2.1: the <c>resource</c> parameter MUST be an absolute URI (RFC 3986
-    /// §4.3) and MUST NOT include a fragment component. A relative <c>resource</c> and a
-    /// fragment-bearing <c>resource</c> are both rejected with <c>invalid_request</c> before the
-    /// validation seam runs.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: the
+    /// <c>resource</c> parameter's value "MUST be an absolute URI, as specified by Section 4.3 of
+    /// [RFC3986]. The URI MUST NOT include a fragment component." A relative <c>resource</c> and a
+    /// fragment-bearing <c>resource</c> are both rejected with the fixed <c>invalid_target</c> body
+    /// this library answers for every malformed <c>resource</c> value, the token exchange grant
+    /// included: a departure from RFC 8693 section 2.2.2's general <c>invalid_request</c> for a
+    /// request that is not valid, following
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>'s
+    /// own instruction for a value the server fails to parse ("it should reject the request with an
+    /// error response using the error code "invalid_target"").
     /// </summary>
     /// <remarks>
     /// Deliberately NOT built via <see cref="TokenExchangeRequestBuilder"/>: both values below are
@@ -484,6 +492,9 @@ internal sealed class TokenExchangeGrantTests
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
         HttpClient http = host.SharedHttpClient!;
         string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
+        const string expectedBody = "{\"error\":\"invalid_target\",\"error_description\":\"The "
+            + "resource parameter must be an absolute URI (RFC 3986 section 4.3) without a "
+            + "fragment.\"}";
 
         //(a) resource with a fragment component — RFC 8707 §2 MUST NOT include a fragment.
         using HttpResponseMessage withFragment = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
@@ -497,7 +508,7 @@ internal sealed class TokenExchangeGrantTests
         }, TestContext.CancellationToken).ConfigureAwait(false);
         string withFragmentBody = await withFragment.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)withFragment.StatusCode, withFragmentBody);
-        Assert.Contains(OAuthErrors.InvalidRequest, withFragmentBody);
+        Assert.AreEqual(expectedBody, withFragmentBody);
 
         //(b) relative resource — RFC 8707 §2 MUST be an absolute URI.
         using HttpResponseMessage relative = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
@@ -511,7 +522,210 @@ internal sealed class TokenExchangeGrantTests
         }, TestContext.CancellationToken).ConfigureAwait(false);
         string relativeBody = await relative.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)relative.StatusCode, relativeBody);
-        Assert.Contains(OAuthErrors.InvalidRequest, relativeBody);
+        Assert.AreEqual(expectedBody, relativeBody);
+    }
+
+
+    /// <summary>
+    /// The scheme and host of an absolute <c>resource</c> are folded to lower case before the
+    /// authorization seam reads them.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>: "the scheme and host are case-insensitive and therefore should be normalized to
+    /// lowercase", and <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section
+    /// 2</see>: "The authorization server may use the exact &quot;resource&quot; value as the audience
+    /// or it may map from that value to a more general URI or abstract identifier for the given
+    /// resource." The authorization seam here copies <see cref="TokenExchangeRequest.Resource"/> into
+    /// <see cref="TokenExchangeAuthorization.Audience"/>, so the value it receives is exactly the
+    /// value the issued access token's <c>aud</c> carries: both are the lower-case spelling. The row
+    /// runs inside a <see cref="ServedCultureScope"/> set to "tr-TR", so a fold that lowered the
+    /// ASCII <c>I</c> the Turkish way (to U+0131) would fail it. The second case carries a query
+    /// component, which the token exchange admits:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// says the <c>resource</c> value "MUST be an absolute URI, as specified by Section 4.3 of
+    /// [RFC3986], that MAY include a query component and MUST NOT include a fragment component.",
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>
+    /// gives the reason a query is sometimes needed: "It SHOULD NOT include a query component, but
+    /// it is recognized that there are cases that make a query component a useful and necessary part
+    /// of the resource parameter, such as when one or more query parameters are used to scope
+    /// requests to an application." The query is not the scheme or the host, so it keeps the
+    /// spelling it was sent with (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC
+    /// 3986 section 6.2.2.1</see>: "The other generic syntax components are assumed to be
+    /// case-sensitive unless specifically defined otherwise by the scheme"): the seam receives
+    /// <c>https://wiki.rs.example/api?Tenant=A</c> and the issued <c>aud</c> carries it.
+    /// </summary>
+    /// <param name="requestedResource">The <c>resource</c> the request sends.</param>
+    /// <param name="foldedResource">The value the seam receives and the issued <c>aud</c> carries.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("HTTPS://WIKI.RS.EXAMPLE/api", "https://wiki.rs.example/api")]
+    [DataRow("HTTPS://WIKI.RS.EXAMPLE/api?Tenant=A", "https://wiki.rs.example/api?Tenant=A")]
+    public async Task TokenExchangeResourceIsFoldedAtIngressAsync(string requestedResource, string foldedResource)
+    {
+        IReadOnlyList<string>? seenResources = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            app, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenResources = request.Resource;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            Audience = request.Resource,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Resource = [requestedResource]
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        Assert.IsNotNull(seenResources, "The authorization seam must have been consulted.");
+        Assert.AreSequenceEqual([foldedResource], seenResources);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreSequenceEqual(
+            [foldedResource],
+            ReadAudience(doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// A <c>resource</c> outside ASCII is refused at the token exchange with the fixed
+    /// <c>invalid_target</c> body this library answers for every malformed <c>resource</c> value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> defines
+    /// <c>invalid_target</c> as "The requested resource is invalid, missing, unknown, or malformed",
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>
+    /// instructs the server that fails to parse a value to "reject the request with an error
+    /// response using the error code "invalid_target"", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// makes the token exchange's <c>resource</c> the same value: "an absolute URI, as specified by
+    /// Section 4.3 of [RFC3986]". The URI syntax defines its terminal values as code points "based on
+    /// the US-ASCII coded character set"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 section 2</see>), so
+    /// the value naming the Kelvin sign (U+212A) in its host is not one. The row runs inside a
+    /// <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// </summary>
+    /// <remarks>
+    /// The form is hand-built, not composed by <see cref="TokenExchangeRequestBuilder"/>, so the
+    /// authorization server's own refusal is what the row observes, as in
+    /// <see cref="MalformedResourceIsRejectedFailClosed"/>.
+    /// </remarks>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task ANonAsciiResourceIsRefusedAtTheTokenExchangeAsync()
+    {
+        string resource = "https://" + char.ConvertFromUtf32(0x212A) + "ey.example/";
+
+        await using TestHostShell app = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            app, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken),
+            [OAuthRequestParameterNames.Resource] = resource
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.AreEqual(MalformedResourceBody, body);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// A <c>resource</c> occurrence that carries whitespace is refused at the token exchange with the
+    /// fixed <c>invalid_target</c> body this library answers for every malformed <c>resource</c>
+    /// value. <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>
+    /// defines <c>invalid_target</c> as "The requested resource is invalid, missing, unknown, or
+    /// malformed", and <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section
+    /// 2.1</see> makes the token exchange's <c>resource</c> "an absolute URI, as specified by Section
+    /// 4.3 of [RFC3986]", whose grammar
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>)
+    /// admits no space. The request trace records one event naming the first part of the occurrence
+    /// as received that fails that grammar: a whitespace-only occurrence fails the <c>scheme</c>
+    /// production (a space is no <c>ALPHA</c>), a space inside the path fails <c>pchar</c>, a space
+    /// inside the host fails <c>reg-name</c>.
+    /// </summary>
+    /// <param name="resource">The <c>resource</c> occurrence the request carries.</param>
+    /// <param name="expectedFaultName">The name of the part the trace records as failing.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("   ", "Scheme")]
+    [DataRow("https://api.example/orders v2", "Path")]
+    [DataRow("https://api example/orders", "Authority")]
+    public async Task AWhitespaceBearingResourceIsRefusedAtTheTokenExchangeAsync(
+        string resource, string expectedFaultName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(AWhitespaceBearingResourceIsRefusedAtTheTokenExchangeAsync));
+        _ = root.Start();
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken),
+            [OAuthRequestParameterNames.Resource] = resource
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        root.Stop();
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.AreEqual(MalformedResourceBody, body);
+        Assert.AreSequenceEqual([expectedFaultName], ReadMalformedResourceFaultNames(capture, root));
     }
 
 
@@ -2725,23 +2939,64 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>'s
-    /// <c>invalid_target</c> ("missing, unknown, or malformed") covers ANY aggregated
-    /// <c>resource</c> occurrence that is null, empty, or whitespace — not only every occurrence
-    /// being blank. A repeated <c>resource</c> parameter where one occurrence is a well-formed URI
-    /// and the OTHER is empty must fail the whole request closed, not silently drop the blank
-    /// occurrence and succeed on the valid one alone.
+    /// An audience the exchange's authorization seam decided keeps its spelling in every access token
+    /// issued from it, across the exchange, a refresh token minted by a second exchange, and the
+    /// rotation of that refresh token.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// defines an <c>audience</c> as "The logical name of the target service", a name "that both the
+    /// client and the authorization server understand", so the server never folds it; and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>
+    /// makes the resources a <c>refresh_token</c> request may name "those that were originally
+    /// granted by the resource owner or a subset thereof", with "any refresh token that is returned"
+    /// bound "to the full original grant". One authorization seam answers by
+    /// <see cref="TokenExchangeRequest.RequestedTokenType"/>: an access token when one is requested,
+    /// a refresh token when one is (the refresh token rides the <c>access_token</c> member of the
+    /// response, <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 section
+    /// 2.2.1</see>), with the same audience both times. The first case is an upper-case URI-shaped
+    /// audience whose two refreshes name it in its own spelling and then in the lower-case host
+    /// spelling, which the folded comparison of the granted set admits; the second is a non-ASCII
+    /// logical name, an audience no <c>resource</c> can restate, whose two refreshes name no
+    /// resource and guard the audience carried into the refresh state. Every <c>aud</c> is the
+    /// audience exactly as the seam authorized it. Each case runs inside a
+    /// <see cref="ServedCultureScope"/> set to "tr-TR".
     /// </summary>
+    /// <param name="shape">The audience the seam authorizes and how the refreshes name it.</param>
     [TestMethod]
-    public async Task TokenExchangeRejectsEmptyResourceOccurrenceMixedWithValidOneAsInvalidTarget()
+    [DoNotParallelize]
+    [DataRow(ExchangeAudienceShape.UpperCaseUri)]
+    [DataRow(ExchangeAudienceShape.NonAsciiLogicalName)]
+    public async Task AnExchangeAuthorizedAudienceKeepsItsSpellingThroughRefreshAndRotationAsync(ExchangeAudienceShape shape)
     {
-        await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
-        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        string audience = shape switch
+        {
+            ExchangeAudienceShape.UpperCaseUri => "HTTPS://WIKI.RS.EXAMPLE/Api",
+            ExchangeAudienceShape.NonAsciiLogicalName => "https://" + char.ConvertFromUtf32(0x212A) + "ey.example/",
+            _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, null)
+        };
+        string? firstRefreshResource = shape switch
+        {
+            ExchangeAudienceShape.UpperCaseUri => audience,
+            _ => null
+        };
+        string? secondRefreshResource = shape switch
+        {
+            ExchangeAudienceShape.UpperCaseUri => "https://wiki.rs.example/Api",
+            _ => null
+        };
 
-        //The token-exchange endpoint candidate only materialises when these seams are wired (the
-        //same fail-closed gate PAR/revocation apply); the resource shape gate under test here runs
-        //before either is ever invoked, so their bodies are unreached.
+        await using TestHostShell app = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            app, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateTokenExchangeTokenAsync =
@@ -2750,9 +3005,88 @@ internal sealed class TokenExchangeGrantTests
                         new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
             candidateIntegration.AuthorizeTokenExchangeAsync =
-                static (subject, actor, request, registration, context, ct) =>
+                (subject, actor, request, registration, context, ct) =>
                     ValueTask.FromResult<TokenExchangeAuthorization?>(
-                        new TokenExchangeAuthorization { Subject = subject.Subject, Scope = WellKnownScopes.OpenId, IssuedTokenType = TokenType.AccessToken });
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = request.RequestedTokenType == TokenType.RefreshToken
+                                ? TokenType.RefreshToken
+                                : TokenType.AccessToken,
+                            Audience = [audience]
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        HttpClient http = host.SharedHttpClient!;
+
+        (int exchangeStatus, string exchangeBody) = await PostExchangeAsync(http, tokenUrl, TokenType.AccessToken).ConfigureAwait(false);
+        Assert.AreEqual(200, exchangeStatus, exchangeBody);
+        Assert.AreSequenceEqual([audience], ReadAudience(ReadMember(exchangeBody, WellKnownTokenTypes.AccessToken)));
+
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+        Assert.AreEqual(200, mintStatus, mintBody);
+        string mintedRefreshToken = ReadMember(mintBody, WellKnownTokenTypes.AccessToken);
+
+        (int firstStatus, string firstBody) = await PostRefreshAsync(
+            http, tokenUrl, mintedRefreshToken, firstRefreshResource).ConfigureAwait(false);
+        Assert.AreEqual(200, firstStatus, firstBody);
+        Assert.AreSequenceEqual([audience], ReadAudience(ReadMember(firstBody, WellKnownTokenTypes.AccessToken)));
+        string rotatedRefreshToken = ReadMember(firstBody, OAuthRequestParameterNames.RefreshToken);
+        Assert.AreNotEqual(mintedRefreshToken, rotatedRefreshToken, "The first refresh must rotate the refresh token.");
+
+        (int secondStatus, string secondBody) = await PostRefreshAsync(
+            http, tokenUrl, rotatedRefreshToken, secondRefreshResource).ConfigureAwait(false);
+        Assert.AreEqual(200, secondStatus, secondBody);
+        Assert.AreSequenceEqual([audience], ReadAudience(ReadMember(secondBody, WellKnownTokenTypes.AccessToken)));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 4);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A token exchange form carrying an empty <c>resource</c>
+    /// occurrence followed by a well-formed one names exactly that one indicator: the empty
+    /// occurrence is dropped, the exchange succeeds, and the authorization seam observes the one
+    /// indicator. A blank element inside a request object's <c>resource</c> claim is a different
+    /// fact, not a parameter sent without a value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenExchangeDropsAnEmptyResourceOccurrenceMixedWithValidOne()
+    {
+        const string Resource = "https://rs.example.com/api";
+
+        IReadOnlyList<string>? seenResources = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenResources = request.Resource;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -2765,7 +3099,69 @@ internal sealed class TokenExchangeGrantTests
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
         };
-        form.Add(OAuthRequestParameterNames.Resource, "https://rs.example.com/api");
+        form.Add(OAuthRequestParameterNames.Resource, "");
+        form.Add(OAuthRequestParameterNames.Resource, Resource);
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        Assert.IsNotNull(seenResources, "The authorization seam must have run.");
+        Assert.AreSequenceEqual([Resource], seenResources!);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A token exchange form whose only <c>resource</c> occurrence
+    /// is empty is an exchange without a <c>resource</c> parameter: it succeeds and the authorization
+    /// seam observes no resource. A blank element inside a request object's <c>resource</c> claim is
+    /// a different fact, not a parameter sent without a value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenExchangeTreatsAnEmptyResourceValueAsOmitted()
+    {
+        IReadOnlyList<string>? seenResources = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenResources = request.Resource;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
         form.Add(OAuthRequestParameterNames.Resource, "");
         form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
 
@@ -2773,9 +3169,9 @@ internal sealed class TokenExchangeGrantTests
             host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(400, (int)response.StatusCode, body);
-        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", body, StringComparison.Ordinal,
-            $"An empty resource occurrence mixed with a valid one must fail the whole request closed. Got: {body}");
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        Assert.IsNotNull(seenResources, "The authorization seam must have run.");
+        Assert.IsEmpty(seenResources!);
     }
 
 
@@ -2908,15 +3304,223 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// An <c>audience</c> occurrence that is empty carries no logical name to contribute; mixed with a
-    /// well-formed occurrence it must fail the whole request closed as malformed
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see>'s
-    /// general <c>invalid_request</c> MUST — RFC 8693 registers no audience-specific code the way RFC
-    /// 8707 §2 registers <c>invalid_target</c> for a malformed <c>resource</c> occurrence), not silently
-    /// drop the blank occurrence and succeed on the valid one alone.
+    /// The <c>audience</c> parameter is a logical name, not a URI the server normalizes:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// says it is "The logical name of the target service where the client intends to use the
+    /// requested security token" and that "Interpretation of the name requires that the value be
+    /// something that both the client and the authorization server understand." A value shaped like a
+    /// URI in upper case (<c>HTTPS://SVC.EXAMPLE/Orders</c>) is therefore handed to the authorization
+    /// seam exactly as sent, and the seam here returns it as the audience, so the issued access
+    /// token's <c>aud</c> carries the same spelling. The scheme and host fold of a
+    /// <c>resource</c> (<see cref="TokenExchangeResourceIsFoldedAtIngressAsync"/>) does not apply to it.
     /// </summary>
     [TestMethod]
-    public async Task TokenExchangeRejectsEmptyAudienceOccurrenceMixedWithValidOneAsInvalidRequest()
+    [DoNotParallelize]
+    public async Task AnAudienceParameterReachesTheAuthorizationSeamAndTheIssuedTokenUnfoldedAsync()
+    {
+        const string audience = "HTTPS://SVC.EXAMPLE/Orders";
+
+        IReadOnlyList<string>? seenAudiences = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenAudiences = request.Audience;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            Audience = request.Audience,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        form.Add(OAuthRequestParameterNames.Audience, audience);
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        Assert.IsNotNull(seenAudiences, "The authorization seam must have run.");
+        Assert.AreSequenceEqual([audience], seenAudiences);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreSequenceEqual(
+            [audience],
+            ReadAudience(doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A token exchange form carrying a well-formed <c>audience</c>
+    /// occurrence followed by an empty one names exactly that one audience
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>'s
+    /// <c>audience</c> parameter): the empty occurrence is dropped, the exchange succeeds, the
+    /// authorization seam observes the one audience, and the issued access token's <c>aud</c> carries it.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenExchangeDropsAnEmptyAudienceOccurrenceMixedWithValidOne()
+    {
+        const string audience = "https://svc.example/orders";
+
+        IReadOnlyList<string>? seenAudiences = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenAudiences = request.Audience;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            Audience = request.Audience,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        form.Add(OAuthRequestParameterNames.Audience, audience);
+        form.Add(OAuthRequestParameterNames.Audience, "");
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        Assert.IsNotNull(seenAudiences, "The authorization seam must have run.");
+        Assert.AreSequenceEqual([audience], seenAudiences!);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreSequenceEqual(
+            [audience],
+            ReadAudience(doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A token exchange form whose only <c>audience</c> occurrence
+    /// is empty is an exchange without an <c>audience</c> parameter
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// makes it OPTIONAL): it succeeds and the authorization seam observes no audience.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenExchangeTreatsAnEmptyAudienceValueAsOmitted()
+    {
+        IReadOnlyList<string>? seenAudiences = null;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    seenAudiences = request.Audience;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        form.Add(OAuthRequestParameterNames.Audience, "");
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        Assert.IsNotNull(seenAudiences, "The authorization seam must have run.");
+        Assert.IsEmpty(seenAudiences!);
+    }
+
+
+    /// <summary>
+    /// A whitespace-only <c>audience</c> occurrence is a value, not a parameter sent without one
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>
+    /// omits only a parameter "sent without a value"). It names no logical name for the target
+    /// service (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>),
+    /// so the request is not valid and is refused with the general <c>invalid_request</c> of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 section 2.2.2</see>,
+    /// which registers no audience-specific error code.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenExchangeRefusesAWhitespaceAudienceOccurrenceAsInvalidRequest()
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
@@ -2933,7 +3537,7 @@ internal sealed class TokenExchangeGrantTests
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
         };
         form.Add(OAuthRequestParameterNames.Audience, "https://svc.example/orders");
-        form.Add(OAuthRequestParameterNames.Audience, "");
+        form.Add(OAuthRequestParameterNames.Audience, "   ");
         form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
 
         using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
@@ -2942,14 +3546,14 @@ internal sealed class TokenExchangeGrantTests
 
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", body, StringComparison.Ordinal,
-            $"An empty audience occurrence mixed with a valid one must fail the whole request closed. Got: {body}");
+            $"A whitespace-only audience occurrence is a value and must fail the request closed. Got: {body}");
     }
 
 
     /// <summary>
     /// RFC 8693 §2.2.2: "If the authorization server is unwilling or unable to issue a token for any
     /// target service indicated by the "resource" or "audience" parameters, the "invalid_target" error
-    /// code SHOULD be used." A policy denial (<see langword="null"/>) on a plain exchange that named an
+    /// code SHOULD be used in the error response." A policy denial (<see langword="null"/>) on a plain exchange that named an
     /// <c>audience</c> (no <c>resource</c>) is <c>invalid_target</c>, not the general <c>invalid_request</c>.
     /// </summary>
     [TestMethod]
@@ -3272,6 +3876,138 @@ internal sealed class TokenExchangeGrantTests
         byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], Pool);
 
         return JsonDocument.Parse(payloadBytes);
+    }
+
+
+    /// <summary>
+    /// The fixed token endpoint body this library answers for every malformed <c>resource</c> value:
+    /// <c>invalid_target</c> with the description that the value "must be an absolute URI (RFC 3986
+    /// section 4.3) without a fragment".
+    /// </summary>
+    private static string MalformedResourceBody =>
+        "{\"error\":\"invalid_target\",\"error_description\":\"The resource parameter must be an "
+        + "absolute URI (RFC 3986 section 4.3) without a fragment.\"}";
+
+
+    /// <summary>
+    /// Reads the fault names the request trace recorded, in the order the spans stopped, from every
+    /// <see cref="OAuthEventNames.MalformedResourceIndicator"/> event's
+    /// <see cref="OAuthEventNames.ResourceIndicatorFaultTagName"/> tag, over the spans of
+    /// <paramref name="root"/>'s trace and <paramref name="root"/> itself.
+    /// </summary>
+    /// <param name="capture">The capture that listened while the request ran.</param>
+    /// <param name="root">The stopped activity the request ran under.</param>
+    /// <returns>The recorded fault names.</returns>
+    private static string[] ReadMalformedResourceFaultNames(TraceTreeCapture capture, Activity root) =>
+    [
+        .. TraceTreeAssertions.FilterByTrace(capture.StoppedActivities, root.TraceId)
+            .Append(root)
+            .SelectMany(activity => activity.Events)
+            .Where(activityEvent => string.Equals(
+                activityEvent.Name, OAuthEventNames.MalformedResourceIndicator, StringComparison.Ordinal))
+            .Select(activityEvent => activityEvent.Tags.Single(tag => string.Equals(
+                tag.Key, OAuthEventNames.ResourceIndicatorFaultTagName, StringComparison.Ordinal)).Value?.ToString()
+                ?? string.Empty)
+    ];
+
+
+    /// <summary>
+    /// Reads the <c>aud</c> claim of <paramref name="compactJws"/> as its list of values: a JSON
+    /// string is a list of one, a JSON array is its elements in order.
+    /// </summary>
+    /// <param name="compactJws">The compact-serialized access token.</param>
+    /// <returns>The audience values exactly as the token carries them.</returns>
+    private static string[] ReadAudience(string compactJws)
+    {
+        using JsonDocument payload = DecodePayload(compactJws);
+        JsonElement aud = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud);
+
+        return aud.ValueKind == JsonValueKind.Array
+            ? [.. aud.EnumerateArray().Select(static element => element.GetString()!)]
+            : [aud.GetString()!];
+    }
+
+
+    /// <summary>Reads the string member <paramref name="name"/> of the JSON object <paramref name="body"/>.</summary>
+    /// <param name="body">The token endpoint's JSON response body.</param>
+    /// <param name="name">The member to read.</param>
+    private static string ReadMember(string body, string name)
+    {
+        using JsonDocument doc = JsonDocument.Parse(body);
+
+        return doc.RootElement.GetProperty(name).GetString()!;
+    }
+
+
+    /// <summary>
+    /// Posts an RFC 8693 section 2.1 impersonation exchange asking for <paramref name="requestedTokenType"/>,
+    /// authenticated by the fixture's client secret, and returns the response's status code and body.
+    /// </summary>
+    /// <param name="http">The client the host is reached with.</param>
+    /// <param name="tokenUrl">The token endpoint.</param>
+    /// <param name="requestedTokenType">The <c>requested_token_type</c> the request carries.</param>
+    private async Task<(int StatusCode, string Body)> PostExchangeAsync(
+        HttpClient http, Uri tokenUrl, TokenType requestedTokenType)
+    {
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            RequestedTokenType = requestedTokenType
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body);
+    }
+
+
+    /// <summary>
+    /// Posts an RFC 6749 section 6 refresh request for <paramref name="refreshToken"/>, naming
+    /// <paramref name="resource"/> when it is not <see langword="null"/>, and returns the response's
+    /// status code and body.
+    /// </summary>
+    /// <param name="http">The client the host is reached with.</param>
+    /// <param name="tokenUrl">The token endpoint.</param>
+    /// <param name="refreshToken">The refresh token presented.</param>
+    /// <param name="resource">The <c>resource</c> the request names, or <see langword="null"/> for none.</param>
+    private async Task<(int StatusCode, string Body)> PostRefreshAsync(
+        HttpClient http, Uri tokenUrl, string refreshToken, string? resource)
+    {
+        Dictionary<string, string> fields = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
+
+        if(resource is not null)
+        {
+            fields[OAuthRequestParameterNames.Resource] = resource;
+        }
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body);
+    }
+
+
+    /// <summary>
+    /// The audience shapes an exchange's authorization seam can decide, and how a refresh names them:
+    /// each names one row of
+    /// <see cref="AnExchangeAuthorizedAudienceKeepsItsSpellingThroughRefreshAndRotationAsync"/>.
+    /// </summary>
+    internal enum ExchangeAudienceShape
+    {
+        /// <summary>An upper-case URI-shaped audience; the refreshes name it as a <c>resource</c>.</summary>
+        UpperCaseUri,
+
+        /// <summary>A logical audience naming the Kelvin sign (U+212A); the refreshes name no <c>resource</c>.</summary>
+        NonAsciiLogicalName
     }
 
 

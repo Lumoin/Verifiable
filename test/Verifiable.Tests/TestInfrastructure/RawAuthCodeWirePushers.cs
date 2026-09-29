@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Text;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
@@ -223,6 +224,72 @@ internal static class RawAuthCodeWirePushers
         request.Headers.Add(AuthorizationServerHttpApplication.TestSubjectHeaderName, subjectId);
 
         return await browserClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Drives a pushed authorization request followed by its browser authorize GET, both over the
+    /// real wire: POSTs <paramref name="parFields"/> to the PAR endpoint exactly as given (so a
+    /// caller can repeat a <c>resource</c> occurrence, or carry <c>client_id</c> and a JAR
+    /// <c>request</c> instead of the loose fields), and, only when that push answers <c>201</c>,
+    /// follows with the pinned no-redirect authorize GET carrying <c>client_id</c> and the returned
+    /// <c>request_uri</c> as <paramref name="subjectId"/>. Shared by every real-wire row across the
+    /// OAuth test tree that drives PAR followed by authorize, so the pushed-then-authorized shape
+    /// exists once. Asserts nothing itself; the caller's own row asserts the returned statuses.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="clientId">The <c>client_id</c> presented at the authorize GET.</param>
+    /// <param name="subjectId">The authenticated-session stand-in header value for the authorize GET.</param>
+    /// <param name="parFields">The PAR endpoint's form fields, sent exactly as given.</param>
+    /// <param name="cancellationToken">Cancellation of both wire exchanges.</param>
+    /// <returns>The pushed request's status and body, and, when it was <c>201</c>, the authorize response's status and <c>Location</c>; otherwise a null <c>Location</c> and no authorize GET was sent.</returns>
+    public static async Task<(int ParStatusCode, string ParBody, Uri? AuthorizeLocation, int AuthorizeStatusCode)> PushParAndAuthorizeAsync(
+        TestHostShell host, string segment, string clientId, string subjectId,
+        IReadOnlyCollection<KeyValuePair<string, string>> parFields, CancellationToken cancellationToken)
+    {
+        (int parStatusCode, string parBody) = await PushRawParFieldsAsync(
+            host, segment, parFields, cancellationToken).ConfigureAwait(false);
+
+        if(parStatusCode != 201)
+        {
+            return (parStatusCode, parBody, null, 0);
+        }
+
+        using JsonDocument parDocument = JsonDocument.Parse(parBody);
+        string requestUri = parDocument.RootElement.GetProperty("request_uri").GetString()!;
+
+        Uri authorizeUri = ComposeAuthorizeUri(host, segment,
+        [
+            new(OAuthRequestParameterNames.ClientId, clientId),
+            new(OAuthRequestParameterNames.RequestUri, requestUri)
+        ]);
+
+        using HttpResponseMessage authorizeResponse = await SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, subjectId, cancellationToken).ConfigureAwait(false);
+
+        return (parStatusCode, parBody, authorizeResponse.Headers.Location, (int)authorizeResponse.StatusCode);
+    }
+
+
+    /// <summary>
+    /// Composes <paramref name="segment"/>'s absolute authorize-endpoint URI carrying
+    /// <paramref name="query"/>, every pair escaped through <see cref="Uri.EscapeDataString(string)"/>:
+    /// the direct-authorize and by-value-request-object GETs a caller sends through
+    /// <see cref="SendPinnedNoRedirectGetAsync"/>, which need no PAR leg first.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="query">The authorize endpoint's query parameters, in the order to compose them.</param>
+    /// <returns>The absolute authorize URI.</returns>
+    public static Uri ComposeAuthorizeUri(TestHostShell host, string segment, IReadOnlyCollection<KeyValuePair<string, string>> query)
+    {
+        HostedAuthorizationServer hosted = host.Host("default");
+        string path = TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment);
+        string escapedQuery = string.Join('&', query.Select(
+            pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+
+        return new Uri(hosted.HttpBaseAddress!, $"{path}?{escapedQuery}");
     }
 
 

@@ -519,12 +519,13 @@ public static class AuthCodeEndpoints
                 //is authoritative (RFC 9101 §6.3 via RFC 9126 §4); issuer_state is carried UNTRUSTED
                 //and surfaced to the application's decision seam at the authorization endpoint.
                 string? issuerState = ReadIssuerState(fields);
-                string? resource = ReadResource(fields);
-                ServerHttpResponse? resourceShapeFailure = ValidateResourceIndicatorsShape(resource);
+                ServerHttpResponse? resourceShapeFailure = ValidateResourceOccurrences(fields);
                 if(resourceShapeFailure is not null)
                 {
                     return (null, resourceShapeFailure);
                 }
+
+                string? resource = ReadResource(fields);
 
                 //Resolved once here and stamped onto ExpectedIssuer so a later redemption
                 //(BuildInputAsync of BuildAuthCodeToken) can compare the issuer it resolves for
@@ -1255,19 +1256,20 @@ public static class AuthCodeEndpoints
                 //authorization request they arrive on the front channel itself. issuer_state is
                 //surfaced UNTRUSTED to the decision seam, validated by neither the library nor read.
                 string? issuerState = ReadIssuerState(fields);
-                string? resource = ReadResource(fields);
-                ServerHttpResponse? resourceShapeFailure = ValidateResourceIndicatorsShape(resource);
+                ServerHttpResponse? resourceShapeFailure = ValidateResourceOccurrences(fields);
                 if(resourceShapeFailure is not null)
                 {
-                    //redirect_uri is already parsed as absolute (the gate above), so — per RFC
-                    //6749 §4.1.2.1 — a malformed resource is reported as an Authorization Error
-                    //Response redirect carrying error=invalid_target, the same transport the
+                    //redirect_uri is already parsed as absolute (the gate above), so, per RFC
+                    //6749 section 4.1.2.1, a malformed resource is reported as an Authorization
+                    //Error Response redirect carrying error=invalid_target, the same transport the
                     //application's own InvalidTarget denial uses, rather than a bare 400.
                     return (null, await BuildAuthorizeErrorResponseAsync(
                         server, context, redirectUri, OAuthErrors.InvalidTarget,
-                        "The resource parameter must be an absolute URI (RFC 3986 §4.3) without a fragment.",
+                        MalformedResourceDescription,
                         requestState, responseMode, clientId, ct).ConfigureAwait(false));
                 }
+
+                string? resource = ReadResource(fields);
 
                 //Resolved once here and stamped onto ExpectedIssuer so a later redemption can
                 //compare the issuer it resolves for the PRESENTING request against the issuer
@@ -1871,16 +1873,16 @@ public static class AuthCodeEndpoints
                         ro.State, ro.ResponseMode, ro.ClientId, ct).ConfigureAwait(false));
                 }
 
-                //RFC 8707 §2.1 / RFC 6749 §4.1.2.1 — same resource shape gate as the direct PKCE
-                //path (BuildAuthorize): redirect_uri is already registration-validated above, so a
-                //malformed resource is reported as an Authorization Error Response redirect
-                //carrying error=invalid_target rather than a bare 400.
+                //RFC 8707 section 2.1 / RFC 6749 section 4.1.2.1: same resource shape gate as the
+                //direct PKCE path (BuildAuthorize): redirect_uri is already registration-validated
+                //above, so a malformed resource is reported as an Authorization Error Response
+                //redirect carrying error=invalid_target rather than a bare 400.
                 ServerHttpResponse? resourceShapeFailure = ValidateResourceIndicatorsShape(ro.Resource);
                 if(resourceShapeFailure is not null)
                 {
                     return (null, await BuildAuthorizeErrorResponseAsync(
                         server, context, ro.RedirectUri, OAuthErrors.InvalidTarget,
-                        "The resource parameter must be an absolute URI (RFC 3986 §4.3) without a fragment.",
+                        MalformedResourceDescription,
                         ro.State, ro.ResponseMode, ro.ClientId, ct).ConfigureAwait(false));
                 }
 
@@ -2909,7 +2911,7 @@ public static class AuthCodeEndpoints
                 OAuthErrors.InvalidRequest, "client_id is required for a client that is not authenticating.");
         }
 
-        ServerHttpResponse? resourceShapeFailure = ValidateRequestOnlyResourceShape(fields);
+        ServerHttpResponse? resourceShapeFailure = ValidateResourceOccurrences(fields);
         if(resourceShapeFailure is not null)
         {
             return resourceShapeFailure;
@@ -3366,7 +3368,7 @@ public static class AuthCodeEndpoints
                 OAuthErrors.InvalidRequest, "client_id is required for a client that is not authenticating.");
         }
 
-        ServerHttpResponse? resourceShapeFailure = ValidateRequestOnlyResourceShape(fields);
+        ServerHttpResponse? resourceShapeFailure = ValidateResourceOccurrences(fields);
         if(resourceShapeFailure is not null)
         {
             return resourceShapeFailure;
@@ -4418,14 +4420,13 @@ public static class AuthCodeEndpoints
                 //resource here IS the grant itself, feeding the issued token's audience directly
                 //(the same absolute-URI/no-fragment shape gate the authorization-code family runs
                 //at PAR/authorize receipt).
-                string? clientCredentialsResource = ReadResource(fields);
-                ServerHttpResponse? clientCredentialsResourceFailure =
-                    ValidateResourceIndicatorsShape(clientCredentialsResource);
+                ServerHttpResponse? clientCredentialsResourceFailure = ValidateResourceOccurrences(fields);
                 if(clientCredentialsResourceFailure is not null)
                 {
                     return (null, clientCredentialsResourceFailure);
                 }
 
+                string? clientCredentialsResource = ReadResource(fields);
                 IReadOnlyList<string>? clientCredentialsAudience =
                     ParseResourceIndicators(clientCredentialsResource) is { Length: > 0 } indicators
                         ? DeduplicateOrdinal(indicators)
@@ -4760,70 +4761,53 @@ public static class AuthCodeEndpoints
 
                 //RFC 8693 §2.1: resource / audience / scope are OPTIONAL and indicate the target and
                 //requested scope. §2.1.1's multi-resource wire form is the REPEATED resource
-                //parameter — RequestFields.GetValues aggregates every occurrence (the same read the
-                //authorization-code path's ReadResource performs) — never several URIs packed into one
-                //occurrence separated by spaces (a resource indicator IS one absolute URI; RFC 3986
-                //§2 / Appendix A's ABNF forbids a raw space inside one), so each raw occurrence is
-                //checked BEFORE joining and rejected — with RFC 8707 §2's own invalid_target, the
-                //uniform outcome for this whole defect class — when it is null, empty, or
-                //all-whitespace (a blank occurrence has no indicator to contribute; silently dropping
-                //it via ParseResourceIndicators's RemoveEmptyEntries after joining would let one bad
-                //occurrence vanish from an otherwise-valid aggregate) or when it carries embedded
-                //whitespace. Past that check every value is non-blank and space-free, so joining with
-                //a space and splitting back via ParseResourceIndicators (the convention the library
-                //also uses for scope / acr_values) recovers exactly the individual RFC 8707 §2
-                //absolute-URI indicators.
+                //parameter — RequestFields.GetValues aggregates every occurrence (the same read
+                //ReadResource performs) — never several URIs packed into one occurrence separated
+                //by spaces (a resource indicator IS one absolute URI; RFC 3986 section 2 /
+                //Appendix A's ABNF forbids a raw space inside one). RFC 6749 section 3.1:
+                //"Parameters sent without a value MUST be treated as if they were omitted from the
+                //request." An empty (or null) occurrence is such a parameter and is dropped, as
+                //ReadResource drops it, so a request whose occurrences are all empty names no
+                //resource. Every remaining occurrence is one indicator exactly as received: an
+                //all-whitespace occurrence, or one that embeds whitespace, is a value the
+                //absolute-URI grammar refuses, so the check below names the first part of it that
+                //fails and the refusal is RFC 8707 section 2's own invalid_target, the same
+                //answer every other malformed occurrence gets.
                 IReadOnlyList<string> resource = [];
-                IReadOnlyList<string> resourceValues = fields.GetValues(OAuthRequestParameterNames.Resource);
-                if(resourceValues.Count > 0)
+                string[] resourceIndicators = [.. ReadResourceOccurrences(fields)];
+                if(resourceIndicators.Length > 0)
                 {
-                    foreach(string rawValue in resourceValues)
-                    {
-                        if(string.IsNullOrEmpty(rawValue) || rawValue.Any(char.IsWhiteSpace))
-                        {
-                            return (null, ServerHttpResponse.BadRequest(
-                                OAuthErrors.InvalidTarget,
-                                "The resource parameter must not contain a null, empty, or "
-                                + "whitespace-only occurrence, and each occurrence must carry no "
-                                + "embedded whitespace."));
-                        }
-                    }
-
-                    //A present-but-empty/blank resource value (every occurrence blank, or a single
-                    //empty parameter) parses to zero indicators — malformed, not "no resource
-                    //requested" — the same distinction ValidateResourceIndicatorsShape draws for the
-                    //authorization-code family. Unreachable once every raw occurrence has already
-                    //passed the null/empty/whitespace gate above; retained defensively so a future
-                    //change to that gate cannot silently reopen "all-blank resource parses to no
-                    //indicators."
-                    string[] resourceIndicators =
-                        ParseResourceIndicators(string.Join(' ', resourceValues)) ?? [];
-                    if(resourceIndicators.Length == 0)
-                    {
-                        return (null, ServerHttpResponse.BadRequest(
-                            OAuthErrors.InvalidTarget,
-                            "The resource parameter, when present, must not be empty."));
-                    }
-
-                    //RFC 8707 §2 / RFC 8693 §2.1: each resource value MUST be an absolute URI (RFC 3986
-                    //§4.3) and MUST NOT include a fragment component. Validate before the validation seam
-                    //runs so a malformed target fails closed up front. Shares its shape check with the
-                    //PAR/authorize gate (IsAbsoluteResourceIndicatorUri); RFC 8693's own §2.2.2 boundary
-                    //keeps THIS shape check's error invalid_request rather than invalid_target — distinct
-                    //from the null/empty/whitespace defect class above, which RFC 8707 §2 itself
-                    //registers invalid_target for ("missing... or malformed").
+                    //RFC 8707 section 2: "Its value MUST be an absolute URI, as specified by
+                    //Section 4.3 of [RFC3986]. The URI MUST NOT include a fragment component." RFC
+                    //8693 section 2.1 repeats the same MUST for this grant's own resource parameter.
+                    //RFC 8693 section 2.2.2 requires invalid_request for a request that is not
+                    //valid; this shape check answers invalid_target instead, a deviation from that
+                    //MUST, following RFC 8707 section 2.1's own instruction for a value the server
+                    //fails to parse ("it should reject the request with an error response using the
+                    //error code "invalid_target""), one error code per parameter at every endpoint
+                    //this library answers with.
                     foreach(string indicator in resourceIndicators)
                     {
-                        if(!IsAbsoluteResourceIndicatorUri(indicator))
+                        ResourceIndicatorFault fault = ResourceIndicatorSyntax.Check(indicator);
+                        if(fault != ResourceIndicatorFault.None)
                         {
+                            RecordMalformedResourceIndicator(fault);
+
                             return (null, ServerHttpResponse.BadRequest(
-                                OAuthErrors.InvalidRequest,
-                                "The resource parameter must be an absolute URI (RFC 3986 §4.3) without a fragment."));
+                                OAuthErrors.InvalidTarget, MalformedResourceDescription));
                         }
                     }
 
-                    //§2's resource set is a SET — deduplicate (ordinal) so a repeated indicator never
+                    //Folded once, at ingress: an accepted indicator's scheme and host ASCII
+                    //letters are lowered here (ResourceIndicatorSyntax.Fold), so a stored grant
+                    //holds the folded spelling. Section 2's resource set is a SET, so
+                    //the folded set is then deduplicated (ordinal) so a repeated indicator never
                     //reaches the authorization seam or a resulting aud twice.
+                    for(int i = 0; i < resourceIndicators.Length; i++)
+                    {
+                        resourceIndicators[i] = ResourceIndicatorSyntax.Fold(resourceIndicators[i]);
+                    }
+
                     resource = DeduplicateOrdinal(resourceIndicators);
                 }
 
@@ -4832,29 +4816,36 @@ public static class AuthCodeEndpoints
                 //occurrence is read (RequestFields.GetValues, the same multi-valued read "resource"
                 //uses above), never folded into one value by TryGetValue's exactly-one semantics.
                 //audience values are logical names that MAY contain spaces, so an occurrence is never
-                //space-split the way a resource occurrence is joined and reparsed; each occurrence IS
-                //one audience. §2.2.2 registers no audience-specific error code for a malformed
-                //occurrence the way RFC 8707 §2 registers invalid_target for "resource" — a null,
-                //empty, or whitespace-only occurrence is simply a request that is "not... valid" under
-                //§2.2.2's general rule, so it is invalid_request. §2's audience set is a SET —
-                //deduplicate (ordinal) so a repeated value never reaches the authorization seam twice.
-                string[] audience = [];
-                IReadOnlyList<string> audienceValues = fields.GetValues(OAuthRequestParameterNames.Audience);
-                if(audienceValues.Count > 0)
+                //space-split; each occurrence IS one audience. RFC 6749 section 3.1: "Parameters sent without a value MUST be treated
+                //as if they were omitted from the request." An empty (or null) occurrence is such a
+                //parameter and is dropped before any check, as the resource loop above drops it, so a
+                //request whose occurrences are all empty names no audience. A whitespace-only
+                //occurrence is a value, not a parameter sent without one; §2.2.2 registers no
+                //audience-specific error code for it the way RFC 8707 §2 registers invalid_target for
+                //"resource" — it is simply a request that is not valid under §2.2.2's general
+                //rule, so it is invalid_request. §2's audience set is a SET — deduplicate (ordinal)
+                //so a repeated value never reaches the authorization seam twice.
+                List<string> audienceValues = [];
+                foreach(string rawValue in fields.GetValues(OAuthRequestParameterNames.Audience))
                 {
-                    foreach(string rawValue in audienceValues)
+                    if(string.IsNullOrEmpty(rawValue))
                     {
-                        if(string.IsNullOrWhiteSpace(rawValue))
-                        {
-                            return (null, ServerHttpResponse.BadRequest(
-                                OAuthErrors.InvalidRequest,
-                                "The audience parameter must not contain a null, empty, or "
-                                + "whitespace-only occurrence."));
-                        }
+                        continue;
                     }
 
-                    audience = DeduplicateOrdinal([.. audienceValues]);
+                    if(string.IsNullOrWhiteSpace(rawValue))
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "The audience parameter must not contain a whitespace-only occurrence."));
+                    }
+
+                    audienceValues.Add(rawValue);
                 }
+
+                string[] audience = audienceValues.Count > 0
+                    ? DeduplicateOrdinal([.. audienceValues])
+                    : [];
 
                 //ID-JAG §4.3: when an Identity Assertion JWT Authorization Grant is requested
                 //(requested_token_type=id-jag), audience is REQUIRED and names THE Resource
@@ -5293,11 +5284,11 @@ public static class AuthCodeEndpoints
                 //single spacey audience name into several bogus "indicators". The carry is
                 //therefore gated: it populates Resource ONLY when every audience entry already IS
                 //a well-formed, whitespace-free absolute resource indicator
-                //(IsAbsoluteResourceIndicatorUri); otherwise Resource stays null — the same
-                //fail-closed outcome as "nothing was granted" — rather than smuggling a malformed
-                //value into a slot every downstream reader assumes is clean.
+                //(IsCarriedAudienceEntry); otherwise Resource stays null, the same fail-closed
+                //outcome as "nothing was granted", rather than smuggling a malformed value into a
+                //slot every downstream reader assumes is clean.
                 Resource = authorization.Audience is { Count: > 0 } audienceEntries
-                    && audienceEntries.All(IsAbsoluteResourceIndicatorUri)
+                    && audienceEntries.All(IsCarriedAudienceEntry)
                     ? string.Join(' ', audienceEntries)
                     : null,
 
@@ -6760,54 +6751,80 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// A malformed-resource sentinel deliberately shaped to fail
-    /// <see cref="IsAbsoluteResourceIndicatorUri"/> (it carries a fragment, which §2 forbids), so a
-    /// defect caught while reading raw wire values reaches the SAME downstream
-    /// <see cref="ValidateResourceIndicatorsShape"/> gate every other malformed resource value goes
-    /// through, with <c>invalid_target</c>, rather than a distinct read-time error code.
+    /// The <c>error_description</c> for a <c>resource</c> value that RFC 3986 section 4.3's
+    /// <c>absolute-URI</c> grammar refuses, whitespace included, or that carries a fragment
+    /// RFC 8707 section 2 forbids, read inside RFC 6749's own charset at its source
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 section 5.2</see>:
+    /// "Values for the "error_description" parameter MUST NOT include characters outside the set
+    /// %x20-21 / %x23-5B / %x5D-7E"), so a redirect and a JSON error body carry the identical text.
     /// </summary>
-    private const string MalformedResourceIndicatorSentinel = "urn:invalid-resource-parameter#malformed";
+    private static string MalformedResourceDescription { get; } =
+        "The resource parameter must be an absolute URI (RFC 3986 section 4.3) without a fragment.";
 
 
     /// <summary>
-    /// Reads the RFC 8707 <c>resource</c> request field, normalising an entirely absent field to
-    /// <see langword="null"/>. A PRESENT field — even an empty or blank one — is returned verbatim
-    /// (never collapsed to <see langword="null"/>): <see cref="ValidateResourceIndicatorsShape"/>
-    /// and <see cref="ResolveEffectiveResource"/> both treat that distinctly from "no resource
-    /// requested" and fail closed, per §2's <c>invalid_target</c> ("missing, unknown, or
-    /// malformed"). §2's multi-resource wire form is the REPEATED <c>resource</c> parameter
+    /// Reads the RFC 8707 <c>resource</c> request field, normalising an absent field, and a field
+    /// whose every occurrence is empty, to <see langword="null"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// An empty (or <see langword="null"/>) occurrence is such a parameter, so it is dropped before
+    /// anything else reads the field, and a request whose occurrences are all empty is a request
+    /// without a <c>resource</c> parameter. A blank string inside a request object's
+    /// <c>resource</c> claim is not a parameter sent without a value; that path is
+    /// <c>AuthCodeRequestObjectExtensions</c>'s claim reader, which refuses it as malformed.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>
+    /// states the general rule for repetition: "Request and response parameters MUST NOT be
+    /// included more than once." For this parameter
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> is the
+    /// rule instead: "Multiple &quot;resource&quot; parameters MAY be used to indicate that the
+    /// requested token is intended to be used at multiple resources." so repeated occurrences are
+    /// aggregated, not refused.
+    /// RFC 8707 section 2's multi-resource wire form is the REPEATED <c>resource</c> parameter
     /// (<see cref="RequestFields.GetValues"/> aggregates every occurrence), never a single
     /// occurrence with several URIs packed inside it separated by spaces — a resource indicator IS
     /// one absolute URI, and RFC 3986 §2 / Appendix A's ABNF does not permit a raw, un-encoded
-    /// space inside one. Each raw occurrence is therefore checked BEFORE joining, and rejected as
-    /// malformed — via <see cref="MalformedResourceIndicatorSentinel"/> — when it is
-    /// <see langword="null"/>, empty, or all-whitespace (a blank occurrence has no indicator to
-    /// contribute; silently dropping it via <see cref="ParseResourceIndicators"/>'s
-    /// <see cref="StringSplitOptions.RemoveEmptyEntries"/> after joining would let one bad
-    /// occurrence vanish from an otherwise-valid aggregate) or when it carries embedded
-    /// whitespace (not "two indicators sent as one" to silently recover by splitting). Once past
-    /// that check, every value is guaranteed non-blank and space-free, so joining the aggregated
-    /// set with a space (the convention this library also uses for <c>scope</c> and
-    /// <c>acr_values</c>) is lossless — <see cref="ParseResourceIndicators"/> splits it back to
-    /// exactly the individual indicators.
+    /// space inside one. A whitespace-only occurrence is a value, unlike the empty one, and an
+    /// occurrence that embeds whitespace is not "two indicators sent as one" to recover by
+    /// splitting, so neither is altered or dropped here: each is kept exactly as received, and
+    /// the shape decision belongs to <see cref="ValidateResourceOccurrences"/>, which runs
+    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> on every occurrence
+    /// <see cref="ReadResourceOccurrences"/> returns and records the fault of the first that
+    /// fails. Once past that check, every occurrence is a whitespace-free indicator, so joining
+    /// the aggregated set with a space (the convention this library also uses for <c>scope</c>
+    /// and <c>acr_values</c>) is lossless: <see cref="ParseResourceIndicators"/> splits it back
+    /// to exactly the individual indicators. Each occurrence is folded with
+    /// <see cref="ResourceIndicatorSyntax.Fold(string)"/> before the join, so an accepted
+    /// indicator's scheme and host ASCII letters are lowered at the ingress; a value the fold's
+    /// own check refuses comes back unchanged. A <c>resource</c> value enters from the wire at
+    /// three sites, each of which folds at its own site: this reader for the form field,
+    /// <c>AuthCodeRequestObjectExtensions.ReadResourceClaim</c> for the request object's
+    /// <c>resource</c> claim, and the token exchange grant for its own <c>resource</c>
+    /// occurrences.
     /// </summary>
     private static string? ReadResource(RequestFields fields)
     {
-        IReadOnlyList<string> values = fields.GetValues(OAuthRequestParameterNames.Resource);
-        if(values.Count == 0)
-        {
-            return null;
-        }
+        IReadOnlyList<string> occurrences = ReadResourceOccurrences(fields);
 
-        foreach(string value in values)
-        {
-            if(string.IsNullOrEmpty(value) || value.Any(char.IsWhiteSpace))
-            {
-                return MalformedResourceIndicatorSentinel;
-            }
-        }
+        return occurrences.Count == 0
+            ? null
+            : string.Join(' ', occurrences.Select(ResourceIndicatorSyntax.Fold));
+    }
 
-        return string.Join(' ', values);
+
+    /// <summary>
+    /// Reads every non-empty occurrence of the RFC 8707 <c>resource</c> request field, each exactly
+    /// as received. An empty (or <see langword="null"/>) occurrence is a parameter sent without a
+    /// value and is dropped
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the
+    /// request."); a whitespace-only occurrence is a value and stays. The occurrences are kept
+    /// apart, never joined, so one that embeds whitespace is not mistaken for several indicators.
+    /// </summary>
+    /// <param name="fields">The inbound request's form fields.</param>
+    /// <returns>The non-empty occurrences in wire order; empty when the field is absent.</returns>
+    private static IReadOnlyList<string> ReadResourceOccurrences(RequestFields fields)
+    {
+        return [.. fields.GetValues(OAuthRequestParameterNames.Resource).Where(static value => !string.IsNullOrEmpty(value))];
     }
 
 
@@ -6816,10 +6833,12 @@ public static class AuthCodeEndpoints
     /// indicators. Returns <see langword="null"/> only when <paramref name="resource"/> itself is
     /// <see langword="null"/> ("no resource parameter present"); an empty or all-whitespace but
     /// non-null value returns an EMPTY array rather than <see langword="null"/>, so a caller can
-    /// distinguish "the parameter was absent" from "the parameter was present but blank" — the
-    /// latter is malformed, not absent (§2's <c>invalid_target</c> covers "missing" values, and a
-    /// present-but-empty value parses to no indicators at all). Resource indicators are absolute
-    /// URIs and so carry no internal spaces, making the split unambiguous.
+    /// distinguish "the parameter was absent" from a value that parses to no indicators at all.
+    /// <see cref="ReadResource"/> drops an empty occurrence as a parameter sent without a value, and
+    /// <see cref="ValidateResourceOccurrences"/> refuses a whitespace-bearing one before any
+    /// caller splits the joined value, so the empty array is reachable only from a stored grant's
+    /// value. Resource indicators are absolute URIs and so carry no internal spaces, making the
+    /// split unambiguous.
     /// </summary>
     private static string[]? ParseResourceIndicators(string? resource)
     {
@@ -6828,33 +6847,33 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Returns whether <paramref name="indicator"/> satisfies
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>'s resource
-    /// indicator shape: an absolute URI (RFC 3986 §4.3) with no fragment component. §2 places no
-    /// scheme restriction on the value — any scheme is a valid resource indicator, not only
-    /// https/http/urn. <see cref="UriKind.Absolute"/> alone is not enough to enforce that: on Unix
-    /// a leading-slash value like <c>/relative</c> parses as an absolute <c>file:</c> URI (it is
-    /// a valid Unix file path) even though the wire text carries no scheme at all, so a relative
-    /// resource would slip through while a genuinely equivalent value is rejected on Windows
-    /// (where the same string fails to parse as absolute in the first place). Rather than
-    /// allowlisting schemes to close that gap, the coercion itself is rejected: when parsing
-    /// yields a <c>file:</c> URI whose original text did not literally start with the <c>file:</c>
-    /// scheme, that is .NET's implicit path-to-URI coercion, not a genuine resource indicator — a
-    /// caller who does write out <c>file:...</c> explicitly still passes. §2 ALSO states the value
-    /// "SHOULD NOT include a query component, but it is recognized that there are cases that make
-    /// a query component a useful and necessary part of the resource parameter" — a SHOULD-NOT,
-    /// not a MUST-NOT, so this gate deliberately does not enforce it: a query-bearing indicator is
-    /// accepted like any other absolute URI without a fragment. <see cref="Uri.TryCreate(string, UriKind, out Uri)"/>
-    /// itself is lenient about embedded whitespace: a value like <c>https://api.example.com/orders v2</c>
-    /// still parses as absolute because the space is percent-escaped into the path during parsing, even
-    /// though the raw wire text was never one URI. Every caller of this gate that reads raw wire
-    /// occurrences (<see cref="ReadResource"/> and its token-exchange-grant equivalent) already rejects
-    /// embedded whitespace before this method ever sees the value, but <see cref="ServerRefreshTokenIssuedState.Resource"/>'s
-    /// exchange&#8594;refresh carry runs this gate directly against RFC 8693 <c>audience</c> entries — a
-    /// logical name the authorization seam MAY have shaped with spaces — so an explicit whitespace check
-    /// here (not "already whitespace-free by construction") is what keeps that carry fail-closed.
+    /// Returns whether <paramref name="indicator"/>, one
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// <c>audience</c> entry (a logical name for a target service, not itself an RFC 8707 resource
+    /// indicator), is an entry the exchange-to-refresh carry can store whole. The carry space-joins
+    /// the authorized entries into <see cref="ServerRefreshTokenIssuedState.Resource"/> and a reader
+    /// splits that value on spaces again, so an entry qualifies only when the split returns it as
+    /// one piece: it holds no white space, and
+    /// <see cref="Uri.TryCreate(string, UriKind, out Uri)"/> reads it as an absolute URI without a
+    /// fragment component. <see cref="UriKind.Absolute"/> alone is not enough to enforce that: on Unix a
+    /// leading-slash value like <c>/relative</c> parses as an absolute <c>file:</c> URI (it is a
+    /// valid Unix file path) even though the wire text carries no scheme at all, so a relative
+    /// value would slip through while a genuinely equivalent value is rejected on Windows (where
+    /// the same string fails to parse as absolute in the first place). Rather than allowlisting
+    /// schemes to close that gap, the coercion itself is rejected: when parsing yields a
+    /// <c>file:</c> URI whose original text did not literally start with the <c>file:</c> scheme,
+    /// that is .NET's implicit path-to-URI coercion, not a genuine indicator; an entry that does
+    /// write out <c>file:...</c> explicitly passes. The parse itself is lenient about embedded
+    /// white space: a value like <c>https://api.example.com/orders v2</c> parses as absolute
+    /// because the space is percent-escaped into the path during parsing, even though the raw wire
+    /// text was never one URI, so the explicit white-space check comes first.
     /// </summary>
-    private static bool IsAbsoluteResourceIndicatorUri(string indicator)
+    /// <param name="indicator">One <c>audience</c> entry from an authorized token exchange.</param>
+    /// <returns>
+    /// <see langword="true"/> when <paramref name="indicator"/> parses as an absolute,
+    /// whitespace-free URI with no fragment component.
+    /// </returns>
+    private static bool IsCarriedAudienceEntry(string indicator)
     {
         if(indicator.Any(char.IsWhiteSpace))
         {
@@ -6877,20 +6896,32 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Shape-validates every space-delimited RFC 8707 §2 indicator in <paramref name="resource"/>
-    /// at PAR/authorize receipt, mirroring the RFC 8693 token-exchange grant's own shape gate
-    /// (<see cref="IsAbsoluteResourceIndicatorUri"/>) but with the authorize/PAR-specific error
-    /// code: §2.1 directs the authorization server to reject a value it fails to parse
-    /// with <c>invalid_target</c>, not <c>invalid_request</c> — <see cref="OAuthErrors.InvalidTarget"/>
-    /// is the error registered for exactly this parameter (§5.2). Runs before the application's
+    /// Shape-validates every space-delimited RFC 8707 section 2 indicator in
+    /// <paramref name="resource"/>, the joined form a request object's <c>resource</c> claim
+    /// reaches the endpoint in at the pushed and by-value request object ingresses, with
+    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/>. The claim path answers
+    /// <see cref="OAuthErrors.InvalidTarget"/> with <see cref="MalformedResourceDescription"/>, the
+    /// same error and the same fixed description as every other ingress: section 2.1 directs the
+    /// authorization server to reject a value it fails to parse with <c>invalid_target</c>, the
+    /// error section 2 defines for exactly this parameter. Runs before the application's
     /// <see cref="EvaluateAuthorizationRequestDelegate"/> sees the value, the same fail-fast the
-    /// <c>authorization_details</c> shape gate applies. A <paramref name="resource"/> that is
-    /// present but empty or all-whitespace parses to zero indicators
-    /// (<see cref="ParseResourceIndicators"/>) and is rejected the same way — §2's
-    /// <c>invalid_target</c> covers a "missing" resource value, and a present-but-empty parameter
-    /// is not the same fact as the parameter never having been sent. Returns
-    /// <see langword="null"/> only when <paramref name="resource"/> is <see langword="null"/>
-    /// (the parameter was never sent) or every indicator is well-formed.
+    /// <c>authorization_details</c> shape gate applies. Section 2 ALSO states the value "SHOULD NOT
+    /// include a query component, but it is recognized that there are cases that make a query
+    /// component a useful and necessary part of the resource parameter": a SHOULD-NOT, not a
+    /// MUST-NOT, so this gate deliberately does not enforce it, and a query-bearing indicator is
+    /// accepted like any other absolute URI without a fragment.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// is followed at the form ingresses by <see cref="ValidateResourceOccurrences"/>, which
+    /// drops an empty occurrence and checks every other occurrence as received. A blank string
+    /// inside a request object's <c>resource</c> claim is not a parameter sent without a value: the
+    /// claim reader refuses it as malformed, and a <paramref name="resource"/> that nonetheless
+    /// parses to zero indicators (<see cref="ParseResourceIndicators"/>) is rejected here with
+    /// <c>invalid_target</c> and the fault of the value as received. A refused indicator's fault
+    /// rides <see cref="RecordMalformedResourceIndicator(ResourceIndicatorFault)"/>'s trace event,
+    /// never the indicator itself. Returns <see langword="null"/> only when
+    /// <paramref name="resource"/> is <see langword="null"/> (the parameter was never sent) or
+    /// every indicator is well-formed.
     /// </summary>
     private static ServerHttpResponse? ValidateResourceIndicatorsShape(string? resource)
     {
@@ -6902,18 +6933,19 @@ public static class AuthCodeEndpoints
 
         if(indicators.Length == 0)
         {
-            return ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidTarget,
-                "The resource parameter, when present, must not be empty.");
+            RecordMalformedResourceIndicator(ResourceIndicatorSyntax.Check(resource));
+
+            return ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription);
         }
 
         foreach(string indicator in indicators)
         {
-            if(!IsAbsoluteResourceIndicatorUri(indicator))
+            ResourceIndicatorFault fault = ResourceIndicatorSyntax.Check(indicator);
+            if(fault != ResourceIndicatorFault.None)
             {
-                return ServerHttpResponse.BadRequest(
-                    OAuthErrors.InvalidTarget,
-                    "The resource parameter must be an absolute URI (RFC 3986 §4.3) without a fragment.");
+                RecordMalformedResourceIndicator(fault);
+
+                return ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription);
             }
         }
 
@@ -6922,89 +6954,121 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// The request-only half of an inbound token-request <c>resource</c> field's shape: present
-    /// but empty is malformed, the same fact <see cref="ResolveEffectiveResource"/> also checks —
-    /// duplicated here, in each step endpoint's pre-correlation step, so the answer is
-    /// byte-identical for a grant that does not exist and one that does. Reads only
-    /// <paramref name="fields"/>.
+    /// Adds <see cref="OAuthEventNames.MalformedResourceIndicator"/> to
+    /// <see cref="System.Diagnostics.Activity.Current"/>, carrying <paramref name="fault"/>'s name
+    /// under <see cref="OAuthEventNames.ResourceIndicatorFaultTagName"/>, never the refused
+    /// <c>resource</c> value, for a deployment that wants the failing part in its own traces.
     /// </summary>
-    /// <param name="fields">The inbound token request's form fields.</param>
-    /// <returns>
-    /// The <c>invalid_target</c> refusal when the request's own <c>resource</c> field is present
-    /// but empty, all-whitespace, or carries a malformed raw occurrence (<see cref="ReadResource"/>'s
-    /// <see cref="MalformedResourceIndicatorSentinel"/>); <see langword="null"/> when the field is
-    /// absent or well-formed — the granted-set subset comparison that also lives in
-    /// <see cref="ResolveEffectiveResource"/> stays there, since it needs the stored grant.
-    /// </returns>
-    private static ServerHttpResponse? ValidateRequestOnlyResourceShape(RequestFields fields)
+    /// <param name="fault">The first part of the refused indicator that failed.</param>
+    private static void RecordMalformedResourceIndicator(ResourceIndicatorFault fault)
     {
-        string? requestedResource = ReadResource(fields);
-        if(requestedResource is null)
-        {
-            return null;
-        }
-
-        //ReadResource collapses ANY malformed raw occurrence — present but empty, all-whitespace,
-        //or embedding whitespace — into MalformedResourceIndicatorSentinel, discarding every other
-        //occurrence in the same request. Splitting that sentinel string yields one non-empty
-        //element, so the parsed-length-zero check below alone can never see it; it is checked
-        //directly, first.
-        if(string.Equals(requestedResource, MalformedResourceIndicatorSentinel, StringComparison.Ordinal))
-        {
-            return ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidTarget, "The resource parameter, when present, must not be empty.");
-        }
-
-        string[] requested = ParseResourceIndicators(requestedResource) ?? [];
-
-        return requested.Length == 0
-            ? ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidTarget, "The resource parameter, when present, must not be empty.")
-            : null;
+        _ = (System.Diagnostics.Activity.Current?.AddEvent(
+            new System.Diagnostics.ActivityEvent(
+                OAuthEventNames.MalformedResourceIndicator,
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    [OAuthEventNames.ResourceIndicatorFaultTagName] = fault.ToString()
+                })));
     }
 
 
     /// <summary>
-    /// Resolves the effective RFC 8707 §2.2 resource set for a token-endpoint response from the
-    /// granted set carried on the code/refresh state and an optional token-request <c>resource</c>.
-    /// No token-request value leaves the full <paramref name="grantedResource"/> set (possibly
-    /// <see langword="null"/>) in force. A token-request value MUST be a subset of the granted set
-    /// (§2.2 — "the authorization server will issue an access token based on that subset of
-    /// requested resources"); a grant with no stored resource has nothing to narrow from, and any
-    /// indicator not present in the granted set, fails closed with <c>invalid_target</c>. Because
-    /// every granted indicator was already shape-validated at PAR/authorize
-    /// (<see cref="ValidateResourceIndicatorsShape"/>), a malformed token-request value can never
-    /// match a granted one and is rejected by the same subset check — no separate shape check is
-    /// needed here (the request-only empty-value case is <see cref="ValidateRequestOnlyResourceShape"/>'s,
-    /// which the endpoint's pre-correlation step already ran before this method is ever reached).
-    /// §2's resource set is a SET — the granted and requested indicator lists are
-    /// each deduplicated (ordinal) before use, via <see cref="DeduplicateOrdinal"/>, so a client or
-    /// stored grant that repeated an indicator never surfaces a duplicate <c>aud</c> member. Shared
-    /// by the <c>authorization_code</c> grant (<see cref="BuildToken"/>) and the
-    /// <c>refresh_token</c> grant (<see cref="BuildRefreshToken"/>); the caller alone decides what
-    /// to persist onto <see cref="ServerRefreshTokenIssuedState.Resource"/> — this method never
-    /// narrows the stored grant itself (§2.2's "any refresh token that is returned is bound to the
-    /// full original grant").
+    /// Applies the occurrence rule of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>
+    /// and the repetition and grammar of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> to the
+    /// <c>resource</c> form field of every form ingress that reads one: the pushed authorization
+    /// request, the direct authorization request, the <c>authorization_code</c> redemption, the
+    /// <c>refresh_token</c> redemption and the <c>client_credentials</c> token request. The rule is
+    /// decided from the field alone. RFC 6749 section 3.1 (repeated for the token endpoint in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>):
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// An empty occurrence is such a parameter and is dropped by
+    /// <see cref="ReadResourceOccurrences"/>. RFC 8707 section 2 allows the parameter to repeat
+    /// ("Multiple &quot;resource&quot; parameters MAY be used to indicate that the requested token
+    /// is intended to be used at multiple resources.") and fixes each value's grammar ("Its value
+    /// MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]"), so every other
+    /// occurrence, a whitespace-only one included, is run through
+    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> exactly as received and the
+    /// first that fails is refused, facts <see cref="ResolveEffectiveResource"/> would otherwise
+    /// discover only after loading the stored grant. At the token endpoint it runs in each step
+    /// endpoint's pre-correlation step, so the answer is byte-identical for a grant that does not
+    /// exist and one that does; at the authorization requests and the <c>client_credentials</c>
+    /// grant it runs before the application's decision seam sees the value. Reads only
+    /// <paramref name="fields"/>. The refused occurrence's fault rides
+    /// <see cref="RecordMalformedResourceIndicator(ResourceIndicatorFault)"/>'s trace event, never
+    /// the occurrence itself.
+    /// </summary>
+    /// <param name="fields">The inbound request's form fields.</param>
+    /// <returns>
+    /// The <c>invalid_target</c> refusal, carrying <see cref="MalformedResourceDescription"/>, when
+    /// an occurrence <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> refuses is
+    /// present; <see langword="null"/> when the field is absent, carries only empty occurrences, or
+    /// every occurrence is well-formed: the granted-set subset comparison that also lives in
+    /// <see cref="ResolveEffectiveResource"/> stays there, since it needs the stored grant.
+    /// </returns>
+    private static ServerHttpResponse? ValidateResourceOccurrences(RequestFields fields)
+    {
+        foreach(string occurrence in ReadResourceOccurrences(fields))
+        {
+            ResourceIndicatorFault fault = ResourceIndicatorSyntax.Check(occurrence);
+            if(fault != ResourceIndicatorFault.None)
+            {
+                RecordMalformedResourceIndicator(fault);
+
+                return ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription);
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Resolves the effective RFC 8707 section 2.2 resource set for a token-endpoint response from
+    /// the granted set carried on the code/refresh state and an optional token-request
+    /// <c>resource</c>. No token-request value leaves the full <paramref name="grantedResource"/>
+    /// set (possibly <see langword="null"/>) in force. A token-request value MUST be a subset of
+    /// the granted set (section 2.2: "the authorization server will issue an access token based on
+    /// that subset of requested resources"); a grant with no stored resource has nothing to narrow
+    /// from, and any indicator not present in the granted set fails closed with
+    /// <c>invalid_target</c>. A malformed token-request value is refused before this method ever
+    /// runs, by <see cref="ValidateResourceOccurrences"/>'s pre-correlation step, so no
+    /// separate shape check is needed here. Section 2's resource set is a SET: the granted and
+    /// requested indicator lists are each deduplicated by
+    /// <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/> before use, via
+    /// <see cref="DeduplicateByComparisonKey"/>, so a client or stored grant that repeated an
+    /// indicator (in either spelling) never surfaces a duplicate <c>aud</c> member. Shared by the
+    /// <c>authorization_code</c> grant (<see cref="BuildToken"/>) and the <c>refresh_token</c>
+    /// grant (<see cref="BuildRefreshToken"/>); the caller alone decides what to persist onto
+    /// <see cref="ServerRefreshTokenIssuedState.Resource"/>: this method never narrows the stored
+    /// grant itself (section 2.2's "any refresh token that is returned is bound to the full
+    /// original grant").
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Subset membership (<see cref="Array.IndexOf{T}(T[], T)"/> below) is byte-exact ordinal
-    /// string comparison — the library's own reading, not a §2.2 mandate.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.1">RFC 3986 §6.2.1</see>
-    /// ranks simple string comparison as the least accurate but least costly of its URI-equivalence
-    /// tiers, and a conformant one; a stricter, non-normalizing comparison is the fail-closed
-    /// direction — a requested indicator that a
-    /// looser (scheme/host-case-insensitive, percent-decoding) comparison would have matched but
-    /// this one does not is refused, never silently accepted, so this reading can only reject a
-    /// grant that a looser one would allow, never the reverse.
+    /// Subset membership is <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/> equality:
+    /// the scheme and host folded to lowercase ASCII when the value is an accepted indicator
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>: the scheme and host are case-insensitive), every other component compared
+    /// exactly, the fail-closed side of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.1">RFC 3986 section 6.2.1</see>'s
+    /// simple string comparison: a requested indicator a looser comparison would have matched but
+    /// this one does not is refused, never silently accepted. A stored grant
+    /// therefore matches a request in either spelling of its scheme and host, and the issued token
+    /// carries the STORED spelling (the matched <paramref name="grantedResource"/> entry, never the
+    /// request's own); a stored value the check refuses (an IRI, or any other value outside the
+    /// ASCII grammar) is carried
+    /// unchanged and applies only when the request names no resource at all, since it can then
+    /// never share a key with anything the request supplies.
     /// </para>
     /// <para>
-    /// §2.2 leaves "[t]he resource value(s) that is acceptable to an authorization server in
-    /// fulfilling an access token request" to the server's "sole discretion based on local policy
-    /// or configuration." A token-request resource when NOTHING was granted (no PAR/authorize
-    /// <c>resource</c> at all) has an empty set to be a subset of — this exercises that §2.2
-    /// discretion by keeping the request fail-closed (<c>invalid_target</c>) rather than treating
-    /// an empty granted set as "anything goes."
+    /// Section 2.2: "The resource value(s) that is acceptable to an authorization server in
+    /// fulfilling an access token request is at its sole discretion based on local policy or
+    /// configuration." A token-request resource when NOTHING was granted (no PAR/authorize
+    /// <c>resource</c> at all) has an empty set to be a subset of: this exercises that discretion
+    /// by keeping the request fail-closed (<c>invalid_target</c>) rather than treating an empty
+    /// granted set as permission to name any resource.
     /// </para>
     /// </remarks>
     private static (IReadOnlyList<string>? Effective, ServerHttpResponse? Failure) ResolveEffectiveResource(
@@ -7014,25 +7078,26 @@ public static class AuthCodeEndpoints
         {
             string[]? granted = ParseResourceIndicators(grantedResource);
 
-            return (granted is null ? null : DeduplicateOrdinal(granted), null);
+            return (granted is null ? null : DeduplicateByComparisonKey(granted), null);
         }
 
-        //A PRESENT but blank token-request resource (ParseResourceIndicators returns a
-        //non-null, zero-length array for it) is malformed, not "no narrowing requested" —
-        //§2's invalid_target covers a missing/malformed resource value the same as at
-        //PAR/authorize receipt (ValidateResourceIndicatorsShape).
-        string[] requested = DeduplicateOrdinal(ParseResourceIndicators(requestedResource) ?? []);
+        //A non-null requested value that parses to zero indicators (ParseResourceIndicators
+        //returns a non-null, zero-length array for it) is malformed, not "no narrowing
+        //requested": section 2's invalid_target covers a missing/malformed resource value the
+        //same as at PAR/authorize receipt (ValidateResourceOccurrences). ReadResource hands
+        //this method null, not such a value, for a request whose occurrences are all empty.
+        string[] requested = DeduplicateByComparisonKey(ParseResourceIndicators(requestedResource) ?? []);
         if(requested.Length == 0)
         {
-            return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidTarget,
-                "The resource parameter, when present, must not be empty."));
+            RecordMalformedResourceIndicator(ResourceIndicatorSyntax.Check(requestedResource));
+
+            return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription));
         }
 
-        //§2.2's "sole discretion" — the library's fail-closed exercise of it — refuses a
+        //Section 2.2's "sole discretion", the library's fail-closed exercise of it, refuses a
         //token-request resource when the grant carries none to narrow from, rather than treating
         //an empty granted set as unconstrained.
-        string[] grantedIndicators = DeduplicateOrdinal(ParseResourceIndicators(grantedResource) ?? []);
+        string[] grantedIndicators = DeduplicateByComparisonKey(ParseResourceIndicators(grantedResource) ?? []);
         if(grantedIndicators.Length == 0)
         {
             return (null, ServerHttpResponse.BadRequest(
@@ -7040,18 +7105,34 @@ public static class AuthCodeEndpoints
                 "The resource parameter must be a subset of the resource(s) originally granted; none were granted."));
         }
 
-        //Ordinal (byte-exact) subset membership — see the remarks above.
+        //Key-based subset membership, scheme/host case-insensitive in ASCII: see the remarks above.
+        //The effective list carries the matched GRANTED entry's spelling, in the requested order.
+        List<string> effective = new(requested.Length);
         foreach(string indicator in requested)
         {
-            if(Array.IndexOf(grantedIndicators, indicator) < 0)
+            string requestedKey = ResourceIndicatorSyntax.ComparisonKey(indicator);
+            string? matchedGrantedSpelling = null;
+            foreach(string granted in grantedIndicators)
+            {
+                if(string.Equals(ResourceIndicatorSyntax.ComparisonKey(granted), requestedKey, StringComparison.Ordinal))
+                {
+                    matchedGrantedSpelling = granted;
+
+                    break;
+                }
+            }
+
+            if(matchedGrantedSpelling is null)
             {
                 return (null, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidTarget,
                     $"The resource parameter must be a subset of the resource(s) originally granted; '{indicator}' was not granted."));
             }
+
+            effective.Add(matchedGrantedSpelling);
         }
 
-        return (requested, null);
+        return ([.. effective], null);
     }
 
 
@@ -7075,6 +7156,37 @@ public static class AuthCodeEndpoints
         foreach(string indicator in indicators)
         {
             if(seen.Add(indicator))
+            {
+                deduplicated.Add(indicator);
+            }
+        }
+
+        return [.. deduplicated];
+    }
+
+
+    /// <summary>
+    /// Removes duplicate entries from <paramref name="indicators"/> by
+    /// <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/>, preserving the first
+    /// occurrence's spelling and position: the resource-indicator counterpart of
+    /// <see cref="DeduplicateOrdinal"/>, used where two spellings that differ only by the fold (an
+    /// upper-case and a lower-case scheme or host, for instance) name the same granted
+    /// resource under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>'s scheme/host case-insensitivity.
+    /// </summary>
+    private static string[] DeduplicateByComparisonKey(string[] indicators)
+    {
+        if(indicators.Length < 2)
+        {
+            return indicators;
+        }
+
+        List<string> deduplicated = new(indicators.Length);
+        HashSet<string> seen = new(StringComparer.Ordinal);
+        foreach(string indicator in indicators)
+        {
+            if(seen.Add(ResourceIndicatorSyntax.ComparisonKey(indicator)))
             {
                 deduplicated.Add(indicator);
             }
@@ -8820,19 +8932,24 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// Builds an OAuth 2.0 Authorization Error Response as a redirect per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
-    /// a 302 to the client's already-validated <paramref name="redirectUri"/> carrying the
-    /// <c>error</c> and <c>error_description</c> query parameters, plus the request's
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see>: a 302 to the client's already-validated <paramref name="redirectUri"/>
+    /// carrying the <c>error</c> and <c>error_description</c> query parameters, plus the request's
     /// <paramref name="state"/> when one was sent. Used for authentication-requirement failures
-    /// (<c>unmet_authentication_requirements</c>, RFC 9470 §5) discovered after the redirect URI
-    /// has been validated, so the error is delivered to the client via the redirect rather than
-    /// rendered to the user agent.
+    /// (<c>unmet_authentication_requirements</c>, RFC 9470 section 5) discovered after the redirect
+    /// URI has been validated, so the error is delivered to the client via the redirect rather than
+    /// rendered to the user agent. <paramref name="errorDescription"/> is reduced through
+    /// <see cref="ErrorDescriptionCharset.Sanitize(string?)"/> before it rides the query string, the
+    /// same RFC 6749 section 4.1.2.1 / section 5.2 charset every JSON error body is already reduced
+    /// to (<see cref="ServerHttpResponse.BadRequest(string, string)"/>'s own body), so an
+    /// application's own denial description that names something outside that charset loses those
+    /// characters on this transport exactly as it would on the other.
     /// </summary>
     private static ServerHttpResponse BuildAuthorizeErrorRedirect(
         Uri redirectUri, string error, string errorDescription, string? state, ExchangeContext context) =>
         BuildAuthorizeRedirectWithParameters(
             redirectUri,
-            $"error={Uri.EscapeDataString(error)}&error_description={Uri.EscapeDataString(errorDescription)}",
+            $"error={Uri.EscapeDataString(error)}&error_description={Uri.EscapeDataString(ErrorDescriptionCharset.Sanitize(errorDescription)!)}",
             state,
             context);
 
@@ -9122,9 +9239,13 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// Builds the Authorization Error Response for an authorize-time failure: a JARM
-    /// JWT-secured response when the request asked for one (JARM §2.1 carries the error
+    /// JWT-secured response when the request asked for one (JARM section 2.1 carries the error
     /// parameters inside the JWT, even for error responses), otherwise the plain RFC 6749
-    /// §4.1.2.1 error redirect.
+    /// section 4.1.2.1 error redirect. <paramref name="errorDescription"/> is reduced through
+    /// <see cref="ErrorDescriptionCharset.Sanitize(string?)"/> before either path carries it, the
+    /// same charset the plain error redirect and every JSON error body already apply, so an
+    /// application's own denial description reads identically on every transport this method can
+    /// choose.
     /// </summary>
     private static async ValueTask<ServerHttpResponse> BuildAuthorizeErrorResponseAsync(
         EndpointServer server,
@@ -9144,7 +9265,7 @@ public static class AuthCodeEndpoints
             Dictionary<string, object> errorParameters = new(3, StringComparer.Ordinal)
             {
                 ["error"] = error,
-                ["error_description"] = errorDescription
+                ["error_description"] = ErrorDescriptionCharset.Sanitize(errorDescription)!
             };
 
             if(!string.IsNullOrEmpty(state))

@@ -1,13 +1,18 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Jar;
+using Verifiable.OAuth.Jarm;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.TokenExchange;
@@ -21,9 +26,12 @@ namespace Verifiable.Tests.OAuth;
 /// the <see cref="AuthorizationDenialReason.InvalidTarget"/> app-driven denial, §2.2 token/refresh
 /// subset narrowing (including the "nothing granted" and "not a subset" adversarial cases), the RFC
 /// 9068 producer's precedence of the granted resource over <see cref="ClientRecord.ScopeToAudience"/>,
-/// and the JAR §2.1 JSON-array resource claim form. Dispatches in-process via
-/// <see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>;
-/// the real-wire resource-pinned array-<c>aud</c> capstone and the refresh-narrowing round live in
+/// and the JAR §2.1 JSON-array resource claim form. A row that starts the HTTP host
+/// (<see cref="TestHostShell.StartHttpHostAsync(CancellationToken)"/>) or uses a
+/// <see cref="RawAuthCodeWirePushers"/> driver runs over the real loopback listener; every other row
+/// dispatches in-process through
+/// <see cref="TestHostShell.DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>.
+/// The real-wire resource-pinned array-<c>aud</c> capstone and the refresh-narrowing exchange live in
 /// <see cref="AuthCodeParPkceRealWireFlowTests.FullJourneyThreadsResourceIndicatorToArrayAudience"/>.
 /// </summary>
 [TestClass]
@@ -38,6 +46,33 @@ internal sealed class Rfc8707ResourceIndicatorTests
     private const string ResourceA = "https://cal.example.com/";
     private const string ResourceB = "https://contacts.example.com/";
     private const string UngrantedResource = "https://unrelated.example.com/";
+
+    /// <summary>
+    /// The <c>invalid_target</c> JSON body every parse-time refusal of a malformed <c>resource</c>
+    /// value answers with, regardless of which grammar part failed
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
+    /// value MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]. The URI MUST NOT
+    /// include a fragment component.").
+    /// </summary>
+    private static string MalformedResourceIndicatorBody { get; } =
+        $"{{\"error\":\"{OAuthErrors.InvalidTarget}\",\"error_description\":\"The resource parameter " +
+        "must be an absolute URI (RFC 3986 section 4.3) without a fragment.\"}";
+
+    /// <summary>
+    /// The <c>error_description</c> text every parse-time refusal of a malformed <c>resource</c>
+    /// value carries, whether it rides a JSON body (<see cref="MalformedResourceIndicatorBody"/>) or
+    /// the query of an error redirect
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see>).
+    /// </summary>
+    private static string MalformedResourceIndicatorDescription { get; } =
+        "The resource parameter must be an absolute URI (RFC 3986 section 4.3) without a fragment.";
+
+    /// <summary>
+    /// The <c>state</c> claim every request object <see cref="BuildResourceJarAsync"/> signs carries,
+    /// so a row can assert the error redirect echoes the request object's own <c>state</c>.
+    /// </summary>
+    private static string ResourceJarState { get; } = "state-fold-resource";
 
     private static Uri ClientBaseUri { get; } = new(ClientId);
     private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
@@ -71,42 +106,28 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>'s
-    /// <c>invalid_target</c> ("missing, unknown, or malformed") covers ANY aggregated
-    /// <c>resource</c> occurrence that is null, empty, or whitespace — not only every occurrence
-    /// being blank. A repeated <c>resource</c> parameter where one occurrence is a well-formed URI
-    /// and the OTHER is empty must fail the whole PAR request closed: joining the aggregate with a
-    /// space before splitting would otherwise silently drop the blank occurrence
-    /// (<see cref="StringSplitOptions.RemoveEmptyEntries"/>) and let the valid one alone succeed.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// A repeated <c>resource</c> parameter (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC
+    /// 8707 section 2</see>'s multi-resource wire form) where one occurrence is a well-formed URI and
+    /// the OTHER is empty is a request naming exactly that one indicator: the PAR request is
+    /// accepted and the redeemed <c>aud</c> carries the one indicator. A blank element inside a
+    /// request object's <c>resource</c> claim is a different fact, not a parameter sent without a
+    /// value, and stays refused as malformed.
     /// </summary>
     [TestMethod]
-    public async Task PushedAuthorizationRequestRejectsEmptyResourceOccurrenceMixedWithValidOne()
+    public async Task PushedAuthorizationRequestDropsAnEmptyResourceOccurrenceMixedWithValidOne()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
-        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-        };
-        parFields.Add(OAuthRequestParameterNames.Resource, ResourceA);
-        parFields.Add(OAuthRequestParameterNames.Resource, "");
+        (string code, string verifier) = await PushAuthorizeAsync(host, material, ["", ResourceA]).ConfigureAwait(false);
+        ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
 
-        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(400, response.StatusCode, response.Body);
-        AssertErrorCode(response, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+        Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(tokenResponse.Body));
     }
 
 
@@ -131,9 +152,10 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Its value
-    /// MUST be an absolute URI." A relative resource value — the cross-platform absolute-URI guard
-    /// (<c>IsAbsoluteResourceIndicatorUri</c>) must reject it on every platform, not merely on
-    /// Windows where <see cref="UriKind.Absolute"/> alone would already fail it.
+    /// MUST be an absolute URI". A relative value has no scheme
+    /// (<see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> finds no <c>:</c> before a
+    /// character the <c>scheme</c> production disallows) and must be refused on every platform, not
+    /// merely on Windows where <see cref="UriKind.Absolute"/> alone would already fail it.
     /// </summary>
     [TestMethod]
     public async Task PushedAuthorizationRequestRejectsRelativeResourceWithInvalidTarget()
@@ -152,10 +174,10 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see> places no
     /// scheme restriction on the resource value — "Its value MUST be an absolute URI ... The URI
-    /// MUST NOT include a fragment component," nothing more. A non-https/http/urn absolute URI
+    /// MUST NOT include a fragment component", nothing more. A non-https/http/urn absolute URI
     /// (here <c>mailto:</c>, chosen because it has no authority component at all — the strongest
     /// case that this is genuinely scheme-agnostic, not merely "any scheme with a host") must be
-    /// ACCEPTED, proving the shape gate no longer allowlists schemes.
+    /// ACCEPTED, proving the shape gate does not allowlist schemes.
     /// </summary>
     [TestMethod]
     public async Task PushedAuthorizationRequestAcceptsNonAllowlistedSchemeAbsoluteUri()
@@ -194,12 +216,13 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Its value
-    /// MUST be an absolute URI." <c>AuthCodeEndpoints.IsAbsoluteResourceIndicatorUri</c>'s guard
-    /// against .NET's implicit path-to-<c>file:</c>-URI coercion (documented on the method itself)
-    /// closes a cross-platform gap the earlier scheme allowlist closed only incidentally: a
-    /// Windows-style absolute path parses as an absolute <c>file:</c> URI too, exactly like the
-    /// Unix leading-slash case <see cref="PushedAuthorizationRequestRejectsRelativeResourceWithInvalidTarget"/>
-    /// covers, and must be rejected the same way.
+    /// MUST be an absolute URI". A Windows-style path carries a backslash, a character none of the
+    /// <c>scheme</c>, <c>path</c> or <c>query</c> productions admit
+    /// (<see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>), so
+    /// the grammar itself refuses it, never .NET's implicit path-to-<c>file:</c>-URI coercion, which
+    /// this reader never consults, exactly like the Unix leading-slash case
+    /// <see cref="PushedAuthorizationRequestRejectsRelativeResourceWithInvalidTarget"/> covers.
     /// </summary>
     [TestMethod]
     public async Task PushedAuthorizationRequestRejectsWindowsStylePathWithInvalidTarget()
@@ -216,11 +239,12 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// The mirror of the two coercion-guard tests above: a resource value that DOES literally
-    /// start with the <c>file:</c> scheme is a genuine, deliberate resource indicator
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see> places no
-    /// scheme restriction) and must be ACCEPTED, proving the guard rejects the implicit coercion
-    /// specifically — not the <c>file:</c> scheme itself.
+    /// The mirror of the two grammar tests above: <c>file:///srv/resources/orders</c> is an
+    /// <c>absolute-URI</c> with an empty authority (the <c>//</c> after the scheme's <c>:</c> is
+    /// present, so <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> reads a genuine,
+    /// deliberate <c>file:</c> indicator; <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>
+    /// places no scheme restriction) and must be ACCEPTED, a genuinely different shape from the
+    /// Windows path above, which carries no <c>//</c> and no scheme at all.
     /// </summary>
     [TestMethod]
     public async Task PushedAuthorizationRequestAcceptsExplicitFileSchemeResource()
@@ -320,6 +344,51 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see>: "If the request fails due to a missing, invalid, or mismatching redirection URI,
+    /// or if the client identifier is missing or invalid, the authorization server SHOULD inform the
+    /// resource owner of the error and MUST NOT automatically redirect the user-agent to the invalid
+    /// redirection URI." A direct authorize GET over the listener carries a <c>redirect_uri</c> that
+    /// is not registered and a <c>resource</c> whose host carries U+212A (KELVIN SIGN), outside
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 section 2</see>'s
+    /// US-ASCII grammar, a defect that would otherwise answer with an <c>invalid_target</c> error
+    /// redirect. The answer is a 400 with no <c>Location</c> header, and its body names the
+    /// unregistered <c>redirect_uri</c>, not the resource.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task DirectAuthorizeOverTheWireDoesNotRedirectToAnUnregisteredRedirectUriWithANonAsciiResourceAsync()
+    {
+        const string unregisteredRedirectUri = "https://attacker.example.com/callback";
+        string resource = "https://" + char.ConvertFromUtf32(0x212A) + "ey.example/";
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        List<KeyValuePair<string, string>> fields = BuildAuthorizationFields(pkce, resource);
+        int redirectUriIndex = fields.FindIndex(
+            static field => field.Key == OAuthRequestParameterNames.RedirectUri);
+        fields[redirectUriIndex] = new(OAuthRequestParameterNames.RedirectUri, unregisteredRedirectUri);
+
+        Uri authorizeUri = RawAuthCodeWirePushers.ComposeAuthorizeUri(host, segment, fields);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location,
+            "An unregistered redirect_uri must never be redirected to, regardless of any other request defect.");
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidRequest}\"", body, StringComparison.Ordinal, body);
+        Assert.Contains("not among the registered redirect URIs", body, StringComparison.Ordinal, body);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>: the
     /// JAR-PAR endpoint has no front channel of its own (PAR always answers directly, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.3">RFC 9126 §2.3</see>), so a
@@ -361,20 +430,24 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// blank element has no indicator to contribute, so the JAR projection
     /// (<c>AuthCodeRequestObjectExtensions.ProjectAuthCode</c>'s <c>ReadResourceClaim</c>) must
     /// treat the whole claim as malformed rather than silently dropping the blank entry and
-    /// carrying the well-formed one alone into <see cref="AuthCodeRequestObject.Resource"/> — the
-    /// same distinction its query-string twin (<c>ReadResource</c>, proven by
-    /// <see cref="PushedAuthorizationRequestRejectsEmptyResourceOccurrenceMixedWithValidOne"/>)
-    /// already draws. Constructed directly against <see cref="JarVerified"/> — a supported public
+    /// carrying the well-formed one alone into <see cref="AuthCodeRequestObject.Resource"/>. A blank
+    /// element inside a claim is not a parameter sent without a value, so
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>'s
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// does not reach it, unlike an empty form occurrence, which the query-string twin
+    /// (<c>ReadResource</c>, proven by
+    /// <see cref="PushedAuthorizationRequestDropsAnEmptyResourceOccurrenceMixedWithValidOne"/>) drops.
+    /// Constructed directly against <see cref="JarVerified"/>, a supported public
     /// entry point — because a genuinely blank JSON array element, once it crosses the wire and is
     /// re-parsed into the verified claims dictionary, is a runtime shape
     /// (<c>List&lt;object&gt;</c>) whose own empty-string filtering already collapses the claim to
     /// the single well-formed entry before <c>ReadResourceClaim</c> ever runs; driving the same
     /// defect through a real signed JAR round-trip would exercise that filtering instead of the
     /// fix. The resulting projected <see cref="AuthCodeRequestObject.Resource"/> is checked against
-    /// RFC 8707 §2's own resource-indicator shape (an absolute URI with no fragment component) —
-    /// the same test <c>IsAbsoluteResourceIndicatorUri</c> applies downstream at
-    /// <c>ValidateResourceIndicatorsShape</c>, whose rejection is what ultimately produces
-    /// <c>invalid_target</c> on the wire: silently dropping the blank entry would leave a bare,
+    /// RFC 8707 section 2's own resource-indicator shape (an absolute URI with no fragment
+    /// component), the same grammar <c>ValidateResourceIndicatorsShape</c> applies downstream via
+    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/>, whose rejection is what
+    /// ultimately produces <c>invalid_target</c> on the wire: silently dropping the blank entry would leave a bare,
     /// well-formed resource indicator here; failing closed leaves a value that itself is not one.
     /// </summary>
     [TestMethod]
@@ -455,9 +528,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>: "If the
     /// authorization server ... does not consider the resource(s) acceptable, it should reject the
-    /// request." A well-formed <c>resource</c> the application does not consider acceptable is
-    /// denied through the ordinary authorize-decision seam with the new
-    /// <see cref="AuthorizationDenialReason.InvalidTarget"/> member, mapped to
+    /// request". A well-formed <c>resource</c> the application does not consider acceptable is
+    /// denied through the ordinary authorize-decision seam with
+    /// <see cref="AuthorizationDenialReason.InvalidTarget"/>, mapped to
     /// <c>invalid_target</c> — distinct from the library's own shape gate above, which never
     /// invokes the application seam at all.
     /// </summary>
@@ -903,7 +976,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Multiple
-    /// 'resource' parameters MAY be used" — the direct (non-PAR) authorize path's own
+    /// &quot;resource&quot; parameters MAY be used" — the direct (non-PAR) authorize path's own
     /// <c>ReadResource</c> read aggregates every repeated occurrence, not merely the PAR path's.
     /// </summary>
     [TestMethod]
@@ -1011,55 +1084,112 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// packed into ONE occurrence separated by spaces — a resource indicator IS one absolute URI
     /// (RFC 3986 §2 / Appendix A's ABNF forbids a raw space inside one). A single occurrence
     /// carrying an embedded space must FAIL the shape gate, not be silently recovered by splitting
-    /// it into two.
+    /// it into two. The refusal answers the fixed malformed-resource <c>invalid_target</c> body, and
+    /// the request trace names the first part of the value as received that fails
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>'s
+    /// <c>absolute-URI</c> grammar: the space is a character no <c>path-abempty</c> segment admits,
+    /// so the fault is <c>Path</c>.
     /// </summary>
     [TestMethod]
+    [DoNotParallelize]
     public async Task SpaceJoinedSingleResourceValueFailsShapeGateAtPushedAuthorizationRequest()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
 
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(SpaceJoinedSingleResourceValueFailsShapeGateAtPushedAuthorizationRequest));
+        _ = root.Start();
+
         ServerHttpResponse response = await PushAsync(
             host, material, $"{ResourceA} {ResourceB}").ConfigureAwait(false);
 
+        root.Stop();
+
         Assert.AreEqual(400, response.StatusCode);
         AssertErrorCode(response, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(MalformedResourceIndicatorBody, response.Body);
+        Assert.AreSequenceEqual(["Path"], ReadMalformedResourceFaultNames(capture, root));
     }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see>: "If the
-    /// authorization server fails to parse the provided value(s) ..., it should reject the request
-    /// ... with the 'invalid_target' error." A resource parameter PRESENT but empty is a parse
-    /// failure, not "no resource requested" — it must not be silently treated as absent.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// A PAR request whose only <c>resource</c> occurrence is empty is a request without a
+    /// <c>resource</c> parameter: it is accepted, and the redeemed <c>aud</c> is the one the same
+    /// request has with the parameter absent (<see cref="NoResourceAnywhereFallsBackToScopeToAudienceAsArray"/>).
+    /// A blank element inside a request object's <c>resource</c> claim is a different fact, not a
+    /// parameter sent without a value, and stays refused as malformed.
     /// </summary>
     [TestMethod]
-    public async Task EmptyResourceValueIsMalformedAtPushedAuthorizationRequest()
+    public async Task EmptyResourceValueAtPushedAuthorizationRequestIsOmitted()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
-        ServerHttpResponse response = await PushAsync(host, material, "").ConfigureAwait(false);
+        (string code, string verifier) = await PushAuthorizeAsync(host, material, [""]).ConfigureAwait(false);
+        ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
 
-        Assert.AreEqual(400, response.StatusCode);
-        AssertErrorCode(response, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+        Assert.AreSequenceEqual(["https://rs.example.com"], DecodeAudienceFromTokenResponse(tokenResponse.Body));
     }
 
 
     /// <summary>
-    /// The token-request twin of <see cref="EmptyResourceValueIsMalformedAtPushedAuthorizationRequest"/> —
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>'s
-    /// <c>invalid_target</c> ("missing, unknown, or malformed") covers a present-but-empty or
-    /// all-whitespace <c>resource</c> at CODE REDEMPTION too, refused by the step's own
-    /// request-only shape check (<c>ValidateRequestOnlyResourceShape</c>) before the presented
-    /// <c>code</c> is ever looked up — so the refusal is byte-identical for a code that was never
-    /// issued and one that was; a subsequent presentation with a correctly-shaped
-    /// <c>resource</c> still redeems the live code.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A code redemption whose only <c>resource</c> occurrence is
+    /// empty is a redemption without a <c>resource</c> parameter: the full granted set applies, as
+    /// <see cref="CodeRedemptionWithNoRequestResourceAppliesTheFullGrantedSetAsArrayAud"/> asserts for the
+    /// parameter absent. A blank element inside a request object's <c>resource</c> claim is a
+    /// different fact, not a parameter sent without a value, and stays refused as malformed.
     /// </summary>
     [TestMethod]
-    public async Task EmptyResourceValueIsMalformedAtCodeRedemption()
+    public async Task EmptyResourceValueAtCodeRedemptionIsOmitted()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        (string code, string verifier) = await PushAuthorizeAsync(
+            host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
+
+        ServerHttpResponse tokenResponse = await TokenAsync(
+            host, material, code, verifier, requestResource: "").ConfigureAwait(false);
+
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+        List<string> aud = DecodeAudienceFromTokenResponse(tokenResponse.Body);
+        Assert.HasCount(2, aud);
+        Assert.Contains(ResourceA, aud);
+        Assert.Contains(ResourceB, aud);
+    }
+
+
+    /// <summary>
+    /// The all-whitespace counterpart of <see cref="EmptyResourceValueAtCodeRedemptionIsOmitted"/>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see> makes
+    /// only a parameter sent WITHOUT a value an omitted one, and a whitespace-only value is a value
+    /// that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> refuses
+    /// (<c>invalid_target</c>, "missing, unknown, or malformed") at CODE REDEMPTION, by the step's own
+    /// occurrence check (<c>ValidateResourceOccurrences</c>) before the presented
+    /// <c>code</c> is ever looked up, so the refusal is byte-identical for a code that was never
+    /// issued and one that was; a subsequent presentation with a correctly-shaped
+    /// <c>resource</c> redeems the live code. The refusal answers the fixed malformed-resource
+    /// <c>invalid_target</c> body, and each refusal's request trace names the first part of the
+    /// value as received that fails
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>'s
+    /// <c>scheme</c> production: a space is no <c>ALPHA</c>, so the fault is <c>Scheme</c>.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task WhitespaceResourceValueIsMalformedAtCodeRedemption()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -1068,24 +1198,21 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
 
-        ServerHttpResponse emptyResourceResponse = await TokenAsync(
-            host, material, code, verifier, requestResource: "").ConfigureAwait(false);
-        ServerHttpResponse unknownCodeEmptyResourceResponse = await TokenAsync(
-            host, material, "code-never-issued-by-this-host", verifier, requestResource: "").ConfigureAwait(false);
-
-        Assert.AreEqual(400, emptyResourceResponse.StatusCode);
-        AssertErrorCode(emptyResourceResponse, OAuthErrors.InvalidTarget);
-        Assert.AreEqual(unknownCodeEmptyResourceResponse.StatusCode, emptyResourceResponse.StatusCode);
-        Assert.AreEqual(unknownCodeEmptyResourceResponse.Body, emptyResourceResponse.Body,
-            "A live code's existence must not be discoverable from an empty resource value's refusal.");
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(WhitespaceResourceValueIsMalformedAtCodeRedemption));
+        _ = root.Start();
 
         ServerHttpResponse whitespaceResourceResponse = await TokenAsync(
             host, material, code, verifier, requestResource: "   ").ConfigureAwait(false);
         ServerHttpResponse unknownCodeWhitespaceResourceResponse = await TokenAsync(
             host, material, "code-never-issued-by-this-host", verifier, requestResource: "   ").ConfigureAwait(false);
 
+        root.Stop();
+
         Assert.AreEqual(400, whitespaceResourceResponse.StatusCode);
         AssertErrorCode(whitespaceResourceResponse, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(MalformedResourceIndicatorBody, whitespaceResourceResponse.Body);
+        Assert.AreSequenceEqual(["Scheme", "Scheme"], ReadMalformedResourceFaultNames(capture, root));
         Assert.AreEqual(unknownCodeWhitespaceResourceResponse.StatusCode, whitespaceResourceResponse.StatusCode);
         Assert.AreEqual(unknownCodeWhitespaceResourceResponse.Body, whitespaceResourceResponse.Body,
             "A live code's existence must not be discoverable from an all-whitespace resource value's refusal.");
@@ -1097,14 +1224,56 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// The refresh-grant twin of <see cref="EmptyResourceValueIsMalformedAtCodeRedemption"/> —
-    /// a present-but-empty or all-whitespace <c>resource</c> at REFRESH is refused by the same
-    /// request-only shape check, before the presented <c>refresh_token</c> is ever looked up, so
-    /// the refusal is byte-identical for a refresh token that was never issued and one that was;
-    /// a subsequent presentation with a correctly-shaped <c>resource</c> still refreshes.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A refresh whose only <c>resource</c> occurrence is empty is
+    /// a refresh without a <c>resource</c> parameter: the full granted set stays in force. A blank
+    /// element inside a request object's <c>resource</c> claim is a different fact, not a parameter
+    /// sent without a value, and stays refused as malformed.
     /// </summary>
     [TestMethod]
-    public async Task EmptyResourceValueIsMalformedAtRefresh()
+    public async Task EmptyResourceValueAtRefreshIsOmitted()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        (string code, string verifier) = await PushAuthorizeAsync(
+            host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
+        ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
+        string refreshToken = ExtractStringProperty(tokenResponse.Body, "refresh_token");
+
+        ServerHttpResponse refreshResponse = await RefreshAsync(
+            host, material, refreshToken, requestResource: "").ConfigureAwait(false);
+
+        Assert.AreEqual(200, refreshResponse.StatusCode, refreshResponse.Body);
+        List<string> aud = DecodeAudienceFromTokenResponse(refreshResponse.Body);
+        Assert.HasCount(2, aud);
+        Assert.Contains(ResourceA, aud);
+        Assert.Contains(ResourceB, aud);
+    }
+
+
+    /// <summary>
+    /// The all-whitespace counterpart of <see cref="EmptyResourceValueAtRefreshIsOmitted"/>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see> makes
+    /// only a parameter sent WITHOUT a value an omitted one, and a whitespace-only value is a value
+    /// that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> refuses
+    /// (<c>invalid_target</c>) at REFRESH, by the same request-only shape check, before the presented
+    /// <c>refresh_token</c> is ever looked up, so the refusal is byte-identical for a refresh token
+    /// that was never issued and one that was; a subsequent presentation with a correctly-shaped
+    /// <c>resource</c> refreshes. The refusal answers the fixed malformed-resource
+    /// <c>invalid_target</c> body, and each refusal's request trace names the first part of the
+    /// value as received that fails
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>'s
+    /// <c>scheme</c> production: a space is no <c>ALPHA</c>, so the fault is <c>Scheme</c>.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task WhitespaceResourceValueIsMalformedAtRefresh()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -1115,24 +1284,21 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
         string refreshToken = ExtractStringProperty(tokenResponse.Body, "refresh_token");
 
-        ServerHttpResponse emptyResourceRefresh = await RefreshAsync(
-            host, material, refreshToken, requestResource: "").ConfigureAwait(false);
-        ServerHttpResponse unknownTokenEmptyResourceRefresh = await RefreshAsync(
-            host, material, "refresh-token-never-issued-by-this-host", requestResource: "").ConfigureAwait(false);
-
-        Assert.AreEqual(400, emptyResourceRefresh.StatusCode);
-        AssertErrorCode(emptyResourceRefresh, OAuthErrors.InvalidTarget);
-        Assert.AreEqual(unknownTokenEmptyResourceRefresh.StatusCode, emptyResourceRefresh.StatusCode);
-        Assert.AreEqual(unknownTokenEmptyResourceRefresh.Body, emptyResourceRefresh.Body,
-            "A live refresh token's existence must not be discoverable from an empty resource value's refusal.");
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(WhitespaceResourceValueIsMalformedAtRefresh));
+        _ = root.Start();
 
         ServerHttpResponse whitespaceResourceRefresh = await RefreshAsync(
             host, material, refreshToken, requestResource: "   ").ConfigureAwait(false);
         ServerHttpResponse unknownTokenWhitespaceResourceRefresh = await RefreshAsync(
             host, material, "refresh-token-never-issued-by-this-host", requestResource: "   ").ConfigureAwait(false);
 
+        root.Stop();
+
         Assert.AreEqual(400, whitespaceResourceRefresh.StatusCode);
         AssertErrorCode(whitespaceResourceRefresh, OAuthErrors.InvalidTarget);
+        Assert.AreEqual(MalformedResourceIndicatorBody, whitespaceResourceRefresh.Body);
+        Assert.AreSequenceEqual(["Scheme", "Scheme"], ReadMalformedResourceFaultNames(capture, root));
         Assert.AreEqual(unknownTokenWhitespaceResourceRefresh.StatusCode, whitespaceResourceRefresh.StatusCode);
         Assert.AreEqual(unknownTokenWhitespaceResourceRefresh.Body, whitespaceResourceRefresh.Body,
             "A live refresh token's existence must not be discoverable from an all-whitespace resource value's refusal.");
@@ -1144,17 +1310,25 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// The real-wire twin of <see cref="EmptyResourceValueIsMalformedAtCodeRedemption"/>: the same
+    /// The real-wire twin of <see cref="WhitespaceResourceValueIsMalformedAtCodeRedemption"/>: the same
     /// step-level refusal, proven through actual HTTP <c>application/x-www-form-urlencoded</c>
-    /// decoding rather than <see cref="RequestFields"/> built directly — an empty value, an
-    /// all-whitespace value, and a MIXED valid-then-malformed repeated <c>resource</c> occurrence
-    /// (the genuine RFC 8707 §2 multi-value wire form: two separate <c>resource=</c> parameters,
+    /// decoding rather than <see cref="RequestFields"/> built directly. A whitespace-only value is a
+    /// value (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>
+    /// makes only a parameter sent without a value an omitted one) that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> refuses
+    /// (<c>invalid_target</c>), alone or MIXED valid-then-whitespace as a repeated <c>resource</c>
+    /// occurrence (the genuine multi-value wire form: two separate <c>resource=</c> parameters,
     /// never one space-joined value) — byte-identical for an unknown code and the still-unconsumed
     /// live one, touching NO grant-store operation on the refusal, with a successful
-    /// correctly-shaped control.
+    /// correctly-shaped control. Every refusal answers the fixed malformed-resource
+    /// <c>invalid_target</c> body and its request trace names the first part of the occurrence as
+    /// received that fails <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986
+    /// Appendix A</see>'s <c>scheme</c> production, <c>Scheme</c>, the whitespace-only occurrence
+    /// being the one refused in the mixed case too.
     /// </summary>
     [TestMethod]
-    public async Task EmptyResourceValueIsMalformedAtCodeRedemptionOverRealWireAsync()
+    [DoNotParallelize]
+    public async Task WhitespaceResourceValueIsMalformedAtCodeRedemptionOverRealWireAsync()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -1163,7 +1337,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
         string segment = material.Registration.TenantId.Value;
-        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
 
@@ -1172,62 +1345,59 @@ internal sealed class Rfc8707ResourceIndicatorTests
             hosted.InstallObservedStorage(candidateIntegration, hosted);
         }).ConfigureAwait(false);
 
-        async Task<(int Status, string Body)> PostTokenAsync(string presentedCode, IReadOnlyList<string> resources)
-        {
-            List<KeyValuePair<string, string>> fields =
-            [
-                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.AuthorizationCode),
-                new(OAuthRequestParameterNames.Code, presentedCode),
-                new(OAuthRequestParameterNames.CodeVerifier, verifier),
-                new(OAuthRequestParameterNames.ClientId, ClientId),
-                new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString)
-            ];
-            foreach(string resource in resources)
-            {
-                fields.Add(new(OAuthRequestParameterNames.Resource, resource));
-            }
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(WhitespaceResourceValueIsMalformedAtCodeRedemptionOverRealWireAsync));
+        _ = root.Start();
 
-            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
-                hosted.SharedHttpClient!, tokenUri, fields, TestContext.CancellationToken).ConfigureAwait(false);
-            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-            return ((int)response.StatusCode, body);
-        }
-
-        foreach(string[] malformedResources in new[] { new[] { "" }, new[] { "   " }, new[] { ResourceA, "" } })
+        foreach(string[] malformedResources in new[] { new[] { "   " }, new[] { ResourceA, "   " } })
         {
             int beforeLive = hosted.StorageObservations.Count;
-            (int liveStatus, string liveBody) = await PostTokenAsync(code, malformedResources).ConfigureAwait(false);
+            (int liveStatus, string liveBody) = await PostTokenAsync(host, segment, code, verifier, malformedResources).ConfigureAwait(false);
             hosted.AssertNoFlowStateStoreOperationTouched(beforeLive,
                 $"a malformed resource occurrence over the real wire at code redemption, live code ('{string.Join(",", malformedResources)}')");
 
             int beforeUnknown = hosted.StorageObservations.Count;
             (int unknownStatus, string unknownBody) = await PostTokenAsync(
-                "code-never-issued-by-this-host", malformedResources).ConfigureAwait(false);
+                host, segment, "code-never-issued-by-this-host", verifier, malformedResources).ConfigureAwait(false);
             hosted.AssertNoFlowStateStoreOperationTouched(beforeUnknown,
                 $"a malformed resource occurrence over the real wire at code redemption, unknown code ('{string.Join(",", malformedResources)}')");
 
             Assert.AreEqual(400, liveStatus, liveBody);
             Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", liveBody, StringComparison.Ordinal);
+            Assert.AreEqual(MalformedResourceIndicatorBody, liveBody);
             Assert.AreEqual(unknownStatus, liveStatus);
             Assert.AreEqual(unknownBody, liveBody,
                 "A live code's existence must not be discoverable from a malformed resource value's refusal over the real wire.");
         }
 
-        (int okStatus, string okBody) = await PostTokenAsync(code, [ResourceA]).ConfigureAwait(false);
+        root.Stop();
+
+        Assert.AreSequenceEqual(
+            ["Scheme", "Scheme", "Scheme", "Scheme"], ReadMalformedResourceFaultNames(capture, root));
+
+        (int okStatus, string okBody) = await PostTokenAsync(host, segment, code, verifier, [ResourceA]).ConfigureAwait(false);
         Assert.AreEqual(200, okStatus, okBody);
     }
 
 
     /// <summary>
-    /// The real-wire twin of <see cref="EmptyResourceValueIsMalformedAtRefresh"/>: the same
-    /// refusal proven through actual HTTP form decoding — an empty value, an all-whitespace value,
-    /// and a MIXED valid-then-malformed repeated <c>resource</c> occurrence — byte-identical for an
-    /// unknown refresh token and the still-usable live one, touching NO grant-store operation on
-    /// the refusal, with a successful correctly-shaped control.
+    /// The real-wire twin of <see cref="WhitespaceResourceValueIsMalformedAtRefresh"/>: the same
+    /// refusal proven through actual HTTP form decoding. A whitespace-only value is a value
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>
+    /// makes only a parameter sent without a value an omitted one) that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> refuses,
+    /// alone or as a MIXED valid-then-whitespace repeated <c>resource</c> occurrence,
+    /// byte-identical for an unknown refresh token and the usable live one, touching NO
+    /// grant-store operation on the refusal, with a successful correctly-shaped control. Every
+    /// refusal answers the fixed malformed-resource <c>invalid_target</c> body and its request trace
+    /// names the first part of the occurrence as received that fails
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>'s
+    /// <c>scheme</c> production, <c>Scheme</c>, the whitespace-only occurrence being the one
+    /// refused in the mixed case too.
     /// </summary>
     [TestMethod]
-    public async Task EmptyResourceValueIsMalformedAtRefreshOverRealWireAsync()
+    [DoNotParallelize]
+    public async Task WhitespaceResourceValueIsMalformedAtRefreshOverRealWireAsync()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -1236,7 +1406,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
         string segment = material.Registration.TenantId.Value;
-        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
         ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
@@ -1248,48 +1417,413 @@ internal sealed class Rfc8707ResourceIndicatorTests
             hosted.InstallObservedStorage(candidateIntegration, hosted);
         }).ConfigureAwait(false);
 
-        async Task<(int Status, string Body)> PostRefreshAsync(string presentedRefreshToken, IReadOnlyList<string> resources)
-        {
-            List<KeyValuePair<string, string>> fields =
-            [
-                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.RefreshToken),
-                new(OAuthRequestParameterNames.RefreshToken, presentedRefreshToken),
-                new(OAuthRequestParameterNames.ClientId, ClientId)
-            ];
-            foreach(string resource in resources)
-            {
-                fields.Add(new(OAuthRequestParameterNames.Resource, resource));
-            }
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(WhitespaceResourceValueIsMalformedAtRefreshOverRealWireAsync));
+        _ = root.Start();
 
-            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
-                hosted.SharedHttpClient!, tokenUri, fields, TestContext.CancellationToken).ConfigureAwait(false);
-            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-            return ((int)response.StatusCode, body);
-        }
-
-        foreach(string[] malformedResources in new[] { new[] { "" }, new[] { "   " }, new[] { ResourceA, "" } })
+        foreach(string[] malformedResources in new[] { new[] { "   " }, new[] { ResourceA, "   " } })
         {
             int beforeLive = hosted.StorageObservations.Count;
-            (int liveStatus, string liveBody) = await PostRefreshAsync(refreshToken, malformedResources).ConfigureAwait(false);
+            (int liveStatus, string liveBody) = await PostRefreshAsync(host, segment, refreshToken, malformedResources).ConfigureAwait(false);
             hosted.AssertNoFlowStateStoreOperationTouched(beforeLive,
                 $"a malformed resource occurrence over the real wire at refresh, live token ('{string.Join(",", malformedResources)}')");
 
             int beforeUnknown = hosted.StorageObservations.Count;
             (int unknownStatus, string unknownBody) = await PostRefreshAsync(
-                "refresh-token-never-issued-by-this-host", malformedResources).ConfigureAwait(false);
+                host, segment, "refresh-token-never-issued-by-this-host", malformedResources).ConfigureAwait(false);
             hosted.AssertNoFlowStateStoreOperationTouched(beforeUnknown,
                 $"a malformed resource occurrence over the real wire at refresh, unknown token ('{string.Join(",", malformedResources)}')");
 
             Assert.AreEqual(400, liveStatus, liveBody);
             Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", liveBody, StringComparison.Ordinal);
+            Assert.AreEqual(MalformedResourceIndicatorBody, liveBody);
             Assert.AreEqual(unknownStatus, liveStatus);
             Assert.AreEqual(unknownBody, liveBody,
                 "A live refresh token's existence must not be discoverable from a malformed resource value's refusal over the real wire.");
         }
 
-        (int okStatus, string okBody) = await PostRefreshAsync(refreshToken, [ResourceA]).ConfigureAwait(false);
+        root.Stop();
+
+        Assert.AreSequenceEqual(
+            ["Scheme", "Scheme", "Scheme", "Scheme"], ReadMalformedResourceFaultNames(capture, root));
+
+        (int okStatus, string okBody) = await PostRefreshAsync(host, segment, refreshToken, [ResourceA]).ConfigureAwait(false);
         Assert.AreEqual(200, okStatus, okBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) Over the real wire a code redemption form carrying a bare
+    /// <c>resource=</c> is a redemption without a <c>resource</c> parameter: the request proceeds and
+    /// the full granted set applies. A blank element inside a request object's <c>resource</c> claim
+    /// is a different fact, not a parameter sent without a value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResourceValueIsOmittedAtCodeRedemptionOverRealWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string code, string verifier) = await PushAuthorizeAsync(
+            host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(host, segment, code, verifier, [""]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        List<string> aud = DecodeAudienceFromTokenResponse(body);
+        Assert.HasCount(2, aud);
+        Assert.Contains(ResourceA, aud);
+        Assert.Contains(ResourceB, aud);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) Over the real wire a code redemption form carrying
+    /// <c>resource=&amp;resource=</c> followed by a granted indicator names exactly that one
+    /// indicator: the empty occurrence is dropped and the redeemed <c>aud</c> narrows to the one.
+    /// A blank element inside a request object's <c>resource</c> claim is a different fact, not a
+    /// parameter sent without a value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResourceOccurrenceMixedWithValidOneNarrowsAtCodeRedemptionOverRealWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string code, string verifier) = await PushAuthorizeAsync(
+            host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(
+            host, segment, code, verifier, ["", ResourceA]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(body));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) Over the real wire a refresh form carrying a bare
+    /// <c>resource=</c> is a refresh without a <c>resource</c> parameter: the request proceeds and
+    /// the full granted set stays in force. A blank element inside a request object's
+    /// <c>resource</c> claim is a different fact, not a parameter sent without a value, and stays
+    /// refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResourceValueIsOmittedAtRefreshOverRealWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string code, string verifier) = await PushAuthorizeAsync(
+            host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
+        ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+        string refreshToken = ExtractStringProperty(tokenResponse.Body, "refresh_token");
+
+        (int status, string body) = await PostRefreshAsync(host, segment, refreshToken, [""]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        List<string> aud = DecodeAudienceFromTokenResponse(body);
+        Assert.HasCount(2, aud);
+        Assert.Contains(ResourceA, aud);
+        Assert.Contains(ResourceB, aud);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) Over the real wire a refresh form carrying an empty
+    /// <c>resource</c> occurrence followed by a granted indicator names exactly that one indicator:
+    /// the empty occurrence is dropped and the refreshed <c>aud</c> narrows to the one. A blank
+    /// element inside a request object's <c>resource</c> claim is a different fact, not a parameter
+    /// sent without a value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyResourceOccurrenceMixedWithValidOneNarrowsAtRefreshOverRealWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string code, string verifier) = await PushAuthorizeAsync(
+            host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
+        ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+        string refreshToken = ExtractStringProperty(tokenResponse.Body, "refresh_token");
+
+        (int status, string body) = await PostRefreshAsync(
+            host, segment, refreshToken, ["", ResourceA]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(body));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// Over the real wire, at each form ingress of the authorization request (the pushed request and
+    /// the direct authorization request), a bare <c>resource=</c> is a request without a
+    /// <c>resource</c> parameter: the authorization proceeds and the redeemed <c>aud</c> is the one
+    /// the same request has with the parameter absent
+    /// (<see cref="NoResourceAnywhereFallsBackToScopeToAudienceAsArray"/>). A blank element inside a
+    /// request object's <c>resource</c> claim is a different fact, not a parameter sent without a
+    /// value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    [DataRow(ResourceDeliveryMode.Pushed)]
+    [DataRow(ResourceDeliveryMode.DirectAuthorize)]
+    public async Task AnEmptyResourceValueIsOmittedAtEveryAuthorizationFormReceiptAsync(ResourceDeliveryMode mode)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, mode, "", pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual(["https://rs.example.com"], DecodeAudienceFromTokenResponse(body));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// Over the real wire, at each form ingress of the authorization request (the pushed request and
+    /// the direct authorization request), an empty <c>resource</c> occurrence followed by a
+    /// well-formed one names exactly that one indicator: the empty occurrence is dropped and the
+    /// redeemed <c>aud</c> carries the one. A blank element inside a request object's
+    /// <c>resource</c> claim is a different fact, not a parameter sent without a value, and stays
+    /// refused as malformed.
+    /// </summary>
+    [TestMethod]
+    [DataRow(ResourceDeliveryMode.Pushed)]
+    [DataRow(ResourceDeliveryMode.DirectAuthorize)]
+    public async Task AnEmptyResourceOccurrenceMixedWithValidOneIsDroppedAtEveryAuthorizationFormReceiptAsync(
+        ResourceDeliveryMode mode)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        List<KeyValuePair<string, string>> fields = BuildAuthorizationFields(pkce, "");
+        fields.Add(new(OAuthRequestParameterNames.Resource, ResourceA));
+        string code = await (mode switch
+        {
+            ResourceDeliveryMode.Pushed =>
+                PushAndExtractCodeAsync(host, segment, fields, TestContext.CancellationToken),
+            ResourceDeliveryMode.DirectAuthorize =>
+                DirectAuthorizeAndExtractCodeAsync(host, segment, fields, TestContext.CancellationToken),
+            _ => throw new NotSupportedException($"Unsupported {nameof(ResourceDeliveryMode)}: {mode}.")
+        }).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(body));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A <c>client_credentials</c> request whose only
+    /// <c>resource</c> occurrence is empty is a request without a <c>resource</c> parameter: it is
+    /// granted the same audience the request with the parameter absent is. A blank element inside a
+    /// request object's <c>resource</c> claim is a different fact, not a parameter sent without a
+    /// value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientCredentialsTreatsAnEmptyResourceValueAsOmitted()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+        const string ClientSecret = "s3cret-for-client-credentials";
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
+
+        RequestFields absentResourceFields = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ClientSecret] = ClientSecret
+        };
+        RequestFields emptyResourceFields = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
+            [OAuthRequestParameterNames.Resource] = ""
+        };
+
+        ServerHttpResponse absentResourceResponse = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.ClientCredentialsToken, WellKnownHttpMethods.Post,
+            absentResourceFields, [], TestContext.CancellationToken).ConfigureAwait(false);
+        ServerHttpResponse emptyResourceResponse = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.ClientCredentialsToken, WellKnownHttpMethods.Post,
+            emptyResourceFields, [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, absentResourceResponse.StatusCode, absentResourceResponse.Body);
+        Assert.AreEqual(200, emptyResourceResponse.StatusCode, emptyResourceResponse.Body);
+        Assert.IsFalse(AccessTokenCarriesAudienceClaim(absentResourceResponse.Body),
+            "The request with the resource parameter absent is issued no aud claim.");
+        Assert.IsFalse(AccessTokenCarriesAudienceClaim(emptyResourceResponse.Body),
+            "The request with an empty resource parameter is issued what the request with the parameter absent is.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) A <c>client_credentials</c> request carrying an empty
+    /// <c>resource</c> occurrence followed by a well-formed one names exactly that one indicator, and
+    /// the issued <c>aud</c> carries the one. A blank element inside a request object's
+    /// <c>resource</c> claim is a different fact, not a parameter sent without a value, and stays
+    /// refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientCredentialsDropsAnEmptyResourceOccurrenceMixedWithValidOne()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+        const string ClientSecret = "s3cret-for-client-credentials";
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
+
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ClientSecret] = ClientSecret
+        };
+        fields.Add(OAuthRequestParameterNames.Resource, "");
+        fields.Add(OAuthRequestParameterNames.Resource, ResourceA);
+
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.ClientCredentialsToken, WellKnownHttpMethods.Post,
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(response.Body));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) Over the real loopback listener, a
+    /// <c>client_credentials</c> request whose only <c>resource</c> occurrence is empty is a request
+    /// without a <c>resource</c> parameter: it answers 200 and is issued the same access token shape
+    /// the request with the parameter absent is, which carries no <c>aud</c> claim. A blank element
+    /// inside a request object's <c>resource</c> claim is a different fact, not a parameter sent
+    /// without a value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientCredentialsTreatsAnEmptyResourceValueAsOmittedOverTheWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        ServerHttpResponse absentResourceResponse = await PostClientCredentialsOverTheWireAsync(
+            host, segment, []).ConfigureAwait(false);
+        ServerHttpResponse emptyResourceResponse = await PostClientCredentialsOverTheWireAsync(
+            host, segment, [""]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, absentResourceResponse.StatusCode, absentResourceResponse.Body);
+        Assert.AreEqual(200, emptyResourceResponse.StatusCode, emptyResourceResponse.Body);
+        Assert.IsFalse(AccessTokenCarriesAudienceClaim(absentResourceResponse.Body),
+            "The request with the resource parameter absent is issued no aud claim.");
+        Assert.IsFalse(AccessTokenCarriesAudienceClaim(emptyResourceResponse.Body),
+            "The request with an empty resource parameter is issued what the request with the parameter absent is.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
+    /// sentence for the token endpoint.) Over the real loopback listener, a
+    /// <c>client_credentials</c> request carrying an empty <c>resource</c> occurrence followed by a
+    /// well-formed one names exactly that one indicator: it answers 200 and the issued <c>aud</c>
+    /// carries the one. A blank element inside a request object's <c>resource</c> claim is a
+    /// different fact, not a parameter sent without a value, and stays refused as malformed.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientCredentialsDropsAnEmptyResourceOccurrenceMixedWithValidOneOverTheWireAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        ServerHttpResponse response = await PostClientCredentialsOverTheWireAsync(
+            host, segment, ["", ResourceA]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(response.Body));
     }
 
 
@@ -1582,6 +2116,1538 @@ internal sealed class Rfc8707ResourceIndicatorTests
     }
 
 
+    /// <summary>
+    /// The path by which a fold row's resource indicator reaches the authorization server, so one
+    /// <see cref="AuthorizeForResourceAsync"/> can drive every wire shape the fold must survive.
+    /// </summary>
+    internal enum ResourceDeliveryMode
+    {
+        /// <summary>Pushed to the PAR endpoint, then the pinned authorize GET redeems <c>request_uri</c>.</summary>
+        Pushed,
+
+        /// <summary>Every parameter addressed directly to the authorize endpoint's query string.</summary>
+        DirectAuthorize,
+
+        /// <summary>A signed request object presented directly to the authorize endpoint's <c>request</c> parameter.</summary>
+        RequestObjectByValue,
+
+        /// <summary>A signed request object pushed to the PAR endpoint, then redeemed through <c>request_uri</c>.</summary>
+        RequestObjectAtPushedEndpoint
+    }
+
+
+    /// <summary>
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#canonical-server-uri">
+    /// The MCP authorization canonical-server-uri section</see>: "implementations SHOULD accept
+    /// uppercase scheme and host components for robustness and interoperability." Read together
+    /// with <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see> ("the scheme and host are case-insensitive and therefore should be normalized
+    /// to lowercase") and <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707
+    /// section 2</see> ("The authorization server may use the exact &quot;resource&quot; value as
+    /// the audience or it may map from that value to a more general URI or abstract identifier for
+    /// the given resource."): whichever of the four request paths
+    /// carries an upper-case scheme-and-host resource indicator, the redeemed <c>aud</c> is the
+    /// canonical, lower-case spelling. Every case runs inside a <see cref="ServedCultureScope"/> set
+    /// to "tr-TR", so a fold that lowered the ASCII <c>I</c> the Turkish way (to U+0131) would fail
+    /// every case here.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow(ResourceDeliveryMode.Pushed)]
+    [DataRow(ResourceDeliveryMode.DirectAuthorize)]
+    [DataRow(ResourceDeliveryMode.RequestObjectByValue)]
+    [DataRow(ResourceDeliveryMode.RequestObjectAtPushedEndpoint)]
+    public async Task AnUppercaseSchemeAndHostResourceIsGrantedTheCanonicalAudienceAsync(ResourceDeliveryMode mode)
+    {
+        const string resource = "HTTPS://API.Example.COM/Path?Q=1";
+        const string expectedAudience = "https://api.example.com/Path?Q=1";
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, mode, resource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([expectedAudience], DecodeAudienceFromTokenResponse(body));
+
+        int expectedRequests = mode is ResourceDeliveryMode.Pushed or ResourceDeliveryMode.RequestObjectAtPushedEndpoint ? 3 : 2;
+        culture.AssertEveryRequestWasServedUnder("tr-TR", expectedRequests);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>: "the scheme and host are case-insensitive and therefore should be normalized
+    /// to lowercase". <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">
+    /// RFC 8707 section 2.2</see>: a token request's resource narrows the granted set. A token
+    /// request naming the granted indicator in a different scheme/host spelling narrows to it,
+    /// by the folded comparison key, and the minted <c>aud</c> carries the GRANTED spelling.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task NarrowingMatchesAGrantedResourceByItsKeyAsync()
+    {
+        const string grantedResource = "https://api.example.com/x";
+        const string requestedResource = "HTTPS://API.EXAMPLE.COM/x";
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, grantedResource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(
+            host, segment, code, pkce.EncodedVerifier, [requestedResource]).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([grantedResource], DecodeAudienceFromTokenResponse(body));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>: "The other generic syntax components are assumed to be case-sensitive unless
+    /// specifically defined otherwise by the scheme", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.3">RFC 9110 section 4.2.3</see>:
+    /// "The scheme and host are case-insensitive and normally provided in lowercase; all other
+    /// components are compared in a case-sensitive manner." A token request naming a resource that
+    /// differs from a granted one only in the case of a part outside the scheme and host (the path
+    /// of <c>https://api.example.com/x</c>, the <c>Example:Thing</c> remainder of
+    /// <c>urn:Example:Thing</c>) names a different resource, so it is not in the granted set and is
+    /// refused with <c>invalid_target</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>:
+    /// "such policy may limit the acceptable resources to those that were originally granted by the
+    /// resource owner or a subset thereof."), the description naming the requested value as not granted.
+    /// </summary>
+    /// <param name="grantedResource">The <c>resource</c> the authorization request granted.</param>
+    /// <param name="requestedResource">The <c>resource</c> the token request names.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("https://api.example.com/x", "https://api.example.com/X")]
+    [DataRow("urn:Example:Thing", "urn:example:thing")]
+    public async Task NarrowingRefusesAResourceThatDiffersOnlyInTheCaseOfAKeyedPartAsync(
+        string grantedResource, string requestedResource)
+    {
+        await AssertNarrowingIsRefusedAsNotGrantedAsync(grantedResource, requestedResource).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The comparison key is the exact spelling apart from the case of the scheme and the host
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.1">RFC 3986 section 6.2.1</see>:
+    /// "If two URIs, when considered as character strings, are identical, then it is safe to
+    /// conclude that they are equivalent"), so a token request naming a spelling that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2">RFC 3986 section 6.2.2</see>
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.3">section 6.2.3</see>
+    /// call equivalent to a granted one, but that this library does not normalize, names a
+    /// resource that is not in the granted set and is refused with <c>invalid_target</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>:
+    /// "such policy may limit the acceptable resources to those that were originally granted by the
+    /// resource owner or a subset thereof."), the description naming the requested value as not
+    /// granted. The four pairs are the clauses the library does not apply:
+    /// an empty path against <c>/</c> (section 6.2.3: "a URI that uses the generic syntax for
+    /// authority with an empty path should be normalized to a path of &quot;/&quot;"), an explicit
+    /// default port against no port (section 6.2.3: "an explicit &quot;:port&quot;, for which the port
+    /// is empty or the default for the scheme, is equivalent to one where the port and its
+    /// &quot;:&quot; delimiter are elided and thus should be removed by scheme-based
+    /// normalization"), a path with dot-segments against the path without them (section 6.2.2.3:
+    /// "URI normalizers should remove dot-segments by applying the remove_dot_segments algorithm to
+    /// the path"), and a percent-encoded octet spelled with lower-case hexadecimal digits against
+    /// the upper-case spelling (section 6.2.2.1: "the hexadecimal digits within a percent-encoding
+    /// triplet (e.g., &quot;%3a&quot; versus &quot;%3A&quot;) are case-insensitive and therefore
+    /// should be normalized to use uppercase letters for the digits A-F").
+    /// </summary>
+    /// <param name="grantedResource">The <c>resource</c> the authorization request granted.</param>
+    /// <param name="requestedResource">The equivalent spelling the token request names.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("https://api.example.com", "https://api.example.com/")]
+    [DataRow("https://api.example.com/x", "https://api.example.com:443/x")]
+    [DataRow("https://api.example.com/b", "https://api.example.com/a/../b")]
+    [DataRow("https://api.example.com/A%2fB", "https://api.example.com/A%2FB")]
+    public async Task NarrowingRefusesAnEquivalentSpellingTheLibraryDoesNotNormalizeAsync(
+        string grantedResource, string requestedResource)
+    {
+        await AssertNarrowingIsRefusedAsNotGrantedAsync(grantedResource, requestedResource).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
+    /// 6.2.2.1</see>: "The other generic syntax components are assumed to be case-sensitive"; only
+    /// the scheme and host fold; a path, query and percent-encoded octet keep their exact spelling.
+    /// A PIN: this resource has nothing for the fold to touch, guarding against a fold that reaches
+    /// further than the scheme and host.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task PathQueryAndPercentEncodingKeepTheirSpellingAsync()
+    {
+        const string resource = "https://api.example.com/A%2fB?X=Y";
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, resource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([resource], DecodeAudienceFromTokenResponse(body));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2">RFC 3986 section 3.2.2</see>:
+    /// "Although host is case-insensitive, producers and normalizers should use lowercase for
+    /// registered names and hexadecimal addresses for the sake of uniformity, while only using
+    /// uppercase letters for percent-encodings."; an <c>IP-literal</c> is lowered like any other
+    /// host (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">section 6.2.2.1</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">Appendix A</see>), while a port
+    /// and a percent-encoded octet keep their exact spelling. Only the scheme
+    /// and host of an authority fold; nothing else in it does.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("HTTPS://[2001:DB8::1]:8443/P", "https://[2001:db8::1]:8443/P")]
+    [DataRow("FOO://B%C3%BCCHER.EXAMPLE/x", "foo://b%C3%BCcher.example/x")]
+    public async Task OnlyTheSchemeAndHostOfAnAuthorityAreFoldedAsync(string resource, string expectedAudience)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, resource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([expectedAudience], DecodeAudienceFromTokenResponse(body));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.1">RFC 3986 section 3.1</see>:
+    /// "Although schemes are case-insensitive, the canonical form is lowercase and documents that
+    /// specify schemes must do so with lowercase letters." An indicator with
+    /// no authority (no <c>//</c> follows the scheme's <c>:</c>) folds only its scheme; the rest of
+    /// its spelling, having no host to fold, is untouched, so <c>URN:Example:Thing</c> and
+    /// <c>urn:example:thing</c> are NOT the same comparison key, unlike an authority's host.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("URN:Example:Thing", null, "urn:Example:Thing")]
+    [DataRow("URN:example:thing", "urn:example:thing", "urn:example:thing")]
+    public async Task TheSchemeOfAnIndicatorWithoutAnAuthorityIsFoldedAsync(
+        string resource, string? requestedResource, string expectedAudience)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, resource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<string> requestedResources = requestedResource is null ? [] : [requestedResource];
+        (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, requestedResources).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([expectedAudience], DecodeAudienceFromTokenResponse(body));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2">RFC 3986 section 3.2.2</see>:
+    /// a registered name's percent-encoded octets represent a UTF-8 sequence; an internationalized
+    /// domain name's A-label (<c>xn--</c>) form is itself ASCII, so it folds like any other host
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">section 6.2.2.1</see>);
+    /// the path segment stays exactly as sent.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnIdnHostInItsALabelFormIsAcceptedAndFoldedAsync()
+    {
+        const string resource = "HTTPS://XN--BCHER-KVA.EXAMPLE/Items";
+        const string expectedAudience = "https://xn--bcher-kva.example/Items";
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, resource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+        Assert.AreSequenceEqual([expectedAudience], DecodeAudienceFromTokenResponse(body));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 section 2</see>: "The
+    /// ABNF notation defines its terminal values to be non-negative integers (codepoints) based on
+    /// the US-ASCII coded character set". A code point above U+007F anywhere in the <c>resource</c>
+    /// value (in its host, its path, or its scheme) is outside that set, so
+    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> refuses it and the pushed
+    /// request answers <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707
+    /// section 2.1</see>'s <c>invalid_target</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
+    /// value MUST be an absolute URI"). Each case is refused with the fixed malformed-resource
+    /// description.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("https://AP", 0x0130, ".EXAMPLE/")]
+    [DataRow("https://ap", 0x0131, ".example/")]
+    [DataRow("https://", 0x212A, "ey.example/")]
+    [DataRow("https://", 0x017F, "erver.example/")]
+    [DataRow("https://api.example.com/", 0x017F, "")]
+    [DataRow("F", 0x0130, "LE://host.example/share")]
+    [DataRow("f", 0x0131, "le://host.example/share")]
+    [DataRow("", 0x212A, "ey://host.example/")]
+    [DataRow("http", 0x017F, "://api.example.com/")]
+    public async Task ANonAsciiResourceIndicatorIsRefusedAtThePushedRequestAsync(
+        string resourcePrefix, int nonAsciiCodePoint, string resourceSuffix)
+    {
+        string resource = resourcePrefix + char.ConvertFromUtf32(nonAsciiCodePoint) + resourceSuffix;
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildAuthorizationFields(pkce, resource), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, body);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2.1">RFC 3986 section 2.1</see>: "A
+    /// percent-encoded octet is encoded as a character triplet, consisting of the percent character
+    /// &quot;%&quot; followed by the two hexadecimal digits representing that octet's numeric
+    /// value.";
+    /// <c>%GG</c>, <c>%2</c> and <c>%2G</c> each violate that triplet.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>'s
+    /// <c>pchar = unreserved / pct-encoded / sub-delims / ":" / "@"</c> admits none of a backslash,
+    /// <c>[</c>, <c>]</c>, <c>^</c>, <c>{</c>, <c>}</c>, <c>|</c> or a backtick in a path segment.
+    /// The last case, an empty fragment (<c>x#</c>), fails the fragment check
+    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> makes and is refused with the
+    /// same description.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("https://api.example.com/%GG", 0, "")]
+    [DataRow("https://api.example.com/p%2", 0, "")]
+    [DataRow("https://api.example.com/%2G", 0, "")]
+    [DataRow("https://api.example.com/a", 0x5C, "b")]
+    [DataRow("https://api.example.com/a[b]", 0, "")]
+    [DataRow("https://api.example.com/a^b", 0, "")]
+    [DataRow("https://api.example.com/a{b}", 0, "")]
+    [DataRow("https://api.example.com/a|b", 0, "")]
+    [DataRow("https://api.example.com/a`b", 0, "")]
+    [DataRow("https://api.example.com/x#", 0, "")]
+    public async Task AResourceIndicatorOutsideTheRfc3986GrammarIsRefusedAtThePushedRequestAsync(
+        string resourcePrefix, int disallowedCodePoint, string resourceSuffix)
+    {
+        string resource = disallowedCodePoint == 0
+            ? resourcePrefix
+            : resourcePrefix + char.ConvertFromUtf32(disallowedCodePoint) + resourceSuffix;
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildAuthorizationFields(pkce, resource), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, body);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.1">RFC 9110 section 4.2.1</see>:
+    /// "A sender MUST NOT generate an &quot;http&quot; URI with an empty host identifier. A recipient that
+    /// processes such a URI reference MUST reject it as invalid.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.2">section 4.2.2</see> says the
+    /// same of an &quot;https&quot; URI. <c>http://</c>, <c>https://</c> and <c>https:///path</c> each
+    /// carry an authority whose host is empty; <c>http:api.example.com</c> and
+    /// <c>https:api.example.com</c> carry no <c>//</c> after the scheme's <c>:</c> at all, so they have
+    /// no authority component to begin with
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.1">RFC 3986 section 3.1</see>),
+    /// though RFC 3986 alone would admit them as a bare <c>path-rootless</c> value. Each is refused
+    /// with the malformed-resource <c>invalid_target</c> body.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("https://")]
+    [DataRow("https:///path")]
+    [DataRow("https:api.example.com")]
+    [DataRow("http://")]
+    [DataRow("http:api.example.com")]
+    public async Task AnHttpIndicatorWithoutAHostIsRefusedAsync(string resource)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildAuthorizationFields(pkce, resource), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, body);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: the
+    /// <c>resource</c> "value MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see> reads
+    /// <c>scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )</c>, so a scheme has at least one
+    /// character; <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.1">section 3.1</see>
+    /// says "Scheme names consist of a sequence of characters beginning with a letter". A value whose
+    /// first character is the <c>:</c> that ends a scheme (<c>:foo</c>, <c>://api.example.com/</c>)
+    /// has an empty scheme and is no absolute URI. Each value is refused at the pushed request with the
+    /// 400 malformed-resource body, the request trace names the <c>scheme</c> as the failing part, and
+    /// the same value at the <c>client_credentials</c> token request over the listener answers the
+    /// same 400 body and mints no token. The pushed request and the <c>client_credentials</c> grant
+    /// are the two places this method drives.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow(":foo")]
+    [DataRow("://api.example.com/")]
+    public async Task AResourceIndicatorWithAnEmptySchemeIsRefusedAtThePushedRequestAndTheClientCredentialsGrantAsync(string resource)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(AResourceIndicatorWithAnEmptySchemeIsRefusedAtThePushedRequestAndTheClientCredentialsGrantAsync));
+        _ = root.Start();
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildAuthorizationFields(pkce, resource), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, body);
+
+        await AssertClientCredentialsIsRefusedAsync(host, segment, resource).ConfigureAwait(false);
+
+        root.Stop();
+
+        Assert.AreSequenceEqual(["Scheme", "Scheme"], ReadMalformedResourceFaultNames(capture, root));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.4">RFC 9110 section 4.2.4</see>:
+    /// "Before making use of an &quot;http&quot; or &quot;https&quot; URI reference received from an
+    /// untrusted source, a recipient SHOULD parse for userinfo and treat its presence as an error; it
+    /// is likely being used to obscure the authority for the sake of phishing attacks." An
+    /// <c>http</c> or <c>https</c> <c>resource</c> indicator that carries a <c>userinfo</c>
+    /// subcomponent (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.1">RFC 3986
+    /// section 3.2.1</see>: "The user information, if present, is followed by a commercial at-sign
+    /// (&quot;@&quot;) that delimits it from the host.") is refused at the pushed request with
+    /// <c>invalid_target</c>, and the request trace names the userinfo as the failing part.
+    /// <c>https://api.example.com@other.example/</c> reads as one host and names another.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("https://User:Pa%41ss@api.example:8443/A%2fB?X=Y")]
+    [DataRow("https://user@api.example/")]
+    [DataRow("https://api.example.com@other.example/")]
+    public async Task AnHttpIndicatorWithUserInformationIsRefusedAsync(string resource)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(AnHttpIndicatorWithUserInformationIsRefusedAsync));
+        _ = root.Start();
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildAuthorizationFields(pkce, resource), TestContext.CancellationToken).ConfigureAwait(false);
+
+        root.Stop();
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, body);
+
+        IReadOnlyList<Activity> inTrace = TraceTreeAssertions.FilterByTrace(capture.StoppedActivities, root.TraceId);
+        ActivityEvent[] malformedEvents = [.. inTrace
+            .SelectMany(activity => activity.Events)
+            .Where(activityEvent => string.Equals(
+                activityEvent.Name, OAuthEventNames.MalformedResourceIndicator, StringComparison.Ordinal))];
+        Assert.HasCount(1, malformedEvents);
+
+        KeyValuePair<string, object?> faultTag = malformedEvents[0].Tags.Single(tag =>
+            string.Equals(tag.Key, OAuthEventNames.ResourceIndicatorFaultTagName, StringComparison.Ordinal));
+        Assert.AreEqual("HttpUserInfo", faultTag.Value);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// A rule of this library, not a specification clause, stated here because RFC 8707 itself imposes no logging duty: every
+    /// refusal of a malformed <c>resource</c> value is a decision recorded as a value, never merely a
+    /// side effect on the wire. The pushed request's dispatch trace carries exactly one
+    /// <see cref="OAuthEventNames.MalformedResourceIndicator"/> event, whose
+    /// <see cref="OAuthEventNames.ResourceIndicatorFaultTagName"/> tag names the specific grammar part
+    /// that failed, and that event carries no tag holding the presented value itself: the record
+    /// names the failure, never the rejected secret or personal data it might carry. The refusal
+    /// itself is <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section
+    /// 2.1</see>'s <c>invalid_target</c>.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("https://api.example.com/%GG", 0, "", "PercentEncoding")]
+    [DataRow("https://", 0x212A, "ey.example/", "NonAscii")]
+    [DataRow("https://api.example.com/x#", 0, "", "Fragment")]
+    public async Task AMalformedResourceIsRecordedOnTheRequestTraceByItsFailingPartAsync(
+        string resourcePrefix, int nonAsciiCodePoint, string resourceSuffix, string expectedFaultName)
+    {
+        string resource = nonAsciiCodePoint == 0
+            ? resourcePrefix
+            : resourcePrefix + char.ConvertFromUtf32(nonAsciiCodePoint) + resourceSuffix;
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(AMalformedResourceIsRecordedOnTheRequestTraceByItsFailingPartAsync));
+        _ = root.Start();
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildAuthorizationFields(pkce, resource), TestContext.CancellationToken).ConfigureAwait(false);
+
+        root.Stop();
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, body);
+
+        IReadOnlyList<Activity> inTrace = TraceTreeAssertions.FilterByTrace(capture.StoppedActivities, root.TraceId);
+        ActivityEvent[] malformedEvents = [.. inTrace
+            .SelectMany(activity => activity.Events)
+            .Where(activityEvent => string.Equals(
+                activityEvent.Name, OAuthEventNames.MalformedResourceIndicator, StringComparison.Ordinal))];
+        Assert.HasCount(1, malformedEvents);
+
+        ActivityEvent malformedEvent = malformedEvents[0];
+        KeyValuePair<string, object?> faultTag = malformedEvent.Tags.Single(tag =>
+            string.Equals(tag.Key, OAuthEventNames.ResourceIndicatorFaultTagName, StringComparison.Ordinal));
+        Assert.AreEqual(expectedFaultName, faultTag.Value);
+
+        bool isPresentedValueCarried = malformedEvent.Tags.Any(tag =>
+            string.Equals(tag.Value?.ToString(), resource, StringComparison.Ordinal));
+        Assert.IsFalse(isPresentedValueCarried,
+            $"The '{OAuthEventNames.MalformedResourceIndicator}' event must never carry the presented value as a tag.");
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// The receipt at which <see cref="ANonAsciiResourceIndicatorIsRefusedAtEveryOtherReceiptAsync"/>
+    /// presents its non-ASCII resource indicator, one receipt per case.
+    /// </summary>
+    internal enum NonAsciiResourceReceipt
+    {
+        /// <summary>Every parameter addressed directly to the authorize endpoint's query string.</summary>
+        DirectAuthorize,
+
+        /// <summary>A signed request object presented directly to the authorize endpoint's <c>request</c> parameter.</summary>
+        RequestObjectByValue,
+
+        /// <summary>A signed request object pushed to the PAR endpoint.</summary>
+        RequestObjectAtPushedEndpoint,
+
+        /// <summary>The token request that redeems an authorization code, live or unknown.</summary>
+        CodeRedemption,
+
+        /// <summary>The token request of the <c>client_credentials</c> grant.</summary>
+        ClientCredentials
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>: "If
+    /// the authorization server fails to parse the provided value(s) or does not consider the
+    /// resource(s) acceptable, it should reject the request with an error response using the error
+    /// code "invalid_target" as the value of the "error" parameter". The value is not an absolute URI
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
+    /// value MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]") because
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 section 2</see> bases its
+    /// grammar on "the US-ASCII coded character set" and the host carries U+212A (KELVIN SIGN). The
+    /// same refusal answers at every receipt that reads a <c>resource</c>: a direct authorize request
+    /// and a request object by value answer the error redirect of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section 4.1.2.1</see>
+    /// (whose <c>error_description</c> "MUST NOT include characters outside the set %x20-21 /
+    /// %x23-5B / %x5D-7E"), a request object at the pushed endpoint and the <c>client_credentials</c>
+    /// token request answer the 400 JSON body, and a code redemption answers the same 400 body for a
+    /// live code and for a code this host never issued, byte for byte, before any flow-state store
+    /// operation runs, so the refusal does not tell the two apart and consumes nothing: the live code
+    /// redeems with a well-formed request afterwards. The five receipts are cases of one method
+    /// because each differs from the others only in the request it sends; each case is served under
+    /// "tr-TR".
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow(NonAsciiResourceReceipt.DirectAuthorize)]
+    [DataRow(NonAsciiResourceReceipt.RequestObjectByValue)]
+    [DataRow(NonAsciiResourceReceipt.RequestObjectAtPushedEndpoint)]
+    [DataRow(NonAsciiResourceReceipt.CodeRedemption)]
+    [DataRow(NonAsciiResourceReceipt.ClientCredentials)]
+    public async Task ANonAsciiResourceIndicatorIsRefusedAtEveryOtherReceiptAsync(NonAsciiResourceReceipt receipt)
+    {
+        string resource = "https://" + char.ConvertFromUtf32(0x212A) + "ey.example/";
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        ImmutableHashSet<CapabilityIdentifier> capabilities = receipt is NonAsciiResourceReceipt.ClientCredentials
+            ? ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
+            : Capabilities;
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        await (receipt switch
+        {
+            NonAsciiResourceReceipt.DirectAuthorize =>
+                AssertDirectAuthorizeIsRefusedByRedirectAsync(host, segment, pkce, resource),
+            NonAsciiResourceReceipt.RequestObjectByValue =>
+                AssertRequestObjectByValueIsRefusedByRedirectAsync(host, material, segment, pkce, resource),
+            NonAsciiResourceReceipt.RequestObjectAtPushedEndpoint =>
+                AssertRequestObjectAtPushedEndpointIsRefusedAsync(host, material, segment, pkce, resource),
+            NonAsciiResourceReceipt.CodeRedemption =>
+                AssertCodeRedemptionIsRefusedIdenticallyAsync(host, material, segment, pkce, resource),
+            NonAsciiResourceReceipt.ClientCredentials =>
+                AssertClientCredentialsIsRefusedAsync(host, segment, resource),
+            _ => throw new NotSupportedException($"Unsupported {nameof(NonAsciiResourceReceipt)}: {receipt}.")
+        }).ConfigureAwait(false);
+
+        int expectedRequests = receipt is NonAsciiResourceReceipt.CodeRedemption ? 5 : 1;
+        culture.AssertEveryRequestWasServedUnder("tr-TR", expectedRequests);
+    }
+
+
+    /// <summary>
+    /// The receipt at which <see cref="AWhitespaceBearingResourceIsRefusedWithItsFailingPartAsync"/>
+    /// presents its whitespace-bearing resource, one receipt per case.
+    /// </summary>
+    internal enum WhitespaceResourceReceipt
+    {
+        /// <summary>Every parameter addressed directly to the authorize endpoint's query string.</summary>
+        DirectAuthorize,
+
+        /// <summary>The token request of the <c>client_credentials</c> grant.</summary>
+        ClientCredentials
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>: "If
+    /// the authorization server fails to parse the provided value(s) or does not consider the
+    /// resource(s) acceptable, it should reject the request with an error response using the error
+    /// code "invalid_target" as the value of the "error" parameter". A <c>resource</c> occurrence that
+    /// carries whitespace is not an absolute URI
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
+    /// value MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]"), and the refusal
+    /// answers the fixed malformed-resource description at every receipt that reads the field: the
+    /// direct authorize request answers the error redirect of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see>, the <c>client_credentials</c> token request the 400 JSON body. The request trace
+    /// names the first part of the occurrence as received that fails
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>'s
+    /// grammar: a whitespace-only occurrence fails the <c>scheme</c> production (a space is no
+    /// <c>ALPHA</c>), a space inside the path fails <c>pchar</c>, a space inside the host fails
+    /// <c>reg-name</c>.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow(WhitespaceResourceReceipt.DirectAuthorize, "   ", "Scheme")]
+    [DataRow(WhitespaceResourceReceipt.DirectAuthorize, "https://cal.example.com/x y", "Path")]
+    [DataRow(WhitespaceResourceReceipt.DirectAuthorize, "https://cal example.com/", "Authority")]
+    [DataRow(WhitespaceResourceReceipt.ClientCredentials, "   ", "Scheme")]
+    [DataRow(WhitespaceResourceReceipt.ClientCredentials, "https://cal.example.com/x y", "Path")]
+    [DataRow(WhitespaceResourceReceipt.ClientCredentials, "https://cal example.com/", "Authority")]
+    public async Task AWhitespaceBearingResourceIsRefusedWithItsFailingPartAsync(
+        WhitespaceResourceReceipt receipt, string resource, string expectedFaultName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        ImmutableHashSet<CapabilityIdentifier> capabilities = receipt is WhitespaceResourceReceipt.ClientCredentials
+            ? ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
+            : Capabilities;
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(AWhitespaceBearingResourceIsRefusedWithItsFailingPartAsync));
+        _ = root.Start();
+
+        await (receipt switch
+        {
+            WhitespaceResourceReceipt.DirectAuthorize =>
+                AssertDirectAuthorizeIsRefusedByRedirectAsync(host, segment, pkce, resource),
+            WhitespaceResourceReceipt.ClientCredentials =>
+                AssertClientCredentialsIsRefusedAsync(host, segment, resource),
+            _ => throw new NotSupportedException($"Unsupported {nameof(WhitespaceResourceReceipt)}: {receipt}.")
+        }).ConfigureAwait(false);
+
+        root.Stop();
+
+        Assert.AreSequenceEqual([expectedFaultName], ReadMalformedResourceFaultNames(capture, root));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see> and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">section 2.2</see>: a refresh
+    /// token request whose <c>resource</c> is not an absolute URI is refused with
+    /// <c>invalid_target</c> before the presented <c>refresh_token</c> is correlated to any grant
+    /// ("In the case of a "refresh_token" or "authorization_code" grant type request, such policy
+    /// may limit the acceptable resources to those that were originally granted"). The refusal names only the
+    /// resource, so it is the same 400 body, byte for byte, for a live refresh token and for one this
+    /// host never issued, and no flow-state store operation runs for either; a refresh naming no
+    /// resource succeeds afterwards with a new <c>refresh_token</c>, so the refusals consumed and
+    /// rotated nothing. The value carries U+212A (KELVIN SIGN), outside
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 section 2</see>'s
+    /// US-ASCII grammar.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task ANonAsciiResourceAtRefreshIsRefusedBeforeCorrelationAsync()
+    {
+        string resource = "https://" + char.ConvertFromUtf32(0x212A) + "ey.example/";
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, ResourceA, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+        (int tokenStatus, string tokenBody) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
+        Assert.AreEqual(200, tokenStatus, tokenBody);
+        string refreshToken = ExtractStringProperty(tokenBody, "refresh_token");
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+
+        int beforeLive = hosted.StorageObservations.Count;
+        (int liveStatus, string liveBody) = await PostRefreshAsync(host, segment, refreshToken, [resource]).ConfigureAwait(false);
+        hosted.AssertNoFlowStateStoreOperationTouched(beforeLive,
+            "a non-ASCII resource at refresh, live refresh token");
+
+        int beforeUnknown = hosted.StorageObservations.Count;
+        (int unknownStatus, string unknownBody) = await PostRefreshAsync(
+            host, segment, "refresh-token-never-issued-by-this-host", [resource]).ConfigureAwait(false);
+        hosted.AssertNoFlowStateStoreOperationTouched(beforeUnknown,
+            "a non-ASCII resource at refresh, unknown refresh token");
+
+        Assert.AreEqual(400, liveStatus, liveBody);
+        Assert.AreEqual(MalformedResourceIndicatorBody, liveBody);
+        Assert.AreEqual(unknownStatus, liveStatus);
+        Assert.AreEqual(unknownBody, liveBody,
+            "A live refresh token's existence must not be discoverable from a non-ASCII resource value's refusal.");
+
+        (int okStatus, string okBody) = await PostRefreshAsync(host, segment, refreshToken, []).ConfigureAwait(false);
+        Assert.AreEqual(200, okStatus, okBody);
+        string rotatedRefreshToken = ExtractStringProperty(okBody, "refresh_token");
+        Assert.IsFalse(string.IsNullOrEmpty(rotatedRefreshToken), okBody);
+        Assert.AreNotEqual(refreshToken, rotatedRefreshToken);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 6);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>: "a
+    /// single "resource" parameter value is represented as a JSON string while multiple values are
+    /// represented as an array of strings." An array claim with an element that is not an absolute
+    /// URI (an empty string, <c>["", ResourceA]</c>) or is not a string at all (a number,
+    /// <c>[ResourceA, 5]</c>) is not an array of resource indicators
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
+    /// value MUST be an absolute URI"), so the whole claim is refused and no element is dropped to
+    /// leave the well-formed one behind: a request object presented by value answers the
+    /// <c>invalid_target</c> error redirect of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see> carrying the request object's own <c>state</c>.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("", ResourceA)]
+    [DataRow(ResourceA, 5)]
+    public async Task ARequestObjectResourceArrayWithAMalformedElementIsRefusedAsync(
+        object firstElement, object secondElement)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string compactJar = await BuildResourceClaimJarAsync(
+            host, material, pkce, new object[] { firstElement, secondElement }, TestContext.CancellationToken).ConfigureAwait(false);
+        Uri authorizeUri = RawAuthCodeWirePushers.ComposeAuthorizeUri(host, segment,
+        [
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.Request, compactJar)
+        ]);
+
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertErrorRedirect(
+            (int)response.StatusCode, response.Headers.Location, OAuthErrors.InvalidTarget,
+            MalformedResourceIndicatorDescription, ResourceJarState);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 1);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see>: "Values for the "error_description" parameter MUST NOT include characters
+    /// outside the set %x20-21 / %x23-5B / %x5D-7E." The application's decision seam denies a request
+    /// with <see cref="AuthorizationDenialReason.InvalidTarget"/> and a description carrying U+00E9
+    /// (LATIN SMALL LETTER E WITH ACUTE) and two U+0022 (QUOTATION MARK); the error redirect's
+    /// <c>error_description</c> is that text with the characters outside the set removed
+    /// ("Refused:  and quoted", two spaces where the letter stood), beside the request's own
+    /// <c>state</c> and the <c>invalid_target</c> code
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>).
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnApplicationDenialDescriptionReachesTheRedirectInsideTheRfc6749CharsetAsync()
+    {
+        const string state = "state-application-denial";
+        string deniedDescription = "Refused: " + char.ConvertFromUtf32(0x00E9) + " and "
+            + char.ConvertFromUtf32(0x0022) + "quoted" + char.ConvertFromUtf32(0x0022);
+
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (_, _, _, _) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Deny(AuthorizationDenialReason.InvalidTarget, deniedDescription));
+        }).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        List<KeyValuePair<string, string>> fields = BuildAuthorizationFields(pkce, ResourceA);
+        fields.Add(new(OAuthRequestParameterNames.State, state));
+        (int parStatusCode, string parBody, Uri? authorizeLocation, int authorizeStatusCode) =
+            await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+                host, segment, ClientId, SubjectId, fields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, parStatusCode, parBody);
+        AssertErrorRedirect(authorizeStatusCode, authorizeLocation, OAuthErrors.InvalidTarget, "Refused:  and quoted", state);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 2);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see>: &quot;Values for the &quot;error_description&quot; parameter MUST NOT include
+    /// characters outside the set %x20-21 / %x23-5B / %x5D-7E.&quot; The application's decision seam
+    /// denies a request with <see cref="AuthorizationDenialReason.InvalidTarget"/> and a description
+    /// carrying U+00E9 (LATIN SMALL LETTER E WITH ACUTE) and two U+0022 (QUOTATION MARK), and the
+    /// request pushed <c>response_mode</c> <c>jwt</c>
+    /// (<see href="https://openid.net/specs/oauth-v2-jarm-final.html#section-2.3">JWT Secured
+    /// Authorization Response Mode for OAuth 2.0 section 2.3</see>), so the authorize answer is a
+    /// redirect carrying a signed <c>response</c>. The <c>error_description</c> inside that signed
+    /// response is the same text with the characters outside the set removed
+    /// (&quot;Refused:  and quoted&quot;, two spaces where the letter stood), beside the request's
+    /// <c>state</c> and the <c>invalid_target</c> code
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>).
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnApplicationDenialDescriptionInASignedResponseIsInsideTheRfc6749CharsetAsync()
+    {
+        const string state = "state-application-denial-signed";
+        string deniedDescription = "Refused: " + char.ConvertFromUtf32(0x00E9) + " and "
+            + char.ConvertFromUtf32(0x0022) + "quoted" + char.ConvertFromUtf32(0x0022);
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        await host.UpdateSigningKeysAsync(
+            material.Registration.TenantId.Value,
+            material.Registration.SigningKeys.ToImmutableDictionary().Add(
+                KeyUsageContext.AuthorizationResponseSigning,
+                new SigningKeySet { Current = [material.SigningKeyId] })).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync =
+                (_, _, _, _) => ValueTask.FromResult(
+                    AuthorizationRequestDecision.Deny(AuthorizationDenialReason.InvalidTarget, deniedDescription));
+        }).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        List<KeyValuePair<string, string>> fields = BuildAuthorizationFields(pkce, ResourceA);
+        fields.Add(new(OAuthRequestParameterNames.State, state));
+        fields.Add(new(OAuthRequestParameterNames.ResponseMode, JarmResponseModes.Jwt));
+        (int parStatusCode, string parBody, Uri? authorizeLocation, int authorizeStatusCode) =
+            await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+                host, segment, ClientId, SubjectId, fields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, parStatusCode, parBody);
+        Assert.AreEqual(302, authorizeStatusCode);
+        Assert.IsNotNull(authorizeLocation, "A signed authorize answer is a redirect carrying a Location header.");
+
+        const string responseMarker = "?response=";
+        string wireLocation = authorizeLocation.OriginalString;
+        int responseStart = wireLocation.IndexOf(responseMarker, StringComparison.Ordinal);
+        Assert.IsGreaterThan(-1, responseStart, $"The redirect carries the signed response. Location: {wireLocation}");
+        string responseJwt = Uri.UnescapeDataString(
+            wireLocation[(responseStart + responseMarker.Length)..].Split('&')[0]);
+
+        ValueTask<PublicKeyMemory?> ResolveKey(string _1, string? _2, CancellationToken _3) =>
+            ValueTask.FromResult<PublicKeyMemory?>(material.SigningPublicKey);
+
+        JarmResponseValidationResult result = await JarmResponseValidation.ValidateAsync(
+            responseJwt,
+            material.Registration.IssuerUri!.OriginalString,
+            ClientId,
+            [WellKnownJwaValues.Es256],
+            TimeProvider.GetUtcNow(),
+            ResolveKey,
+            static payload => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                payload, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Payload JSON parsed to null."),
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid);
+        Assert.AreEqual(OAuthErrors.InvalidTarget, result.Error);
+        Assert.AreEqual(state, result.State);
+        Assert.IsNotNull(result.Parameters);
+        Assert.IsTrue(result.Parameters.TryGetValue(OAuthRequestParameterNames.ErrorDescription, out object? description));
+        Assert.AreEqual("Refused:  and quoted", description as string);
+    }
+
+
+    /// <summary>
+    /// Grants <paramref name="grantedResource"/> at the pushed request over the real loopback
+    /// listener, served under "tr-TR", then redeems the code naming <paramref name="requestedResource"/>
+    /// and asserts the 400 <c>invalid_target</c> body that names the requested value as not granted
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>).
+    /// </summary>
+    /// <param name="grantedResource">The <c>resource</c> the authorization request grants.</param>
+    /// <param name="requestedResource">The <c>resource</c> the token request names.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertNarrowingIsRefusedAsNotGrantedAsync(string grantedResource, string requestedResource)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
+            host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, grantedResource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await PostTokenAsync(
+            host, segment, code, pkce.EncodedVerifier, [requestedResource]).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", body, StringComparison.Ordinal, body);
+        Assert.Contains(
+            "The resource parameter must be a subset of the resource(s) originally granted;",
+            body, StringComparison.Ordinal, body);
+        Assert.Contains(requestedResource, body, StringComparison.Ordinal, body);
+        Assert.Contains("was not granted.", body, StringComparison.Ordinal, body);
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
+    }
+
+
+    /// <summary>
+    /// Asserts a direct authorize request carrying a non-ASCII <paramref name="resource"/> is refused
+    /// with the <c>invalid_target</c> error redirect, echoing the request's <c>state</c>.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="pkce">The PKCE pair whose challenge the request carries.</param>
+    /// <param name="resource">The <c>resource</c> value under test.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertDirectAuthorizeIsRefusedByRedirectAsync(
+        TestHostShell host, string segment, PkceParameters pkce, string resource)
+    {
+        const string state = "state-direct-authorize";
+        List<KeyValuePair<string, string>> fields = BuildAuthorizationFields(pkce, resource);
+        fields.Add(new(OAuthRequestParameterNames.State, state));
+
+        Uri authorizeUri = RawAuthCodeWirePushers.ComposeAuthorizeUri(host, segment, fields);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertErrorRedirect(
+            (int)response.StatusCode, response.Headers.Location, OAuthErrors.InvalidTarget,
+            MalformedResourceIndicatorDescription, state);
+    }
+
+
+    /// <summary>
+    /// Asserts a request object by value carrying a non-ASCII <paramref name="resource"/> is refused
+    /// with the <c>invalid_target</c> error redirect, echoing the request object's <c>state</c>.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="material">The registration signing the request object.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="pkce">The PKCE pair whose challenge the request object carries.</param>
+    /// <param name="resource">The <c>resource</c> value under test.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertRequestObjectByValueIsRefusedByRedirectAsync(
+        TestHostShell host, VerifierKeyMaterial material, string segment, PkceParameters pkce, string resource)
+    {
+        string compactJar = await BuildResourceJarAsync(
+            host, material, pkce, resource, TestContext.CancellationToken).ConfigureAwait(false);
+        Uri authorizeUri = RawAuthCodeWirePushers.ComposeAuthorizeUri(host, segment,
+        [
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.Request, compactJar)
+        ]);
+
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertErrorRedirect(
+            (int)response.StatusCode, response.Headers.Location, OAuthErrors.InvalidTarget,
+            MalformedResourceIndicatorDescription, ResourceJarState);
+    }
+
+
+    /// <summary>
+    /// Asserts a request object pushed to the PAR endpoint with a non-ASCII <paramref name="resource"/>
+    /// is refused with the 400 <c>invalid_target</c> JSON body.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="material">The registration signing the request object.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="pkce">The PKCE pair whose challenge the request object carries.</param>
+    /// <param name="resource">The <c>resource</c> value under test.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertRequestObjectAtPushedEndpointIsRefusedAsync(
+        TestHostShell host, VerifierKeyMaterial material, string segment, PkceParameters pkce, string resource)
+    {
+        string compactJar = await BuildResourceJarAsync(
+            host, material, pkce, resource, TestContext.CancellationToken).ConfigureAwait(false);
+        List<KeyValuePair<string, string>> fields =
+        [
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.Request, compactJar)
+        ];
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, fields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, body);
+    }
+
+
+    /// <summary>
+    /// Asserts a code redemption naming a non-ASCII <paramref name="resource"/> answers the same 400
+    /// <c>invalid_target</c> body for a live code and for an unknown one, touching no flow-state store
+    /// operation for either, and that the live code then redeems with a well-formed request.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="material">The registration the code is issued to.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="pkce">The PKCE pair the live code is bound to.</param>
+    /// <param name="resource">The <c>resource</c> value under test.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertCodeRedemptionIsRefusedIdenticallyAsync(
+        TestHostShell host, VerifierKeyMaterial material, string segment, PkceParameters pkce, string resource)
+    {
+        HostedAuthorizationServer hosted = host.Host("default");
+        string code = await AuthorizeForResourceAsync(
+            host, material, segment, ResourceDeliveryMode.Pushed, ResourceA, pkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+
+        int beforeLive = hosted.StorageObservations.Count;
+        (int liveStatus, string liveBody) = await PostTokenAsync(
+            host, segment, code, pkce.EncodedVerifier, [resource]).ConfigureAwait(false);
+        hosted.AssertNoFlowStateStoreOperationTouched(beforeLive,
+            "a non-ASCII resource at code redemption, live code");
+
+        int beforeUnknown = hosted.StorageObservations.Count;
+        (int unknownStatus, string unknownBody) = await PostTokenAsync(
+            host, segment, "code-never-issued-by-this-host", pkce.EncodedVerifier, [resource]).ConfigureAwait(false);
+        hosted.AssertNoFlowStateStoreOperationTouched(beforeUnknown,
+            "a non-ASCII resource at code redemption, unknown code");
+
+        Assert.AreEqual(400, liveStatus, liveBody);
+        Assert.AreEqual(MalformedResourceIndicatorBody, liveBody);
+        Assert.AreEqual(unknownStatus, liveStatus);
+        Assert.AreEqual(unknownBody, liveBody,
+            "A live code's existence must not be discoverable from a non-ASCII resource value's refusal.");
+
+        (int okStatus, string okBody) = await PostTokenAsync(
+            host, segment, code, pkce.EncodedVerifier, [ResourceA]).ConfigureAwait(false);
+        Assert.AreEqual(200, okStatus, okBody);
+    }
+
+
+    /// <summary>
+    /// Asserts a <c>client_credentials</c> token request naming a malformed <paramref name="resource"/>
+    /// (a non-ASCII value, or one with an empty scheme) is refused with the 400 <c>invalid_target</c>
+    /// JSON body.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="resource">The <c>resource</c> value under test.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertClientCredentialsIsRefusedAsync(TestHostShell host, string segment, string resource)
+    {
+        ServerHttpResponse response = await PostClientCredentialsOverTheWireAsync(
+            host, segment, [resource]).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(MalformedResourceIndicatorBody, response.Body);
+    }
+
+
+    /// <summary>
+    /// Wires the client secret check of the <c>client_credentials</c> grant on the live server, then
+    /// posts a <c>client_credentials</c> token request over the real loopback listener carrying one
+    /// <c>resource</c> occurrence per entry of <paramref name="resources"/>, in order, and none when
+    /// the list is empty.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="resources">The <c>resource</c> occurrences the request carries.</param>
+    /// <returns>The listener's answer.</returns>
+    private async Task<ServerHttpResponse> PostClientCredentialsOverTheWireAsync(
+        TestHostShell host, string segment, IReadOnlyList<string> resources)
+    {
+        const string clientSecret = "s3cret-for-client-credentials";
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, clientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
+
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ClientSecret] = clientSecret
+        };
+        foreach(string resource in resources)
+        {
+            fields.Add(OAuthRequestParameterNames.Resource, resource);
+        }
+
+        return await RawAuthCodeWirePushers.PushNamedEndpointAsync(
+            host, segment, WellKnownEndpointNames.ClientCredentialsToken, WellKnownHttpMethods.Post,
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Reads the fault names the request trace recorded, in the order the spans stopped, from every
+    /// <see cref="OAuthEventNames.MalformedResourceIndicator"/> event's
+    /// <see cref="OAuthEventNames.ResourceIndicatorFaultTagName"/> tag, over the spans of
+    /// <paramref name="root"/>'s trace and <paramref name="root"/> itself.
+    /// </summary>
+    /// <param name="capture">The capture that listened while the request ran.</param>
+    /// <param name="root">The stopped activity the request ran under.</param>
+    /// <returns>The recorded fault names.</returns>
+    private static string[] ReadMalformedResourceFaultNames(TraceTreeCapture capture, Activity root) =>
+    [
+        .. TraceTreeAssertions.FilterByTrace(capture.StoppedActivities, root.TraceId)
+            .Append(root)
+            .SelectMany(activity => activity.Events)
+            .Where(activityEvent => string.Equals(
+                activityEvent.Name, OAuthEventNames.MalformedResourceIndicator, StringComparison.Ordinal))
+            .Select(activityEvent => activityEvent.Tags.Single(tag => string.Equals(
+                tag.Key, OAuthEventNames.ResourceIndicatorFaultTagName, StringComparison.Ordinal)).Value?.ToString()
+                ?? string.Empty)
+    ];
+
+
+    /// <summary>
+    /// Asserts an authorization endpoint answer is the error redirect of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 section
+    /// 4.1.2.1</see>: a 302 whose <c>Location</c> is the registered redirect URI and whose query
+    /// carries the <c>error</c>, <c>error_description</c> and <c>state</c> values, each decoded from
+    /// the wire query.
+    /// </summary>
+    /// <param name="statusCode">The status code of the authorize response.</param>
+    /// <param name="location">The <c>Location</c> header of the authorize response.</param>
+    /// <param name="expectedError">The expected <c>error</c> code.</param>
+    /// <param name="expectedDescription">The expected <c>error_description</c> text.</param>
+    /// <param name="expectedState">The expected <c>state</c> value.</param>
+    private static void AssertErrorRedirect(
+        int statusCode, Uri? location, string expectedError, string expectedDescription, string expectedState)
+    {
+        Assert.AreEqual(302, statusCode);
+        Assert.IsNotNull(location, "An error redirect carries a Location header.");
+
+        string wireLocation = location.OriginalString;
+        int queryStart = wireLocation.IndexOf('?', StringComparison.Ordinal);
+        Assert.IsGreaterThan(-1, queryStart, $"The error redirect carries a query. Location: {wireLocation}");
+        Assert.AreEqual(RedirectUri.OriginalString, wireLocation[..queryStart]);
+
+        Dictionary<string, string> query = [];
+        foreach(string pair in wireLocation[(queryStart + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int equalsIndex = pair.IndexOf('=', StringComparison.Ordinal);
+            string name = equalsIndex < 0 ? pair : pair[..equalsIndex];
+            string value = equalsIndex < 0 ? string.Empty : pair[(equalsIndex + 1)..];
+            query[Uri.UnescapeDataString(name.Replace('+', ' '))] = Uri.UnescapeDataString(value.Replace('+', ' '));
+        }
+
+        Assert.AreEqual(expectedError, query.GetValueOrDefault(OAuthRequestParameterNames.Error), wireLocation);
+        Assert.AreEqual(expectedDescription, query.GetValueOrDefault(OAuthRequestParameterNames.ErrorDescription), wireLocation);
+        Assert.AreEqual(expectedState, query.GetValueOrDefault(OAuthRequestParameterNames.State), wireLocation);
+    }
+
+
+    /// <summary>
+    /// Builds the shared response_type/client_id/PKCE/redirect_uri/scope/resource field set every
+    /// <see cref="ResourceDeliveryMode.Pushed"/> and <see cref="ResourceDeliveryMode.DirectAuthorize"/>
+    /// case sends, whether to the PAR endpoint's form body or the authorize endpoint's query string.
+    /// </summary>
+    /// <param name="pkce">The generated PKCE pair for this case.</param>
+    /// <param name="resource">The <c>resource</c> value under test.</param>
+    /// <returns>The ordered field list.</returns>
+    private static List<KeyValuePair<string, string>> BuildAuthorizationFields(PkceParameters pkce, string resource) =>
+    [
+        new(OAuthRequestParameterNames.ResponseType, WellKnownResponseTypes.Code),
+        new(OAuthRequestParameterNames.ClientId, ClientId),
+        new(OAuthRequestParameterNames.CodeChallenge, pkce.EncodedChallenge),
+        new(OAuthRequestParameterNames.CodeChallengeMethod, WellKnownCodeChallengeMethods.S256),
+        new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString),
+        new(OAuthRequestParameterNames.Scope, WellKnownScopes.OpenId),
+        new(OAuthRequestParameterNames.Resource, resource)
+    ];
+
+
+    /// <summary>
+    /// Drives <paramref name="mode"/>'s wire shape for <paramref name="resource"/> over the real
+    /// listener and returns the authorization code; the one seam every fold row's data case shares,
+    /// so each case differs only in the resource value under test, never in how it reaches the server.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="material">The registration signing a request object, when <paramref name="mode"/> needs one.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="mode">The wire shape to drive.</param>
+    /// <param name="resource">The <c>resource</c> value under test.</param>
+    /// <param name="pkce">The PKCE pair this case redeems with.</param>
+    /// <param name="cancellationToken">Cancellation of every wire exchange this drives.</param>
+    /// <returns>The authorization code extracted from the authorize redirect.</returns>
+    private Task<string> AuthorizeForResourceAsync(
+        TestHostShell host, VerifierKeyMaterial material, string segment, ResourceDeliveryMode mode,
+        string resource, PkceParameters pkce, CancellationToken cancellationToken) => mode switch
+        {
+            ResourceDeliveryMode.Pushed =>
+                PushAndExtractCodeAsync(host, segment, BuildAuthorizationFields(pkce, resource), cancellationToken),
+            ResourceDeliveryMode.DirectAuthorize =>
+                DirectAuthorizeAndExtractCodeAsync(host, segment, BuildAuthorizationFields(pkce, resource), cancellationToken),
+            ResourceDeliveryMode.RequestObjectByValue =>
+                RequestObjectByValueAndExtractCodeAsync(host, material, segment, pkce, resource, cancellationToken),
+            ResourceDeliveryMode.RequestObjectAtPushedEndpoint =>
+                RequestObjectAtPushedEndpointAndExtractCodeAsync(host, material, segment, pkce, resource, cancellationToken),
+            _ => throw new NotSupportedException($"Unsupported {nameof(ResourceDeliveryMode)}: {mode}.")
+        };
+
+
+    /// <summary>Pushes <paramref name="fields"/> to the PAR endpoint and redeems the pinned authorize GET, asserting the 201/302 pair.</summary>
+    private static async Task<string> PushAndExtractCodeAsync(
+        TestHostShell host, string segment, IReadOnlyCollection<KeyValuePair<string, string>> fields, CancellationToken cancellationToken)
+    {
+        (int parStatusCode, string parBody, Uri? location, int authorizeStatusCode) =
+            await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+                host, segment, ClientId, SubjectId, fields, cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        Assert.AreEqual(302, authorizeStatusCode);
+
+        return ExtractCode(location!.ToString());
+    }
+
+
+    /// <summary>Sends <paramref name="fields"/> directly to the authorize endpoint's query string, asserting the 302 redirect.</summary>
+    private static async Task<string> DirectAuthorizeAndExtractCodeAsync(
+        TestHostShell host, string segment, IReadOnlyCollection<KeyValuePair<string, string>> fields, CancellationToken cancellationToken)
+    {
+        Uri authorizeUri = RawAuthCodeWirePushers.ComposeAuthorizeUri(host, segment, fields);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)response.StatusCode);
+
+        return ExtractCode(response.Headers.Location!.ToString());
+    }
+
+
+    /// <summary>Signs a request object carrying <paramref name="resource"/> and presents it directly at the authorize endpoint.</summary>
+    private async Task<string> RequestObjectByValueAndExtractCodeAsync(
+        TestHostShell host, VerifierKeyMaterial material, string segment, PkceParameters pkce, string resource, CancellationToken cancellationToken)
+    {
+        string compactJar = await BuildResourceJarAsync(host, material, pkce, resource, cancellationToken).ConfigureAwait(false);
+        List<KeyValuePair<string, string>> fields =
+        [
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.Request, compactJar)
+        ];
+
+        return await DirectAuthorizeAndExtractCodeAsync(host, segment, fields, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>Signs a request object carrying <paramref name="resource"/> and pushes it to the PAR endpoint.</summary>
+    private async Task<string> RequestObjectAtPushedEndpointAndExtractCodeAsync(
+        TestHostShell host, VerifierKeyMaterial material, string segment, PkceParameters pkce, string resource, CancellationToken cancellationToken)
+    {
+        string compactJar = await BuildResourceJarAsync(host, material, pkce, resource, cancellationToken).ConfigureAwait(false);
+        List<KeyValuePair<string, string>> fields =
+        [
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.Request, compactJar)
+        ];
+
+        return await PushAndExtractCodeAsync(host, segment, fields, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds and signs a request object carrying <paramref name="resource"/> and
+    /// <paramref name="pkce"/>'s challenge, after extending <paramref name="material"/> into the
+    /// <see cref="KeyUsageContext.JarSigning"/> slot (<see cref="UpgradeToJarSigningCapableAsync"/>).
+    /// </summary>
+    private Task<string> BuildResourceJarAsync(
+        TestHostShell host, VerifierKeyMaterial material, PkceParameters pkce, string resource, CancellationToken cancellationToken) =>
+        BuildResourceClaimJarAsync(host, material, pkce, resource, cancellationToken);
+
+
+    /// <summary>
+    /// Builds and signs a request object whose <c>resource</c> claim is <paramref name="resourceClaim"/>
+    /// exactly as given (a string, or an array of elements of any JSON type), after extending
+    /// <paramref name="material"/> into the <see cref="KeyUsageContext.JarSigning"/> slot; the seam
+    /// <see cref="BuildResourceJarAsync"/> and the array-claim rows share.
+    /// </summary>
+    /// <param name="host">The fixture owning the registration.</param>
+    /// <param name="material">The registration signing the request object.</param>
+    /// <param name="pkce">The PKCE pair whose challenge the request object carries.</param>
+    /// <param name="resourceClaim">The value of the <c>resource</c> claim.</param>
+    /// <param name="cancellationToken">Cancellation of the signing call.</param>
+    /// <returns>The compact-serialized signed request object.</returns>
+    private async Task<string> BuildResourceClaimJarAsync(
+        TestHostShell host, VerifierKeyMaterial material, PkceParameters pkce, object resourceClaim, CancellationToken cancellationToken)
+    {
+        await UpgradeToJarSigningCapableAsync(host, material).ConfigureAwait(false);
+
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, issuedAt, ClientId, RedirectUri, ResourceJarState, "nonce-fold-resource");
+        claims[OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge;
+        claims[OAuthRequestParameterNames.Resource] = resourceClaim;
+
+        return await OAuthJarFixtures.BuildSignedJarAsync(material, claims, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Redeems <paramref name="presentedCode"/> at the token endpoint over the real wire, adding one
+    /// repeated <c>resource</c> field occurrence per entry of <paramref name="resources"/>; the
+    /// class-level token helper the two malformed-resource listener rows and every fold row share.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="presentedCode">The authorization code presented.</param>
+    /// <param name="verifier">The PKCE code verifier matching the code's challenge.</param>
+    /// <param name="resources">Zero or more repeated <c>resource</c> field occurrences.</param>
+    /// <returns>The response's status code and body.</returns>
+    private async Task<(int Status, string Body)> PostTokenAsync(
+        TestHostShell host, string segment, string presentedCode, string verifier, IReadOnlyList<string> resources)
+    {
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        List<KeyValuePair<string, string>> fields =
+        [
+            new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.AuthorizationCode),
+            new(OAuthRequestParameterNames.Code, presentedCode),
+            new(OAuthRequestParameterNames.CodeVerifier, verifier),
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString)
+        ];
+        foreach(string resource in resources)
+        {
+            fields.Add(new(OAuthRequestParameterNames.Resource, resource));
+        }
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.Host("default").SharedHttpClient!, tokenUri, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body);
+    }
+
+
+    /// <summary>
+    /// Refreshes <paramref name="presentedRefreshToken"/> over the real wire, adding one repeated
+    /// <c>resource</c> field occurrence per entry of <paramref name="resources"/>; the class-level
+    /// refresh helper <see cref="WhitespaceResourceValueIsMalformedAtRefreshOverRealWireAsync"/> shares.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="presentedRefreshToken">The refresh token presented.</param>
+    /// <param name="resources">Zero or more repeated <c>resource</c> field occurrences.</param>
+    /// <returns>The response's status code and body.</returns>
+    private async Task<(int Status, string Body)> PostRefreshAsync(
+        TestHostShell host, string segment, string presentedRefreshToken, IReadOnlyList<string> resources)
+    {
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        List<KeyValuePair<string, string>> fields =
+        [
+            new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.RefreshToken),
+            new(OAuthRequestParameterNames.RefreshToken, presentedRefreshToken),
+            new(OAuthRequestParameterNames.ClientId, ClientId)
+        ];
+        foreach(string resource in resources)
+        {
+            fields.Add(new(OAuthRequestParameterNames.Resource, resource));
+        }
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.Host("default").SharedHttpClient!, tokenUri, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body);
+    }
+
+
     private async Task<ServerHttpResponse> PushAsync(
         TestHostShell host, VerifierKeyMaterial material, string? resource, string? scope = null)
     {
@@ -1796,6 +3862,27 @@ internal sealed class Rfc8707ResourceIndicatorTests
             $"aud must always be the RFC 7519 §4.1.3 JSON array shape, never a bare string. Payload: {payload.RootElement}");
 
         return aud.EnumerateArray().Select(e => e.GetString()!).ToList();
+    }
+
+
+    /// <summary>
+    /// Decodes the issued access token from a token-endpoint response body and reports whether its
+    /// payload carries an <c>aud</c> claim at all; the counterpart of
+    /// <see cref="DecodeAudienceFromTokenResponse"/> for a grant that issues no audience.
+    /// </summary>
+    /// <param name="tokenResponseBody">The token-endpoint response body.</param>
+    /// <returns><see langword="true"/> when the access token payload has an <c>aud</c> member.</returns>
+    private static bool AccessTokenCarriesAudienceClaim(string tokenResponseBody)
+    {
+        using JsonDocument responseDoc = JsonDocument.Parse(tokenResponseBody);
+        string accessToken = responseDoc.RootElement.GetProperty("access_token").GetString()!;
+
+        string[] segments = accessToken.Split('.');
+        Assert.HasCount(3, segments);
+        byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared);
+        using JsonDocument payload = JsonDocument.Parse(payloadBytes);
+
+        return payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Aud, out _);
     }
 
 

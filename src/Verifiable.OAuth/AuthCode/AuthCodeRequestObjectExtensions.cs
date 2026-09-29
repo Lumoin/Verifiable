@@ -132,56 +132,66 @@ public static class AuthCodeRequestObjectExtensions
 
     /// <summary>
     /// A sentinel returned for a JAR <c>resource</c> claim that is present but does not parse to
-    /// either RFC 8707 §2.1 wire shape (a string not carried through
-    /// <see cref="JwsAccessTokenValidator.TryReadStringList"/>'s string-or-array tolerance, or an
-    /// empty array). Deliberately shaped to fail
-    /// <c>AuthCodeEndpoints.IsAbsoluteResourceIndicatorUri</c> (it carries a fragment, which §2
-    /// forbids) so the SAME downstream <c>ValidateResourceIndicatorsShape</c> gate every other
-    /// malformed resource value goes through rejects this one too, with <c>invalid_target</c>
-    /// rather than a distinct parse-time error code.
+    /// either RFC 8707 section 2.1 wire shape, or that parses to the shape but carries a blank,
+    /// non-string, or whitespace-bearing element. Deliberately shaped to fail
+    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> (it carries a fragment,
+    /// which RFC 8707 section 2 forbids) so the SAME downstream <c>ValidateResourceIndicatorsShape</c>
+    /// gate every other malformed resource value goes through rejects this one too, with
+    /// <c>invalid_target</c> rather than a distinct parse-time error code.
     /// </summary>
-    private const string MalformedResourceClaimSentinel = "urn:invalid-resource-claim#malformed";
+    private static string MalformedResourceClaimSentinel { get; } = "urn:invalid-resource-claim#malformed";
 
 
     /// <summary>
     /// Reads the RFC 8707 <c>resource</c> claim per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">§2.1</see>: "a single
-    /// resource parameter value is represented as a JSON string while multiple values are
-    /// represented as an array of strings." Reuses
-    /// <see cref="JwsAccessTokenValidator.TryReadStringList"/> — the same string-or-array reader
-    /// the <c>aud</c>/<c>amr</c> claims use for the identical RFC 7519 §4.1.3-family wire
-    /// ambiguity. Each element of the resolved list is itself required to carry no embedded
-    /// whitespace before the set is space-joined into the convention <c>ParseResourceIndicators</c>
-    /// recovers at every other seam (PAR/authorize query strings, the token-exchange grant): a
-    /// resource indicator is one absolute URI (RFC 3986 §2 / Appendix A's ABNF forbids a raw space
-    /// inside one), so an
-    /// array/string element that already carries one is not "several indicators sent as one" to
-    /// recover by splitting, it is malformed. A PRESENT claim that does not parse to either shape,
-    /// OR whose value is empty, OR whose value carries whitespace, is not silently treated as absent: it returns
-    /// <see cref="MalformedResourceClaimSentinel"/>, carrying the defect through to the existing
-    /// shape gate instead of dropping it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>:
+    /// "a single &quot;resource&quot; parameter value is represented as a JSON string while multiple values are
+    /// represented as an array of strings." Reads the claim's own runtime value directly, admitting
+    /// every shape <see cref="JwsAccessTokenValidator.TryReadStringList"/> admits for the identical
+    /// RFC 7519 section 4.1.3-family <c>aud</c>/<c>amr</c> wire ambiguity, but without that reader's
+    /// filtering: a JSON string is the single value; a JSON array is the multiple-value form only
+    /// when it is non-empty and every element is itself a non-empty, whitespace-free JSON string
+    /// (RFC 8707 section 2.1: "multiple values are represented as an array of strings"); any other
+    /// shape, and any array element that is not such a string (a blank string, a number, a nested
+    /// value), is malformed. A resource indicator is one absolute URI (RFC 3986 section 2 /
+    /// Appendix A's ABNF forbids a raw space inside one), so an element that already carries
+    /// whitespace is not "several indicators sent as one" to recover by splitting; it is malformed.
+    /// A malformed claim returns <see cref="MalformedResourceClaimSentinel"/>, carrying the defect
+    /// through to the existing shape gate instead of dropping it silently. Each accepted element is
+    /// folded with <see cref="ResourceIndicatorSyntax.Fold(string)"/> before the set is
+    /// space-joined into the convention <c>ParseResourceIndicators</c> recovers at every other seam
+    /// (PAR/authorize query strings, the token-exchange grant).
     /// </summary>
     private static string? ReadResourceClaim(IReadOnlyDictionary<string, object> claims)
     {
-        if(!claims.ContainsKey(OAuthRequestParameterNames.Resource))
+        if(!claims.TryGetValue(OAuthRequestParameterNames.Resource, out object? raw))
         {
             return null;
         }
 
-        if(!JwsAccessTokenValidator.TryReadStringList(
-            claims, OAuthRequestParameterNames.Resource, out IReadOnlyList<string> values))
+        if(raw is string single)
         {
-            return MalformedResourceClaimSentinel;
+            return string.IsNullOrEmpty(single) || single.Any(char.IsWhiteSpace)
+                ? MalformedResourceClaimSentinel
+                : ResourceIndicatorSyntax.Fold(single);
         }
 
-        foreach(string value in values)
+        if(raw is IEnumerable<object> elements)
         {
-            if(string.IsNullOrEmpty(value) || value.Any(char.IsWhiteSpace))
+            List<string> folded = [];
+            foreach(object element in elements)
             {
-                return MalformedResourceClaimSentinel;
+                if(element is not string value || string.IsNullOrEmpty(value) || value.Any(char.IsWhiteSpace))
+                {
+                    return MalformedResourceClaimSentinel;
+                }
+
+                folded.Add(ResourceIndicatorSyntax.Fold(value));
             }
+
+            return folded.Count == 0 ? MalformedResourceClaimSentinel : string.Join(' ', folded);
         }
 
-        return string.Join(' ', values);
+        return MalformedResourceClaimSentinel;
     }
 }
