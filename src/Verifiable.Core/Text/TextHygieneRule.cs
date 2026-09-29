@@ -5,20 +5,14 @@ namespace Verifiable.Core.Text;
 /// <summary>
 /// An immutable selection of <see cref="TextHygieneClass"/> values that <see cref="TextHygiene"/> reports or escapes,
 /// with code points exempt from that selection. Which classes a reader must not be shown is the caller's policy;
-/// <see cref="Default"/>, <see cref="DisplayText"/> and <see cref="Strict"/> are the presets, and
-/// <see cref="Create"/> builds any other rule after refusing one that could never select anything it names.
+/// <see cref="Default"/>, <see cref="DisplayText"/> and <see cref="Strict"/> are the presets, and the
+/// <see cref="TextHygieneRule(IEnumerable{TextHygieneClass}, IEnumerable{int})"/> constructor builds any other rule
+/// and throws for one that could never select anything it names.
 /// A rule selects only what its classes cover: the remarks of <see cref="TextHygieneClass"/> list the code points
 /// that act when shown and that no class covers, so no rule is a complete display sanitizer.
 /// </summary>
 public sealed class TextHygieneRule
 {
-    /// <summary>
-    /// The largest value in the Unicode codespace. Unicode core
-    /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G22696">D9</see> defines the
-    /// codespace as "A range of integers from 0 to" 10FFFF (hexadecimal), and an exception outside it can match nothing.
-    /// </summary>
-    private static int MaximumCodePoint { get; } = 0x10FFFF;
-
     /// <summary>
     /// Stores the snapshots of a rule whose values are already known to be usable.
     /// </summary>
@@ -89,92 +83,89 @@ public sealed class TextHygieneRule
         FrozenSet<int>.Empty);
 
     /// <summary>
-    /// Creates a rule from the caller's classes and exceptions, or refuses a rule that could not select what it names:
-    /// an empty class set, a value that is not a defined <see cref="TextHygieneClass"/>, or an exception outside the
-    /// Unicode codespace 0..10FFFF. The classes are checked before the exceptions, and the first offending value in
-    /// input order is named in the refusal. Exceptions that exempt a selected code point, or a whole class, are the
-    /// caller's choice and are kept (see <see cref="AllowedCodePoints"/>).
+    /// Builds a rule from the caller's classes and exceptions, or throws for one that could never select anything it
+    /// names: an empty class set, a value that is not a defined <see cref="TextHygieneClass"/>, or an exception outside
+    /// the Unicode codespace 0..10FFFF. The classes are checked before the exceptions, and the first offending value in
+    /// input order is named in the exception. Exceptions that exempt a selected code point, or a whole class, are the
+    /// caller's choice and are kept (see <see cref="AllowedCodePoints"/>). Unicode core
+    /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G22696">D9</see> defines the
+    /// codespace as "A range of integers from 0 to" 10FFFF (hexadecimal).
     /// </summary>
     /// <param name="classes">The classes to report or escape.</param>
     /// <param name="allowedCodePoints">Exempt scalar values, or lone UTF-16 code units in D800..DFFF.</param>
-    /// <returns>The rule, or the <see cref="TextHygieneRuleRefusal"/> naming why it cannot be built.</returns>
-    /// <exception cref="ArgumentNullException">Either collection is null.</exception>
-    public static Result<TextHygieneRule, TextHygieneRuleRefusal> Create(IEnumerable<TextHygieneClass> classes, IEnumerable<int> allowedCodePoints)
+    /// <exception cref="ArgumentNullException"><paramref name="classes"/> or <paramref name="allowedCodePoints"/>
+    /// is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="classes"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="classes"/> holds a value that is not a defined
+    /// <see cref="TextHygieneClass"/>, or <paramref name="allowedCodePoints"/> holds a value outside 0..10FFFF.</exception>
+    public TextHygieneRule(IEnumerable<TextHygieneClass> classes, IEnumerable<int> allowedCodePoints)
+        : this(ValidateClasses(classes), ValidateAllowedCodePoints(allowedCodePoints))
+    {
+    }
+
+    /// <summary>
+    /// Snapshots <paramref name="classes"/> after guarding it against null, emptiness and an undefined value: a
+    /// rule with no class would pass every input, and a value that is not a defined <see cref="TextHygieneClass"/>
+    /// can never be an occurrence's class.
+    /// </summary>
+    /// <param name="classes">The classes to report or escape.</param>
+    /// <returns>The snapshot the constructor stores as <see cref="Classes"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="classes"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="classes"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="classes"/> holds a value that is not a defined
+    /// <see cref="TextHygieneClass"/>.</exception>
+    private static FrozenSet<TextHygieneClass> ValidateClasses(IEnumerable<TextHygieneClass> classes)
     {
         ArgumentNullException.ThrowIfNull(classes);
-        ArgumentNullException.ThrowIfNull(allowedCodePoints);
         TextHygieneClass[] classList = [.. classes];
-        int[] allowedList = [.. allowedCodePoints];
         if(classList.Length == 0)
         {
-            return Result.Failure<TextHygieneRule, TextHygieneRuleRefusal>(new TextHygieneRuleRefusal(TextHygieneRuleRefusalReason.EmptyClassSet, null));
+            throw new ArgumentException("A rule with no class would pass every input.", nameof(classes));
         }
 
         foreach(TextHygieneClass selected in classList)
         {
             if(!Enum.IsDefined(selected))
             {
-                return Result.Failure<TextHygieneRule, TextHygieneRuleRefusal>(new TextHygieneRuleRefusal(TextHygieneRuleRefusalReason.UndefinedClass, (int)selected));
+                throw new ArgumentOutOfRangeException(
+                    nameof(classes), (int)selected, "A rule's class must be a defined TextHygieneClass; an undefined value can never be an occurrence's class.");
             }
         }
 
+        return classList.ToFrozenSet();
+    }
+
+    /// <summary>
+    /// Snapshots <paramref name="allowedCodePoints"/> after guarding it against null and a value outside the
+    /// Unicode codespace 0..10FFFF, which Unicode core
+    /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G22696">D9</see> defines as
+    /// "A range of integers from 0 to" 10FFFF (hexadecimal): such a value can never match an input.
+    /// </summary>
+    /// <param name="allowedCodePoints">Exempt scalar values, or lone UTF-16 code units in D800..DFFF.</param>
+    /// <returns>The snapshot the constructor stores as <see cref="AllowedCodePoints"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="allowedCodePoints"/> is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="allowedCodePoints"/> holds a value outside
+    /// 0..10FFFF.</exception>
+    private static FrozenSet<int> ValidateAllowedCodePoints(IEnumerable<int> allowedCodePoints)
+    {
+        ArgumentNullException.ThrowIfNull(allowedCodePoints);
+        int[] allowedList = [.. allowedCodePoints];
         foreach(int allowed in allowedList)
         {
             if(allowed < 0 || allowed > MaximumCodePoint)
             {
-                return Result.Failure<TextHygieneRule, TextHygieneRuleRefusal>(new TextHygieneRuleRefusal(TextHygieneRuleRefusalReason.CodePointOutsideCodespace, allowed));
+                throw new ArgumentOutOfRangeException(
+                    nameof(allowedCodePoints), allowed, "An exception outside the Unicode codespace 0..10FFFF can never match an input.");
             }
         }
 
-        return Result.Success<TextHygieneRule, TextHygieneRuleRefusal>(new TextHygieneRule(classList.ToFrozenSet(), allowedList.ToFrozenSet()));
-    }
-}
-
-/// <summary>
-/// Why <see cref="TextHygieneRule.Create"/> refused to build a rule.
-/// </summary>
-public enum TextHygieneRuleRefusalReason
-{
-    /// <summary>
-    /// No class was given, so the rule would pass every input.
-    /// </summary>
-    EmptyClassSet,
-
-    /// <summary>
-    /// A value is not a defined <see cref="TextHygieneClass"/>, so no occurrence can ever carry it.
-    /// </summary>
-    UndefinedClass,
-
-    /// <summary>
-    /// An exception lies outside the Unicode codespace 0..10FFFF, so no input can ever hold it.
-    /// </summary>
-    CodePointOutsideCodespace
-}
-
-/// <summary>
-/// The refusal <see cref="TextHygieneRule.Create"/> returns: the reason and the offending value it names.
-/// </summary>
-public readonly record struct TextHygieneRuleRefusal
-{
-    /// <summary>
-    /// Stores the reason and the offending value.
-    /// </summary>
-    /// <param name="reason">Why the rule was refused.</param>
-    /// <param name="value">The offending class or code point value, or null for an empty class set.</param>
-    internal TextHygieneRuleRefusal(TextHygieneRuleRefusalReason reason, int? value)
-    {
-        Reason = reason;
-        Value = value;
+        return allowedList.ToFrozenSet();
     }
 
     /// <summary>
-    /// Gets why the rule was refused.
+    /// The largest value in the Unicode codespace. Unicode core
+    /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G22696">D9</see> defines the
+    /// codespace as "A range of integers from 0 to" 10FFFF (hexadecimal), and an exception outside it can match nothing.
     /// </summary>
-    public TextHygieneRuleRefusalReason Reason { get; }
-
-    /// <summary>
-    /// Gets the offending value: the undefined class's numeric value or the exception outside the codespace;
-    /// null for <see cref="TextHygieneRuleRefusalReason.EmptyClassSet"/>, which has no single offending value.
-    /// </summary>
-    public int? Value { get; }
+    private static int MaximumCodePoint { get; } = 0x10FFFF;
 }

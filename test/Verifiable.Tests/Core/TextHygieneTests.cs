@@ -533,23 +533,22 @@ internal sealed class TextHygieneTests
     }
 
     /// <summary>
-    /// <see cref="TextHygieneRule.Create"/> refuses a rule without classes, which could select nothing.
+    /// The <see cref="TextHygieneRule(IEnumerable{TextHygieneClass}, IEnumerable{int})"/> constructor throws for a
+    /// rule without classes, which could select nothing.
     /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see> lists the categories a
     /// rule selects from; a rule that names none of them passes every input.
     /// </summary>
     [TestMethod]
     public void RuleCreationRefusesAnEmptyClassSet()
     {
-        var creation = TextHygieneRule.Create([], [0x0009]);
+        ArgumentException thrown = Assert.ThrowsExactly<ArgumentException>(() => new TextHygieneRule([], [0x0009]));
 
-        Assert.IsFalse(creation.IsSuccess, "A rule without classes must be refused.");
-        Assert.AreEqual(TextHygieneRuleRefusalReason.EmptyClassSet, creation.Error.Reason);
-        Assert.IsNull(creation.Error.Value, "An empty class set has no single offending value.");
+        Assert.AreEqual("classes", thrown.ParamName, "The refusal must name the empty class set.");
     }
 
     /// <summary>
-    /// <see cref="TextHygieneRule.Create"/> refuses a class value that is not a defined <see cref="TextHygieneClass"/>,
-    /// naming it, because no occurrence can carry it.
+    /// The <see cref="TextHygieneRule(IEnumerable{TextHygieneClass}, IEnumerable{int})"/> constructor throws for a
+    /// class value that is not a defined <see cref="TextHygieneClass"/>, naming it, because no occurrence can carry it.
     /// <see href="https://www.unicode.org/reports/tr44/#GC_Values_Table">UAX #44, Table 12</see> lists the categories a
     /// rule selects from.
     /// </summary>
@@ -559,16 +558,16 @@ internal sealed class TextHygieneTests
     [DataRow(999)]
     public void RuleCreationRefusesAnUndefinedClass(int undefinedClass)
     {
-        var creation = TextHygieneRule.Create([TextHygieneClass.Format, (TextHygieneClass)undefinedClass], []);
+        ArgumentOutOfRangeException thrown = Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+            () => new TextHygieneRule([TextHygieneClass.Format, (TextHygieneClass)undefinedClass], []));
 
-        Assert.IsFalse(creation.IsSuccess, "An undefined class must be refused.");
-        Assert.AreEqual(TextHygieneRuleRefusalReason.UndefinedClass, creation.Error.Reason);
-        Assert.AreEqual(undefinedClass, creation.Error.Value);
+        Assert.AreEqual("classes", thrown.ParamName, "The refusal must name the class collection.");
+        Assert.AreEqual(undefinedClass, thrown.ActualValue);
     }
 
     /// <summary>
-    /// <see cref="TextHygieneRule.Create"/> refuses an exception outside the Unicode codespace, naming it, because no
-    /// input can hold it. Unicode core
+    /// The <see cref="TextHygieneRule(IEnumerable{TextHygieneClass}, IEnumerable{int})"/> constructor throws for an
+    /// exception outside the Unicode codespace, naming it, because no input can hold it. Unicode core
     /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G22696">D9</see> defines the
     /// Unicode codespace as "A range of integers from 0 to" 10FFFF (hexadecimal).
     /// </summary>
@@ -578,16 +577,17 @@ internal sealed class TextHygieneTests
     [DataRow(0x110000)]
     public void RuleCreationRefusesAnExceptionOutsideTheCodespace(int codePoint)
     {
-        var creation = TextHygieneRule.Create([TextHygieneClass.Format], [0x0009, codePoint]);
+        ArgumentOutOfRangeException thrown = Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+            () => new TextHygieneRule([TextHygieneClass.Format], [0x0009, codePoint]));
 
-        Assert.IsFalse(creation.IsSuccess, "An exception outside the codespace must be refused.");
-        Assert.AreEqual(TextHygieneRuleRefusalReason.CodePointOutsideCodespace, creation.Error.Reason);
-        Assert.AreEqual(codePoint, creation.Error.Value);
+        Assert.AreEqual("allowedCodePoints", thrown.ParamName, "The refusal must name the exempt code point collection.");
+        Assert.AreEqual(codePoint, thrown.ActualValue);
     }
 
     /// <summary>
-    /// <see cref="TextHygieneRule.Create"/> accepts an exception anywhere in the Unicode codespace, surrogate code
-    /// points included, which exempt a lone UTF-16 code unit. Unicode core
+    /// The <see cref="TextHygieneRule(IEnumerable{TextHygieneClass}, IEnumerable{int})"/> constructor accepts an
+    /// exception anywhere in the Unicode codespace, surrogate code points included, which exempt a lone UTF-16 code
+    /// unit. Unicode core
     /// <see href="https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G22696">D9</see> defines the
     /// Unicode codespace as "A range of integers from 0 to" 10FFFF (hexadecimal).
     /// </summary>
@@ -598,10 +598,9 @@ internal sealed class TextHygieneTests
     [DataRow(0x10FFFF)]
     public void RuleCreationAcceptsEveryCodespaceValue(int codePoint)
     {
-        var creation = TextHygieneRule.Create([TextHygieneClass.Format], [codePoint]);
+        TextHygieneRule rule = new([TextHygieneClass.Format], [codePoint]);
 
-        Assert.IsTrue(creation.IsSuccess, "An exception in the codespace must be accepted.");
-        Assert.Contains(codePoint, creation.Value.AllowedCodePoints, "The rule must keep the exception.");
+        Assert.Contains(codePoint, rule.AllowedCodePoints, "The rule must keep the exception.");
     }
 
     /// <summary>
@@ -769,17 +768,14 @@ internal sealed class TextHygieneTests
     }
 
     /// <summary>
-    /// Creates a rule the test knows to be valid, failing the test if it is refused.
+    /// Creates a rule the test knows to be valid.
     /// </summary>
     /// <param name="classes">The classes to select.</param>
     /// <param name="allowedCodePoints">The exempt code points.</param>
     /// <returns>The rule.</returns>
     private static TextHygieneRule CreateRule(TextHygieneClass[] classes, int[] allowedCodePoints)
     {
-        var creation = TextHygieneRule.Create(classes, allowedCodePoints);
-        Assert.IsTrue(creation.IsSuccess, "The test's rule must be valid.");
-
-        return creation.Value;
+        return new TextHygieneRule(classes, allowedCodePoints);
     }
 
     /// <summary>
