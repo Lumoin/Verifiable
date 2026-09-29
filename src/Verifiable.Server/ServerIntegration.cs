@@ -377,6 +377,9 @@ public class ServerIntegration: WiringComponent
     /// skin placed on the context).
     /// </summary>
     /// <remarks>
+    /// An issuer identifier derived from an unvalidated <c>Host</c> or forwarded header lets a client
+    /// assertion made for another authorization server match the accepted audience, so the
+    /// application pins the issuer to configuration.
     /// Set during construction or on an alteration candidate. A serving setter throws
     /// <see cref="InvalidOperationException"/> naming this member; use
     /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.

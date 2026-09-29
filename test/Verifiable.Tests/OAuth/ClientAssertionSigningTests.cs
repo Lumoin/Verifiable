@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
+using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
+using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -145,5 +147,60 @@ internal sealed class ClientAssertionSigningTests
         JsonElement audience = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud);
         Assert.AreEqual(JsonValueKind.String, audience.ValueKind);
         Assert.AreEqual(TokenEndpoint, audience.GetString());
+    }
+
+
+    /// <summary>
+    /// RFC 7523
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">Section 3</see> item 3: "The JWT
+    /// MUST contain an &quot;aud&quot; (audience) claim containing a value that identifies the authorization
+    /// server as an intended audience." rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see> item b replaces item 3 for client authentication: the &quot;aud&quot; claim value "MUST use
+    /// the issuer identifier [RFC8414] of the authorization server as its sole value." A registration whose
+    /// <see cref="ClientRegistration.ClientAssertionAudience"/> is unset names no such value, so
+    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> refuses it as an
+    /// argument error, an <see cref="ArgumentNullException"/> naming the audience member and not a
+    /// <see cref="NullReferenceException"/> from reading it, and the form it was to extend carries no
+    /// client authentication parameter afterwards.
+    /// </summary>
+    [TestMethod]
+    public async Task UnsetAssertionAudienceIsRefusedAsAnArgumentAndAddsNothingToTheForm()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, _) = app.CreateInProcessOAuthClientAndRegistration(
+            material.Registration,
+            "https://client.example.com/callback",
+            material.Registration.IssuerUri!.ToString());
+        ClientRegistration unsetAudience = registration with { ClientAssertionAudience = null! };
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keyMaterial.PublicKey;
+        using PrivateKeyMemory privateKey = keyMaterial.PrivateKey;
+
+        OutgoingFormFields form = new();
+        ExchangeContext context = [];
+
+        ArgumentNullException refusal = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+            async () => await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
+                form,
+                unsetAudience,
+                new Uri(TokenEndpoint),
+                privateKey,
+                SigningKeyId,
+                HeaderSerializer,
+                PayloadSerializer,
+                TimeSpan.FromMinutes(5),
+                client.Infrastructure,
+                TimeProvider.GetUtcNow(),
+                context,
+                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.Contains(nameof(ClientRegistration.ClientAssertionAudience), refusal.ParamName ?? string.Empty,
+            StringComparison.Ordinal, "The refusal must name the unset audience member.");
+        Assert.AreEqual(0, form.Count, "A refused assertion must add no parameter to the form.");
     }
 }

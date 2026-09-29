@@ -46,10 +46,13 @@ public sealed record ClientAssertionAudience
     /// <summary>
     /// The authorization server's issuer identifier, the library default. rfc7523bis-11 Section 4
     /// requires that the <c>aud</c> claim value "MUST indicate only the issuer identifier of the intended
-    /// authorization server as the audience of the JWT", and
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see> states that
-    /// "the issuer identifier URL of the authorization server ... SHOULD be used as the value of the
-    /// audience".
+    /// authorization server as the audience of the JWT". For a pushed authorization request
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-5">rfc7523bis-11
+    /// Section 5</see> replaces the last paragraph of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see>, which
+    /// states that "the issuer identifier URL of the authorization server ... SHOULD be used as the value
+    /// of the audience", with the text "the issuer identifier URL of the authorization server according to
+    /// [RFC8414] MUST be used as the sole value of the audience."
     /// </summary>
     public static ClientAssertionAudience IssuerIdentifier { get; } = new(0);
 

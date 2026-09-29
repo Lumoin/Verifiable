@@ -40,6 +40,26 @@ namespace Verifiable.OAuth.Server;
 /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication">OpenID
 /// Connect Core 1.0 Section 9</see> (which prefers it).
 /// </para>
+/// <para>
+/// The default is therefore a deviation from rfc7523bis-11
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+/// 4</see> item b and
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-5">Section
+/// 5</see>, which require the authorization server to reject a JWT that does not contain its issuer
+/// identifier as the sole audience value; <see cref="IssuerIdentifierOnly"/> is the rule those sections
+/// state.
+/// </para>
+/// <para>
+/// This policy governs <see cref="PrivateKeyJwtClientAuthentication"/> only. The library ships no
+/// <c>client_secret_jwt</c> validator, so a <c>client_secret_jwt</c> validator is the application's and
+/// applies the audience rule itself.
+/// </para>
+/// <para>
+/// The accepted values are the issuer identifier the application's issuer resolution yields and the
+/// endpoint URLs its endpoint resolution yields. A value derived from an unvalidated <c>Host</c> or
+/// forwarded header lets an assertion made for another authorization server match, so the
+/// application pins both to configuration.
+/// </para>
 /// </remarks>
 [DebuggerDisplay("ClientAssertionAudiencePolicy Code={Code}")]
 public sealed record ClientAssertionAudiencePolicy

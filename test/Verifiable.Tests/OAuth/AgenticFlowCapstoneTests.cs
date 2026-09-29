@@ -303,19 +303,21 @@ internal sealed class AgenticFlowCapstoneTests
         }
 
         //rfc7523bis-11 Section 4: the client_assertion presented at each token endpoint must name
-        //that endpoint's own issuer identifier as its sole aud, by default (ClientAssertionAudience.IssuerIdentifier).
+        //that endpoint's own issuer identifier as its sole aud, by default (ClientAssertionAudience.IssuerIdentifier),
+        //and is typed client-authentication+jwt by default ("Client authentication JWTs SHOULD be
+        //explicitly typed by using the typ header parameter value client-authentication+jwt").
         Assert.HasCount(1, topology.As2RecordedAssertions,
             "AS2 must see exactly one client_assertion: the redeem's.");
         (string redeemTyp, JsonElement redeemAudience) =
             ClientAssertionRecorder.DecodeTypAndAudience(topology.As2RecordedAssertions[0], Pool);
-        Assert.AreEqual("JWT", redeemTyp);
+        Assert.AreEqual("client-authentication+jwt", redeemTyp);
         Assert.AreEqual(JsonValueKind.String, redeemAudience.ValueKind);
         Assert.AreEqual(topology.As2Issuer.OriginalString, redeemAudience.GetString(),
             "The redeem assertion's aud must name AS2's issuer identifier.");
 
         (string mintTyp, JsonElement mintAudience) =
             ClientAssertionRecorder.DecodeTypAndAudience(topology.As1RecordedAssertions[^1], Pool);
-        Assert.AreEqual("JWT", mintTyp);
+        Assert.AreEqual("client-authentication+jwt", mintTyp);
         Assert.AreEqual(JsonValueKind.String, mintAudience.ValueKind);
         Assert.AreEqual(topology.As1Issuer.OriginalString, mintAudience.GetString(),
             "The mint assertion's aud must name AS1's issuer identifier.");

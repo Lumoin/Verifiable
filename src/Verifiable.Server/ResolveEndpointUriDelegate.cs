@@ -30,7 +30,10 @@ namespace Verifiable.Server;
 /// <c>context.Issuer</c> for the scheme/authority and
 /// compose the path themselves; deployments that resolve issuer per request
 /// (e.g., from <c>Forwarded</c> headers) construct the authority from whatever
-/// the skin placed on the context.
+/// the skin placed on the context. An endpoint URL derived from an unvalidated <c>Host</c> or
+/// forwarded header lets a client assertion made for another authorization server match the accepted
+/// audience, because the default audience policy accepts the token and pushed-authorization endpoint
+/// URLs this delegate yields, so the application pins them to configuration.
 /// </para>
 /// <para>
 /// Returning <see langword="null"/> indicates the application does not expose

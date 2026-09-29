@@ -130,17 +130,29 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// runs, while <see cref="Validate"/> itself checks membership only.
 /// </para>
 /// <para>
+/// No validator reads the <c>typ</c> header parameter, so an assertion typed <c>JWT</c> and one typed
+/// <c>client-authentication+jwt</c> both authenticate, following rfc7523bis-11
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+/// 4</see>: "it is NOT RECOMMENDED for servers to reject JWTs that do not have explicit types."
+/// </para>
+/// <para>
 /// The claim rules enforced by <see cref="Validate"/>:
 /// </para>
 /// <list type="bullet">
 ///   <item><description>
 ///     <c>iss</c> and <c>sub</c> both equal <c>client_id</c> — RFC 7523 §3 items 1 and 2.B: "For
-///     client authentication, the subject MUST be the client_id of the OAuth client."
+///     client authentication, the subject MUST be the &quot;client_id&quot; of the OAuth client."
 ///   </description></item>
 ///   <item><description>
 ///     <c>aud</c> (string or array) contains only values the caller accepts as this authorization
-///     server's identity — its issuer identifier or token endpoint URL (RFC 7523 §3 item 3) — and
-///     at least one is present; an array carrying any other value is rejected outright, the same
+///     server's identity, and at least one is present (RFC 7523 Section 3 item 3). The validators
+///     that <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
+///     returns pass the issuer identifier and the request's token endpoint
+///     URL and pushed authorization request endpoint URL under
+///     <see cref="ClientAssertionAudiencePolicy.AuthorizationServerIdentities"/> (RFC 9126 Section 2),
+///     and the issuer identifier alone under
+///     <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/> (rfc7523bis-11 Section 4
+///     item b). An array carrying any other value is rejected outright, the same
 ///     anti-audience-injection posture <see cref="FederationClientAuthentication"/> and
 ///     <see cref="Rfc7523AssertionValidation"/> apply.
 ///   </description></item>
@@ -166,7 +178,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// <param name="acceptedAudiences">
     /// The values <c>aud</c> may name — this authorization server's issuer identifier and/or token
     /// endpoint URL (RFC 7523 §3 item 3: "The token endpoint URL of the authorization server MAY be
-    /// used as a value for an aud element"). This method checks membership only: passing the issuer
+    /// used as a value for an &quot;aud&quot; element"). This method checks membership only: passing the issuer
     /// identifier alone does not refuse an array that repeats it, because the issuer-only rule is
     /// applied by <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// with <c>audiencePolicy</c>.
@@ -307,7 +319,11 @@ public static class PrivateKeyJwtClientAuthentication
     /// Replay-defense hook consulted after the claim rules pass, or <see langword="null"/> to skip
     /// replay defense (the caller relies on a different mechanism). Pass
     /// <see cref="JtiReplayGuard.ConsultClientAssertionAsync"/> directly to reuse the library's
-    /// replay store.
+    /// replay store. OpenID Connect Core Section 9 requires a client assertion to be used once
+    /// (<see href="https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication">"These
+    /// tokens MUST only be used once, unless conditions for reuse were negotiated between the
+    /// parties"</see>), so a <see langword="null"/> hook leaves that rule to the application's own
+    /// mechanism.
     /// </param>
     /// <param name="resolveJwksUriAsync">
     /// The OPTIONAL key-set resolution seam for a registration that carries a
@@ -357,7 +373,11 @@ public static class PrivateKeyJwtClientAuthentication
     /// </param>
     /// <param name="checkJtiReplayAsync">
     /// Replay-defense hook consulted after the claim rules pass, or <see langword="null"/> to skip
-    /// replay defense.
+    /// replay defense. OpenID Connect Core Section 9 requires a client assertion to be used once
+    /// (<see href="https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication">"These
+    /// tokens MUST only be used once, unless conditions for reuse were negotiated between the
+    /// parties"</see>), so a <see langword="null"/> hook leaves that rule to the application's own
+    /// mechanism.
     /// </param>
     /// <param name="resolveJwksUriAsync">
     /// The OPTIONAL key-set resolution seam; see the registry-resolving overload's parameter of the
@@ -586,6 +606,9 @@ public static class PrivateKeyJwtClientAuthentication
                     //BEFORE running declared authentication — read that carried value rather than
                     //resolving a second time for the same request. PAR, client credentials, and
                     //the other stepless callers carry nothing, so they resolve here as before.
+                    //rfc7523bis-11 Section 4 item b: "The authorization server MUST have an issuer
+                    //identifier to be used with this specification." A resolution that fails leaves
+                    //no issuer identifier to compare the audience with, so the assertion is refused.
                     Uri issuerUri;
                     if(context.CorrelationStepIssuer is Uri carriedIssuer)
                     {
@@ -780,6 +803,14 @@ public static class PrivateKeyJwtClientAuthentication
     }
 
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="values"/> holds at least one element and
+    /// every element is non-empty and ordinal-equal to one of <paramref name="acceptedAudiences"/>.
+    /// This is the typed-array shape of an <c>aud</c> claim, judged by the rule in
+    /// <see cref="IsAudienceAccepted"/>.
+    /// </summary>
+    /// <param name="values">The <c>aud</c> array elements.</param>
+    /// <param name="acceptedAudiences">The values <c>aud</c> may name.</param>
     private static bool AreAllAccepted(IEnumerable<string> values, IReadOnlyCollection<string> acceptedAudiences)
     {
         bool sawAny = false;
@@ -797,6 +828,15 @@ public static class PrivateKeyJwtClientAuthentication
     }
 
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="values"/> holds at least one element and
+    /// every element is a non-empty <see cref="string"/> ordinal-equal to one of
+    /// <paramref name="acceptedAudiences"/>; an element of any other type refuses the whole array.
+    /// This is the mixed-array shape of an <c>aud</c> claim, judged by the rule in
+    /// <see cref="IsAudienceAccepted"/>.
+    /// </summary>
+    /// <param name="values">The <c>aud</c> array elements.</param>
+    /// <param name="acceptedAudiences">The values <c>aud</c> may name.</param>
     private static bool AreAllAccepted(IEnumerable<object> values, IReadOnlyCollection<string> acceptedAudiences)
     {
         bool sawAny = false;
@@ -828,6 +868,17 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see cref="IsAudienceAccepted"/> matches, so a one-element array is judged the same way under
     /// both audience policies.
     /// </summary>
+    /// <remarks>
+    /// The comparison is ordinal (<see cref="StringComparison.Ordinal"/>), the Simple String Comparison
+    /// method rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see> requires: "In the absence of an application profile specifying otherwise, applications
+    /// MUST compare the audience values using the Simple String Comparison method defined in Section
+    /// 6.2.1 of RFC 3986" (<see href="https://datatracker.ietf.org/doc/html/rfc3986#section-6.2.1">RFC
+    /// 3986 Section 6.2.1</see>). An issuer identifier with an appended <c>/</c> or a differently cased
+    /// scheme is a different value and is refused; a differently cased host follows from the same
+    /// ordinal comparison, which sees only code units and folds no case.
+    /// </remarks>
     private static bool IsIssuerIdentifierOnlyAudience(object audienceRaw, string issuerIdentifier)
     {
         return audienceRaw switch
@@ -842,6 +893,17 @@ public static class PrivateKeyJwtClientAuthentication
     }
 
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="candidate"/> is ordinal-equal to one of
+    /// <paramref name="values"/>. An ordinal comparison is the Simple String Comparison method that
+    /// rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see> and RFC 7523
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">Section 3</see> item 3 name for
+    /// comparing audience values (Section 6.2.1 of RFC 3986).
+    /// </summary>
+    /// <param name="values">The accepted values.</param>
+    /// <param name="candidate">The value to look for.</param>
     private static bool ContainsOrdinal(IReadOnlyCollection<string> values, string candidate)
     {
         foreach(string value in values)

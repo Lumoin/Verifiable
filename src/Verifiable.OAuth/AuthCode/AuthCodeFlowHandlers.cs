@@ -133,6 +133,15 @@ public static class AuthCodeFlowHandlers
     /// the PAR endpoint, persists <see cref="ParCompletedState"/> state, and returns a
     /// redirect URI for the caller to forward to the user agent.
     /// </summary>
+    /// <remarks>
+    /// The send attaches no client authentication: the request carries no <c>client_assertion</c>
+    /// field and no authorization header. A confidential client's pushed request is authenticated by
+    /// the application's own push built on
+    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/>, following
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 Section 2.1</see>: "If
+    /// applicable, the client also adds its authentication credentials to the request header or the
+    /// request body using the same rules as for token endpoint requests."
+    /// </remarks>
     /// <param name="fields">
     /// Inbound form fields. A <c>scope</c> field names the requested scope values (RFC 6749 §3.3,
     /// space-delimited) and is sent as given; without one, or with a blank one, the pushed request
@@ -1071,10 +1080,21 @@ public static class AuthCodeFlowHandlers
     /// object signs, and returns the authorize redirect URI carrying the issued <c>request_uri</c>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A resource entry holding any white-space character is refused before anything is signed,
     /// sent or stored (<see cref="HasResourceEntryHoldingWhiteSpace"/>): an RFC 8707 §2 indicator is
     /// one absolute URI, and the entries the object signs are exactly the entries the flow state
     /// keeps and the code redemption sends.
+    /// </para>
+    /// <para>
+    /// The send attaches no client authentication: the request carries no <c>client_assertion</c>
+    /// field and no authorization header. A confidential client's pushed request is authenticated by
+    /// the application's own push built on
+    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/>, following
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 Section 2.1</see>: "If
+    /// applicable, the client also adds its authentication credentials to the request header or the
+    /// request body using the same rules as for token endpoint requests."
+    /// </para>
     /// </remarks>
     /// <param name="jarOptions">The caller's per-call inputs: the scope, the resource indicators, the signing key and the serializers.</param>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>

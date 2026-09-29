@@ -75,6 +75,15 @@ namespace Verifiable.OAuth.Client;
 /// endpoint the request is sent to.
 /// </para>
 /// <para>
+/// <strong>Pushed authorization requests.</strong> The library's own pushed-request sender, the
+/// <c>StartParAsync</c> overloads of <see cref="AuthCode.AuthCodeClient"/>, attaches no client
+/// authentication. A confidential client's pushed request is authenticated by the application's push,
+/// built on <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/>, as
+/// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 Section 2.1</see> states: "If
+/// applicable, the client also adds its authentication credentials to the request header or the request
+/// body using the same rules as for token endpoint requests."
+/// </para>
+/// <para>
 /// <strong>Profile.</strong> The <see cref="Profile"/> slot selects the
 /// security profile this registration runs under
 /// (<see cref="PolicyProfile.Fapi20"/>, <see cref="PolicyProfile.Haip10"/>,
@@ -188,12 +197,20 @@ public sealed record ClientRegistration
     /// Whether a <c>private_key_jwt</c> client assertion this registration signs carries the explicit
     /// <c>typ</c> header parameter value
     /// <see cref="Verifiable.JCose.WellKnownMediaTypes.Jwt.ClientAuthenticationJwt"/> rather than
-    /// <see cref="Verifiable.JCose.WellKnownJwkValues.TypeJwt"/>. <see langword="false"/> by default; a
-    /// per-registration choice, since
+    /// <see cref="Verifiable.JCose.WellKnownJwkValues.TypeJwt"/>. <see langword="true"/> by default: the
+    /// assertion's <c>typ</c> is <c>client-authentication+jwt</c>, following the
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
-    /// Section 4</see>'s explicit typing is a SHOULD of an Internet-Draft, not of an RFC.
+    /// Section 4</see> and
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-5">Section
+    /// 5</see> SHOULD: "Client authentication JWTs SHOULD be explicitly typed by using the typ header
+    /// parameter value client-authentication+jwt or another more specific explicit type value defined by a
+    /// specification profiling this specification." Setting it to <see langword="false"/> writes the
+    /// generic <c>JWT</c>, a deviation from that SHOULD offered only for an authorization server that
+    /// rejects <c>typ</c> values it does not know. The draft's statement on server-side typing, "it is NOT
+    /// RECOMMENDED for servers to reject JWTs that do not have explicit types", concerns servers that
+    /// reject untyped assertions and states no rule for servers that reject typed ones.
     /// </summary>
-    public bool IsClientAssertionExplicitlyTyped { get; init; }
+    public bool IsClientAssertionExplicitlyTyped { get; init; } = true;
 
     /// <summary>
     /// The URI at which this client's JWKS document is published, when

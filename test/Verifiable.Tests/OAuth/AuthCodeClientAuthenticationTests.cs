@@ -9,6 +9,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
@@ -211,17 +212,32 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// does not contain its own issuer identifier as the sole audience value." Each case drives one
     /// <c>aud</c> shape over the real wire: the issuer as a string or as a one-element array
     /// authenticates (HTTP 201), while the token endpoint URL, the pushed authorization request
-    /// endpoint URL, an array naming the issuer and the token endpoint together, and an array naming
-    /// the issuer twice are each refused with HTTP 401 <c>invalid_client</c>.
+    /// endpoint URL, an array naming the issuer and the token endpoint together, an array naming
+    /// the issuer twice, the issuer with an appended <c>/</c>, and the issuer with its scheme
+    /// upper-cased are each refused with HTTP 401 <c>invalid_client</c>. The fixture's issuer host is
+    /// the IP literal <c>127.0.0.1</c>, which upper-casing leaves unchanged, so the upper-cased case
+    /// varies the scheme only.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section 4.1.3</see>
     /// admits both forms of the claim: "In the general case, the &quot;aud&quot; value is an array of
     /// case-sensitive strings, each containing a StringOrURI value. In the special case when the JWT has
     /// one audience, the &quot;aud&quot; value MAY be a single case-sensitive string containing a
-    /// StringOrURI value."
+    /// StringOrURI value." The last two cases hold rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see>: "In the absence of an application profile specifying otherwise, applications MUST
+    /// compare the audience values using the Simple String Comparison method defined in Section 6.2.1
+    /// of RFC 3986", so a value that differs from the issuer identifier only by a trailing slash or by
+    /// the letter case of its scheme is a different value. Every 401 body carries an <c>error_description</c> member that
+    /// is a non-empty string within the character set
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> gives
+    /// it (<c>%x20-21 / %x23-5B / %x5D-7E</c>), following
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">RFC 7523 Section 3.2</see>: "The
+    /// authorization server MAY include additional information regarding the reasons the JWT was
+    /// considered invalid using the &quot;error_description&quot; or &quot;error_uri&quot; parameters."
     /// </summary>
     /// <param name="audienceShape">
     /// Which <c>aud</c> shape the assertion carries: <c>issuer</c>, <c>issuerArray</c>,
-    /// <c>tokenEndpoint</c>, <c>parEndpoint</c>, <c>issuerAndTokenEndpoint</c> or <c>issuerTwice</c>.
+    /// <c>tokenEndpoint</c>, <c>parEndpoint</c>, <c>issuerAndTokenEndpoint</c>, <c>issuerTwice</c>,
+    /// <c>issuerWithTrailingSlash</c> or <c>issuerWithUpperCasedScheme</c>.
     /// </param>
     /// <param name="expectedStatusCode">The pushed authorization endpoint's HTTP status for that shape.</param>
     [TestMethod]
@@ -231,6 +247,8 @@ internal sealed class AuthCodeClientAuthenticationTests
     [DataRow("parEndpoint", 401, DisplayName = "the pushed authorization endpoint URL as a string")]
     [DataRow("issuerAndTokenEndpoint", 401, DisplayName = "the issuer and the token endpoint URL as a two-element array")]
     [DataRow("issuerTwice", 401, DisplayName = "the issuer duplicated as a two-element array")]
+    [DataRow("issuerWithTrailingSlash", 401, DisplayName = "the issuer with an appended slash")]
+    [DataRow("issuerWithUpperCasedScheme", 401, DisplayName = "the issuer with its scheme upper-cased")]
     public async Task IssuerOnlyPolicyAcceptsOnlyTheIssuerAsSoleAudienceAsync(string audienceShape, int expectedStatusCode)
     {
         //Opt in to the issuer-only rule: with no additionalAcceptedAudiences, only this exact
@@ -247,6 +265,8 @@ internal sealed class AuthCodeClientAuthenticationTests
                 "parEndpoint" => parEndpoint.OriginalString,
                 "issuerAndTokenEndpoint" => new[] { issuer, tokenEndpoint.OriginalString },
                 "issuerTwice" => new[] { issuer, issuer },
+                "issuerWithTrailingSlash" => issuer + "/",
+                "issuerWithUpperCasedScheme" => UpperCaseScheme(issuer),
                 _ => throw new ArgumentOutOfRangeException(nameof(audienceShape), audienceShape, null)
             }).ConfigureAwait(false);
 
@@ -257,17 +277,330 @@ internal sealed class AuthCodeClientAuthenticationTests
             using JsonDocument errorBody = JsonDocument.Parse(parBody);
             Assert.AreEqual("invalid_client", errorBody.RootElement.GetProperty("error").GetString(),
                 $"aud={audienceShape} must refuse as invalid_client. Body={parBody}");
+
+            Assert.IsTrue(
+                errorBody.RootElement.TryGetProperty("error_description", out JsonElement description),
+                $"aud={audienceShape} refusal must carry error_description. Body={parBody}");
+            Assert.AreEqual(JsonValueKind.String, description.ValueKind,
+                $"aud={audienceShape} error_description must be a string. Body={parBody}");
+
+            string descriptionText = description.GetString()!;
+            Assert.IsFalse(string.IsNullOrEmpty(descriptionText),
+                $"aud={audienceShape} error_description must not be empty. Body={parBody}");
+            Assert.IsTrue(IsWithinErrorDescriptionCharacterSet(descriptionText),
+                $"aud={audienceShape} error_description must stay within %x20-21 / %x23-5B / %x5D-7E. Body={parBody}");
         }
     }
 
 
     /// <summary>
-    /// Starts one real-wire authorization server with <paramref name="validator"/> wired as its client
-    /// authentication, registers a <c>private_key_jwt</c> client over a published one-key JWKS, and
-    /// pushes one authorization request per entry of <paramref name="audiences"/>, each carrying a
-    /// freshly signed client assertion whose <c>aud</c> that entry builds from the resolved issuer
-    /// identifier, token endpoint URL and pushed authorization request endpoint URL. The shared setup
-    /// of every row proving what the pushed authorization endpoint does with an assertion's audience.
+    /// Returns <paramref name="issuer"/> with its scheme upper-cased and the rest unchanged, the
+    /// value a case-normalizing comparison would treat as the issuer identifier and
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc3986#section-6.2.1">RFC 3986 Section 6.2.1</see>
+    /// Simple String Comparison treats as a different string. The host is left as it is: the fixture's
+    /// issuer host is an IP literal, which upper-casing leaves unchanged.
+    /// </summary>
+    /// <param name="issuer">An absolute issuer identifier.</param>
+    /// <returns>The issuer identifier with its scheme in upper case.</returns>
+    private static string UpperCaseScheme(string issuer)
+    {
+        Uri parsed = new(issuer, UriKind.Absolute);
+
+        return string.Concat(parsed.Scheme.ToUpperInvariant(), issuer.AsSpan(parsed.Scheme.Length));
+    }
+
+
+    /// <summary>
+    /// Returns <see langword="true"/> when every character of <paramref name="value"/> lies in the set
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> allows
+    /// for an <c>error_description</c> value: <c>%x20-21 / %x23-5B / %x5D-7E</c>.
+    /// </summary>
+    /// <param name="value">The <c>error_description</c> text.</param>
+    /// <returns><see langword="true"/> when no character falls outside the set.</returns>
+    private static bool IsWithinErrorDescriptionCharacterSet(string value)
+    {
+        foreach(char character in value)
+        {
+            int codePoint = character;
+            bool isAllowed = codePoint is (>= 0x20 and <= 0x21) or (>= 0x23 and <= 0x5B) or (>= 0x5D and <= 0x7E);
+            if(!isAllowed)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Client assertions whose claim sets the specifications allow authenticate at the pushed
+    /// authorization endpoint over the real wire: HTTP 201 with a <c>request_uri</c>. OpenID Connect
+    /// Core <see href="https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication">Section
+    /// 9</see>: "The JWT MAY contain other Claims. Any Claims used that are not understood MUST be
+    /// ignored." and <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>
+    /// item 8: "The JWT MAY contain other claims." — an assertion carrying the claim
+    /// <c>https://example.test/tenant</c> authenticates under the default audience policy and under
+    /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/> alike. Item 6: "The JWT MAY
+    /// contain an &quot;iat&quot; (issued at) claim that identifies the time at which the JWT was
+    /// issued." — an assertion with no <c>iat</c> member authenticates. Item 5: "The JWT MAY contain
+    /// an &quot;nbf&quot; (not before) claim that identifies the time before which the token MUST NOT
+    /// be accepted for processing." — an <c>nbf</c> sixty seconds before the fixture clock's current
+    /// time is a time that has passed, so the assertion authenticates. Item 4: "The authorization
+    /// server MUST reject any JWT with an expiration time that has passed, subject to allowable clock
+    /// skew between systems." — an <c>exp</c> thirty seconds before the fixture clock's current time
+    /// has passed by less than <see cref="TimingPolicy.ClockSkewTolerance"/>, so the assertion
+    /// authenticates; its <c>iat</c> lies ninety seconds before the current time so the lifetime stays
+    /// positive.
+    /// </summary>
+    /// <param name="claimShape">
+    /// Which claim set the assertion carries: <c>unregisteredClaim</c>, <c>noIssuedAt</c>,
+    /// <c>notBeforeInThePast</c> or <c>expiredWithinSkew</c>.
+    /// </param>
+    /// <param name="isIssuerOnlyPolicy">
+    /// <see langword="true"/> to wire <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>,
+    /// <see langword="false"/> for the default audience policy.
+    /// </param>
+    [TestMethod]
+    [DataRow("unregisteredClaim", false, DisplayName = "an unregistered claim under the default audience policy")]
+    [DataRow("unregisteredClaim", true, DisplayName = "an unregistered claim under the issuer-only audience policy")]
+    [DataRow("noIssuedAt", false, DisplayName = "no iat claim under the default audience policy")]
+    [DataRow("notBeforeInThePast", false, DisplayName = "an nbf claim sixty seconds in the past under the default audience policy")]
+    [DataRow("expiredWithinSkew", false, DisplayName = "an exp claim thirty seconds in the past under the default audience policy")]
+    public async Task ClaimSetsTheSpecificationsAllowAreAcceptedAtThePushedRequestAsync(
+        string claimShape, bool isIssuerOnlyPolicy)
+    {
+        ValidateClientCredentialsDelegate validator = isIssuerOnlyPolicy
+            ? PrivateKeyJwtClientAuthentication.BuildValidator(audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
+            : PrivateKeyJwtClientAuthentication.BuildValidator();
+
+        (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
+            validator,
+            "rfc7523-accepted-claims-key-1",
+            observe: null,
+            claims => claimShape switch
+            {
+                "unregisteredClaim" => SerializeClaims(claims, ("https://example.test/tenant", "tenant-a")),
+                "noIssuedAt" => SerializeClaims(claims, (WellKnownJwtClaimNames.Iat, null)),
+                "notBeforeInThePast" => SerializeClaims(claims, (WellKnownJwtClaimNames.Nbf, IssuedAtSeconds(claims) - 60)),
+                "expiredWithinSkew" => SerializeClaims(
+                    claims,
+                    (WellKnownJwtClaimNames.Iat, IssuedAtSeconds(claims) - 90),
+                    (WellKnownJwtClaimNames.Exp, IssuedAtSeconds(claims) - 30)),
+                _ => throw new ArgumentOutOfRangeException(nameof(claimShape), claimShape, null)
+            }).ConfigureAwait(false);
+
+        (int statusCode, string body) = pushes[0];
+        Assert.AreEqual(201, statusCode, $"claims={claimShape} issuerOnly={isIssuerOnlyPolicy} Body={body}");
+        using JsonDocument accepted = JsonDocument.Parse(body);
+        Assert.IsTrue(
+            accepted.RootElement.TryGetProperty("request_uri", out JsonElement requestUri)
+                && requestUri.ValueKind == JsonValueKind.String,
+            $"claims={claimShape} the accepted push must answer a request_uri. Body={body}");
+    }
+
+
+    /// <summary>
+    /// A client assertion whose <c>nbf</c> lies in the future is refused at the pushed authorization
+    /// endpoint over the real wire. <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523
+    /// Section 3</see> item 5: "The JWT MAY contain an &quot;nbf&quot; (not before) claim that identifies
+    /// the time before which the token MUST NOT be accepted for processing." The assertion carries an
+    /// <c>nbf</c> five minutes after the fixture clock's current time and an <c>exp</c> after that
+    /// <c>nbf</c>, so only the not-before rule refuses it. <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">Section
+    /// 3.2</see>: "If the client JWT is not valid, the authorization server constructs an error response
+    /// as defined in OAuth 2.0 [RFC6749]. The value of the &quot;error&quot; parameter MUST be the
+    /// &quot;invalid_client&quot; error code. The authorization server MAY include additional
+    /// information regarding the reasons the JWT was considered invalid using the
+    /// &quot;error_description&quot; or &quot;error_uri&quot; parameters." — the answer is HTTP 401
+    /// <c>invalid_client</c> with an <c>error_description</c> string.
+    /// </summary>
+    [TestMethod]
+    public async Task FutureNotBeforeIsRefusedAtThePushedRequestAsync()
+    {
+        (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
+            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            "rfc7523-future-nbf-key-1",
+            observe: null,
+            static claims => SerializeClaims(
+                claims,
+                (WellKnownJwtClaimNames.Nbf, IssuedAtSeconds(claims) + 300),
+                (WellKnownJwtClaimNames.Exp, IssuedAtSeconds(claims) + 600))).ConfigureAwait(false);
+
+        AssertRefusedAsInvalidClient(pushes[0].StatusCode, pushes[0].Body, "nbf five minutes ahead");
+    }
+
+
+    /// <summary>
+    /// A client assertion that breaks one claim rule is refused at the pushed authorization endpoint
+    /// over the real wire under the default audience policy: HTTP 401 <c>invalid_client</c> with an
+    /// <c>error_description</c> string
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">RFC 7523 Section 3.2</see>).
+    /// The rules: OpenID Connect Core
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication">Section
+    /// 9</see> for the <c>iss</c> claim, "This MUST contain the client_id of the OAuth Client." — another
+    /// client's identifier is refused; <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523
+    /// Section 3</see> item 2.B, "For client authentication, the subject MUST be the &quot;client_id&quot;
+    /// of the OAuth client." — a <c>sub</c> that differs from the client identifier is refused; item 4,
+    /// "The authorization server MUST reject any JWT with an expiration time that has passed, subject to
+    /// allowable clock skew between systems." — an <c>exp</c> two minutes before the fixture clock's
+    /// current time is beyond the sixty-second <see cref="TimingPolicy.ClockSkewTolerance"/>; item 3,
+    /// "The authorization server MUST reject any JWT that does not contain its own identity as the
+    /// intended audience." — a foreign <c>aud</c> string is refused, where
+    /// rfc7523bis-11 <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see> replaces item 3 for client authentication. A foreign value beside the issuer identifier
+    /// in an <c>aud</c> array is refused by the library's own rule that every <c>aud</c> element must be
+    /// accepted, the rule following rfc7523bis-11 Section 4 item b: "The authorization server MUST reject
+    /// any JWT that does not contain its issuer identifier as its sole audience value." Item 10, "The
+    /// authorization server MUST reject a JWT that is not valid in all other respects per &quot;JSON Web
+    /// Token (JWT)&quot; [JWT]." — <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4">RFC 7519
+    /// Section 4</see>: "The Claim Names within a JWT Claims Set MUST be unique; JWT parsers MUST either
+    /// reject JWTs with duplicate Claim Names or use a JSON parser that returns only the lexically last
+    /// duplicate member name". The library takes the rejection branch:
+    /// <see cref="JwkJsonReader.IsWellFormedJsonDocument"/> refuses a payload that repeats a member name.
+    /// The repeated <c>sub</c> case names the client identifier first and the attacker's value last. On
+    /// this fixture the wired payload deserializer also refuses a repeated member name, so this wire case
+    /// shows that the assertion is refused, and
+    /// <see cref="PrivateKeyJwtClientAuthenticationTests.RepeatedClaimNameIsRefusedBeforeAnyClaimIsRead"/>
+    /// isolates the library's own refusal by wiring a deserializer that accepts a repeated name.
+    /// </summary>
+    /// <param name="claimShape">
+    /// Which rule the assertion breaks: <c>wrongIssuer</c>, <c>wrongSubject</c>, <c>expired</c>,
+    /// <c>foreignAudience</c>, <c>foreignAudienceInArray</c> or <c>duplicateSubject</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("wrongIssuer", DisplayName = "iss names another client")]
+    [DataRow("wrongSubject", DisplayName = "sub differs from the client identifier")]
+    [DataRow("expired", DisplayName = "exp two minutes in the past")]
+    [DataRow("foreignAudience", DisplayName = "aud is a foreign string")]
+    [DataRow("foreignAudienceInArray", DisplayName = "aud is an array naming the issuer and a foreign value")]
+    [DataRow("duplicateSubject", DisplayName = "sub appears twice")]
+    public async Task ClaimRuleViolationsAreRefusedAtThePushedRequestAsync(string claimShape)
+    {
+        (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
+            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            "rfc7523-claim-rules-key-1",
+            observe: null,
+            claims => claimShape switch
+            {
+                "wrongIssuer" => SerializeClaims(claims, (WellKnownJwtClaimNames.Iss, "https://other-client.test")),
+                "wrongSubject" => SerializeClaims(claims, (WellKnownJwtClaimNames.Sub, "https://other-client.test")),
+                "expired" => SerializeClaims(
+                    claims,
+                    (WellKnownJwtClaimNames.Iat, IssuedAtSeconds(claims) - 180),
+                    (WellKnownJwtClaimNames.Exp, IssuedAtSeconds(claims) - 120)),
+                "foreignAudience" => SerializeClaims(claims, (WellKnownJwtClaimNames.Aud, "https://foreign.example")),
+                "foreignAudienceInArray" => SerializeClaims(
+                    claims,
+                    (WellKnownJwtClaimNames.Aud, new[] { (string)claims[WellKnownJwtClaimNames.Aud], "https://foreign.example" })),
+                "duplicateSubject" => AppendStringMember(SerializeClaims(claims), WellKnownJwtClaimNames.Sub, "attacker-client"),
+                _ => throw new ArgumentOutOfRangeException(nameof(claimShape), claimShape, null)
+            }).ConfigureAwait(false);
+
+        AssertRefusedAsInvalidClient(pushes[0].StatusCode, pushes[0].Body, $"claims={claimShape}");
+    }
+
+
+    /// <summary>
+    /// A client assertion pushed with a pushed authorization request is not stored with it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 Section 2.1</see>: "When
+    /// present in a pushed authorization request, they are relied upon only for client authentication
+    /// and are not germane to the authorization request itself." A valid assertion authenticates the
+    /// push (HTTP 201) and the pushed request the server stores under the answered <c>request_uri</c>
+    /// holds neither the <c>client_assertion</c> value nor the <c>client_assertion_type</c> value.
+    /// The stored request declares the authorization parameters the server reads as members and none of
+    /// them carries a client assertion or its type, so every string and <see cref="Uri"/> member is
+    /// compared with both values directly. The stored request's text form shows each scalar and
+    /// <see cref="Uri"/> member by value (a collection member would show only its type name), so the
+    /// text-form assertions cover the values those members hold; the client identifier and the code
+    /// challenge appearing in it show the text form lists the members.
+    /// </summary>
+    [TestMethod]
+    public async Task PushedRequestStoresNoClientAuthenticationParametersAsync()
+    {
+        (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
+            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            "rfc9126-stored-request-key-1",
+            (host, assertions) =>
+            {
+                ParRequestReceivedState stored = host.FlowStore.Values
+                    .Select(entry => entry.State)
+                    .OfType<ParRequestReceivedState>()
+                    .Single();
+
+                (string Name, string? Value)[] members =
+                [
+                    (nameof(stored.FlowId), stored.FlowId),
+                    (nameof(stored.ExpectedIssuer), stored.ExpectedIssuer),
+                    (nameof(stored.RequestUri), stored.RequestUri.OriginalString),
+                    (nameof(stored.CodeChallenge), stored.CodeChallenge),
+                    (nameof(stored.CodeChallengeMethod), stored.CodeChallengeMethod),
+                    (nameof(stored.RedirectUri), stored.RedirectUri.OriginalString),
+                    (nameof(stored.Scope), stored.Scope),
+                    (nameof(stored.ClientId), stored.ClientId),
+                    (nameof(stored.Nonce), stored.Nonce),
+                    (nameof(stored.AcrValues), stored.AcrValues),
+                    (nameof(stored.Prompt), stored.Prompt),
+                    (nameof(stored.State), stored.State),
+                    (nameof(stored.AuthorizationDetails), stored.AuthorizationDetails),
+                    (nameof(stored.ResponseMode), stored.ResponseMode),
+                    (nameof(stored.IssuerState), stored.IssuerState),
+                    (nameof(stored.Resource), stored.Resource)
+                ];
+                foreach((string name, string? value) in members)
+                {
+                    Assert.DoesNotContain(assertions[0], value ?? string.Empty, StringComparison.Ordinal,
+                        $"The stored pushed request's {name} member must not carry the client_assertion value.");
+                    Assert.DoesNotContain(WellKnownClientAssertionTypes.JwtBearer, value ?? string.Empty, StringComparison.Ordinal,
+                        $"The stored pushed request's {name} member must not carry the client_assertion_type value.");
+                }
+
+                string storedText = stored.ToString();
+                Assert.Contains(stored.ClientId, storedText, StringComparison.Ordinal,
+                    "The stored request's text form must list its members, the client identifier among them.");
+                Assert.Contains(stored.CodeChallenge, storedText, StringComparison.Ordinal,
+                    "The stored request's text form must list its members, the code challenge among them.");
+                Assert.DoesNotContain(assertions[0], storedText, StringComparison.Ordinal,
+                    "The stored pushed request's text form must not show the client_assertion value.");
+                Assert.DoesNotContain(WellKnownClientAssertionTypes.JwtBearer, storedText, StringComparison.Ordinal,
+                    "The stored pushed request's text form must not show the client_assertion_type value.");
+            },
+            static claims => SerializeClaims(claims)).ConfigureAwait(false);
+
+        Assert.AreEqual(201, pushes[0].StatusCode, $"Body={pushes[0].Body}");
+    }
+
+
+    /// <summary>
+    /// Asserts that a push was refused as a failed client authentication: HTTP 401, an <c>error</c>
+    /// member of <c>invalid_client</c> and an <c>error_description</c> member that is a non-empty string
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">RFC 7523 Section 3.2</see>).
+    /// </summary>
+    /// <param name="statusCode">The push's HTTP status code.</param>
+    /// <param name="body">The push's response body.</param>
+    /// <param name="label">Names the case in each failure message.</param>
+    private static void AssertRefusedAsInvalidClient(int statusCode, string body, string label)
+    {
+        Assert.AreEqual(401, statusCode, $"{label} Body={body}");
+
+        using JsonDocument errorBody = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_client", errorBody.RootElement.GetProperty("error").GetString(),
+            $"{label} must refuse as invalid_client. Body={body}");
+        Assert.IsTrue(
+            errorBody.RootElement.TryGetProperty("error_description", out JsonElement description),
+            $"{label} refusal must carry error_description. Body={body}");
+        Assert.AreEqual(JsonValueKind.String, description.ValueKind,
+            $"{label} error_description must be a string. Body={body}");
+        Assert.IsFalse(string.IsNullOrEmpty(description.GetString()),
+            $"{label} error_description must not be empty. Body={body}");
+    }
+
+
+    /// <summary>
+    /// Pushes one authorization request per entry of <paramref name="audiences"/> over the real wire,
+    /// each carrying a freshly signed client assertion whose <c>aud</c> that entry builds from the
+    /// resolved issuer identifier, token endpoint URL and pushed authorization request endpoint URL.
+    /// The setup of every row proving what the pushed authorization endpoint does with an assertion's
+    /// audience; the assertion's other claims are the default set.
     /// </summary>
     /// <param name="validator">The server's client-credentials validator.</param>
     /// <param name="signingKeyId">The <c>kid</c> the client's JWKS publishes its key under.</param>
@@ -276,10 +609,193 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// authorization request endpoint URL, returning the <c>aud</c> claim value (a string or an array).
     /// </param>
     /// <returns>Each push's HTTP status code and body, in the order of <paramref name="audiences"/>.</returns>
-    private async Task<(int StatusCode, string Body)[]> PushSignedAssertionsAtParAsync(
+    private Task<(int StatusCode, string Body)[]> PushSignedAssertionsAtParAsync(
         ValidateClientCredentialsDelegate validator,
         string signingKeyId,
         params Func<string, Uri, Uri, object>[] audiences)
+    {
+        Func<AssertionSigningContext, Task<string>>[] signers = new Func<AssertionSigningContext, Task<string>>[audiences.Length];
+        for(int index = 0; index < audiences.Length; ++index)
+        {
+            Func<string, Uri, Uri, object> audience = audiences[index];
+            signers[index] = signing => SignClientAssertionWithoutKidAsync(
+                signing.SigningKey, ClientId,
+                audience(signing.Issuer, signing.TokenEndpoint, signing.ParEndpoint), signing.IssuedAt,
+                signing.HeaderSerializer, signing.PayloadSerializer, TestContext.CancellationToken);
+        }
+
+        return PushAtParAsync(validator, signingKeyId, signers, observe: null);
+    }
+
+
+    /// <summary>
+    /// Pushes one authorization request per entry of <paramref name="claimShapes"/> over the real wire,
+    /// each carrying a freshly signed client assertion whose claims set that entry shapes. Each shape is
+    /// given the default claims (<c>iss</c> and <c>sub</c> the client identifier, <c>aud</c> the issuer
+    /// identifier, a unique <c>jti</c>, <c>iat</c> the fixture clock's current time in seconds, and
+    /// <c>exp</c> one minute after it) and returns the JSON object the assertion's payload carries
+    /// verbatim, so a case adds, drops or changes a claim, or repeats a member name through raw JSON.
+    /// </summary>
+    /// <param name="validator">The server's client-credentials validator.</param>
+    /// <param name="signingKeyId">The <c>kid</c> the client's JWKS publishes its key under.</param>
+    /// <param name="observe">
+    /// Called once after every push, while the server is running, with the host and the signed
+    /// assertions in push order; <see langword="null"/> to observe nothing.
+    /// </param>
+    /// <param name="claimShapes">One shape per push.</param>
+    /// <returns>Each push's HTTP status code and body, in the order of <paramref name="claimShapes"/>.</returns>
+    private Task<(int StatusCode, string Body)[]> PushShapedAssertionsAtParAsync(
+        ValidateClientCredentialsDelegate validator,
+        string signingKeyId,
+        Action<TestHostShell, IReadOnlyList<string>>? observe,
+        params Func<Dictionary<string, object>, string>[] claimShapes)
+    {
+        Func<AssertionSigningContext, Task<string>>[] signers = new Func<AssertionSigningContext, Task<string>>[claimShapes.Length];
+        for(int index = 0; index < claimShapes.Length; ++index)
+        {
+            Func<Dictionary<string, object>, string> claimShape = claimShapes[index];
+            signers[index] = signing => SignRawClaimsAsync(
+                signing.SigningKey, signing.Algorithm, claimShape(BuildDefaultClaims(signing)));
+        }
+
+        return PushAtParAsync(validator, signingKeyId, signers, observe);
+    }
+
+
+    /// <summary>
+    /// Returns the default client assertion claims for one push: <c>iss</c> and <c>sub</c> the client
+    /// identifier, <c>aud</c> the issuer identifier, a unique <c>jti</c>, <c>iat</c> the signing time
+    /// in seconds and <c>exp</c> one minute after it.
+    /// </summary>
+    /// <param name="signing">The push's signing context.</param>
+    /// <returns>A fresh claims dictionary the caller may change.</returns>
+    private static Dictionary<string, object> BuildDefaultClaims(AssertionSigningContext signing) =>
+        new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Iss] = ClientId,
+            [WellKnownJwtClaimNames.Sub] = ClientId,
+            [WellKnownJwtClaimNames.Aud] = signing.Issuer,
+            [WellKnownJwtClaimNames.Jti] = $"assertion-{Guid.NewGuid():N}",
+            [WellKnownJwtClaimNames.Iat] = signing.IssuedAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = signing.IssuedAt.AddMinutes(1).ToUnixTimeSeconds()
+        };
+
+
+    /// <summary>
+    /// Serializes <paramref name="claims"/> to a JSON object after applying <paramref name="changes"/>:
+    /// a change with a value sets that claim, a change with a <see langword="null"/> value removes it.
+    /// </summary>
+    /// <param name="claims">The claims to serialize; changed in place.</param>
+    /// <param name="changes">The claims to set or remove, in order.</param>
+    /// <returns>The claims as a JSON object.</returns>
+    private static string SerializeClaims(Dictionary<string, object> claims, params (string Name, object? Value)[] changes)
+    {
+        foreach((string name, object? value) in changes)
+        {
+            if(value is null)
+            {
+                _ = claims.Remove(name);
+            }
+            else
+            {
+                claims[name] = value;
+            }
+        }
+
+        return JsonSerializer.Serialize(claims);
+    }
+
+
+    /// <summary>
+    /// Appends a string member as the last member of the JSON object <paramref name="json"/>, without
+    /// checking whether the member name is already present, so the object can repeat a member name with
+    /// the appended value last.
+    /// </summary>
+    /// <param name="json">A serialized JSON object.</param>
+    /// <param name="name">The member name to append.</param>
+    /// <param name="value">The member's string value.</param>
+    /// <returns>The JSON object with the member appended.</returns>
+    private static string AppendStringMember(string json, string name, string value) =>
+        json.Insert(json.Length - 1, $",\"{name}\":\"{value}\"");
+
+
+    /// <summary>
+    /// Reads the <c>iat</c> claim of <paramref name="claims"/>, the fixture clock's current time in
+    /// seconds, so a shape derives every other time claim from the fixture clock.
+    /// </summary>
+    /// <param name="claims">The default claims.</param>
+    /// <returns>The <c>iat</c> value in seconds since the Unix epoch.</returns>
+    private static long IssuedAtSeconds(Dictionary<string, object> claims) =>
+        (long)claims[WellKnownJwtClaimNames.Iat];
+
+
+    /// <summary>
+    /// Signs <paramref name="payloadJson"/> verbatim as the payload of a compact JWS whose protected
+    /// header carries <c>alg</c> and <c>typ</c> but no <c>kid</c>, with the project's signing
+    /// primitive, so the payload can hold any member set, including a repeated member name, that the
+    /// library's own payload serializer would not write.
+    /// </summary>
+    /// <param name="signingKey">The client's private key.</param>
+    /// <param name="algorithm">The JWA algorithm name matching <paramref name="signingKey"/>.</param>
+    /// <param name="payloadJson">The JSON object that becomes the payload.</param>
+    /// <returns>The compact serialization of the signed assertion.</returns>
+    private static async Task<string> SignRawClaimsAsync(PrivateKeyMemory signingKey, string algorithm, string payloadJson)
+    {
+        string headerSegment = TestSetup.Base64UrlEncoder(
+            Encoding.UTF8.GetBytes($"{{\"alg\":\"{algorithm}\",\"typ\":\"JWT\"}}"));
+        string payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{payloadSegment}");
+
+        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+
+        return $"{headerSegment}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+    }
+
+
+    /// <summary>
+    /// What a per-push signer needs to sign one client assertion: the client's key and its JWA name,
+    /// the server's issuer identifier and endpoint URLs, the fixture clock's current time, and the
+    /// server's JWT serializers.
+    /// </summary>
+    /// <param name="SigningKey">The client's private key.</param>
+    /// <param name="Algorithm">The JWA algorithm name matching <paramref name="SigningKey"/>.</param>
+    /// <param name="Issuer">The resolved issuer identifier.</param>
+    /// <param name="TokenEndpoint">The token endpoint URL.</param>
+    /// <param name="ParEndpoint">The pushed authorization request endpoint URL.</param>
+    /// <param name="IssuedAt">The fixture clock's current time at signing.</param>
+    /// <param name="HeaderSerializer">The server's JWT header serializer.</param>
+    /// <param name="PayloadSerializer">The server's JWT payload serializer.</param>
+    private sealed record AssertionSigningContext(
+        PrivateKeyMemory SigningKey,
+        string Algorithm,
+        string Issuer,
+        Uri TokenEndpoint,
+        Uri ParEndpoint,
+        DateTimeOffset IssuedAt,
+        JwtHeaderSerializer HeaderSerializer,
+        JwtPayloadSerializer PayloadSerializer);
+
+
+    /// <summary>
+    /// Starts one real-wire authorization server with <paramref name="validator"/> wired as its client
+    /// authentication, registers a <c>private_key_jwt</c> client over a published one-key JWKS, and
+    /// pushes one authorization request per entry of <paramref name="signers"/>, each carrying the
+    /// client assertion that entry signs. The shared setup of every row proving what the pushed
+    /// authorization endpoint does with a client assertion.
+    /// </summary>
+    /// <param name="validator">The server's client-credentials validator.</param>
+    /// <param name="signingKeyId">The <c>kid</c> the client's JWKS publishes its key under.</param>
+    /// <param name="signers">One signer per push, returning the compact client assertion.</param>
+    /// <param name="observe">
+    /// Called once after every push, while the server is running, with the host and the signed
+    /// assertions in push order; <see langword="null"/> to observe nothing.
+    /// </param>
+    /// <returns>Each push's HTTP status code and body, in the order of <paramref name="signers"/>.</returns>
+    private async Task<(int StatusCode, string Body)[]> PushAtParAsync(
+        ValidateClientCredentialsDelegate validator,
+        string signingKeyId,
+        IReadOnlyList<Func<AssertionSigningContext, Task<string>>> signers,
+        Action<TestHostShell, IReadOnlyList<string>>? observe)
     {
         var signingKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
@@ -315,15 +831,16 @@ internal sealed class AuthCodeClientAuthenticationTests
                 profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken).ConfigureAwait(false);
             string issuer = registration.AuthorizationServerIssuer.OriginalString;
 
-            (int StatusCode, string Body)[] pushes = new (int StatusCode, string Body)[audiences.Length];
-            for(int index = 0; index < audiences.Length; ++index)
+            (int StatusCode, string Body)[] pushes = new (int StatusCode, string Body)[signers.Count];
+            string[] assertions = new string[signers.Count];
+            for(int index = 0; index < signers.Count; ++index)
             {
-                object audience = audiences[index](issuer, tokenEndpoint, parEndpoint);
                 PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
-                string assertion = await SignClientAssertionWithoutKidAsync(
-                    signingKeys.PrivateKey, ClientId, audience, TimeProvider.GetUtcNow(),
-                    host.Server.OAuth().Codecs.JwtHeaderSerializer!, host.Server.OAuth().Codecs.JwtPayloadSerializer!,
-                    TestContext.CancellationToken).ConfigureAwait(false);
+                AssertionSigningContext signing = new(
+                    signingKeys.PrivateKey, alg, issuer, tokenEndpoint, parEndpoint, TimeProvider.GetUtcNow(),
+                    host.Server.OAuth().Codecs.JwtHeaderSerializer!, host.Server.OAuth().Codecs.JwtPayloadSerializer!);
+                string assertion = await signers[index](signing).ConfigureAwait(false);
+                assertions[index] = assertion;
 
                 Dictionary<string, string> parFields = new(StringComparer.Ordinal)
                 {
@@ -339,6 +856,8 @@ internal sealed class AuthCodeClientAuthenticationTests
                 pushes[index] = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
                     host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
             }
+
+            observe?.Invoke(host, assertions);
 
             return pushes;
         }
@@ -654,8 +1173,10 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// Section 4</see>: for client authentication the <c>aud</c> claim value "MUST indicate only the
     /// issuer identifier of the intended authorization server as the audience of the JWT" by default
     /// (<see cref="ClientAssertionAudience.IssuerIdentifier"/>), and client authentication JWTs "SHOULD
-    /// be explicitly typed by using the typ header parameter value client-authentication+jwt" when
-    /// <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/> asks for it. A registration may
+    /// be explicitly typed by using the typ header parameter value client-authentication+jwt", which a
+    /// registration that leaves <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/> unset
+    /// (the <see langword="null"/> row) and one that sets it to <see langword="true"/> both do; a
+    /// registration that sets it to <see langword="false"/> signs the generic <c>JWT</c>. A registration may
     /// instead choose <see cref="ClientAssertionAudience.TokenEndpoint"/>:
     /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3 item 3</see>
     /// permits "The token endpoint URL of the authorization server ... as a value for an
@@ -679,10 +1200,11 @@ internal sealed class AuthCodeClientAuthenticationTests
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(false, true)]
+    [DataRow(false, null)]
     [DataRow(true, false)]
     [DataRow(true, true)]
     public async Task CodeExchangeAssertionFollowsTheRegistrationsAudienceAndTypeAsync(
-        bool isTokenEndpointAudience, bool isExplicitlyTyped)
+        bool isTokenEndpointAudience, bool? isExplicitlyTyped)
     {
         var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
@@ -726,7 +1248,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 ClientAssertionAudience = isTokenEndpointAudience
                     ? ClientAssertionAudience.TokenEndpoint
                     : ClientAssertionAudience.IssuerIdentifier,
-                IsClientAssertionExplicitlyTyped = isExplicitlyTyped
+                IsClientAssertionExplicitlyTyped = isExplicitlyTyped ?? registration.IsClientAssertionExplicitlyTyped
             };
 
             await DriveAndAssertSucceedsAsync(
@@ -741,7 +1263,7 @@ internal sealed class AuthCodeClientAuthenticationTests
             Assert.HasCount(2, recordedAssertions,
                 "The pushed request and the token request must each present exactly one client_assertion.");
 
-            string expectedTyp = isExplicitlyTyped ? "client-authentication+jwt" : "JWT";
+            string expectedTyp = isExplicitlyTyped is false ? "JWT" : "client-authentication+jwt";
             string issuer = registration.AuthorizationServerIssuer.OriginalString;
 
             string expectedAudience = isTokenEndpointAudience ? tokenEndpoint.OriginalString : issuer;

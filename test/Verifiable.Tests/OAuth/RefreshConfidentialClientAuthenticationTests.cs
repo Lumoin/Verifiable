@@ -231,8 +231,11 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
     /// Section 4</see>: the refresh leg's <c>private_key_jwt</c> client assertion names the
     /// authorization server's issuer identifier as its sole <c>aud</c> by default
-    /// (<see cref="ClientAssertionAudience.IssuerIdentifier"/>), with the default <c>typ</c>,
-    /// verified server-side by the default
+    /// (<see cref="ClientAssertionAudience.IssuerIdentifier"/>), with the default <c>typ</c>, which is
+    /// <c>client-authentication+jwt</c> because "Client authentication JWTs SHOULD be explicitly typed
+    /// by using the typ header parameter value client-authentication+jwt or another more specific
+    /// explicit type value defined by a specification profiling this specification."
+    /// The assertion is verified server-side by the default
     /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// pipeline wrapped by <see cref="ClientAssertionRecorder.Wrap"/> so the presented assertion can
     /// be inspected after a successful refresh.
@@ -290,7 +293,7 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             (string typ, JsonElement audience) =
                 ClientAssertionRecorder.DecodeTypAndAudience(recordedAssertions[^1], Pool);
-            Assert.AreEqual("JWT", typ);
+            Assert.AreEqual("client-authentication+jwt", typ);
             Assert.AreEqual(JsonValueKind.String, audience.ValueKind);
             Assert.AreEqual(registration.AuthorizationServerIssuer.OriginalString, audience.GetString(),
                 "The refresh assertion's aud must name the authorization server's issuer identifier.");

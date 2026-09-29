@@ -48,6 +48,11 @@ public static class ExchangeContextServerExtensions
                 && v is Uri u ? u : null;
 
         /// <summary>Sets the server issuer URI.</summary>
+        /// <remarks>
+        /// An issuer identifier derived from an unvalidated <c>Host</c> or forwarded header lets a client
+        /// assertion made for another authorization server match the accepted audience, so the
+        /// application pins the issuer to configuration.
+        /// </remarks>
         public void SetIssuer(Uri issuer)
         {
             ArgumentNullException.ThrowIfNull(issuer);

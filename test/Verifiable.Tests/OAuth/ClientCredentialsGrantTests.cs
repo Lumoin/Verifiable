@@ -402,14 +402,18 @@ internal sealed class ClientCredentialsGrantTests
     /// intended authorization server as the audience of the JWT", and a registration that names neither
     /// <see cref="ClientRegistration.ClientAssertionAudience"/> nor
     /// <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/> signs the default
-    /// <see cref="ClientAssertionAudience.IssuerIdentifier"/> with the default <c>typ</c>. Drives the
+    /// <see cref="ClientAssertionAudience.IssuerIdentifier"/> with the default <c>typ</c>, which is
+    /// <c>client-authentication+jwt</c> because "Client authentication JWTs SHOULD be explicitly typed
+    /// by using the typ header parameter value client-authentication+jwt or another more specific
+    /// explicit type value defined by a specification profiling this specification." Drives the
     /// same fixture as <see cref="ClientComposedRequestIssuesTokenUnderPrivateKeyJwtOverRealWire"/>
     /// with the default server validator
     /// (<see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>,
     /// no additional accepted audiences) wrapped by <see cref="ClientAssertionRecorder.Wrap"/>, proving
     /// what <see cref="ClientCredentialsClient.RequestTokenAsync"/> actually signed
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see>'s
-    /// issuer-identifier default) rather than what the token endpoint merely tolerates.
+    /// (the issuer-identifier default of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see> item b) rather than what the token endpoint merely tolerates.
     /// </summary>
     [TestMethod]
     public async Task ClientCredentialsAssertionNamesTheIssuerByDefaultAsync()
@@ -467,7 +471,7 @@ internal sealed class ClientCredentialsGrantTests
                 "The client_credentials token request must present exactly one client_assertion.");
             (string typ, JsonElement audience) =
                 ClientAssertionRecorder.DecodeTypAndAudience(recordedAssertions[0], Pool);
-            Assert.AreEqual("JWT", typ);
+            Assert.AreEqual("client-authentication+jwt", typ);
             Assert.AreEqual(JsonValueKind.String, audience.ValueKind);
             Assert.AreEqual(registration.AuthorizationServerIssuer.OriginalString, audience.GetString());
         }

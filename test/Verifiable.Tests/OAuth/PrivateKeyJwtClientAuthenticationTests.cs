@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
@@ -141,7 +143,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
     /// <summary>
     /// RFC 7523 §3 item 3: "The token endpoint URL of the authorization server MAY be used as a
-    /// value for an aud element" — a caller that additionally accepts the token endpoint URL sees an
+    /// value for an &quot;aud&quot; element" — a caller that additionally accepts the token endpoint URL sees an
     /// assertion audienced to it validate.
     /// </summary>
     [TestMethod]
@@ -845,6 +847,275 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see> item b: "The authorization server MUST have an issuer identifier to be used with this
+    /// specification." The validator compares an assertion's <c>aud</c> with the authorization server's
+    /// issuer identifier, and when the issuer resolution seam fails with an
+    /// <see cref="InvalidOperationException"/> there is no issuer identifier to compare with: a
+    /// well-formed assertion, signed by the registered key and authenticating before the seam fails, is
+    /// refused by the validator returning <see langword="false"/> rather than by an escaped exception.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionIsRefusedWhenIssuerResolutionFails()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+            RequestFields fields = BuildFields(assertion);
+
+            bool isAuthenticatedWithAnIssuer = await validator(
+                null, fields, registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.IsTrue(isAuthenticatedWithAnIssuer,
+                "The assertion must authenticate while the issuer resolves, so only the failed resolution can refuse it.");
+
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.ResolveIssuerAsync = (_, _, _) =>
+                    throw new InvalidOperationException("The authorization server has no issuer identifier.");
+            }).ConfigureAwait(false);
+
+            bool isAuthenticatedWithoutAnIssuer = await validator(
+                null, fields, registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(isAuthenticatedWithoutAnIssuer,
+                "A failed issuer resolution leaves no issuer identifier to compare the audience with, so the assertion must be refused.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see> item b: the authorization server "MUST reject any JWT that does not contain its issuer
+    /// identifier as its sole audience value." RFC 7519
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">Section 4.1.3</see> makes the
+    /// <c>aud</c> value "an array of case-sensitive strings" in the general case, and the container a
+    /// host's payload deserializer builds for that array is the host's choice. The issuer-only rule
+    /// counts an <c>aud</c> array as any <see cref="IEnumerable{T}"/> of <see cref="object"/> or of
+    /// <see cref="string"/>, reading its first two elements, so the element count and not the
+    /// container type decides: here the deserializer yields the array as a lazily produced sequence
+    /// that is neither a list nor an array, holding the issuer identifier once (the sole audience value,
+    /// accepted) or twice (not the sole audience value, refused) under
+    /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>.
+    /// </summary>
+    /// <param name="issuerElementCount">How many times the issuer identifier appears in the <c>aud</c> sequence.</param>
+    /// <param name="isAuthenticatedExpected">Whether the assertion is expected to authenticate.</param>
+    [TestMethod]
+    [DataRow(1, true, DisplayName = "the issuer identifier once in a lazily produced sequence is accepted")]
+    [DataRow(2, false, DisplayName = "the issuer identifier twice in a lazily produced sequence is refused")]
+    public async Task IssuerOnlyPolicyCountsAnAudienceSequenceHeldAsAnIterator(int issuerElementCount, bool isAuthenticatedExpected)
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            string issuerIdentifier = registration.IssuerUri!.OriginalString;
+            string[] audienceElements = [.. Enumerable.Repeat(issuerIdentifier, issuerElementCount)];
+
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.Codecs.JwtPayloadDeserializer = bytes =>
+                {
+                    Dictionary<string, object> claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                        bytes, TestSetup.DefaultSerializationOptions)
+                        ?? throw new FormatException("Payload JSON parsed to null.");
+                    claims[WellKnownJwtClaimNames.Aud] = AsLazySequence(audienceElements);
+
+                    return claims;
+                };
+            }).ConfigureAwait(false);
+
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly);
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, issuerIdentifier, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            bool isAuthenticated = await validator(
+                null, BuildFields(assertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(isAuthenticatedExpected, isAuthenticated,
+                $"An aud sequence holding the issuer identifier {issuerElementCount} time(s) must "
+                + (isAuthenticatedExpected ? "authenticate" : "be refused") + " under the issuer-only policy.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Yields <paramref name="values"/> one at a time through an iterator, so the result is an
+    /// <see cref="IEnumerable{T}"/> of <see cref="object"/> that is neither an
+    /// <see cref="IReadOnlyList{T}"/> nor an array.
+    /// </summary>
+    /// <param name="values">The elements to yield.</param>
+    private static IEnumerable<object> AsLazySequence(string[] values)
+    {
+        foreach(string value in values)
+        {
+            yield return value;
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 7519 <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4">Section 4</see>: "The Claim
+    /// Names within a JWT Claims Set MUST be unique; JWT parsers MUST either reject JWTs with duplicate
+    /// Claim Names or use a JSON parser that returns only the lexically last duplicate member name".
+    /// <see cref="PrivateKeyJwtClientAuthentication"/> takes the rejection branch: it refuses a payload
+    /// that repeats a member name through <see cref="JwkJsonReader.IsWellFormedJsonDocument"/> before the
+    /// wired payload deserializer or any claim rule runs. Here the wired deserializer is permissive: it
+    /// parses with <see cref="JsonDocument"/>, which allows a repeated name, and keeps the first member
+    /// (case one, the client's <c>sub</c> first and a foreign <c>sub</c> last) or the last member (case
+    /// two, a foreign <c>sub</c> first and the client's <c>sub</c> last). Each case is built so that the
+    /// deserializer yields the client's own <c>sub</c>, which the assertion would authenticate with, and
+    /// the validator nevertheless refuses the re-signed assertion, so only the refusal of the repeated
+    /// name can be responsible.
+    /// </summary>
+    /// <param name="isLastMemberKept">
+    /// Whether the permissive deserializer keeps the last member under a repeated name (otherwise the first).
+    /// </param>
+    /// <param name="isForeignSubjectFirst">
+    /// Whether the foreign <c>sub</c> member precedes the client's (otherwise it follows).
+    /// </param>
+    [TestMethod]
+    [DataRow(false, false, DisplayName = "the client's sub first and a foreign sub last, read first-wins")]
+    [DataRow(true, true, DisplayName = "a foreign sub first and the client's sub last, read last-wins")]
+    public async Task RepeatedClaimNameIsRefusedBeforeAnyClaimIsRead(bool isLastMemberKept, bool isForeignSubjectFirst)
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.Codecs.JwtPayloadDeserializer = bytes =>
+                    ReadClaimsKeepingOneRepeatedMember(bytes, isLastMemberKept);
+            }).ConfigureAwait(false);
+
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            string[] segments = assertion.Split('.');
+            using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(segments[1], BaseMemoryPool.Shared);
+            string payloadJson = Encoding.UTF8.GetString(payloadOwner.Memory.Span);
+
+            //Splice the foreign "sub" in as raw text, since a dictionary cannot carry two entries under one key.
+            string foreignSubjectMember = $"\"{WellKnownJwtClaimNames.Sub}\":\"foreign-subject\"";
+            string repeatedPayloadJson = isForeignSubjectFirst
+                ? payloadJson.Insert(1, foreignSubjectMember + ",")
+                : payloadJson.Insert(payloadJson.Length - 1, "," + foreignSubjectMember);
+            string repeatedPayloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(repeatedPayloadJson));
+
+            byte[] signingInput = Encoding.ASCII.GetBytes($"{segments[0]}.{repeatedPayloadB64}");
+            using Signature signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared)
+                .ConfigureAwait(false);
+            string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+            string repeatedAssertion = $"{segments[0]}.{repeatedPayloadB64}.{signatureB64}";
+
+            IReadOnlyDictionary<string, object> permissiveClaims = app.Server.OAuth().Codecs.JwtPayloadDeserializer!(
+                Encoding.UTF8.GetBytes(repeatedPayloadJson));
+            Assert.AreEqual(registration.ClientId, (string)permissiveClaims[WellKnownJwtClaimNames.Sub],
+                "The permissive deserializer must yield the client's own sub, so only the repeated name can refuse the assertion.");
+
+            bool isAuthenticated = await validator(
+                null, BuildFields(repeatedAssertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(isAuthenticated,
+                "An assertion whose payload repeats a claim name must be refused whichever member the wired deserializer keeps.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a JWT payload with <see cref="JsonDocument"/>, which allows a repeated member name, and keeps
+    /// one member per name: the last with the indexer, or the first with
+    /// <see cref="Dictionary{TKey, TValue}.TryAdd(TKey, TValue)"/>. Strings, integers and booleans are
+    /// materialised as their CLR values and every other value as its raw JSON text.
+    /// </summary>
+    /// <param name="payload">The decoded UTF-8 bytes of the payload JSON object.</param>
+    /// <param name="isLastMemberKept">Whether the last member under a repeated name wins (otherwise the first).</param>
+    /// <returns>The claim dictionary holding one value per claim name.</returns>
+    private static Dictionary<string, object> ReadClaimsKeepingOneRepeatedMember(ReadOnlySpan<byte> payload, bool isLastMemberKept)
+    {
+        using JsonDocument document = JsonDocument.Parse(
+            payload.ToArray(), new JsonDocumentOptions { AllowDuplicateProperties = true });
+
+        Dictionary<string, object> claims = [];
+        foreach(JsonProperty member in document.RootElement.EnumerateObject())
+        {
+            object value = member.Value.ValueKind switch
+            {
+                JsonValueKind.String => member.Value.GetString()!,
+                JsonValueKind.Number => member.Value.GetInt64(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => member.Value.GetRawText()
+            };
+
+            if(isLastMemberKept)
+            {
+                claims[member.Name] = value;
+            }
+            else
+            {
+                _ = claims.TryAdd(member.Name, value);
+            }
+        }
+
+        return claims;
+    }
+
+
+    /// <summary>
+    /// Re-declares <paramref name="baseline"/> for <c>private_key_jwt</c> client authentication: the
+    /// token endpoint authentication method is <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> and
+    /// the registered JWK Set holds the one key <paramref name="clientPublicKey"/> under
+    /// <see cref="SigningKeyId"/>.
+    /// </summary>
+    /// <param name="baseline">The registration the host created for the client.</param>
+    /// <param name="clientPublicKey">The client's public key to publish in the registered JWK Set.</param>
+    /// <returns>The registration with the authentication method and JWK Set replaced.</returns>
     private static ClientRecord BuildConfidentialRegistration(ClientRecord baseline, PublicKeyMemory clientPublicKey)
     {
         string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientPublicKey.Tag);
@@ -898,6 +1169,17 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// Signs a client assertion through <see cref="ClientAssertionSigning.SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, PrivateKeyMemory, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// with the server's codecs, a fresh <c>jti</c>, and an <c>iat</c> one minute before and an <c>exp</c>
+    /// five minutes after the server's fixture clock.
+    /// </summary>
+    /// <param name="server">The server whose codecs and clock the assertion is built with.</param>
+    /// <param name="clientId">The client identifier written as the <c>iss</c> and <c>sub</c> claims.</param>
+    /// <param name="audience">The value written as the <c>aud</c> claim.</param>
+    /// <param name="clientPrivateKey">The client's private key the assertion is signed with.</param>
+    /// <param name="signingKeyId">The <c>kid</c> written to the JOSE header.</param>
+    /// <returns>The assertion in JWS Compact Serialization.</returns>
     private async Task<string> SignAssertionAsync(
         EndpointServer server, string clientId, string audience, PrivateKeyMemory clientPrivateKey,
         string signingKeyId = SigningKeyId)
@@ -964,6 +1246,13 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// Builds the form fields of a <c>private_key_jwt</c> request: the <c>client_assertion_type</c> set to
+    /// <see cref="WellKnownClientAssertionTypes.JwtBearer"/> and the <c>client_assertion</c> set to
+    /// <paramref name="clientAssertion"/>.
+    /// </summary>
+    /// <param name="clientAssertion">The assertion in JWS Compact Serialization.</param>
+    /// <returns>The request fields carrying the assertion type and the assertion.</returns>
     private static RequestFields BuildFields(string clientAssertion)
     {
         RequestFields fields = new();
@@ -974,6 +1263,12 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// Builds an <see cref="ExchangeContext"/> bound to <paramref name="server"/>, the shape a dispatched
+    /// request carries into a <see cref="ValidateClientCredentialsDelegate"/>.
+    /// </summary>
+    /// <param name="server">The server the context is bound to.</param>
+    /// <returns>The context with the server set.</returns>
     private static ExchangeContext BuildContext(EndpointServer server)
     {
         ExchangeContext context = [];

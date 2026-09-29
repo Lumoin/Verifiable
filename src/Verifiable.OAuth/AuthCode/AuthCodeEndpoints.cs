@@ -391,6 +391,11 @@ public static class AuthCodeEndpoints
                     return (null, parAuthenticationFailure);
                 }
 
+                //RFC 9126 Section 2.1, on the token endpoint's client authentication parameters:
+                //"When present in a pushed authorization request, they are relied upon only for
+                //client authentication and are not germane to the authorization request itself."
+                //The reads below take the named authorization parameters only, so client_assertion
+                //and client_assertion_type never enter the pushed request.
                 if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
                     || string.IsNullOrWhiteSpace(challenge))
                 {

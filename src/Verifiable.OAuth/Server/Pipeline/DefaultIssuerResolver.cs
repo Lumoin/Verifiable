@@ -31,7 +31,10 @@ namespace Verifiable.OAuth.Server.Pipeline;
 ///       populated by the ASP.NET skin from the incoming request's scheme and
 ///       host. Used when the registration does not declare an issuer,
 ///       accommodating deployments where the URL is derived per-request from
-///       the reverse proxy's forwarded host.
+///       the reverse proxy's forwarded host. A value derived from an unvalidated
+///       <c>Host</c> or forwarded header lets a client assertion made for another
+///       authorization server match the accepted audience, so the application
+///       pins the issuer to configuration.
 ///     </description>
 ///   </item>
 ///   <item>
