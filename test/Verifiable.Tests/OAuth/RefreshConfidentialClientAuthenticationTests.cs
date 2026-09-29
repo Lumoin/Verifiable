@@ -156,7 +156,7 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
     /// <c>client_assertion</c> to the refresh POST from <see cref="TestKeyMaterialProvider"/>-generated
     /// P-256 key material, driven through <see cref="AuthCodeFlowDriver.DriveRefreshAsync"/>'s
     /// <see cref="ClientAssertionOptions"/> overload, verified server-side by the real
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// pipeline over a published <c>ClientJwks</c> — the same production shape
     /// <see cref="PrivateKeyJwtClientAuthenticationTests"/> exercises directly.
     /// </summary>

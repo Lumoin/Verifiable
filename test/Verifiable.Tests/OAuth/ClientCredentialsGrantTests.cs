@@ -322,7 +322,7 @@ internal sealed class ClientCredentialsGrantTests
     /// The client-composed <c>client_credentials</c> request over the real wire under
     /// <c>private_key_jwt</c> (RFC 7523 §2.2): <see cref="ClientCredentialsClient.RequestTokenAsync"/>
     /// signs and attaches the <c>client_assertion</c> itself and the server verifies it with the real
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// pipeline over a published <c>ClientJwks</c> — the same production shape
     /// <see cref="AuthCodeClientAuthenticationTests"/> exercises for the authorization-code leg,
     /// proving the shared helper this leg now calls behaves identically.
@@ -405,7 +405,7 @@ internal sealed class ClientCredentialsGrantTests
     /// <see cref="ClientAssertionAudience.IssuerIdentifier"/> with the default <c>typ</c>. Drives the
     /// same fixture as <see cref="ClientComposedRequestIssuesTokenUnderPrivateKeyJwtOverRealWire"/>
     /// with the default server validator
-    /// (<see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>,
+    /// (<see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>,
     /// no additional accepted audiences) wrapped by <see cref="ClientAssertionRecorder.Wrap"/>, proving
     /// what <see cref="ClientCredentialsClient.RequestTokenAsync"/> actually signed
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see>'s
@@ -470,6 +470,96 @@ internal sealed class ClientCredentialsGrantTests
             Assert.AreEqual("JWT", typ);
             Assert.AreEqual(JsonValueKind.String, audience.ValueKind);
             Assert.AreEqual(registration.AuthorizationServerIssuer.OriginalString, audience.GetString());
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see> item b: the <c>aud</c> claim value "MUST indicate only the issuer identifier of
+    /// the intended authorization server as the audience of the JWT; this includes that the token
+    /// endpoint URL of the authorization server MUST NOT be used as an audience value." A token endpoint
+    /// wired with <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/> refuses, over the
+    /// real wire, the <c>client_credentials</c> request whose registration names
+    /// <see cref="ClientAssertionAudience.TokenEndpoint"/> (the client signs the token endpoint URL as
+    /// <c>aud</c>) with the error <c>invalid_client</c>, and authenticates the one whose registration
+    /// names <see cref="ClientAssertionAudience.IssuerIdentifier"/>. Drives the same fixture as
+    /// <see cref="ClientCredentialsAssertionNamesTheIssuerByDefaultAsync"/>.
+    /// </summary>
+    /// <param name="isTokenEndpointAudience">
+    /// <see langword="true"/> when the registration names <see cref="ClientAssertionAudience.TokenEndpoint"/>,
+    /// <see langword="false"/> for <see cref="ClientAssertionAudience.IssuerIdentifier"/>.
+    /// </param>
+    /// <param name="expectedOutcome">The outcome the client's typed result carries for that audience.</param>
+    /// <param name="expectedErrorCode">
+    /// The <c>error</c> member of the refusal's JSON body, or <see langword="null"/> when the request
+    /// is authenticated.
+    /// </param>
+    [TestMethod]
+    [DataRow(true, AuthCodeFlowEndpointOutcome.BadRequest, "invalid_client", DisplayName = "the registration names the token endpoint URL")]
+    [DataRow(false, AuthCodeFlowEndpointOutcome.Ok, null, DisplayName = "the registration names the issuer identifier")]
+    public async Task IssuerOnlyPolicyHoldsAtTheTokenEndpointAsync(
+        bool isTokenEndpointAudience, AuthCodeFlowEndpointOutcome expectedOutcome, string? expectedErrorCode)
+    {
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce,
+                capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+            await AddMachineScopeAsync(host, material).ConfigureAwait(false);
+
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            const string SigningKeyId = "issuer-only-token-endpoint-key-1";
+            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+                clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
+            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync =
+                    PrivateKeyJwtClientAuthentication.BuildValidator(
+                        audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly);
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideAuthMethodAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt,
+                clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
+
+            (OAuthClient client, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration, ClientId, profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys,
+                ClientAssertionAudience = isTokenEndpointAudience
+                    ? ClientAssertionAudience.TokenEndpoint
+                    : ClientAssertionAudience.IssuerIdentifier
+            };
+
+            AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+                registration, scope: MachineScope, resource: null, [],
+                clientAssertionOptions: new ClientAssertionOptions
+                {
+                    SigningKeyId = SigningKeyId,
+                    HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                    PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+                },
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(expectedOutcome, result.Outcome,
+                $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+            Assert.AreEqual(expectedErrorCode, result.ErrorCode,
+                $"ErrorDescription={result.ErrorDescription}");
         }
         finally
         {
@@ -997,7 +1087,7 @@ internal sealed class ClientCredentialsGrantTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 §8</see>: the DPoP-
     /// retrying send must present a FRESHLY-SIGNED <c>private_key_jwt</c> client assertion (a new
     /// <c>jti</c>) on the retry, not the same one — proved here by wiring the authorization server's
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// WITH the client-assertion replay delegate: a second presentation of the SAME assertion is
     /// refused, so the retry can only complete by presenting a different one.
     /// </summary>
@@ -1405,7 +1495,7 @@ internal sealed class ClientCredentialsGrantTests
 
     /// <summary>
     /// Builds a JWKS JSON document publishing one key under <paramref name="kid"/>, the shape
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// resolves the client's signing key from.
     /// </summary>
     private static string BuildJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)

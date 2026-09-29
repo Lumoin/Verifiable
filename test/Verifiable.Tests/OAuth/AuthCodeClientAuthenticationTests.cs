@@ -182,14 +182,112 @@ internal sealed class AuthCodeClientAuthenticationTests
     [TestMethod]
     public async Task PushedRequestAcceptsEachOfTheThreeRfc9126AudiencesWithoutExplicitWiring()
     {
+        //No additionalAcceptedAudiences: only the resolved issuer is accepted unless the
+        //library itself widens the set per RFC 9126 Section 2.
+        (int StatusCode, string Body)[] pushes = await PushSignedAssertionsAtParAsync(
+            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            "rfc9126-audience-key-1",
+            static (issuer, _, _) => issuer,
+            static (_, tokenEndpoint, _) => tokenEndpoint.OriginalString,
+            static (_, _, parEndpoint) => parEndpoint.OriginalString).ConfigureAwait(false);
+
+        string[] labels = ["issuer", "token endpoint", "PAR endpoint"];
+        for(int index = 0; index < labels.Length; ++index)
+        {
+            Assert.AreEqual(201, pushes[index].StatusCode, $"aud={labels[index]} Body={pushes[index].Body}");
+        }
+    }
+
+
+    /// <summary>
+    /// Under <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>,
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see> item b: the <c>aud</c> claim value "MUST indicate only the issuer identifier of
+    /// the intended authorization server as the audience of the JWT; this includes that the token
+    /// endpoint URL of the authorization server MUST NOT be used as an audience value." For the pushed
+    /// request, <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-5">Section
+    /// 5</see> states "the issuer identifier URL of the authorization server according to [RFC8414] MUST
+    /// be used as the sole value of the audience. The authorization server MUST reject any such JWT that
+    /// does not contain its own issuer identifier as the sole audience value." Each case drives one
+    /// <c>aud</c> shape over the real wire: the issuer as a string or as a one-element array
+    /// authenticates (HTTP 201), while the token endpoint URL, the pushed authorization request
+    /// endpoint URL, an array naming the issuer and the token endpoint together, and an array naming
+    /// the issuer twice are each refused with HTTP 401 <c>invalid_client</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section 4.1.3</see>
+    /// admits both forms of the claim: "In the general case, the &quot;aud&quot; value is an array of
+    /// case-sensitive strings, each containing a StringOrURI value. In the special case when the JWT has
+    /// one audience, the &quot;aud&quot; value MAY be a single case-sensitive string containing a
+    /// StringOrURI value."
+    /// </summary>
+    /// <param name="audienceShape">
+    /// Which <c>aud</c> shape the assertion carries: <c>issuer</c>, <c>issuerArray</c>,
+    /// <c>tokenEndpoint</c>, <c>parEndpoint</c>, <c>issuerAndTokenEndpoint</c> or <c>issuerTwice</c>.
+    /// </param>
+    /// <param name="expectedStatusCode">The pushed authorization endpoint's HTTP status for that shape.</param>
+    [TestMethod]
+    [DataRow("issuer", 201, DisplayName = "the issuer as a string")]
+    [DataRow("issuerArray", 201, DisplayName = "the issuer as a one-element array")]
+    [DataRow("tokenEndpoint", 401, DisplayName = "the token endpoint URL as a string")]
+    [DataRow("parEndpoint", 401, DisplayName = "the pushed authorization endpoint URL as a string")]
+    [DataRow("issuerAndTokenEndpoint", 401, DisplayName = "the issuer and the token endpoint URL as a two-element array")]
+    [DataRow("issuerTwice", 401, DisplayName = "the issuer duplicated as a two-element array")]
+    public async Task IssuerOnlyPolicyAcceptsOnlyTheIssuerAsSoleAudienceAsync(string audienceShape, int expectedStatusCode)
+    {
+        //Opt in to the issuer-only rule: with no additionalAcceptedAudiences, only this exact
+        //cardinality of the issuer is accepted.
+        (int StatusCode, string Body)[] pushes = await PushSignedAssertionsAtParAsync(
+            PrivateKeyJwtClientAuthentication.BuildValidator(
+                audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly),
+            "rfc7523bis-issuer-only-key-1",
+            (issuer, tokenEndpoint, parEndpoint) => audienceShape switch
+            {
+                "issuer" => issuer,
+                "issuerArray" => new[] { issuer },
+                "tokenEndpoint" => tokenEndpoint.OriginalString,
+                "parEndpoint" => parEndpoint.OriginalString,
+                "issuerAndTokenEndpoint" => new[] { issuer, tokenEndpoint.OriginalString },
+                "issuerTwice" => new[] { issuer, issuer },
+                _ => throw new ArgumentOutOfRangeException(nameof(audienceShape), audienceShape, null)
+            }).ConfigureAwait(false);
+
+        (int parStatusCode, string parBody) = pushes[0];
+        Assert.AreEqual(expectedStatusCode, parStatusCode, $"aud={audienceShape} Body={parBody}");
+        if(expectedStatusCode == 401)
+        {
+            using JsonDocument errorBody = JsonDocument.Parse(parBody);
+            Assert.AreEqual("invalid_client", errorBody.RootElement.GetProperty("error").GetString(),
+                $"aud={audienceShape} must refuse as invalid_client. Body={parBody}");
+        }
+    }
+
+
+    /// <summary>
+    /// Starts one real-wire authorization server with <paramref name="validator"/> wired as its client
+    /// authentication, registers a <c>private_key_jwt</c> client over a published one-key JWKS, and
+    /// pushes one authorization request per entry of <paramref name="audiences"/>, each carrying a
+    /// freshly signed client assertion whose <c>aud</c> that entry builds from the resolved issuer
+    /// identifier, token endpoint URL and pushed authorization request endpoint URL. The shared setup
+    /// of every row proving what the pushed authorization endpoint does with an assertion's audience.
+    /// </summary>
+    /// <param name="validator">The server's client-credentials validator.</param>
+    /// <param name="signingKeyId">The <c>kid</c> the client's JWKS publishes its key under.</param>
+    /// <param name="audiences">
+    /// One builder per push, given the issuer identifier, the token endpoint URL and the pushed
+    /// authorization request endpoint URL, returning the <c>aud</c> claim value (a string or an array).
+    /// </param>
+    /// <returns>Each push's HTTP status code and body, in the order of <paramref name="audiences"/>.</returns>
+    private async Task<(int StatusCode, string Body)[]> PushSignedAssertionsAtParAsync(
+        ValidateClientCredentialsDelegate validator,
+        string signingKeyId,
+        params Func<string, Uri, Uri, object>[] audiences)
+    {
         var signingKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
             string alg = CryptoFormatConversions.DefaultTagToJwaConverter(signingKeys.PublicKey.Tag);
-            const string SigningKeyId = "rfc9126-audience-key-1";
             IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
                 signingKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
-            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+            string jwksJson = BuildJwksJson(jwk, signingKeyId);
 
             await using TestHostShell host = new(TimeProvider);
             using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -203,30 +301,24 @@ internal sealed class AuthCodeClientAuthenticationTests
             Uri parEndpoint = new(
                 hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
 
-            //No additionalAcceptedAudiences: only the resolved issuer is accepted unless the
-            //library itself widens the set per RFC 9126 §2.
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync =
-                    PrivateKeyJwtClientAuthentication.BuildValidator();
+                candidateIntegration.ValidateClientCredentialsAsync = validator;
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
                 host, material, ClientAuthenticationMethod.PrivateKeyJwt,
                 clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
 
-            (OAuthClient client, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
+            (_, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
                 material.Registration, RedirectUri.OriginalString,
                 profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken).ConfigureAwait(false);
             string issuer = registration.AuthorizationServerIssuer.OriginalString;
 
-            foreach((string label, string audience) in new (string Label, string Audience)[]
+            (int StatusCode, string Body)[] pushes = new (int StatusCode, string Body)[audiences.Length];
+            for(int index = 0; index < audiences.Length; ++index)
             {
-                ("issuer", issuer),
-                ("token endpoint", tokenEndpoint.OriginalString),
-                ("PAR endpoint", parEndpoint.OriginalString)
-            })
-            {
+                object audience = audiences[index](issuer, tokenEndpoint, parEndpoint);
                 PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
                 string assertion = await SignClientAssertionWithoutKidAsync(
                     signingKeys.PrivateKey, ClientId, audience, TimeProvider.GetUtcNow(),
@@ -244,11 +336,11 @@ internal sealed class AuthCodeClientAuthenticationTests
                     [OAuthRequestParameterNames.ClientAssertion] = assertion
                 };
 
-                (int parStatusCode, string parBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+                pushes[index] = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
                     host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
-
-                Assert.AreEqual(201, parStatusCode, $"aud={label} ({audience}) Body={parBody}");
             }
+
+            return pushes;
         }
         finally
         {
@@ -483,7 +575,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <c>client_assertion</c> from <see cref="TestKeyMaterialProvider"/>-generated P-256 key material,
     /// driven through <see cref="AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync"/>'s
     /// <see cref="ClientAssertionOptions"/> overload, and the server verifies it with the real
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// pipeline over a published <c>ClientJwks</c> — the same production shape
     /// <see cref="PrivateKeyJwtClientAuthenticationTests"/> exercises directly. The client signs the
     /// audience its registration's <see cref="ClientRegistration.ClientAssertionAudience"/> names, the
@@ -573,7 +665,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// Server's Token Endpoint." Every choice is applied at both endpoints the registration
     /// authenticates at over <see cref="PrivateKeyJwtAuthenticatesOverRealWire"/>'s fixture, the pushed
     /// request and the token request, with the default server validator
-    /// (<see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>,
+    /// (<see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>,
     /// no additional accepted audiences) wrapped by <see cref="ClientAssertionRecorder.Wrap"/> so both
     /// presented assertions are inspected, proving the default set
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see> requires
@@ -1104,10 +1196,13 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// Signs a <c>private_key_jwt</c> client assertion (RFC 7523 §2.2/§3) whose protected header
     /// carries no <c>kid</c> — the shape the server resolves through
     /// <see cref="JwkJsonReader.SelectSoleKey(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/> rather than by
-    /// key identifier.
+    /// key identifier. <paramref name="audience"/> is written as the JWT payload's raw <c>aud</c>
+    /// value: a <see langword="string"/> writes the RFC 7519 Section 4.1.3 string form, and a
+    /// <see cref="string"/>[] (or another string enumerable) writes its array form, one or more
+    /// elements, so a case naming a duplicated or multi-valued <c>aud</c> needs no separate signer.
     /// </summary>
     private static async Task<string> SignClientAssertionWithoutKidAsync(
-        PrivateKeyMemory signingKey, string clientId, string audience, DateTimeOffset now,
+        PrivateKeyMemory signingKey, string clientId, object audience, DateTimeOffset now,
         JwtHeaderSerializer headerSerializer, JwtPayloadSerializer payloadSerializer,
         CancellationToken cancellationToken)
     {

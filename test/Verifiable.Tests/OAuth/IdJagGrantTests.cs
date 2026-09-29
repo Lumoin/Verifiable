@@ -935,7 +935,7 @@ internal sealed class IdJagGrantTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 §8</see>: the DPoP-
     /// retrying send must present a FRESHLY-SIGNED <c>private_key_jwt</c> client assertion (a new
     /// <c>jti</c>) on the retry, not the same one — proved here by wiring the authorization server's
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// WITH the client-assertion replay delegate: a second presentation of the SAME assertion is
     /// refused, so the retry can only complete by presenting a different one.
     /// </summary>
@@ -5415,7 +5415,7 @@ internal sealed class IdJagGrantTests
     /// Starts <paramref name="app"/>'s "default" host, realigns <paramref name="material"/>'s
     /// registration to the listening address, mints a fresh client signing key, publishes it as the
     /// registration's <c>private_key_jwt</c> JWKS, and wires
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// as the client-credentials validator — the authentication method
     /// <see cref="IdJagFlowHandlers"/> always signs, regardless of <see cref="ClientRegistration.AuthenticationMethod"/>.
     /// </summary>
@@ -5457,7 +5457,7 @@ internal sealed class IdJagGrantTests
 
     /// <summary>
     /// Builds a JWKS JSON document publishing one key under <paramref name="kid"/>, the shape
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// resolves the client's signing key from.
     /// </summary>
     private static string BuildClientAssertionJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)

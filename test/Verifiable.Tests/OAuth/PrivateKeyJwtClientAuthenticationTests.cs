@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -20,7 +21,7 @@ namespace Verifiable.Tests.OAuth;
 /// §8.2 (CIMD-047/048/049/050) requires. Part A exercises the pure
 /// <see cref="PrivateKeyJwtClientAuthentication.Validate"/> claim rules directly, mirroring
 /// <c>Rfc7523AssertionValidationTests</c>'s style. Part B exercises the full
-/// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
+/// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
 /// pipeline — parse, key resolution from a JWKS, real signature verification, then the claim rules —
 /// against a project-crypto-generated P-256 key pair via <see cref="TestKeyMaterialProvider"/> and
 /// <see cref="ClientAssertionSigning"/>, never <c>System.Security.Cryptography</c> directly.
@@ -801,6 +802,46 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             clientKeys.PublicKey.Dispose();
             clientKeys.PrivateKey.Dispose();
         }
+    }
+
+
+    /// <summary>
+    /// rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see>'s issuer-only audience rule admits no additional accepted audience: this proves a
+    /// contract of this library: <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
+    /// refuses the contradictory composition of a non-empty additional-audience set together with
+    /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/> when the validator is BUILT,
+    /// before any wire input is read, through the registry-resolving overload and through the
+    /// overload taking an explicit <see cref="VerificationDelegate"/> alike, and the exception's message
+    /// names both <c>additionalAcceptedAudiences</c> and <c>audiencePolicy</c>.
+    /// </summary>
+    /// <param name="isExplicitVerificationDelegateOverload">
+    /// <see langword="true"/> to build through the overload taking an explicit
+    /// <see cref="VerificationDelegate"/>, <see langword="false"/> for the registry-resolving overload.
+    /// </param>
+    [TestMethod]
+    [DataRow(false, DisplayName = "the registry-resolving overload")]
+    [DataRow(true, DisplayName = "the explicit VerificationDelegate overload")]
+    public void IssuerOnlyPolicyWithAdditionalAudiencesIsRefusedAtBuild(bool isExplicitVerificationDelegateOverload)
+    {
+        VerificationDelegate verification = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
+            CryptoAlgorithm.P256, Purpose.Verification);
+
+        ArgumentException refusal = Assert.ThrowsExactly<ArgumentException>(
+            () => isExplicitVerificationDelegateOverload
+                ? PrivateKeyJwtClientAuthentication.BuildValidator(
+                    verification,
+                    additionalAcceptedAudiences: ["https://other.example"],
+                    audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
+                : PrivateKeyJwtClientAuthentication.BuildValidator(
+                    additionalAcceptedAudiences: ["https://other.example"],
+                    audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly));
+
+        Assert.Contains("additionalAcceptedAudiences", refusal.Message, StringComparison.Ordinal,
+            "The refusal must name the additional-audience argument.");
+        Assert.Contains("audiencePolicy", refusal.Message, StringComparison.Ordinal,
+            "The refusal must name the audience-policy argument.");
     }
 
 

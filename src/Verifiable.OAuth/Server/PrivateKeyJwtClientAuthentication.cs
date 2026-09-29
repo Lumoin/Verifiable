@@ -111,7 +111,7 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// <para>
 /// <see cref="Validate"/> is crypto-agnostic: it operates on the already signature-verified,
 /// decoded <see cref="JwtPayload"/>, mirroring <see cref="FederationClientAuthentication.Validate"/>'s
-/// shape. <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?)"/>
+/// shape. <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
 /// and its explicit-<see cref="VerificationDelegate"/> overload compose the signature step around
 /// it: they parse the compact <c>client_assertion</c>, resolve the verification key from the
 /// registration's <see cref="ClientRecord.ClientJwks"/> — or, when that is absent, from
@@ -120,6 +120,14 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> (through
 /// <see cref="DpopJwkUtilities.PublicKeyFromJwk"/>), verify with <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>,
 /// and only then apply <see cref="Validate"/>.
+/// </para>
+/// <para>
+/// The <see cref="ClientAssertionAudiencePolicy"/> is applied by the validators
+/// <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
+/// builds, not by <see cref="Validate"/>: under
+/// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/> the <c>aud</c> claim must be the
+/// issuer identifier as a string or as a one-element array, checked before <see cref="Validate"/>
+/// runs, while <see cref="Validate"/> itself checks membership only.
 /// </para>
 /// <para>
 /// The claim rules enforced by <see cref="Validate"/>:
@@ -158,7 +166,10 @@ public static class PrivateKeyJwtClientAuthentication
     /// <param name="acceptedAudiences">
     /// The values <c>aud</c> may name — this authorization server's issuer identifier and/or token
     /// endpoint URL (RFC 7523 §3 item 3: "The token endpoint URL of the authorization server MAY be
-    /// used as a value for an aud element").
+    /// used as a value for an aud element"). This method checks membership only: passing the issuer
+    /// identifier alone does not refuse an array that repeats it, because the issuer-only rule is
+    /// applied by <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
+    /// with <c>audiencePolicy</c>.
     /// </param>
     /// <param name="now">The instant expiry / not-before are evaluated against.</param>
     /// <param name="clockSkew">Tolerance applied to the <c>exp</c>, <c>nbf</c>, and <c>iat</c> comparisons.</param>
@@ -282,12 +293,15 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see cref="ClientRecord.ClientJwks"/>, verifies the signature via
     /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>'s
     /// registry-resolving overload, and applies <see cref="Validate"/>. Delegates the signature step
-    /// to <see cref="BuildValidator(VerificationDelegate,System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?)"/>'s
+    /// to <see cref="BuildValidator(VerificationDelegate,System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>'s
     /// shared core once the key is resolved per request, so the verification logic is written once.
     /// </summary>
     /// <param name="additionalAcceptedAudiences">
-    /// Extra values <c>aud</c> may name beyond the resolved issuer identifier — for example the
-    /// token endpoint URL — or <see langword="null"/> to accept only the issuer.
+    /// Extra values <c>aud</c> may name beyond the resolved issuer identifier and the request's token
+    /// and pushed-authorization endpoint URLs, or <see langword="null"/> to add none. Refused (an
+    /// <see cref="ArgumentException"/> at build time, before any wire input is read) when non-empty
+    /// together with <paramref name="audiencePolicy"/> set to
+    /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>.
     /// </param>
     /// <param name="checkJtiReplayAsync">
     /// Replay-defense hook consulted after the claim rules pass, or <see langword="null"/> to skip
@@ -307,11 +321,21 @@ public static class PrivateKeyJwtClientAuthentication
     /// the <see cref="ExchangeContext"/> this delegate is called with, and owns whatever caching sits
     /// in front of the attempt (see <see cref="Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate"/>).
     /// </param>
+    /// <param name="audiencePolicy">
+    /// The <c>aud</c> claim rule this validator applies,
+    /// <see cref="ClientAssertionAudiencePolicy.AuthorizationServerIdentities"/> (the default, also
+    /// read from <see langword="null"/>) or <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>.
+    /// </param>
     public static ValidateClientCredentialsDelegate BuildValidator(
         IReadOnlyCollection<string>? additionalAcceptedAudiences = null,
         CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null,
-        ResolveJwksUriDelegate? resolveJwksUriAsync = null) =>
-        BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate: null);
+        ResolveJwksUriDelegate? resolveJwksUriAsync = null,
+        ClientAssertionAudiencePolicy? audiencePolicy = null)
+    {
+        ThrowIfAudiencePolicyCompositionIsContradictory(additionalAcceptedAudiences, audiencePolicy);
+
+        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate: null, audiencePolicy);
+    }
 
 
     /// <summary>
@@ -325,8 +349,11 @@ public static class PrivateKeyJwtClientAuthentication
     /// </summary>
     /// <param name="verificationDelegate">The verification function to use.</param>
     /// <param name="additionalAcceptedAudiences">
-    /// Extra values <c>aud</c> may name beyond the resolved issuer identifier — for example the
-    /// token endpoint URL — or <see langword="null"/> to accept only the issuer.
+    /// Extra values <c>aud</c> may name beyond the resolved issuer identifier and the request's token
+    /// and pushed-authorization endpoint URLs, or <see langword="null"/> to add none. Refused (an
+    /// <see cref="ArgumentException"/> at build time, before any wire input is read) when non-empty
+    /// together with <paramref name="audiencePolicy"/> set to
+    /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>.
     /// </param>
     /// <param name="checkJtiReplayAsync">
     /// Replay-defense hook consulted after the claim rules pass, or <see langword="null"/> to skip
@@ -336,15 +363,49 @@ public static class PrivateKeyJwtClientAuthentication
     /// The OPTIONAL key-set resolution seam; see the registry-resolving overload's parameter of the
     /// same name.
     /// </param>
+    /// <param name="audiencePolicy">
+    /// The <c>aud</c> claim rule this validator applies; see the registry-resolving overload's
+    /// parameter of the same name.
+    /// </param>
     public static ValidateClientCredentialsDelegate BuildValidator(
         VerificationDelegate verificationDelegate,
         IReadOnlyCollection<string>? additionalAcceptedAudiences = null,
         CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null,
-        ResolveJwksUriDelegate? resolveJwksUriAsync = null)
+        ResolveJwksUriDelegate? resolveJwksUriAsync = null,
+        ClientAssertionAudiencePolicy? audiencePolicy = null)
     {
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+        ThrowIfAudiencePolicyCompositionIsContradictory(additionalAcceptedAudiences, audiencePolicy);
 
-        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate);
+        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate, audiencePolicy);
+    }
+
+
+    /// <summary>
+    /// Refuses a contradictory composition: <paramref name="audiencePolicy"/> set to
+    /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/> together with a non-empty
+    /// <paramref name="additionalAcceptedAudiences"/> asks for the accepted set to be closed to the
+    /// issuer alone and widened by extra values in the same call. rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see>'s narrower rule admits no additional accepted audience, so both
+    /// <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
+    /// and its explicit-<see cref="VerificationDelegate"/> overload refuse this composition when the
+    /// validator is BUILT, before any wire input is read.
+    /// </summary>
+    /// <param name="additionalAcceptedAudiences">The additional-audience argument as the caller passed it.</param>
+    /// <param name="audiencePolicy">The audience-policy argument as the caller passed it.</param>
+    private static void ThrowIfAudiencePolicyCompositionIsContradictory(
+        IReadOnlyCollection<string>? additionalAcceptedAudiences,
+        ClientAssertionAudiencePolicy? audiencePolicy)
+    {
+        if(audiencePolicy == ClientAssertionAudiencePolicy.IssuerIdentifierOnly
+            && additionalAcceptedAudiences is { Count: > 0 })
+        {
+            throw new ArgumentException(
+                $"{nameof(additionalAcceptedAudiences)} must be empty or null when {nameof(audiencePolicy)} is "
+                + $"{nameof(ClientAssertionAudiencePolicy)}.{nameof(ClientAssertionAudiencePolicy.IssuerIdentifierOnly)} "
+                + "(rfc7523bis-11 Section 4: the aud claim must indicate only the issuer identifier).");
+        }
     }
 
 
@@ -362,7 +423,8 @@ public static class PrivateKeyJwtClientAuthentication
         IReadOnlyCollection<string>? additionalAcceptedAudiences,
         CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync,
         ResolveJwksUriDelegate? resolveJwksUriAsync,
-        VerificationDelegate? verificationDelegate)
+        VerificationDelegate? verificationDelegate,
+        ClientAssertionAudiencePolicy? audiencePolicy)
     {
         return async (request, fields, registration, context, cancellationToken) =>
         {
@@ -545,33 +607,52 @@ public static class PrivateKeyJwtClientAuthentication
                         }
                     }
 
-                    List<string> acceptedAudiences = [issuerUri.OriginalString];
-                    if(additionalAcceptedAudiences is not null)
-                    {
-                        acceptedAudiences.AddRange(additionalAcceptedAudiences);
-                    }
+                    ClientAssertionAudiencePolicy effectiveAudiencePolicy =
+                        audiencePolicy ?? ClientAssertionAudiencePolicy.AuthorizationServerIdentities;
 
-                    //RFC 9126 §2: "the authorization server MUST accept its issuer identifier,
-                    //token endpoint URL, or pushed authorization request endpoint URL as values
-                    //that identify it as an intended audience" — a blanket MUST on the
-                    //authorization server, not only at the PAR endpoint, so every caller of this
-                    //validator accepts the same three identities without a second wiring
-                    //parameter. The per-request EndpointChain already carries each active
-                    //endpoint's resolved URL (the same one MetadataEndpoints publishes), so the
-                    //token and PAR endpoint URLs are read from it rather than duplicated here. The
-                    //accepted string is the PUBLISHED one: RFC 7519 §2's StringOrURI is "compared
-                    //as case-sensitive strings with no transformations or canonicalizations
-                    //applied", so an `aud` copied from `MetadataEndpoints`' own
-                    //`ResolvedUri.ToString()` must be matched with the same call, never
-                    //`OriginalString`.
-                    if(context.EndpointChain is { } endpointChain)
+                    List<string> acceptedAudiences = [issuerUri.OriginalString];
+                    if(effectiveAudiencePolicy == ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
                     {
-                        foreach(ServerEndpoint chainEndpoint in endpointChain)
+                        //rfc7523bis-11 Section 4 item b: the authorization server "MUST reject any JWT
+                        //that does not contain its issuer identifier as its sole audience value." A
+                        //CARDINALITY rule, not only a membership rule, so an array naming the issuer
+                        //twice is refused even though every element would otherwise match an accepted
+                        //audience below.
+                        if(!payload.TryGetValue(WellKnownJwtClaimNames.Aud, out object? issuerOnlyAudienceRaw)
+                            || !IsIssuerIdentifierOnlyAudience(issuerOnlyAudienceRaw, issuerUri.OriginalString))
                         {
-                            if(string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal)
-                                || string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodePar, StringComparison.Ordinal))
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        if(additionalAcceptedAudiences is not null)
+                        {
+                            acceptedAudiences.AddRange(additionalAcceptedAudiences);
+                        }
+
+                        //RFC 9126 Section 2: "the authorization server MUST accept its issuer identifier,
+                        //token endpoint URL, or pushed authorization request endpoint URL as values
+                        //that identify it as an intended audience" - a blanket MUST on the
+                        //authorization server, not only at the PAR endpoint, so every caller of this
+                        //validator accepts the same three identities without a second wiring
+                        //parameter. The per-request EndpointChain already carries each active
+                        //endpoint's resolved URL (the same one MetadataEndpoints publishes), so the
+                        //token and PAR endpoint URLs are read from it rather than duplicated here. The
+                        //accepted string is the PUBLISHED one: RFC 7519 Section 2's StringOrURI is "compared
+                        //as case-sensitive strings with no transformations or canonicalizations
+                        //applied", so an `aud` copied from `MetadataEndpoints`' own
+                        //`ResolvedUri.ToString()` must be matched with the same call, never
+                        //`OriginalString`.
+                        if(context.EndpointChain is { } endpointChain)
+                        {
+                            foreach(ServerEndpoint chainEndpoint in endpointChain)
                             {
-                                acceptedAudiences.Add(chainEndpoint.ResolvedUri.ToString());
+                                if(string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal)
+                                    || string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodePar, StringComparison.Ordinal))
+                                {
+                                    acceptedAudiences.Add(chainEndpoint.ResolvedUri.ToString());
+                                }
                             }
                         }
                     }
@@ -730,6 +811,34 @@ public static class PrivateKeyJwtClientAuthentication
         }
 
         return sawAny;
+    }
+
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="audienceRaw"/> is exactly the issuer
+    /// identifier, a bare string equal to <paramref name="issuerIdentifier"/>, or an array holding
+    /// exactly that one string and nothing else. rfc7523bis-11
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
+    /// 4</see> item b: the <c>aud</c> claim value "MUST indicate only the issuer identifier of the
+    /// intended authorization server as the audience of the JWT; this includes that the token endpoint
+    /// URL of the authorization server MUST NOT be used as an audience value." A CARDINALITY rule, so an
+    /// array of two or more elements is refused regardless of what it holds, including a duplicated
+    /// issuer. An array is matched as <see cref="IEnumerable{T}"/> of <see cref="string"/> or of
+    /// <see cref="object"/> and counted to exactly one element, the same shapes
+    /// <see cref="IsAudienceAccepted"/> matches, so a one-element array is judged the same way under
+    /// both audience policies.
+    /// </summary>
+    private static bool IsIssuerIdentifierOnlyAudience(object audienceRaw, string issuerIdentifier)
+    {
+        return audienceRaw switch
+        {
+            string single => string.Equals(single, issuerIdentifier, StringComparison.Ordinal),
+            IEnumerable<string> stringArray => stringArray.Take(2).ToList() is [string soleString]
+                && string.Equals(soleString, issuerIdentifier, StringComparison.Ordinal),
+            IEnumerable<object> mixedArray => mixedArray.Take(2).ToList() is [string soleValue]
+                && string.Equals(soleValue, issuerIdentifier, StringComparison.Ordinal),
+            _ => false
+        };
     }
 
 

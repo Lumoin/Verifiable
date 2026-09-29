@@ -112,7 +112,7 @@ public sealed record JwksUriResolution
 /// <see cref="ClientIdMetadataDocuments.ResolveAsync"/> for a <c>private_key_jwt</c> Client ID
 /// Metadata Document client whose document names a <c>jwks_uri</c> instead of an inline <c>jwks</c>,
 /// and wireable to
-/// <see cref="Verifiable.OAuth.Server.PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,ResolveJwksUriDelegate?)"/>
+/// <see cref="Verifiable.OAuth.Server.PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
 /// for an RFC 7591-registered client whose <see cref="ClientRecord.ClientJwksUri"/> was never
 /// dereferenced at registration time.
 /// </remarks>
