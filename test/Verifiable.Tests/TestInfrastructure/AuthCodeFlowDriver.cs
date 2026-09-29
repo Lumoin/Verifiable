@@ -283,8 +283,10 @@ internal static class AuthCodeFlowDriver
 
         OutgoingFormFields form = new(parFields);
         ExchangeContext context = [];
+        Uri tokenEndpoint = new(
+            host.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, tenantSegment));
         OutgoingHeaders headers = await AttachConfidentialParCredentialsAsync(
-            form, registration, clientAssertionOptions, infrastructure, now, context, cancellationToken)
+            form, registration, clientAssertionOptions, infrastructure, now, context, tokenEndpoint, cancellationToken)
             .ConfigureAwait(false);
 
         HttpResponseData parHttpResponse = await RawAuthCodeWirePushers.PushRawParRequestAsync(
@@ -303,7 +305,9 @@ internal static class AuthCodeFlowDriver
     /// (<see cref="OutgoingFormFieldsClientAuthExtensions.WithClientSecretPost"/>,
     /// <see cref="OutgoingHeadersClientAuthExtensions.WithClientSecretBasic"/>,
     /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/>) since PAR's own
-    /// client call has no such dispatch of its own.
+    /// client call has no such dispatch of its own. <paramref name="tokenEndpoint"/> is the token
+    /// endpoint URL a registration's <see cref="ClientAssertionAudience.TokenEndpoint"/> choice
+    /// writes as the pushed client assertion's <c>aud</c>.
     /// </summary>
     private static async ValueTask<OutgoingHeaders> AttachConfidentialParCredentialsAsync(
         OutgoingFormFields form,
@@ -312,6 +316,7 @@ internal static class AuthCodeFlowDriver
         OAuthClientInfrastructure infrastructure,
         DateTimeOffset now,
         ExchangeContext context,
+        Uri tokenEndpoint,
         CancellationToken cancellationToken)
     {
         if(registration.AuthenticationMethod == ClientAuthenticationMethod.ClientSecretPost)
@@ -341,7 +346,7 @@ internal static class AuthCodeFlowDriver
             await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
                 form,
                 registration,
-                registration.AuthorizationServerIssuer,
+                tokenEndpoint,
                 signingKey,
                 clientAssertionOptions.SigningKeyId,
                 clientAssertionOptions.HeaderSerializer,

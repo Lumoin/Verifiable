@@ -485,9 +485,12 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <see cref="ClientAssertionOptions"/> overload, and the server verifies it with the real
     /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>
     /// pipeline over a published <c>ClientJwks</c> — the same production shape
-    /// <see cref="PrivateKeyJwtClientAuthenticationTests"/> exercises directly. The validator accepts
-    /// the resolved token endpoint URL as <c>aud</c> (RFC 7523 §3 item 3's permitted alternate),
-    /// matching what <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> signs.
+    /// <see cref="PrivateKeyJwtClientAuthenticationTests"/> exercises directly. The client signs the
+    /// audience its registration's <see cref="ClientRegistration.ClientAssertionAudience"/> names, the
+    /// issuer identifier by default (rfc7523bis-11 Section 4), and the validator's accepted set holds
+    /// RFC 9126 Section 2's three permitted audiences (the issuer identifier, the token endpoint, and
+    /// the pushed-authorization endpoint), matching what
+    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> signs.
     /// </summary>
     [TestMethod]
     public async Task PrivateKeyJwtAuthenticatesOverRealWire()
@@ -499,8 +502,8 @@ internal sealed class AuthCodeClientAuthenticationTests
             using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
                 ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-            //Start the listener before wiring the validator so the resolved token endpoint URL
-            //(the client-signed aud, per RFC 7523 §3 item 3) is known.
+            //Start the listener before wiring the validator so the resolved token endpoint URL,
+            //one of RFC 9126 Section 2's three accepted audiences, is known before the validator is built.
             await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
             HostedAuthorizationServer hosted = host.Host("default");
             string segment = material.Registration.TenantId.Value;
@@ -545,6 +548,123 @@ internal sealed class AuthCodeClientAuthenticationTests
                     HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
                     PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
                 }).ConfigureAwait(false);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see>: for client authentication the <c>aud</c> claim value "MUST indicate only the
+    /// issuer identifier of the intended authorization server as the audience of the JWT" by default
+    /// (<see cref="ClientAssertionAudience.IssuerIdentifier"/>), and client authentication JWTs "SHOULD
+    /// be explicitly typed by using the typ header parameter value client-authentication+jwt" when
+    /// <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/> asks for it. A registration may
+    /// instead choose <see cref="ClientAssertionAudience.TokenEndpoint"/>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3 item 3</see>
+    /// permits "The token endpoint URL of the authorization server ... as a value for an
+    /// &quot;aud&quot; element", and
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication">OpenID
+    /// Connect Core 1.0 Section 9</see> states "The Audience SHOULD be the URL of the Authorization
+    /// Server's Token Endpoint." Every choice is applied at both endpoints the registration
+    /// authenticates at over <see cref="PrivateKeyJwtAuthenticatesOverRealWire"/>'s fixture, the pushed
+    /// request and the token request, with the default server validator
+    /// (<see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>,
+    /// no additional accepted audiences) wrapped by <see cref="ClientAssertionRecorder.Wrap"/> so both
+    /// presented assertions are inspected, proving the default set
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see> requires
+    /// (the issuer identifier, the token endpoint, and the pushed-authorization endpoint) already
+    /// accepts what the client, driven by its own registration, actually sent.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-5">rfc7523bis-11
+    /// Section 5</see> replaces that default under
+    /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>, a server's own opt-in this
+    /// row does not exercise.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public async Task CodeExchangeAssertionFollowsTheRegistrationsAudienceAndTypeAsync(
+        bool isTokenEndpointAudience, bool isExplicitlyTyped)
+    {
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenEndpoint = new(
+                hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
+
+            string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            const string SigningKeyId = "audience-and-type-key-1";
+            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+                clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
+            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+
+            List<string> recordedAssertions = [];
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = ClientAssertionRecorder.Wrap(recordedAssertions);
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideAuthMethodAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt,
+                clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys,
+                ClientAssertionAudience = isTokenEndpointAudience
+                    ? ClientAssertionAudience.TokenEndpoint
+                    : ClientAssertionAudience.IssuerIdentifier,
+                IsClientAssertionExplicitlyTyped = isExplicitlyTyped
+            };
+
+            await DriveAndAssertSucceedsAsync(
+                host, client, registration, clientFlowStore, material.Registration.TenantId.Value,
+                clientAssertionOptions: new ClientAssertionOptions
+                {
+                    SigningKeyId = SigningKeyId,
+                    HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                    PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+                }).ConfigureAwait(false);
+
+            Assert.HasCount(2, recordedAssertions,
+                "The pushed request and the token request must each present exactly one client_assertion.");
+
+            string expectedTyp = isExplicitlyTyped ? "client-authentication+jwt" : "JWT";
+            string issuer = registration.AuthorizationServerIssuer.OriginalString;
+
+            string expectedAudience = isTokenEndpointAudience ? tokenEndpoint.OriginalString : issuer;
+
+            (string pushedTyp, JsonElement pushedAudience) =
+                ClientAssertionRecorder.DecodeTypAndAudience(recordedAssertions[0], Pool);
+            Assert.AreEqual(expectedTyp, pushedTyp);
+            Assert.AreEqual(JsonValueKind.String, pushedAudience.ValueKind);
+            Assert.AreEqual(expectedAudience, pushedAudience.GetString());
+
+            (string tokenTyp, JsonElement tokenAudience) =
+                ClientAssertionRecorder.DecodeTypAndAudience(recordedAssertions[1], Pool);
+            Assert.AreEqual(expectedTyp, tokenTyp);
+            Assert.AreEqual(JsonValueKind.String, tokenAudience.ValueKind);
+            Assert.AreEqual(expectedAudience, tokenAudience.GetString());
         }
         finally
         {
@@ -884,7 +1004,8 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// Drives <c>private_key_jwt</c> over the real token endpoint with a client assertion carrying no
     /// <c>kid</c> header, asserting the exchange's outcome against <paramref name="expectAccepted"/>.
     /// <see cref="ClientAssertionOptions.SigningKeyId"/> is required and
-    /// <see cref="ClientAssertionSigning.SignAsync"/> always attaches it as <c>kid</c>, so this
+    /// <see cref="ClientAssertionSigning.SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, PrivateKeyMemory, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
+    /// always attaches it as <c>kid</c>, so this
     /// branch signs its own assertion directly and pushes the token-endpoint form fields rather than
     /// through <see cref="OAuthClient"/>.
     /// </summary>

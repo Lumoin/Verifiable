@@ -397,6 +397,89 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see>: the <c>aud</c> claim value "MUST indicate only the issuer identifier of the
+    /// intended authorization server as the audience of the JWT", and a registration that names neither
+    /// <see cref="ClientRegistration.ClientAssertionAudience"/> nor
+    /// <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/> signs the default
+    /// <see cref="ClientAssertionAudience.IssuerIdentifier"/> with the default <c>typ</c>. Drives the
+    /// same fixture as <see cref="ClientComposedRequestIssuesTokenUnderPrivateKeyJwtOverRealWire"/>
+    /// with the default server validator
+    /// (<see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?)"/>,
+    /// no additional accepted audiences) wrapped by <see cref="ClientAssertionRecorder.Wrap"/>, proving
+    /// what <see cref="ClientCredentialsClient.RequestTokenAsync"/> actually signed
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see>'s
+    /// issuer-identifier default) rather than what the token endpoint merely tolerates.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientCredentialsAssertionNamesTheIssuerByDefaultAsync()
+    {
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce,
+                capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+            await AddMachineScopeAsync(host, material).ConfigureAwait(false);
+
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            const string SigningKeyId = "issuer-by-default-key-1";
+            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+                clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
+            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+
+            List<string> recordedAssertions = [];
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = ClientAssertionRecorder.Wrap(recordedAssertions);
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideAuthMethodAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt,
+                clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
+
+            (OAuthClient client, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration, ClientId, profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys
+            };
+
+            AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+                registration, scope: MachineScope, resource: null, [],
+                clientAssertionOptions: new ClientAssertionOptions
+                {
+                    SigningKeyId = SigningKeyId,
+                    HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                    PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+                },
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome,
+                $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+
+            Assert.HasCount(1, recordedAssertions,
+                "The client_credentials token request must present exactly one client_assertion.");
+            (string typ, JsonElement audience) =
+                ClientAssertionRecorder.DecodeTypAndAudience(recordedAssertions[0], Pool);
+            Assert.AreEqual("JWT", typ);
+            Assert.AreEqual(JsonValueKind.String, audience.ValueKind);
+            Assert.AreEqual(registration.AuthorizationServerIssuer.OriginalString, audience.GetString());
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>:
     /// <c>invalid_client</c> covers "Client authentication failed." A wrong <c>client_secret_basic</c>
     /// secret answers <see cref="ClientCredentialsClient.RequestTokenAsync"/>'s typed

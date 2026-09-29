@@ -47,10 +47,39 @@ public sealed record ClientAssertionOptions
 public static class ClientTokenEndpointAuthentication
 {
     /// <summary>
-    /// Adds the confidential-client authentication parameters — <c>client_id</c>,
+    /// Adds the confidential-client authentication parameters, <c>client_id</c>,
     /// <c>client_assertion_type</c>, and a freshly-signed <c>private_key_jwt</c> <c>client_assertion</c>
-    /// (RFC 7523 §2.2) bound to the token endpoint — to a token-endpoint request form.
+    /// (RFC 7523 Section 2.2) bound to the authorization server as the registration chooses, to a
+    /// token-endpoint request form. The <c>aud</c> value follows
+    /// <see cref="ClientRegistration.ClientAssertionAudience"/> and the <c>typ</c> header follows
+    /// <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/>.
     /// </summary>
+    /// <param name="form">The outgoing form fields the assertion parameters are added to.</param>
+    /// <param name="registration">
+    /// The registration whose <see cref="ClientRegistration.ClientAssertionAudience"/> and
+    /// <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/> choose the assertion's <c>aud</c>
+    /// and <c>typ</c>.
+    /// </param>
+    /// <param name="tokenEndpoint">
+    /// The authorization server's resolved token endpoint URL, whichever endpoint this request is
+    /// sent to (the pushed-authorization endpoint included). It becomes the assertion's <c>aud</c>
+    /// only when <paramref name="registration"/> chooses
+    /// <see cref="ClientAssertionAudience.TokenEndpoint"/>; under
+    /// <see cref="ClientAssertionAudience.IssuerIdentifier"/> it is not read. Naming one endpoint's
+    /// URL as <c>aud</c> while sending to a different endpoint is the audience-injection attack
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-1">rfc7523bis-11's
+    /// Introduction</see> describes; <see cref="ClientAssertionAudience.TokenEndpoint"/>'s own doc
+    /// states the deviation from rfc7523bis-11 Section 4 that choosing it makes.
+    /// </param>
+    /// <param name="signingKey">The client's confidential-authentication signing key.</param>
+    /// <param name="signingKeyId">The <c>kid</c> header parameter value identifying the key to the AS.</param>
+    /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
+    /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
+    /// <param name="clientAssertionLifetime">The assertion's validity window (RFC 7523 Section 3 rule 4).</param>
+    /// <param name="infrastructure">Supplies the <c>jti</c> generator, the encoder, and the memory pool.</param>
+    /// <param name="now">The instant the assertion's <c>iat</c> and <c>exp</c> are computed from.</param>
+    /// <param name="context">The per-operation exchange context passed to the <c>jti</c> generator.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask AttachClientAssertionAsync(
         OutgoingFormFields form,
         ClientRegistration registration,
@@ -67,20 +96,39 @@ public static class ClientTokenEndpointAuthentication
     {
         ArgumentNullException.ThrowIfNull(form);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(registration.ClientAssertionAudience);
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
         ArgumentNullException.ThrowIfNull(infrastructure);
 
         string jti = await infrastructure.GenerateIdentifierAsync(
             WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
 
+        //rfc7523bis-11 Section 4: for client authentication the aud value MUST indicate only the issuer
+        //identifier of the intended authorization server, the string the library's own server compares
+        //ordinally (PrivateKeyJwtClientAuthentication); RFC 7523 Section 3 item 3 permits (MAY) and
+        //OpenID Connect Core Section 9 recommends (SHOULD) the token endpoint URL instead, for an
+        //authorization server that refuses its issuer identifier.
+        string audience = registration.ClientAssertionAudience.Code switch
+        {
+            var c when c == ClientAssertionAudience.IssuerIdentifier.Code => registration.AuthorizationServerIssuer.OriginalString,
+            var c when c == ClientAssertionAudience.TokenEndpoint.Code => tokenEndpoint.OriginalString,
+            _ => throw new NotSupportedException(
+                $"Client assertion audience '{registration.ClientAssertionAudience}' is not supported.")
+        };
+
+        string type = registration.IsClientAssertionExplicitlyTyped
+            ? WellKnownMediaTypes.Jwt.ClientAuthenticationJwt
+            : WellKnownJwkValues.TypeJwt;
+
         string clientAssertion = await ClientAssertionSigning.SignAsync(
             registration.ClientId.Value,
-            tokenEndpoint.OriginalString,
+            audience,
             jti,
             now,
             now.Add(clientAssertionLifetime),
             signingKey,
             signingKeyId,
+            type,
             headerSerializer,
             payloadSerializer,
             infrastructure.Base64UrlEncoder,

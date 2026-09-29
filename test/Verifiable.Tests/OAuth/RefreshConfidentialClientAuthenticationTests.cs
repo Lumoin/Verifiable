@@ -228,6 +228,82 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
 
     /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see>: the refresh leg's <c>private_key_jwt</c> client assertion names the
+    /// authorization server's issuer identifier as its sole <c>aud</c> by default
+    /// (<see cref="ClientAssertionAudience.IssuerIdentifier"/>), with the default <c>typ</c>,
+    /// verified server-side by the default
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
+    /// pipeline wrapped by <see cref="ClientAssertionRecorder.Wrap"/> so the presented assertion can
+    /// be inspected after a successful refresh.
+    /// </summary>
+    [TestMethod]
+    public async Task RefreshAssertionNamesTheIssuerByDefaultAsync()
+    {
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            const string SigningKeyId = "issuer-by-default-refresh-key-1";
+            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+                clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
+            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+
+            List<string> recordedAssertions = [];
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = ClientAssertionRecorder.Wrap(recordedAssertions);
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideAuthMethodAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt,
+                clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys
+            };
+
+            ClientAssertionOptions assertionOptions = new()
+            {
+                SigningKeyId = SigningKeyId,
+                HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+            };
+
+            await DriveInitialIssuanceAndAssertRefreshSucceedsAsync(
+                host, client, registration, clientFlowStore, material.Registration.TenantId.Value,
+                clientAssertionOptions: assertionOptions).ConfigureAwait(false);
+
+            (string typ, JsonElement audience) =
+                ClientAssertionRecorder.DecodeTypAndAudience(recordedAssertions[^1], Pool);
+            Assert.AreEqual("JWT", typ);
+            Assert.AreEqual(JsonValueKind.String, audience.ValueKind);
+            Assert.AreEqual(registration.AuthorizationServerIssuer.OriginalString, audience.GetString(),
+                "The refresh assertion's aud must name the authorization server's issuer identifier.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// A public client (<see cref="ClientAuthenticationMethod.None"/>, the default) attaches no
     /// credential at either leg and relies on PKCE alone (RFC 6749 §6, §3.2.1) — the refresh leg's
     /// new authentication attachment must not regress this baseline, unauthenticated case.

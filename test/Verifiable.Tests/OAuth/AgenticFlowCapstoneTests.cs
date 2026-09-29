@@ -116,7 +116,10 @@ internal sealed class AgenticFlowCapstoneTests
     /// <c>id_token</c> → RS1 200 → <c>OAuthClient.IdJag.MintAsync</c> with that id_token as the
     /// subject token → cross-trust-domain <c>RedeemAsync</c> at AS2 (CIMD-materialized,
     /// <c>private_key_jwt</c>-authenticated) → RS2 200 — finishing with the span-tree
-    /// assertions over the six hosts.
+    /// assertions over the six hosts and, per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see>, that the mint and redeem client assertions each name the issuer identifier
+    /// of the authorization server they are presented to.
     /// </summary>
     [TestMethod]
     public async Task AgenticFlowHappyPathAcrossSixHostsFormsOneConnectedTrace()
@@ -298,6 +301,24 @@ internal sealed class AgenticFlowCapstoneTests
             Assert.AreEqual(Rs2RequiredScope, claims.GetProperty(WellKnownJwtClaimNames.Scope).GetString());
             AssertAudienceClaim(claims, Rs2Audience);
         }
+
+        //rfc7523bis-11 Section 4: the client_assertion presented at each token endpoint must name
+        //that endpoint's own issuer identifier as its sole aud, by default (ClientAssertionAudience.IssuerIdentifier).
+        Assert.HasCount(1, topology.As2RecordedAssertions,
+            "AS2 must see exactly one client_assertion: the redeem's.");
+        (string redeemTyp, JsonElement redeemAudience) =
+            ClientAssertionRecorder.DecodeTypAndAudience(topology.As2RecordedAssertions[0], Pool);
+        Assert.AreEqual("JWT", redeemTyp);
+        Assert.AreEqual(JsonValueKind.String, redeemAudience.ValueKind);
+        Assert.AreEqual(topology.As2Issuer.OriginalString, redeemAudience.GetString(),
+            "The redeem assertion's aud must name AS2's issuer identifier.");
+
+        (string mintTyp, JsonElement mintAudience) =
+            ClientAssertionRecorder.DecodeTypAndAudience(topology.As1RecordedAssertions[^1], Pool);
+        Assert.AreEqual("JWT", mintTyp);
+        Assert.AreEqual(JsonValueKind.String, mintAudience.ValueKind);
+        Assert.AreEqual(topology.As1Issuer.OriginalString, mintAudience.GetString(),
+            "The mint assertion's aud must name AS1's issuer identifier.");
 
         //Step 7 — RS2 accepts the AS2 token.
         using(JsonDocument rs2Claims = await GetProtectedResourceAsync(
@@ -1063,6 +1084,12 @@ internal sealed class AgenticFlowCapstoneTests
 
         public Uri As2TokenEndpoint { get; private set; } = null!;
 
+        /// <summary>Every <c>client_assertion</c> AS1's validator has seen, in arrival order.</summary>
+        public List<string> As1RecordedAssertions { get; } = [];
+
+        /// <summary>Every <c>client_assertion</c> AS2's validator has seen, in arrival order.</summary>
+        public List<string> As2RecordedAssertions { get; } = [];
+
         /// <summary>The multi-pinned, auto-redirect-disabled browser stand-in for authorize hops.</summary>
         public HttpClient BrowserClient { get; private set; } = null!;
 
@@ -1229,17 +1256,21 @@ internal sealed class AgenticFlowCapstoneTests
                 }).ConfigureAwait(false);
             }
 
-            //RFC 7523 §3 item 3 accepts the token endpoint URL as an aud value; the
-            //OAuthClient.IdJag flows sign their client assertions with exactly that audience.
+            //RFC 9126 Section 2 requires the accepted set to hold the issuer identifier, the token
+            //endpoint and the pushed-authorization endpoint together; rfc7523bis-11 Section 5 replaces
+            //that default under ClientAssertionAudiencePolicy.IssuerIdentifierOnly, an authorization
+            //server's own opt-in this flow does not exercise. The OAuthClient.IdJag flows sign their
+            //client assertions with the audience ClientRegistration.ClientAssertionAudience names, the
+            //issuer identifier by default (rfc7523bis-11 Section 4), which the accepted set already
+            //holds. ClientAssertionRecorder.Wrap records every presented client_assertion so the mint
+            //and redeem assertions can be inspected after the flow.
             await TestHostShell.AlterAsync(As1.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
-                    additionalAcceptedAudiences: [As1TokenEndpoint.OriginalString]);
+                candidateIntegration.ValidateClientCredentialsAsync = ClientAssertionRecorder.Wrap(As1RecordedAssertions);
             }).ConfigureAwait(false);
             await TestHostShell.AlterAsync(As2.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
-                    additionalAcceptedAudiences: [As2TokenEndpoint.OriginalString]);
+                candidateIntegration.ValidateClientCredentialsAsync = ClientAssertionRecorder.Wrap(As2RecordedAssertions);
             }).ConfigureAwait(false);
             //Both CIMD documents declare private_key_jwt; the token endpoint now refuses a declared
             //method it does not advertise before any validator runs (RFC 8414, Section 2), so both

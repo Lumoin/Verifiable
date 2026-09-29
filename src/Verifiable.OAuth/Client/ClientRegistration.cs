@@ -61,6 +61,18 @@ namespace Verifiable.OAuth.Client;
 /// resolvers on <see cref="OAuthClientInfrastructure"/>. The registration
 /// carries only the AS's <see cref="AuthorizationServerIssuer"/> identifier;
 /// per-call resolution turns that into resolved endpoints and JWKS.
+/// <see cref="ClientAssertionAudience"/> and
+/// <see cref="IsClientAssertionExplicitlyTyped"/> sit on the registration
+/// rather than beside it because a registration names exactly one
+/// authorization server, so every flow that authenticates to it presents one
+/// <c>private_key_jwt</c> shape: the code exchange and refresh through
+/// <see cref="TokenEndpointClientOperations.AttachClientAuthenticationAsync"/>,
+/// the client credentials grant, the ID-JAG mint and redeem
+/// (<see cref="IdJag.IdJagFlowHandlers.MintAsync"/>,
+/// <see cref="IdJag.IdJagFlowHandlers.RedeemAsync"/>), and raw pushes built on
+/// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/>, whose
+/// <c>tokenEndpoint</c> parameter takes the resolved token endpoint URL regardless of which
+/// endpoint the request is sent to.
 /// </para>
 /// <para>
 /// <strong>Profile.</strong> The <see cref="Profile"/> slot selects the
@@ -161,6 +173,27 @@ public sealed record ClientRegistration
     /// <see cref="SigningKeyMaterial"/>.
     /// </remarks>
     public PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>? AuthenticationKeyMaterial { get; init; }
+
+    /// <summary>
+    /// The value a <c>private_key_jwt</c> client assertion's <c>aud</c> claim names at every endpoint this
+    /// registration authenticates at. Defaults to
+    /// <see cref="ClientAssertionAudience.IssuerIdentifier"/> per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see>'s requirement that the value "MUST indicate only the issuer identifier of the
+    /// intended authorization server".
+    /// </summary>
+    public ClientAssertionAudience ClientAssertionAudience { get; init; } = ClientAssertionAudience.IssuerIdentifier;
+
+    /// <summary>
+    /// Whether a <c>private_key_jwt</c> client assertion this registration signs carries the explicit
+    /// <c>typ</c> header parameter value
+    /// <see cref="Verifiable.JCose.WellKnownMediaTypes.Jwt.ClientAuthenticationJwt"/> rather than
+    /// <see cref="Verifiable.JCose.WellKnownJwkValues.TypeJwt"/>. <see langword="false"/> by default; a
+    /// per-registration choice, since
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">rfc7523bis-11
+    /// Section 4</see>'s explicit typing is a SHOULD of an Internet-Draft, not of an RFC.
+    /// </summary>
+    public bool IsClientAssertionExplicitlyTyped { get; init; }
 
     /// <summary>
     /// The URI at which this client's JWKS document is published, when

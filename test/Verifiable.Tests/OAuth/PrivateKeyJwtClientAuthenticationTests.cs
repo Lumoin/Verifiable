@@ -882,7 +882,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
     /// <summary>
     /// Signs a client assertion with no <c>kid</c> header member at all — the RFC 7517 §4.5 optional
-    /// case a legitimate single-key set relies on. Mirrors <see cref="ClientAssertionSigning.SignAsync"/>'s
+    /// case a legitimate single-key set relies on. Mirrors
+    /// <see cref="ClientAssertionSigning.SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, PrivateKeyMemory, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>'s
     /// header and payload shape, since that method requires a non-empty <c>kid</c> and so cannot
     /// produce this header itself.
     /// </summary>
