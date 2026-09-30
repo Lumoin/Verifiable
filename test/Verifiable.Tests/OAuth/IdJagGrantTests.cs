@@ -3,6 +3,8 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Relations;
+using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -91,6 +93,12 @@ internal sealed class IdJagGrantTests
     private const string UnrelatedSamlIssuer = "https://unrelated-saml.example";
 
     /// <summary>
+    /// The <c>kid</c> of signing material the host's published JWKS does not hold, so the redeem's resolver of
+    /// signing material answers nothing for a grant that names it.
+    /// </summary>
+    private static string UnknownSigningKeyId { get; } = "signing-material-the-resolver-does-not-know";
+
+    /// <summary>
     /// A <c>saml-nameid</c> Subject Identifier with the REQUIRED members plus two of the four optional
     /// members (<c>nameid_format</c>, <c>sp_name_qualifier</c>); <c>name_qualifier</c> and
     /// <c>sp_provided_id</c> are omitted so the §3.2.2 exactly-when-present rule is observable.
@@ -102,6 +110,23 @@ internal sealed class IdJagGrantTests
         NameIdFormat = SamlNameIdFormatAttribute,
         SpNameQualifier = SamlSpNameQualifier
     };
+
+    /// <summary>
+    /// The SAML NameID identifier an application configures for the fixture's End-User: the SAML issuer, the
+    /// &lt;NameID&gt; value and the SPNameQualifier the NameID is scoped to
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>).
+    /// </summary>
+    private static SamlNameIdSubjectIdentifier ConfiguredSamlIdentifier { get; } = new()
+    {
+        Issuer = SamlIssuer,
+        NameId = SamlNameId,
+        SpNameQualifier = SamlSpNameQualifier
+    };
+
+    /// <summary>
+    /// The one body the token endpoint answers a refused JWT Bearer assertion with, whatever the reason.
+    /// </summary>
+    private static string JagRefusal { get; } = """{"error":"invalid_grant","error_description":"The JWT assertion is not valid."}""";
 
     /// <summary>
     /// A party that acted before the client redeeming the grant — the prior actor a nested
@@ -3670,79 +3695,949 @@ internal sealed class IdJagGrantTests
             header, payload, ResourceAsIssuer, ClientId, TimeProvider.GetUtcNow(), TimeSpan.FromSeconds(60));
 
         Assert.IsTrue(result.IsValid, result.FailureDescription);
-        Assert.IsNotNull(result.SubjectIdentifier);
-        Assert.AreEqual(SamlIssuer, result.SubjectIdentifier!.Issuer);
-        Assert.AreEqual(SamlNameId, result.SubjectIdentifier.NameId);
-        Assert.AreEqual(SamlNameIdFormatAttribute, result.SubjectIdentifier.NameIdFormat);
-        Assert.AreEqual(SamlSpNameQualifier, result.SubjectIdentifier.SpNameQualifier);
-        Assert.IsNull(result.SubjectIdentifier.NameQualifier);
-        Assert.IsNull(result.SubjectIdentifier.SpProvidedId);
+        Assert.IsNotNull(result.SamlNameIdSubjectIdentifier);
+        Assert.AreEqual(SamlIssuer, result.SamlNameIdSubjectIdentifier!.Issuer);
+        Assert.AreEqual(SamlNameId, result.SamlNameIdSubjectIdentifier.NameId);
+        Assert.AreEqual(SamlNameIdFormatAttribute, result.SamlNameIdSubjectIdentifier.NameIdFormat);
+        Assert.AreEqual(SamlSpNameQualifier, result.SamlNameIdSubjectIdentifier.SpNameQualifier);
+        Assert.IsNull(result.SamlNameIdSubjectIdentifier.NameQualifier);
+        Assert.IsNull(result.SamlNameIdSubjectIdentifier.SpProvidedId);
     }
 
 
     /// <summary>
-    /// §3.2.2: a Resource Authorization Server that requires a SAML NameID Subject Identifier for subject
-    /// resolution rejects a validated ID-JAG that carries no (usable) <c>sub_id</c> with
-    /// <c>invalid_grant</c>. The library surfaces the (absent) identifier; the server's policy enforces
-    /// the requirement.
+    /// An <c>iss_sub</c> <c>sub_id</c> whose <c>iss</c> is the grant's validated issuer and whose <c>sub</c> is
+    /// the grant's validated subject names the End-User the grant names, and the equality holds by the claim's
+    /// own values.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "When both sub and sub_id are present, they MUST identify the same End-User."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.3">RFC 9493 Section 3.2.3</see>:
+    /// "These members MUST follow the formats of the "iss" member and "sub" member defined by [RFC7519],
+    /// respectively. Both the "iss" member and the "sub" member are REQUIRED and MUST NOT be null or empty."
     /// </summary>
     [TestMethod]
-    public async Task RedeemRequiringSamlNameIdRejectsGrantWithoutSubId()
+    public async Task EqualityHoldsForAnIssSubRestatingTheValidatedSubjectAsync()
     {
-        await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, string idpIssuer) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            mintedSubjectIdentifier: static idpIssuer => SubjectIdentifier.IssuerSubject(idpIssuer, SubjectIdentity)).ConfigureAwait(false);
 
-        //A normal mint (no sub_id supplied) → the JAG carries no sub_id claim.
-        await WireMintSeamsAsync(app, WellKnownScopes.OpenId, resourceClientId: null).ConfigureAwait(false);
-
-        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        HostedAuthorizationServer host = app.Host("default");
-        HttpClient http = host.SharedHttpClient!;
-        string segment = material.Registration.TenantId.Value;
-        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
-
-        ServerVerificationKeyResolverDelegate jwksResolver =
-            await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
-        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ValidateJwtBearerAssertionAsync =
-                async (assertion, requestedScope, registration, context, ct) =>
-                {
-                    JwtBearerGrant? grant = await ValidateIdJagAsync(assertion, registration, jwksResolver, ResourceAsIssuer)
-                        .ConfigureAwait(false);
-                    if(grant is null)
-                    {
-
-                        return null;
-                    }
-
-                    //§3.2.2: this Resource Authorization Server resolves users by SAML NameID and requires the
-                    //sub_id; a validated grant without a usable one cannot be resolved → reject.
-                    (JwtHeader header, JwtPayload payload) = ParseJwtParts(assertion);
-                    IdJagAssertionValidationResult result = IdJagAssertionValidation.Validate(
-                        header, payload, ResourceAsIssuer, registration.ClientId, TimeProvider.GetUtcNow(), TimeSpan.FromSeconds(60));
-
-                    return result.SubjectIdentifier is null ? null : grant;
-                };
-        }).ConfigureAwait(false);
-
-        using HttpResponseMessage mintResponse = await PostMintAsync(http, tokenUrl, ResourceAsIssuer).ConfigureAwait(false);
-        string mintBody = await mintResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
-        string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
-
-        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
-        string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(400, (int)redeemResponse.StatusCode, redeemBody);
-        Assert.Contains(OAuthErrors.InvalidGrant, redeemBody);
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.IsTrue(recorded.IsValid, recorded.FailureDescription);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Holds, ComparisonBasis.ProfileRule, ComparisonDecision.Permit);
+        ComparisonRecord<SubjectIdentifier, IdJagSubjectContext> comparison = recorded.SubjectIdentifierComparison!;
+        Assert.AreEqual("iss_sub", comparison.Candidate.Format);
+        Assert.AreEqual(idpIssuer, comparison.Reference.Issuer);
+        Assert.IsNull(comparison.Reference.Tenant);
+        Assert.AreEqual(SubjectIdentity, comparison.Reference.Subject);
     }
 
 
     /// <summary>
-    /// §9.5: the <c>sub_id.issuer</c> (a SAML issuer) MUST NOT establish trust in the ID-JAG issuer. A JAG
-    /// whose <c>sub_id</c> names an unrelated SAML issuer still validates on its own <c>iss</c>, and the
+    /// An <c>iss_sub</c> <c>sub_id</c> of the grant's validated issuer that names another subject does not
+    /// name the End-User the grant names, and with no association wired the grant is refused.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "When both sub and sub_id are present, they MUST identify the same End-User." and "A public subject
+    /// identifier MUST be unique when scoped with issuer (iss+sub) for a single-tenant issuer". No clause
+    /// states the refusal: it is this library's reading of the two sentences, under which two subjects of one
+    /// issuer are two End-Users unless the application's association says they are one.
+    /// </summary>
+    [TestMethod]
+    public async Task EqualityFailsForAnIssSubNamingAnotherSubjectOfTheValidatedIssuerAsync()
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            mintedSubjectIdentifier: static idpIssuer => SubjectIdentifier.IssuerSubject(idpIssuer, "another-end-user")).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierMismatch, recorded.FailureReason);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Fails, ComparisonBasis.ProfileRule, ComparisonDecision.Deny);
+    }
+
+
+    /// <summary>
+    /// A pairwise <c>iss_sub</c> <c>sub_id</c> of the grant's validated issuer names the End-User by another
+    /// <c>sub</c>. With the application's association wired, the association decides it and the grant is
+    /// redeemed. Without one, the claim fails as another subject of the grant's issuer: this library reads
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>,
+    /// "When both sub and sub_id are present, they MUST identify the same End-User." with "A public subject
+    /// identifier MUST be unique when scoped with issuer (iss+sub) for a single-tenant issuer", as two subjects
+    /// of one issuer being two End-Users unless the application says they are one; no clause states that
+    /// refusal.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-4.2">RFC 9493 Section 4.2</see>: "Similarly,
+    /// the JWT's "sub" Claim and the Subject Identifier's "sub" member MAY be different."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>
+    /// refuses a grant when "the sub_id claim is not authorized by local policy for the validated ID-JAG
+    /// issuer."
+    /// </summary>
+    /// <param name="caseName">Whether the rule wires the association: <c>withAssociation</c> or <c>withoutAssociation</c>.</param>
+    [TestMethod]
+    [DataRow("withAssociation", DisplayName = "the association maps the pairwise identifier")]
+    [DataRow("withoutAssociation", DisplayName = "no association is wired")]
+    public async Task APairwiseSubjectIsDecidedByTheAssociationAsync(string caseName)
+    {
+        Func<string, IdJagSubjectIdentifierRule> rule = caseName switch
+        {
+            "withAssociation" => static idpIssuer => new IdJagSubjectIdentifierRule
+            {
+                Relation = ComparisonRelation.Equal,
+                Association = (candidate, reference, relation, cancellationToken) => ValueTask.FromResult(candidate switch
+                {
+                    _ when IsSameIdentifier(candidate, SubjectIdentifier.IssuerSubject(idpIssuer, "pairwise-7f3a"))
+                        && IsGrantSubject(reference, idpIssuer) => ComparisonOutcome.Holds,
+                    _ when SubjectIdentifierFormats.IsIssuerSubject(candidate.Format)
+                        && candidate.Members.GetValueOrDefault("iss") is string issuer
+                        && string.Equals(issuer, idpIssuer, StringComparison.Ordinal) => ComparisonOutcome.Fails,
+                    _ => ComparisonOutcome.Indeterminate
+                })
+            },
+            "withoutAssociation" => static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            rule,
+            mintedSubjectIdentifier: static idpIssuer => SubjectIdentifier.IssuerSubject(idpIssuer, "pairwise-7f3a")).ConfigureAwait(false);
+
+        Assert.IsNotNull(recorded, body);
+        if(caseName == "withAssociation")
+        {
+            Assert.AreEqual(200, statusCode, body);
+            AssertComparison(
+                recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Holds, ComparisonBasis.ApplicationRule, ComparisonDecision.Permit);
+        }
+        else
+        {
+            Assert.AreEqual(400, statusCode, body);
+            Assert.AreEqual(JagRefusal, body);
+            Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierMismatch, recorded.FailureReason);
+            AssertComparison(
+                recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Fails, ComparisonBasis.ProfileRule, ComparisonDecision.Deny);
+        }
+    }
+
+
+    /// <summary>
+    /// An <c>iss_sub</c> <c>sub_id</c> in another issuer's namespace, with no association wired, is a
+    /// comparison nothing can decide; the claim is OPTIONAL, so the grant is redeemed and the record keeps that
+    /// nothing decided it.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "The sub_id claim MAY be used to identify the same End-User as the sub claim using a different
+    /// identifier namespace from the ID-JAG iss and sub."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-4.1">RFC 9493 Section 4.1</see>: "When
+    /// processing a JWT with both JWT "sub" and "sub_id" Claims, implementations MUST NOT rely on both claims to
+    /// determine the JWT Subject. An implementation MAY attempt to determine the JWT Subject from one claim and
+    /// fall back to using the other if it determines it does not understand the format of the first claim."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-4.2">RFC 9493 Section 4.2</see>: "The JWT
+    /// "sub_id" Claim MAY contain an "iss_sub" Subject Identifier. In this case, the JWT's "iss" Claim and the
+    /// Subject Identifier's "iss" member MAY be different."
+    /// <see href="https://github.com/pic-protocol/pic-spec/blob/35b1d904aebf9438b0f25d7465d1d0b965d6656b/draft/0.2/rfc/pic-prover-verifier-spec.txt">PIC Prover and Verifier (pic-prover-verifier-02) Section 4.2</see>:
+    /// "a Verifier MUST reject a PCA whose profile is unknown or does not define a deterministic comparison."
+    /// Redeeming the grant is this library's rule for the OPTIONAL claim of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>,
+    /// where it does not follow that sentence; <see cref="IdJagSubjectIdentifierRule.Presence"/> states the
+    /// choice.
+    /// </summary>
+    [TestMethod]
+    public async Task AnotherNamespaceWithoutAnAssociationIsIndeterminateWhileOptionalAsync()
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            mintedSubjectIdentifier: static _ => SubjectIdentifier.IssuerSubject("https://other-idp.example", "alice-at-other")).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Indeterminate, ComparisonBasis.None, ComparisonDecision.Permit);
+    }
+
+
+    /// <summary>
+    /// A server that requires the <c>sub_id</c> claim and wires no association cannot say whether the claim is
+    /// authorized by its local policy, even when the claim restates the grant's own subject, so the grant is
+    /// refused as undecided.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>:
+    /// "If the Resource Authorization Server requires a SAML NameID Subject Identifier for subject resolution,
+    /// it MUST reject the token request with an invalid_grant error as defined in Section 5.2 of [RFC6749] if
+    /// any of the following is true" and one of them is "the sub_id claim is not authorized by local policy for
+    /// the validated ID-JAG issuer."
+    /// <see href="https://github.com/pic-protocol/pic-spec/blob/35b1d904aebf9438b0f25d7465d1d0b965d6656b/draft/0.2/rfc/pic-lineage-guardrail-spec.txt">PIC Sandboxed Execution (pic-sandboxed-execution-02) Section 2.6</see>:
+    /// "An input required by policy that is unauthenticated, ambiguously bound, semantically unmapped,
+    /// inconsistent with the presented continuity state, unavailable, or controlled only by the proposing
+    /// executor MUST produce deny or indeterminate-deny."
+    /// </summary>
+    /// <param name="caseName">The claim: <c>anotherNamespace</c> or <c>theGrantSubject</c>.</param>
+    [TestMethod]
+    [DataRow("anotherNamespace", DisplayName = "an iss_sub of another issuer")]
+    [DataRow("theGrantSubject", DisplayName = "the iss_sub of the grant's own issuer and subject")]
+    public async Task ARequiredIdentifierWithoutAnAssociationIsAnIndeterminateDenyAsync(string caseName)
+    {
+        Func<string, SubjectIdentifier?> identifier = caseName switch
+        {
+            "anotherNamespace" => static _ => SubjectIdentifier.IssuerSubject("https://other-idp.example", "alice-at-other"),
+            "theGrantSubject" => static idpIssuer => SubjectIdentifier.IssuerSubject(idpIssuer, SubjectIdentity),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Presence = IdJagSubjectIdentifierPresence.Required },
+            mintedSubjectIdentifier: identifier).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierUndetermined, recorded.FailureReason);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Indeterminate, ComparisonBasis.None, ComparisonDecision.IndeterminateDeny);
+    }
+
+
+    /// <summary>
+    /// A deny and an indeterminate-deny leave the server as one and the same wire answer, byte for byte; only
+    /// the recorded result tells them apart. The one wire answer is this library's rule.
+    /// <see href="https://github.com/pic-protocol/pic-spec/blob/35b1d904aebf9438b0f25d7465d1d0b965d6656b/draft/0.2/rfc/pic-lineage-guardrail-spec.txt">PIC Sandboxed Execution (pic-sandboxed-execution-02) Section 2.4</see>:
+    /// "A permit MAY appear in an authorizing outer advancement; a deny MUST NOT authorize continuation. A
+    /// profile MAY record a denial for audit, but MUST NOT introduce a denial artifact that is interpreted as
+    /// permission to cross the governed boundary."
+    /// The deny is an <c>iss_sub</c> of the grant's own issuer naming another subject, with no association
+    /// wired: its refusal is this library's reading of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>,
+    /// "When both sub and sub_id are present, they MUST identify the same End-User." with "A public subject
+    /// identifier MUST be unique when scoped with issuer (iss+sub) for a single-tenant issuer", under which two
+    /// subjects of one issuer are two End-Users unless the application says they are one; no clause states that
+    /// refusal. The indeterminate-deny is a required claim that no association decides.
+    /// </summary>
+    [TestMethod]
+    public async Task ADenyAndAnIndeterminateDenyAnswerTheWireIdenticallyAsync()
+    {
+        (int denyStatusCode, string denyBody, IdJagAssertionValidationResult? denyRecorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            mintedSubjectIdentifier: static idpIssuer => SubjectIdentifier.IssuerSubject(idpIssuer, "another-end-user")).ConfigureAwait(false);
+        (int undeterminedStatusCode, string undeterminedBody, IdJagAssertionValidationResult? undeterminedRecorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Presence = IdJagSubjectIdentifierPresence.Required },
+            mintedSubjectIdentifier: static _ => SubjectIdentifier.IssuerSubject("https://other-idp.example", "alice-at-other")).ConfigureAwait(false);
+
+        Assert.AreEqual(400, denyStatusCode, denyBody);
+        Assert.AreEqual(400, undeterminedStatusCode, undeterminedBody);
+        Assert.AreEqual(denyBody, undeterminedBody);
+        Assert.AreEqual(JagRefusal, denyBody);
+
+        Assert.IsNotNull(denyRecorded);
+        Assert.IsNotNull(undeterminedRecorded);
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierMismatch, denyRecorded.FailureReason);
+        Assert.AreEqual(ComparisonDecision.Deny, denyRecorded.SubjectIdentifierComparison?.Decision);
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierUndetermined, undeterminedRecorded.FailureReason);
+        Assert.AreEqual(ComparisonDecision.IndeterminateDeny, undeterminedRecorded.SubjectIdentifierComparison?.Decision);
+    }
+
+
+    /// <summary>
+    /// A SAML NameID <c>sub_id</c> is in the SAML issuer's namespace, which only the application's association
+    /// maps, and the association decides it by the complete configured identifier: a different
+    /// <c>nameid</c>, a different <c>sp_name_qualifier</c> or a different SAML issuer is not the configured
+    /// End-User.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>:
+    /// "The Resource Authorization Server MUST compare every member of the SAML NameID Subject Identifier that is
+    /// part of the set of identifier fields it uses for subject resolution for that SAML issuer." and "In
+    /// particular, when the SAML Assertion Subject &lt;NameID&gt; is scoped to a Service Provider, the
+    /// sp_name_qualifier value is part of the subject namespace."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">Section 9.5</see>:
+    /// "The Resource Authorization Server MUST use a SAML NameID sub_id only when the validated ID-JAG issuer is
+    /// explicitly associated with the SAML issuer identified by sub_id.issuer through local configuration or
+    /// trusted federation metadata."
+    /// </summary>
+    /// <param name="caseName">
+    /// The presented identifier: <c>theConfiguredIdentifier</c>, <c>anotherNameId</c>,
+    /// <c>anotherSpNameQualifier</c> or <c>anUnrelatedIssuer</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("theConfiguredIdentifier", DisplayName = "the complete configured identifier")]
+    [DataRow("anotherNameId", DisplayName = "another nameid")]
+    [DataRow("anotherSpNameQualifier", DisplayName = "another sp_name_qualifier")]
+    [DataRow("anUnrelatedIssuer", DisplayName = "a SAML issuer the association does not know")]
+    public async Task TheAssociationDecidesAnotherNamespaceByItsCompleteConfiguredIdentifierAsync(string caseName)
+    {
+        SamlNameIdSubjectIdentifier presented = caseName switch
+        {
+            "theConfiguredIdentifier" => ConfiguredSamlIdentifier,
+            "anotherNameId" => ConfiguredSamlIdentifier with { NameId = "mallory@example.com" },
+            "anotherSpNameQualifier" => ConfiguredSamlIdentifier with { SpNameQualifier = "https://other-sp.example/saml/sp" },
+            "anUnrelatedIssuer" => ConfiguredSamlIdentifier with { Issuer = UnrelatedSamlIssuer },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static idpIssuer => new IdJagSubjectIdentifierRule
+            {
+                Relation = ComparisonRelation.Equal,
+                Association = ConfiguredSamlAssociation(idpIssuer)
+            },
+            mintedSubjectIdentifier: _ => presented.ToSubjectIdentifier()).ConfigureAwait(false);
+
+        Assert.IsNotNull(recorded, body);
+        if(caseName == "theConfiguredIdentifier")
+        {
+            Assert.AreEqual(200, statusCode, body);
+            AssertComparison(
+                recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Holds, ComparisonBasis.ApplicationRule, ComparisonDecision.Permit);
+        }
+        else
+        {
+            Assert.AreEqual(400, statusCode, body);
+            Assert.AreEqual(JagRefusal, body);
+            Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierMismatch, recorded.FailureReason);
+            AssertComparison(
+                recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Fails, ComparisonBasis.ApplicationRule, ComparisonDecision.Deny);
+        }
+    }
+
+
+    /// <summary>
+    /// A server that requires a SAML NameID <c>sub_id</c> refuses one under a SAML issuer its association does
+    /// not associate with the grant's validated issuer.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>:
+    /// "If the Resource Authorization Server requires a SAML NameID Subject Identifier for subject resolution,
+    /// it MUST reject the token request with an invalid_grant error as defined in Section 5.2 of [RFC6749] if
+    /// any of the following is true" and the third is "the sub_id claim is not authorized by local policy for
+    /// the validated ID-JAG issuer."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">Section 9.5</see>:
+    /// "The Resource Authorization Server MUST use a SAML NameID sub_id only when the validated ID-JAG issuer is
+    /// explicitly associated with the SAML issuer identified by sub_id.issuer through local configuration or
+    /// trusted federation metadata."
+    /// </summary>
+    [TestMethod]
+    public async Task ARequiredSamlIdentifierUnderAnIssuerTheAssociationDoesNotAuthorizeIsRefusedAsync()
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static idpIssuer => new IdJagSubjectIdentifierRule
+            {
+                Presence = IdJagSubjectIdentifierPresence.Required,
+                AcceptedFormats = new HashSet<string>(StringComparer.Ordinal) { "saml-nameid" },
+                Association = ConfiguredSamlAssociation(idpIssuer)
+            },
+            mintedSubjectIdentifier: static _ => (ConfiguredSamlIdentifier with { Issuer = UnrelatedSamlIssuer }).ToSubjectIdentifier()).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierMismatch, recorded.FailureReason);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Fails, ComparisonBasis.ApplicationRule, ComparisonDecision.Deny);
+    }
+
+
+    /// <summary>
+    /// A server that requires the <c>sub_id</c> claim redeems a grant whose identifier its association
+    /// authorizes: the complete configured SAML NameID identifier, and the <c>iss_sub</c> identifier restating
+    /// the grant's own subject, which under a required claim is decided by the association like every other
+    /// candidate and is put to it exactly once. Deciding the identical claim by the association is this
+    /// library's rule for a required claim.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>:
+    /// "If the Resource Authorization Server requires a SAML NameID Subject Identifier for subject resolution,
+    /// it MUST reject the token request with an invalid_grant error as defined in Section 5.2 of [RFC6749] if
+    /// any of the following is true" and the third is "the sub_id claim is not authorized by local policy for
+    /// the validated ID-JAG issuer." An identifier the association authorizes meets none of the three.
+    /// </summary>
+    /// <param name="caseName">
+    /// The identifier the grant carries: <c>theConfiguredSamlIdentifier</c> or <c>theGrantsOwnIssSub</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("theConfiguredSamlIdentifier", DisplayName = "the configured SAML NameID identifier the association holds")]
+    [DataRow("theGrantsOwnIssSub", DisplayName = "the iss_sub identifier of the grant's own subject")]
+    public async Task ARequiredIdentifierTheAssociationAuthorizesIsRedeemedAsync(string caseName)
+    {
+        int associationCalls = 0;
+        Func<string, IdJagSubjectIdentifierRule> rule = caseName switch
+        {
+            "theConfiguredSamlIdentifier" => idpIssuer => new IdJagSubjectIdentifierRule
+            {
+                Presence = IdJagSubjectIdentifierPresence.Required,
+                AcceptedFormats = new HashSet<string>(StringComparer.Ordinal) { "saml-nameid" },
+                Association = (candidate, reference, relation, cancellationToken) =>
+                {
+                    _ = Interlocked.Increment(ref associationCalls);
+
+                    return ConfiguredSamlAssociation(idpIssuer)(candidate, reference, relation, cancellationToken);
+                }
+            },
+            "theGrantsOwnIssSub" => idpIssuer => new IdJagSubjectIdentifierRule
+            {
+                Presence = IdJagSubjectIdentifierPresence.Required,
+                Association = (candidate, reference, relation, cancellationToken) =>
+                {
+                    _ = Interlocked.Increment(ref associationCalls);
+
+                    return ValueTask.FromResult(ComparisonOutcome.Holds);
+                }
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            rule,
+            mintedSubjectIdentifier: idpIssuer => caseName switch
+            {
+                "theConfiguredSamlIdentifier" => ConfiguredSamlIdentifier.ToSubjectIdentifier(),
+                "theGrantsOwnIssSub" => SubjectIdentifier.IssuerSubject(idpIssuer, SubjectIdentity),
+                _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Holds, ComparisonBasis.ApplicationRule, ComparisonDecision.Permit);
+        Assert.AreEqual(1, associationCalls);
+    }
+
+
+    /// <summary>
+    /// In a grant of a multi-tenant issuer, <c>iss</c> and <c>sub</c> alone do not name the End-User, so an
+    /// <c>iss_sub</c> restating them is decided only by the application's association, which sees the tenant:
+    /// undecided without one (redeemed under the OPTIONAL claim, refused where the claim is required), and
+    /// held by an association that knows the tenant.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "A public subject identifier MUST be unique when scoped with issuer (iss+sub) for a single-tenant issuer
+    /// and MUST be unique when scoped with issuer and tenant (iss+tenant+sub) for multi-tenant issuer." The same
+    /// section defines the OPTIONAL <c>tenant</c> claim as the tenant identifier of a multi-tenant issuer.
+    /// </summary>
+    /// <param name="caseName">The rule: <c>equal</c>, <c>required</c> or <c>tenantAssociation</c>.</param>
+    [TestMethod]
+    [DataRow("equal", DisplayName = "equality without an association")]
+    [DataRow("required", DisplayName = "a required claim without an association")]
+    [DataRow("tenantAssociation", DisplayName = "equality with an association that knows the tenant")]
+    public async Task ATenantQualifiedContextIsDecidedOnlyByTheAssociationAsync(string caseName)
+    {
+        string? observedTenant = null;
+        Func<string, IdJagSubjectIdentifierRule> rule = caseName switch
+        {
+            "equal" => static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            "required" => static _ => new IdJagSubjectIdentifierRule { Presence = IdJagSubjectIdentifierPresence.Required },
+            "tenantAssociation" => _ => new IdJagSubjectIdentifierRule
+            {
+                Relation = ComparisonRelation.Equal,
+                Association = (candidate, reference, relation, cancellationToken) =>
+                {
+                    observedTenant = reference.Tenant;
+
+                    return ValueTask.FromResult(string.Equals(reference.Tenant, "tenant-acme", StringComparison.Ordinal)
+                        ? ComparisonOutcome.Holds
+                        : ComparisonOutcome.Fails);
+                }
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            rule,
+            mintedSubjectIdentifier: static idpIssuer => SubjectIdentifier.IssuerSubject(idpIssuer, SubjectIdentity),
+            mintedTenant: IssuerTenant).ConfigureAwait(false);
+
+        Assert.IsNotNull(recorded, body);
+        if(caseName == "equal")
+        {
+            Assert.AreEqual(200, statusCode, body);
+            AssertComparison(
+                recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Indeterminate, ComparisonBasis.None, ComparisonDecision.Permit);
+            Assert.AreEqual("tenant-acme", recorded.SubjectIdentifierComparison!.Reference.Tenant);
+        }
+        else if(caseName == "required")
+        {
+            Assert.AreEqual(400, statusCode, body);
+            Assert.AreEqual(JagRefusal, body);
+            Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierUndetermined, recorded.FailureReason);
+        }
+        else
+        {
+            Assert.AreEqual(200, statusCode, body);
+            AssertComparison(
+                recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Holds, ComparisonBasis.ApplicationRule, ComparisonDecision.Permit);
+            Assert.AreEqual("tenant-acme", observedTenant);
+        }
+    }
+
+
+    /// <summary>
+    /// A grant whose <c>tenant</c>, <c>aud_tenant</c> or <c>aud_sub</c> claim is present and is not a JSON
+    /// string with at least one character that is not white space is refused: a tenant relationship the server
+    /// cannot read is never taken for one the grant does not carry.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "tenant: OPTIONAL - JSON string that represents the tenant identifier for a multi-tenant issuer" and
+    /// "aud_tenant: OPTIONAL - A JSON string that represents a Resource Authorization Server tenant identifier";
+    /// the subject is scoped by the tenant: "A public subject identifier MUST be unique when scoped with issuer
+    /// (iss+sub) for a single-tenant issuer and MUST be unique when scoped with issuer and tenant
+    /// (iss+tenant+sub) for multi-tenant issuer." The same section names no JSON type for <c>aud_sub</c>
+    /// ("aud_sub: OPTIONAL - The Resource Authorization Server's identifier for the End-User as defined in
+    /// [OpenID.Enterprise]."). The JSON string of <c>tenant</c> and <c>aud_tenant</c> is the draft's; refusing a
+    /// present value of any of the three claims that is not a string with at least one character that is not
+    /// white space, the empty string included, is this library's fail-closed reading, and no sentence of
+    /// Section 3.1,
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// or
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-6.3">Section 6.3</see>
+    /// states that refusal.
+    /// </summary>
+    /// <param name="caseName">
+    /// The claim the grant carries: <c>tenantNumber</c>, <c>tenantEmpty</c>, <c>tenantObject</c>,
+    /// <c>audTenantNumber</c>, <c>audSubNumber</c>, <c>tenantWhiteSpace</c>, <c>audTenantWhiteSpace</c> or
+    /// <c>audSubWhiteSpace</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("tenantNumber", DisplayName = "a tenant that is a number")]
+    [DataRow("tenantEmpty", DisplayName = "a tenant that is an empty string")]
+    [DataRow("tenantObject", DisplayName = "a tenant that is an object")]
+    [DataRow("audTenantNumber", DisplayName = "an aud_tenant that is a number")]
+    [DataRow("audSubNumber", DisplayName = "an aud_sub that is a number")]
+    [DataRow("tenantWhiteSpace", DisplayName = "a tenant of white space only")]
+    [DataRow("audTenantWhiteSpace", DisplayName = "an aud_tenant of white space only")]
+    [DataRow("audSubWhiteSpace", DisplayName = "an aud_sub of white space only")]
+    public async Task AMalformedTenantRelationshipClaimIsRefusedAsync(string caseName)
+    {
+        (string ClaimName, object ClaimValue, IdJagValidationFailureReason Reason) malformed = caseName switch
+        {
+            "tenantNumber" => ("tenant", 5L, IdJagValidationFailureReason.MalformedTenant),
+            "tenantEmpty" => ("tenant", "", IdJagValidationFailureReason.MalformedTenant),
+            "tenantObject" => ("tenant", new Dictionary<string, object>(StringComparer.Ordinal), IdJagValidationFailureReason.MalformedTenant),
+            "audTenantNumber" => ("aud_tenant", 5L, IdJagValidationFailureReason.MalformedAudienceTenant),
+            "audSubNumber" => ("aud_sub", 5L, IdJagValidationFailureReason.MalformedAudienceSubject),
+            "tenantWhiteSpace" => ("tenant", " ", IdJagValidationFailureReason.MalformedTenant),
+            "audTenantWhiteSpace" => ("aud_tenant", " ", IdJagValidationFailureReason.MalformedAudienceTenant),
+            "audSubWhiteSpace" => ("aud_sub", " ", IdJagValidationFailureReason.MalformedAudienceSubject),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [malformed.ClaimName] = malformed.ClaimValue
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(malformed.Reason, recorded.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A grant whose <c>tenant</c> claim is present and unreadable is refused before its <c>sub_id</c> is
+    /// compared, so the library's own rule for a grant of a single-tenant issuer never decides it and the
+    /// application's association is not asked.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "A public subject identifier MUST be unique when scoped with issuer (iss+sub) for a single-tenant issuer
+    /// and MUST be unique when scoped with issuer and tenant (iss+tenant+sub) for multi-tenant issuer."
+    /// Refusing a present <c>tenant</c> that is not a JSON string with at least one character that is not white
+    /// space is this library's fail-closed reading; no sentence of Section 3.1,
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// or <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-6.3">Section 6.3</see>
+    /// states it.
+    /// </summary>
+    [TestMethod]
+    public async Task AGrantWithAMalformedTenantIsNeverDecidedByTheLibrarysOwnRuleAsync()
+    {
+        int associationCalls = 0;
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            _ => new IdJagSubjectIdentifierRule
+            {
+                Relation = ComparisonRelation.Equal,
+                Association = (candidate, reference, relation, cancellationToken) =>
+                {
+                    associationCalls++;
+
+                    return ValueTask.FromResult(ComparisonOutcome.Fails);
+                }
+            },
+            signedClaims: static idpIssuer => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["tenant"] = 5L,
+                ["sub_id"] = SubjectIdentifier.IssuerSubject(idpIssuer, SubjectIdentity).ToWireObject()
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedTenant, recorded.FailureReason);
+        Assert.IsNull(recorded.SubjectIdentifierComparison);
+        Assert.AreEqual(0, associationCalls);
+    }
+
+
+    /// <summary>
+    /// A server that requires the <c>sub_id</c> claim refuses a grant that carries none, and records no
+    /// comparison, since there is no claim to compare.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>:
+    /// "If the Resource Authorization Server requires a SAML NameID Subject Identifier for subject resolution,
+    /// it MUST reject the token request with an invalid_grant error as defined in Section 5.2 of [RFC6749] if
+    /// any of the following is true" and the first is "the ID-JAG does not contain a sub_id claim using the SAML
+    /// NameID Subject Identifier Format"
+    /// </summary>
+    [TestMethod]
+    public async Task ARequiredIdentifierThatIsAbsentIsRefusedAsync()
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule
+            {
+                Presence = IdJagSubjectIdentifierPresence.Required,
+                AcceptedFormats = new HashSet<string>(StringComparer.Ordinal) { "saml-nameid" }
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierRequired, recorded.FailureReason);
+        Assert.IsNull(recorded.SubjectIdentifierComparison);
+    }
+
+
+    /// <summary>
+    /// A server that requires the <c>sub_id</c> claim and supports only the SAML NameID format refuses an
+    /// identifier of another format.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>
+    /// refuses a grant when "the sub_id claim is malformed or uses a Subject Identifier Format that the Resource
+    /// Authorization Server does not support"
+    /// </summary>
+    [TestMethod]
+    public async Task ARequiredIdentifierOfAFormatTheServerDoesNotAcceptIsRefusedAsync()
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule
+            {
+                Presence = IdJagSubjectIdentifierPresence.Required,
+                AcceptedFormats = new HashSet<string>(StringComparer.Ordinal) { "saml-nameid" }
+            },
+            mintedSubjectIdentifier: static _ => SubjectIdentifier.Email("alice@example.com")).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.UnsupportedSubjectIdentifierFormat, recorded.FailureReason);
+        Assert.IsNull(recorded.SubjectIdentifierComparison);
+    }
+
+
+    /// <summary>
+    /// Where the <c>sub_id</c> claim is OPTIONAL and compared, an identifier of a format outside the formats the
+    /// server supports is surfaced and recorded undecided, basis none, and the application's association is not
+    /// asked: the server does not resolve subjects by that format, the identical <c>iss_sub</c> of the grant's
+    /// own subject included. Permitting the undecided comparison of an OPTIONAL claim is this library's rule.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>:
+    /// "The Resource Authorization Server MAY use sub_id for subject resolution when it supports the indicated
+    /// Subject Identifier Format."
+    /// </summary>
+    /// <param name="caseName">The identifier the grant carries: <c>email</c> or <c>grantSubject</c>.</param>
+    [TestMethod]
+    [DataRow("email", DisplayName = "an email identifier")]
+    [DataRow("grantSubject", DisplayName = "the iss_sub identifier of the grant's own subject")]
+    public async Task AnIdentifierOfAFormatTheRuleDoesNotAcceptIsUndecidedWhileOptionalAsync(string caseName)
+    {
+        int associationCalls = 0;
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            _ => new IdJagSubjectIdentifierRule
+            {
+                Relation = ComparisonRelation.Equal,
+                AcceptedFormats = new HashSet<string>(StringComparer.Ordinal) { "saml-nameid" },
+                Association = (candidate, reference, relation, cancellationToken) =>
+                {
+                    associationCalls++;
+
+                    return ValueTask.FromResult(ComparisonOutcome.Holds);
+                }
+            },
+            mintedSubjectIdentifier: idpIssuer => caseName switch
+            {
+                "email" => SubjectIdentifier.Email("alice@example.com"),
+                "grantSubject" => SubjectIdentifier.IssuerSubject(idpIssuer, SubjectIdentity),
+                _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.IsNotNull(recorded.SubjectIdentifier, "The claim is surfaced.");
+        Assert.AreEqual(caseName == "email" ? "email" : "iss_sub", recorded.SubjectIdentifier.Format);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Indeterminate, ComparisonBasis.None, ComparisonDecision.Permit);
+        Assert.AreEqual(0, associationCalls);
+    }
+
+
+    /// <summary>
+    /// Under the default rule an identifier of any format is surfaced as the claim carries it and judged by
+    /// nothing: the claim is OPTIONAL and the server uses it for subject resolution only in a format it
+    /// supports.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "The sub_id claim MAY be used to identify the same End-User as the sub claim using a different
+    /// identifier namespace from the ID-JAG iss and sub."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">Section 3.2.2</see>:
+    /// "The Resource Authorization Server MAY use sub_id for subject resolution when it supports the indicated
+    /// Subject Identifier Format."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-4.1">RFC 9493 Section 4.1</see>: "An
+    /// implementation MAY attempt to determine the JWT Subject from one claim and fall back to using the other
+    /// if it determines it does not understand the format of the first claim."
+    /// </summary>
+    [TestMethod]
+    public async Task TheDefaultRuleSurfacesAnIdentifierOfAnyFormatUnjudgedAsync()
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            mintedSubjectIdentifier: static _ => SubjectIdentifier.Email("alice@example.com")).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.IsNotNull(recorded.SubjectIdentifier, "The claim is surfaced.");
+        Assert.AreEqual("email", recorded.SubjectIdentifier.Format);
+        Assert.HasCount(1, recorded.SubjectIdentifier.Members);
+        Assert.AreEqual("alice@example.com", recorded.SubjectIdentifier.Members["email"]);
+        Assert.IsNull(recorded.SubjectIdentifierComparison);
+    }
+
+
+    /// <summary>
+    /// A <c>sub_id</c> that is not a Subject Identifier, or that breaks the rules of its known format, is
+    /// refused when the rule judges the claim.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>: "A Subject
+    /// Identifier MUST conform to a specific Identifier Format and MUST contain a "format" member whose value is
+    /// the name of that Identifier Format." and "Every member within a Subject Identifier MUST match the rules
+    /// specified for that member by this specification or by a Subject Identifier's Identifier Format. A
+    /// Subject Identifier MUST NOT contain any members prohibited or not described by its Identifier Format and
+    /// MUST contain all members required by its Identifier Format." The check covers the members present, their
+    /// JSON types, the members a format does not describe and the reserved <c>format</c> member, and the rules on
+    /// a member's value are the caller's, which <see cref="SubjectIdentifier.IsValidForKnownFormat"/> names.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the Resource Authorization Server uses the sub_id claim for subject resolution, it MUST process the
+    /// claim according to the indicated Subject Identifier Format. For SAML NameID subject identifiers, the
+    /// Resource Authorization Server MUST apply the processing rules in Section 3.2.2."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">RFC 9493 Section 3.2.8</see>: "Subject
+    /// Identifiers in this format MUST contain an "identifiers" member whose value is a JSON array containing one
+    /// or more Subject Identifiers." and ""aliases" Subject Identifiers MUST NOT be nested, i.e., the
+    /// "identifiers" member of an "aliases" Subject Identifier MUST NOT contain a Subject Identifier in the
+    /// Aliases Identifier Format."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>:
+    /// "A Subject Identifier in this format MUST contain:" <c>format</c>, <c>issuer</c> and <c>nameid</c>, and
+    /// "nameid_format: A JSON string containing the value of the Format attribute on the SAML Assertion Subject
+    /// &lt;NameID&gt; as defined in [OASIS.saml-core-2.0-os]."
+    /// </summary>
+    /// <param name="caseName">
+    /// The claim value: <c>aString</c>, <c>anArray</c>, <c>anEmptyObject</c>, <c>anUndescribedMember</c>,
+    /// <c>aNestedAliases</c>, <c>anEmptyAliases</c>, <c>aSamlNameIdWithoutNameId</c>,
+    /// <c>aSamlNameIdWithANumericFormat</c> or <c>aSamlNameIdWithAnUndescribedMember</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("aString", DisplayName = "a JSON string")]
+    [DataRow("anArray", DisplayName = "a JSON array")]
+    [DataRow("anEmptyObject", DisplayName = "an object without format")]
+    [DataRow("anUndescribedMember", DisplayName = "an iss_sub with a member its format does not describe")]
+    [DataRow("aNestedAliases", DisplayName = "an aliases identifier whose one element is an aliases identifier")]
+    [DataRow("anEmptyAliases", DisplayName = "an aliases identifier with an empty identifiers array")]
+    [DataRow("aSamlNameIdWithoutNameId", DisplayName = "a saml-nameid identifier without nameid")]
+    [DataRow("aSamlNameIdWithANumericFormat", DisplayName = "a saml-nameid identifier whose nameid_format is a number")]
+    [DataRow("aSamlNameIdWithAnUndescribedMember", DisplayName = "a saml-nameid identifier with a member its format does not describe")]
+    public async Task AMalformedIdentifierIsRefusedWhenTheRuleJudgesItAsync(string caseName)
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            signedClaims: idpIssuer => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["sub_id"] = MalformedSubId(caseName, idpIssuer)
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedSubjectIdentifier, recorded.FailureReason);
+        Assert.IsNull(recorded.SubjectIdentifierComparison);
+    }
+
+
+    /// <summary>
+    /// Under the default rule a <c>sub_id</c> that is not a Subject Identifier, or that breaks the rules of its
+    /// known format, does not refuse the grant and is surfaced as absent, so no reader of the result takes it
+    /// for a Subject Identifier.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>: "Every member
+    /// within a Subject Identifier MUST match the rules specified for that member by this specification or by a
+    /// Subject Identifier's Identifier Format. A Subject Identifier MUST NOT contain any members prohibited or
+    /// not described by its Identifier Format and MUST contain all members required by its Identifier Format."
+    /// The check covers the members present, their JSON types, the members a format does not describe and the
+    /// reserved <c>format</c> member, and the rules on a member's value are the caller's, which
+    /// <see cref="SubjectIdentifier.IsValidForKnownFormat"/> names.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-4.1">RFC 9493 Section 4.1</see>: "An
+    /// implementation MAY attempt to determine the JWT Subject from one claim and fall back to using the other
+    /// if it determines it does not understand the format of the first claim."
+    /// </summary>
+    /// <param name="caseName">
+    /// The claim value: <c>aString</c>, <c>anUndescribedMember</c>, <c>aSamlNameIdWithANumericFormat</c> or
+    /// <c>aSamlNameIdWithAnUndescribedMember</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("aString", DisplayName = "a JSON string")]
+    [DataRow("anUndescribedMember", DisplayName = "an iss_sub with a member its format does not describe")]
+    [DataRow("aSamlNameIdWithANumericFormat", DisplayName = "a saml-nameid identifier whose nameid_format is a number")]
+    [DataRow("aSamlNameIdWithAnUndescribedMember", DisplayName = "a saml-nameid identifier with a member its format does not describe")]
+    public async Task AMalformedIdentifierIsSurfacedAsAbsentUnderTheDefaultRuleAsync(string caseName)
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: idpIssuer => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["sub_id"] = MalformedSubId(caseName, idpIssuer)
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.IsNull(recorded.SubjectIdentifier);
+        Assert.IsNull(recorded.SamlNameIdSubjectIdentifier);
+        Assert.IsNull(recorded.SubjectIdentifierComparison);
+    }
+
+
+    /// <summary>
+    /// A grant the server cannot verify is refused before its <c>sub_id</c> is read: the claim, however well
+    /// formed and however a SAML NameID identifier it names, never establishes trust in the grant's issuer, so
+    /// the application's association is not asked. The grant is signed under signing material the server's
+    /// resolver of signing material does not know; the fixture's redeem seam resolves the signing material before it validates any
+    /// claim, so no validation result is recorded. What the row proves is the order: the application's
+    /// validation of the grant's signature runs before the library reads any claim, so a grant the server
+    /// cannot verify reaches neither the <c>sub_id</c> rule nor the association. That order is the application's
+    /// validation delegate's (the fixture's delegate here), as is the trust in the grant's issuer.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 9.5</see>:
+    /// "When the ID-JAG includes a sub_id claim, the Resource Authorization Server MUST NOT use the
+    /// sub_id.issuer value to establish trust in the ID-JAG issuer. The ID-JAG MUST first be validated using the
+    /// iss claim, signature, audience, expiration, and client binding according to this specification."
+    /// </summary>
+    [TestMethod]
+    public async Task AGrantTheServerCannotVerifyIsRefusedBeforeItsSubIdIsReadAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> unknownKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory unknownPublicKey = unknownKeys.PublicKey;
+        using PrivateKeyMemory unknownPrivateKey = unknownKeys.PrivateKey;
+
+        int associationCalls = 0;
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            idpIssuer => new IdJagSubjectIdentifierRule
+            {
+                Presence = IdJagSubjectIdentifierPresence.Required,
+                AcceptedFormats = new HashSet<string>(StringComparer.Ordinal) { "saml-nameid" },
+                Association = (candidate, reference, relation, cancellationToken) =>
+                {
+                    _ = Interlocked.Increment(ref associationCalls);
+
+                    return ConfiguredSamlAssociation(idpIssuer)(candidate, reference, relation, cancellationToken);
+                }
+            },
+            signedClaims: static _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["sub_id"] = ConfiguredSamlIdentifier.ToSubjectIdentifier().ToWireObject()
+            },
+            signingMaterial: unknownPrivateKey).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNull(recorded, "The grant is refused before any claim is validated.");
+        Assert.AreEqual(0, associationCalls);
+    }
+
+
+    /// <summary>
+    /// A <c>sub</c> of white space only identifies no principal, so the grant is refused as missing its
+    /// subject before any <c>sub_id</c> rule runs, and no comparison is recorded.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>, item 2: "The JWT
+    /// MUST contain a "sub" (subject) claim identifying the principal that is the subject of the JWT." Reading
+    /// a white-space value as identifying no principal is this library's reading of "identifying the
+    /// principal": its token factories refuse a white-space subject.
+    /// </summary>
+    [TestMethod]
+    public async Task AWhiteSpaceSubjectIsRefusedAsAValueNotAFaultAsync()
+    {
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.Equal },
+            signedClaims: static idpIssuer => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["sub"] = " ",
+                ["sub_id"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["format"] = "iss_sub",
+                    ["iss"] = idpIssuer,
+                    ["sub"] = " "
+                }
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(IdJagValidationFailureReason.MissingSubject, recorded.FailureReason);
+        Assert.IsNull(recorded.SubjectIdentifierComparison);
+    }
+
+
+    /// <summary>
+    /// A rule naming a relation the <c>sub_id</c> profile does not define decides nothing and asks nobody: the
+    /// comparison is undecided without calling the association, which redeems the grant under the OPTIONAL
+    /// claim and refuses it where the claim is required.
+    /// <see href="https://github.com/pic-protocol/pic-spec/blob/35b1d904aebf9438b0f25d7465d1d0b965d6656b/draft/0.2/rfc/pic-prover-verifier-spec.txt">PIC Prover and Verifier (pic-prover-verifier-02) Section 4.2</see>:
+    /// "Every profile that introduces an authority representation MUST define its syntax, its equivalence
+    /// relation, its attenuation order" and "a deterministic comparison sufficient for non-expansion
+    /// validation." The same section: "a Verifier MUST reject a PCA whose profile is unknown or does not define
+    /// a deterministic comparison." Redeeming the grant in the optional case is this library's rule for the
+    /// OPTIONAL claim of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>,
+    /// where it does not follow that sentence; <see cref="IdJagSubjectIdentifierRule.Presence"/> states the
+    /// choice.
+    /// </summary>
+    /// <param name="caseName">The rule: <c>optional</c> or <c>requiredWithAssociation</c>.</param>
+    [TestMethod]
+    [DataRow("optional", DisplayName = "an optional claim compared under a subset relation")]
+    [DataRow("requiredWithAssociation", DisplayName = "a required claim compared under a subset relation with an association")]
+    public async Task ARuleNamingAComparisonTheFormatDoesNotDefineDecidesNothingAsync(string caseName)
+    {
+        int associationCalls = 0;
+        Func<string, IdJagSubjectIdentifierRule> rule = caseName switch
+        {
+            "optional" => static _ => new IdJagSubjectIdentifierRule { Relation = ComparisonRelation.SubsetOf },
+            "requiredWithAssociation" => idpIssuer => new IdJagSubjectIdentifierRule
+            {
+                Presence = IdJagSubjectIdentifierPresence.Required,
+                Relation = ComparisonRelation.SubsetOf,
+                Association = (candidate, reference, relation, cancellationToken) =>
+                {
+                    _ = Interlocked.Increment(ref associationCalls);
+
+                    return ValueTask.FromResult(ComparisonOutcome.Holds);
+                }
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            rule,
+            mintedSubjectIdentifier: static idpIssuer => SubjectIdentifier.IssuerSubject(idpIssuer, SubjectIdentity)).ConfigureAwait(false);
+
+        Assert.IsNotNull(recorded, body);
+        if(caseName == "optional")
+        {
+            Assert.AreEqual(200, statusCode, body);
+            AssertComparison(
+                recorded.SubjectIdentifierComparison, ComparisonRelation.SubsetOf, ComparisonOutcome.Indeterminate, ComparisonBasis.None, ComparisonDecision.Permit);
+        }
+        else
+        {
+            Assert.AreEqual(400, statusCode, body);
+            Assert.AreEqual(JagRefusal, body);
+            Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierUndetermined, recorded.FailureReason);
+            Assert.AreEqual(0, associationCalls);
+        }
+    }
+
+
+    /// <summary>
+    /// Section 9.5: the <c>sub_id.issuer</c> (a SAML issuer) MUST NOT establish trust in the ID-JAG issuer. A JAG
+    /// whose <c>sub_id</c> names an unrelated SAML issuer validates on its own <c>iss</c>, and the
     /// validator surfaces the SAML issuer separately (distinct from the ID-JAG <c>iss</c>) so the Resource
-    /// Authorization Server can perform the §9.5 association check itself.
+    /// Authorization Server can perform the Section 9.5 association check itself.
     /// </summary>
     [TestMethod]
     public async Task RedeemDoesNotEstablishTrustFromSubIdIssuer()
@@ -3766,7 +4661,7 @@ internal sealed class IdJagGrantTests
                             Subject = subject.Subject,
                             Scope = ChatScope,
                             IssuedTokenType = TokenType.IdJag,
-                            SubjectIdentifier = new SamlNameIdSubjectIdentifier { Issuer = UnrelatedSamlIssuer, NameId = SamlNameId }
+                            SubjectIdentifier = new SamlNameIdSubjectIdentifier { Issuer = UnrelatedSamlIssuer, NameId = SamlNameId }.ToSubjectIdentifier()
                         });
         }).ConfigureAwait(false);
 
@@ -3789,15 +4684,378 @@ internal sealed class IdJagGrantTests
         //Trust came from the ID-JAG iss (the IdP), not the sub_id.issuer (an unrelated SAML issuer).
         Assert.IsTrue(result.IsValid, result.FailureDescription);
         Assert.AreEqual(idpIssuer, result.Issuer);
-        Assert.AreEqual(UnrelatedSamlIssuer, result.SubjectIdentifier!.Issuer);
-        Assert.AreNotEqual(result.Issuer, result.SubjectIdentifier.Issuer, "§9.5: the SAML issuer is not the ID-JAG issuer.");
+        Assert.AreEqual(UnrelatedSamlIssuer, result.SamlNameIdSubjectIdentifier!.Issuer);
+        Assert.AreNotEqual(result.Issuer, result.SamlNameIdSubjectIdentifier.Issuer, "Section 9.5: the SAML issuer is not the ID-JAG issuer.");
     }
 
 
     /// <summary>
-    /// §4.5: a SAML 2.0 Assertion is accepted as the <c>subject_token</c> (<c>subject_token_type</c> =
-    /// the saml2 URN) for an ID-JAG mint. The §4.5 MUST that the SAML Audience / SPEntityID map to the
-    /// authenticated client is enforced by the validation seam — an assertion bound to this client mints;
+    /// The minted grant's <c>sub_id</c> is the Issuer and Subject identifier the authorization seam chose.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "sub_id: OPTIONAL - Subject Identifier as defined in [RFC9493]. The sub_id claim MAY be used to
+    /// identify the same End-User as the sub claim using a different identifier namespace from the ID-JAG
+    /// iss and sub."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.3">RFC 9493 Section 3.2.3</see>:
+    /// "Both the "iss" member and the "sub" member are REQUIRED and MUST NOT be null or empty. The Issuer
+    /// and Subject Identifier Format is identified by the name "iss_sub"."
+    /// </summary>
+    [TestMethod]
+    public async Task MintEmitsAnIssSubSubjectIdentifierTheSeamChoseAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(
+            app,
+            ChatScope,
+            resourceClientId: null,
+            subjectIdentifier: SubjectIdentifier.IssuerSubject("https://other-idp.example", "alice-at-other")).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(jag);
+        Assert.IsTrue(payload.RootElement.TryGetProperty("sub_id", out JsonElement subId), "The grant carries the sub_id the seam chose.");
+
+        Assert.HasCount(3, subId.EnumerateObject());
+        Assert.AreEqual("iss_sub", subId.GetProperty("format").GetString());
+        Assert.AreEqual("https://other-idp.example", subId.GetProperty("iss").GetString());
+        Assert.AreEqual("alice-at-other", subId.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// A seam that chooses an identifier that is not well formed, one of a format the library recognizes that
+    /// breaks the member rules of that format or one whose format is blank, is answered <c>server_error</c> and
+    /// no grant is minted: the identifier is the server's own defect, not the request's, which is a rule of this
+    /// library.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>: "Every
+    /// member within a Subject Identifier MUST match the rules specified for that member by this
+    /// specification or by a Subject Identifier's Identifier Format. A Subject Identifier MUST NOT contain
+    /// any members prohibited or not described by its Identifier Format and MUST contain all members
+    /// required by its Identifier Format." The check covers the members present, their JSON types, the members a
+    /// format does not describe and the reserved <c>format</c> member, and the rules on a member's value are the
+    /// caller's, which <see cref="SubjectIdentifier.IsValidForKnownFormat"/> names.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.3">RFC 9493 Section 3.2.3</see>:
+    /// "Both the "iss" member and the "sub" member are REQUIRED and MUST NOT be null or empty."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>: "A Subject
+    /// Identifier MUST conform to a specific Identifier Format and MUST contain a "format" member whose value is
+    /// the name of that Identifier Format." An empty or white-space format names no format. The refusal comes
+    /// before the grant's <c>jti</c> is generated, so no grant identifier is spent on a refused identifier; that
+    /// order is this library's.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>: "The "format"
+    /// member is reserved for use as described in this specification; Identifier Formats MUST NOT declare any
+    /// rules regarding the "format" member." A known-format identifier whose members also hold an entry named
+    /// <c>format</c> carries a member the format does not describe.
+    /// </summary>
+    /// <param name="caseName">
+    /// Which identifier the seam chooses: <c>issSubWithoutSub</c>, <c>issSubWithUndescribedMember</c>,
+    /// <c>emptyFormat</c>, <c>whiteSpaceFormat</c> or <c>emailWithAFormatMember</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("issSubWithoutSub", DisplayName = "an iss_sub identifier without sub")]
+    [DataRow("issSubWithUndescribedMember", DisplayName = "an iss_sub identifier with a member its format does not describe")]
+    [DataRow("emptyFormat", DisplayName = "an identifier whose format is empty")]
+    [DataRow("whiteSpaceFormat", DisplayName = "an identifier whose format is white space")]
+    [DataRow("emailWithAFormatMember", DisplayName = "an email identifier whose members also hold an entry named format")]
+    public async Task MintRefusesAKnownFormatIdentifierBreakingItsFormatAsync(string caseName)
+    {
+        SubjectIdentifier identifier = caseName switch
+        {
+            "emailWithAFormatMember" => new SubjectIdentifier
+            {
+                Format = "email",
+                Members = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["email"] = "alice@example.com",
+                    ["format"] = "email"
+                }
+            },
+            "emptyFormat" => new SubjectIdentifier
+            {
+                Format = "",
+                Members = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["handle"] = "a-7"
+                }
+            },
+            "whiteSpaceFormat" => new SubjectIdentifier
+            {
+                Format = " ",
+                Members = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["handle"] = "a-7"
+                }
+            },
+            "issSubWithoutSub" => new SubjectIdentifier
+            {
+                Format = "iss_sub",
+                Members = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["iss"] = "https://other-idp.example"
+                }
+            },
+            "issSubWithUndescribedMember" => new SubjectIdentifier
+            {
+                Format = "iss_sub",
+                Members = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["iss"] = "https://other-idp.example",
+                    ["sub"] = "alice-at-other",
+                    ["email"] = "alice@other-idp.example"
+                }
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertTheMintAnswersNotReadyAsync(subjectIdentifier: identifier).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An authorization seam that supplies a <c>tenant</c>, an <c>aud_tenant</c> or an <c>aud_sub</c> of white
+    /// space only is answered <c>server_error</c> and no grant is minted, and the refusal comes before the grant's
+    /// <c>jti</c> is generated: the value is the seam's own defect, and a grant carrying it is one this library's
+    /// redeem refuses. The rule is this library's; no sentence of a specification states it.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>
+    /// defines the claims: "tenant: OPTIONAL - JSON string that represents the tenant identifier for a
+    /// multi-tenant issuer", "aud_tenant: OPTIONAL - A JSON string that represents a Resource Authorization
+    /// Server tenant identifier" and "aud_sub: OPTIONAL - The Resource Authorization Server's identifier for the
+    /// End-User as defined in [OpenID.Enterprise]."
+    /// </summary>
+    /// <param name="caseName">
+    /// Which value the seam supplies: <c>tenant</c>, <c>audTenant</c> or <c>audSub</c>, each a single space.
+    /// </param>
+    [TestMethod]
+    [DataRow("tenant", DisplayName = "a tenant of white space only")]
+    [DataRow("audTenant", DisplayName = "an aud_tenant of white space only")]
+    [DataRow("audSub", DisplayName = "an aud_sub of white space only")]
+    public async Task MintRefusesAWhiteSpaceTenantRelationshipValueFromTheSeamAsync(string caseName)
+    {
+        (string? Tenant, string? AudienceTenant, string? AudienceSubject) supplied = caseName switch
+        {
+            "tenant" => (" ", null, null),
+            "audTenant" => (null, " ", null),
+            "audSub" => (null, null, " "),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertTheMintAnswersNotReadyAsync(
+            tenant: supplied.Tenant,
+            audienceTenant: supplied.AudienceTenant,
+            audienceSubject: supplied.AudienceSubject).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An authorization seam that supplies a <c>tenant</c>, an <c>aud_tenant</c> and an <c>aud_sub</c> that are
+    /// all empty is answered 200 and the minted grant carries none of the three claims.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "tenant: OPTIONAL - JSON string that represents the tenant identifier for a multi-tenant issuer".
+    /// Omitting a claim whose value the seam leaves empty is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task MintOmitsATenantRelationshipValueThatIsEmptyAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(
+            app,
+            ChatScope,
+            resourceClientId: null,
+            tenant: "",
+            audienceTenant: "",
+            audienceSubject: "").ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(jag);
+        Assert.IsFalse(payload.RootElement.TryGetProperty("tenant", out _), "An empty tenant is omitted.");
+        Assert.IsFalse(payload.RootElement.TryGetProperty("aud_tenant", out _), "An empty aud_tenant is omitted.");
+        Assert.IsFalse(payload.RootElement.TryGetProperty("aud_sub", out _), "An empty aud_sub is omitted.");
+    }
+
+
+    /// <summary>
+    /// Mints over the loopback listener with an authorization seam that supplies the given values and asserts
+    /// that nothing is minted: the answer is 500 with the <c>server_error</c> object alone, carrying the fixed
+    /// description, and the host's identifier seam is asked for no grant identifier.
+    /// </summary>
+    /// <param name="subjectIdentifier">The <c>sub_id</c> identifier the seam supplies, or <see langword="null"/> for none.</param>
+    /// <param name="tenant">The issuer <c>tenant</c> the seam supplies, or <see langword="null"/> for none.</param>
+    /// <param name="audienceTenant">The <c>aud_tenant</c> the seam supplies, or <see langword="null"/> for none.</param>
+    /// <param name="audienceSubject">The <c>aud_sub</c> the seam supplies, or <see langword="null"/> for none.</param>
+    private async Task AssertTheMintAnswersNotReadyAsync(
+        SubjectIdentifier? subjectIdentifier = null,
+        string? tenant = null,
+        string? audienceTenant = null,
+        string? audienceSubject = null)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(
+            app,
+            ChatScope,
+            resourceClientId: null,
+            subjectIdentifier: subjectIdentifier,
+            tenant: tenant,
+            audienceTenant: audienceTenant,
+            audienceSubject: audienceSubject).ConfigureAwait(false);
+
+        //The host's identifier seam counts the grant identifiers it is asked for.
+        int grantIdentifierCalls = 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
+            candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
+            {
+                if(purpose.Equals(WellKnownIdentifierPurposes.OAuthJti))
+                {
+                    grantIdentifierCalls++;
+                }
+
+                return original(purpose, context, ct);
+            };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, (int)response.StatusCode, body);
+
+        //The body is the error object alone: no access_token member carries a grant.
+        using JsonDocument doc = JsonDocument.Parse(body);
+        JsonElement root = doc.RootElement;
+        Assert.HasCount(2, root.EnumerateObject());
+        Assert.AreEqual("server_error", root.GetProperty("error").GetString());
+        Assert.AreEqual("The server is not ready to serve this request.", root.GetProperty("error_description").GetString());
+        Assert.AreEqual(0, grantIdentifierCalls, "No grant identifier is generated for a refused value of the seam.");
+    }
+
+
+    /// <summary>
+    /// A <c>sub_id</c> placed among the additional claims the seam supplies does not reach the grant: the
+    /// claim is the one draft-ietf-oauth-identity-assertion-authz-grant-04
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>
+    /// defines, "sub_id: OPTIONAL - Subject Identifier as defined in [RFC9493].", and the mint writes it
+    /// only from the identifier the seam chooses, which is a rule of this library.
+    /// </summary>
+    [TestMethod]
+    public async Task MintIgnoresASubIdSmuggledThroughAdditionalClaimsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = ChatScope,
+                            IssuedTokenType = TokenType.IdJag,
+                            AdditionalClaims = new Dictionary<string, object>(StringComparer.Ordinal)
+                            {
+                                ["sub_id"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                                {
+                                    ["format"] = "email",
+                                    ["email"] = "a@example.com"
+                                }
+                            }
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(jag);
+        Assert.IsFalse(payload.RootElement.TryGetProperty("sub_id", out _), "A sub_id among the additional claims does not reach the grant.");
+    }
+
+
+    /// <summary>
+    /// An identifier of a format the library does not recognize is written to the grant's <c>sub_id</c>
+    /// as the seam gave it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>: "Every
+    /// Identifier Format MUST have a unique name registered in the IANA "Security Event Identifier Formats"
+    /// registry established in Section 8.1 or a Collision-Resistant Name as defined in [RFC7519]."
+    /// </summary>
+    [TestMethod]
+    public async Task MintWritesAnUnknownFormatAsGivenAsync()
+    {
+        SubjectIdentifier identifier = new()
+        {
+            Format = "urn:example:subject-format",
+            Members = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["handle"] = "a-7"
+            }
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null, subjectIdentifier: identifier).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(jag);
+        Assert.IsTrue(payload.RootElement.TryGetProperty("sub_id", out JsonElement subId), "The grant carries the sub_id the seam chose.");
+
+        Assert.HasCount(2, subId.EnumerateObject());
+        Assert.AreEqual("urn:example:subject-format", subId.GetProperty("format").GetString());
+        Assert.AreEqual("a-7", subId.GetProperty("handle").GetString());
+    }
+
+
+    /// <summary>
+    /// Section 4.5: a SAML 2.0 Assertion is accepted as the <c>subject_token</c> (<c>subject_token_type</c> =
+    /// the saml2 URN) for an ID-JAG mint. The Section 4.5 MUST that the SAML Audience / SPEntityID map to the
+    /// authenticated client is enforced by the validation seam: an assertion bound to this client mints;
     /// one bound to a different SP is rejected with <c>invalid_grant</c>.
     /// </summary>
     [TestMethod]
@@ -3807,7 +5065,7 @@ internal sealed class IdJagGrantTests
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
 
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
-        //The seam models §4.5: it accepts the SAML assertion only when its Audience (the SP entity id,
+        //The seam models Section 4.5: it accepts the SAML assertion only when its Audience (the SP entity id,
         //here stood in for by the subject_token value) maps to the authenticated client.
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
@@ -3827,7 +5085,7 @@ internal sealed class IdJagGrantTests
         HttpClient http = host.SharedHttpClient!;
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        //SAML Audience maps to the authenticated client → mints.
+        //SAML Audience maps to the authenticated client, so the grant is minted.
         using HttpResponseMessage matched = await PostSamlMintAsync(http, tokenUrl, ClientId).ConfigureAwait(false);
         string matchedBody = await matched.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)matched.StatusCode, matchedBody);
@@ -3836,7 +5094,7 @@ internal sealed class IdJagGrantTests
         using JsonDocument jagPayload = DecodePayload(jag);
         Assert.AreEqual(SubjectIdentity, jagPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
 
-        //SAML Audience maps to a different SP → invalid_grant (§4.5 mapping MUST).
+        //SAML Audience maps to a different SP, so the answer is invalid_grant (Section 4.5 mapping MUST).
         using HttpResponseMessage mismatched = await PostSamlMintAsync(http, tokenUrl, "https://other-sp.example").ConfigureAwait(false);
         string mismatchedBody = await mismatched.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)mismatched.StatusCode, mismatchedBody);
@@ -3845,7 +5103,7 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
-    /// Wires the mint seams so the authorization step supplies the §3.2 SAML NameID Subject Identifier
+    /// Wires the mint seams so the authorization step supplies the Section 3.2 SAML NameID Subject Identifier
     /// (<see cref="SamlSubjectId"/>) on the issued ID-JAG.
     /// </summary>
     private static async Task WireSamlSubjectIdMintSeamsAsync(TestHostShell app)
@@ -3868,7 +5126,7 @@ internal sealed class IdJagGrantTests
                             Subject = subject.Subject,
                             Scope = ChatScope,
                             IssuedTokenType = TokenType.IdJag,
-                            SubjectIdentifier = SamlSubjectId
+                            SubjectIdentifier = SamlSubjectId.ToSubjectIdentifier()
                         });
         }).ConfigureAwait(false);
     }
@@ -3876,7 +5134,7 @@ internal sealed class IdJagGrantTests
 
     /// <summary>
     /// Posts a Token Exchange that uses a SAML 2.0 Assertion as the <c>subject_token</c>
-    /// (<c>subject_token_type</c> = the saml2 URN) requesting an ID-JAG (§4.5).
+    /// (<c>subject_token_type</c> = the saml2 URN) requesting an ID-JAG (Section 4.5).
     /// </summary>
     private Task<HttpResponseMessage> PostSamlMintAsync(HttpClient http, Uri tokenUrl, string subjectToken) =>
         OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
@@ -3892,7 +5150,7 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
-    /// §3.1: an ID-JAG MAY carry optional ID Token identity claims. When the authorization seam supplies
+    /// Section 3.1: an ID-JAG MAY carry optional ID Token identity claims. When the authorization seam supplies
     /// <c>auth_time</c> / <c>acr</c> / <c>amr</c> / <c>email</c> (the latter RECOMMENDED), the minted JAG
     /// carries them verbatim (string, numeric, and array shapes alike).
     /// </summary>
@@ -5129,7 +6387,10 @@ internal sealed class IdJagGrantTests
 
     /// <summary>
     /// Signs an ID-JAG whose <c>act</c>/<c>may_act</c> claim values are set directly, bypassing the
-    /// mint so a value RFC 8693 §4.1/§4.4 does not define can reach the redeem path as wire bytes.
+    /// mint so a value <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 Section 4.1</see>
+    /// / <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">Section 4.4</see> does not define can
+    /// reach the redeem path as wire bytes; the
+    /// claims builder <see cref="BuildIdJagWithClaimsAsync"/> signs it.
     /// </summary>
     /// <param name="signingKey">The IdP signing key.</param>
     /// <param name="keyId">The <c>kid</c> the Resource Authorization Server resolves the key by.</param>
@@ -5137,36 +6398,65 @@ internal sealed class IdJagGrantTests
     /// <param name="actor">The raw <c>act</c> claim value, or <see langword="null"/> to omit it.</param>
     /// <param name="authorizedActor">The raw <c>may_act</c> claim value, or <see langword="null"/> to omit it.</param>
     /// <returns>The compact JWS.</returns>
-    private async Task<string> BuildIdJagWithActorClaimsAsync(
+    private Task<string> BuildIdJagWithActorClaimsAsync(
         PrivateKeyMemory signingKey,
         string keyId,
         string issuer,
         object? actor,
         object? authorizedActor)
     {
+        Dictionary<string, object> claims = new(StringComparer.Ordinal);
+        if(actor is not null)
+        {
+            claims[WellKnownJwtClaimNames.Act] = actor;
+        }
+
+        if(authorizedActor is not null)
+        {
+            claims[WellKnownJwtClaimNames.MayAct] = authorizedActor;
+        }
+
+        return BuildIdJagWithClaimsAsync(signingKey, keyId, issuer, claims);
+    }
+
+
+    /// <summary>
+    /// Signs an ID-JAG outside the mint, under the host's published signing key, so a claim value the
+    /// mint never produces reaches the redeem path as wire bytes. The grant carries the claims every
+    /// redeem requires (<c>iss</c>, <c>sub</c>, <c>aud</c>, <c>client_id</c>, a fresh <c>jti</c>,
+    /// <c>iat</c>, <c>exp</c> and <c>scope</c>), and each entry of <paramref name="claims"/> is added or
+    /// replaces the claim of its name: <c>sub</c>, <c>sub_id</c>, <c>tenant</c>, <c>resource</c>,
+    /// <c>act</c> or <c>may_act</c>.
+    /// </summary>
+    /// <param name="signingKey">The IdP signing key.</param>
+    /// <param name="keyId">The <c>kid</c> the Resource Authorization Server resolves the signing key by.</param>
+    /// <param name="issuer">The IdP issuer identifier.</param>
+    /// <param name="claims">The claims to add or replace, by name, with their raw values.</param>
+    /// <returns>The compact JWS.</returns>
+    private async Task<string> BuildIdJagWithClaimsAsync(
+        PrivateKeyMemory signingKey,
+        string keyId,
+        string issuer,
+        IReadOnlyDictionary<string, object> claims)
+    {
         DateTimeOffset now = TimeProvider.GetUtcNow();
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
         JwtHeader header = JwtHeader.ForSigning(algorithm, "oauth-id-jag+jwt", keyId);
-        JwtPayload payload = new(capacity: 10)
+        JwtPayload payload = new(capacity: 8 + claims.Count)
         {
             [WellKnownJwtClaimNames.Iss] = issuer,
             [WellKnownJwtClaimNames.Sub] = SubjectIdentity,
             [WellKnownJwtClaimNames.Aud] = ResourceAsIssuer,
             [WellKnownJwtClaimNames.ClientId] = ClientId,
-            [WellKnownJwtClaimNames.Jti] = $"actor-shape-jag-{Guid.NewGuid():N}",
+            [WellKnownJwtClaimNames.Jti] = $"claims-jag-{Guid.NewGuid():N}",
             [WellKnownJwtClaimNames.Iat] = now.AddMinutes(-1).ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = now.AddMinutes(5).ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Scope] = WellKnownScopes.OpenId
         };
 
-        if(actor is not null)
+        foreach(KeyValuePair<string, object> claim in claims)
         {
-            payload[WellKnownJwtClaimNames.Act] = actor;
-        }
-
-        if(authorizedActor is not null)
-        {
-            payload[WellKnownJwtClaimNames.MayAct] = authorizedActor;
+            payload[claim.Key] = claim.Value;
         }
 
         UnsignedJwt unsigned = new(header, payload);
@@ -5538,8 +6828,29 @@ internal sealed class IdJagGrantTests
         }).ConfigureAwait(false);
 
 
-    /// <summary>Installs the authorization operation on the editable candidate.</summary>
-    private static void WireIdJagAuthorization(AuthorizationServerIntegration candidateIntegration, string grantedScope, string? resourceClientId)
+    /// <summary>
+    /// Installs on the editable candidate an authorization operation that selects the id-jag issued type
+    /// for the validated subject with the given granted scope and, when supplied, the resource
+    /// <c>client_id</c>, the <c>sub_id</c> identifier, the issuer <c>tenant</c>, the granted
+    /// <c>resource</c> entries, the <c>aud_tenant</c> and the <c>aud_sub</c>.
+    /// </summary>
+    /// <param name="candidateIntegration">The editable candidate the operation is installed on.</param>
+    /// <param name="grantedScope">The scope the grant carries.</param>
+    /// <param name="resourceClientId">The <c>client_id</c> at the Resource Authorization Server, or <see langword="null"/> for the requesting client.</param>
+    /// <param name="subjectIdentifier">The <c>sub_id</c> identifier the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="tenant">The issuer <c>tenant</c> the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="resource">The granted <c>resource</c> entries, or <see langword="null"/> for none.</param>
+    /// <param name="audienceTenant">The <c>aud_tenant</c> the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="audienceSubject">The <c>aud_sub</c> the grant carries, or <see langword="null"/> for none.</param>
+    private static void WireIdJagAuthorization(
+        AuthorizationServerIntegration candidateIntegration,
+        string grantedScope,
+        string? resourceClientId,
+        SubjectIdentifier? subjectIdentifier = null,
+        string? tenant = null,
+        IReadOnlyList<string>? resource = null,
+        string? audienceTenant = null,
+        string? audienceSubject = null)
     {
         candidateIntegration.AuthorizeTokenExchangeAsync =
             (subject, actor, request, registration, context, ct) =>
@@ -5549,7 +6860,12 @@ internal sealed class IdJagGrantTests
                         Subject = subject.Subject,
                         Scope = grantedScope,
                         IssuedTokenType = TokenType.IdJag,
-                        ResourceClientId = resourceClientId
+                        ResourceClientId = resourceClientId,
+                        SubjectIdentifier = subjectIdentifier,
+                        Tenant = tenant,
+                        AudienceTenant = audienceTenant,
+                        AudienceSubject = audienceSubject,
+                        Resource = resource ?? []
                     });
     }
 
@@ -5557,9 +6873,25 @@ internal sealed class IdJagGrantTests
     /// <summary>
     /// Wires the three mint seams: client authentication, a subject-token validation that accepts the
     /// fixture's Identity Assertion and surfaces its subject, and an authorization seam that selects the
-    /// id-jag issued type with the given granted scope and (optional) resource client_id.
+    /// id-jag issued type with the given granted scope, (optional) resource client_id, (optional)
+    /// <c>sub_id</c> identifier, (optional) issuer <c>tenant</c>, (optional) <c>aud_tenant</c> and (optional)
+    /// <c>aud_sub</c>.
     /// </summary>
-    private static async Task WireMintSeamsAsync(TestHostShell app, string grantedScope, string? resourceClientId)
+    /// <param name="app">The host shell whose server is wired.</param>
+    /// <param name="grantedScope">The scope the grant carries.</param>
+    /// <param name="resourceClientId">The <c>client_id</c> at the Resource Authorization Server, or <see langword="null"/> for the requesting client.</param>
+    /// <param name="subjectIdentifier">The <c>sub_id</c> identifier the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="tenant">The issuer <c>tenant</c> the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="audienceTenant">The <c>aud_tenant</c> the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="audienceSubject">The <c>aud_sub</c> the grant carries, or <see langword="null"/> for none.</param>
+    private static async Task WireMintSeamsAsync(
+        TestHostShell app,
+        string grantedScope,
+        string? resourceClientId,
+        SubjectIdentifier? subjectIdentifier = null,
+        string? tenant = null,
+        string? audienceTenant = null,
+        string? audienceSubject = null)
     {
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
@@ -5570,7 +6902,14 @@ internal sealed class IdJagGrantTests
                 static (token, tokenType, registration, context, ct) =>
                     ValueTask.FromResult<ValidatedSecurityToken?>(
                         new ValidatedSecurityToken { Subject = SubjectIdentity });
-            WireIdJagAuthorization(candidateIntegration, grantedScope, resourceClientId);
+            WireIdJagAuthorization(
+                candidateIntegration,
+                grantedScope,
+                resourceClientId,
+                subjectIdentifier,
+                tenant,
+                audienceTenant: audienceTenant,
+                audienceSubject: audienceSubject);
         }).ConfigureAwait(false);
 
     }
@@ -5582,11 +6921,23 @@ internal sealed class IdJagGrantTests
     /// rules via <see cref="IdJagAssertionValidation"/>. Returns <see langword="null"/> (→
     /// <c>invalid_grant</c>) on any failure, mirroring a real RS.
     /// </summary>
+    /// <param name="assertion">The compact JWS the redeem request carries.</param>
+    /// <param name="registration">The authenticated client's registration.</param>
+    /// <param name="resolver">Resolves the IdP's verification key by <c>kid</c>.</param>
+    /// <param name="resourceServerIssuer">The Resource Authorization Server's own issuer identifier.</param>
+    /// <param name="rule">
+    /// The rule applied to the grant's <c>sub_id</c> through
+    /// <see cref="IdJagAssertionValidation.ValidateAsync"/>, or <see langword="null"/> to validate through
+    /// <see cref="IdJagAssertionValidation.Validate"/>.
+    /// </param>
+    /// <param name="recorder">Receives the validation result the seam decides on, or <see langword="null"/>.</param>
     private async Task<JwtBearerGrant?> ValidateIdJagAsync(
         string assertion,
         ClientRecord registration,
         ServerVerificationKeyResolverDelegate resolver,
-        string resourceServerIssuer)
+        string resourceServerIssuer,
+        IdJagSubjectIdentifierRule? rule = null,
+        Action<IdJagAssertionValidationResult>? recorder = null)
     {
         string[] parts = assertion.Split('.');
         if(parts.Length != 3)
@@ -5626,9 +6977,14 @@ internal sealed class IdJagGrantTests
             payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
         }
 
-        IdJagAssertionValidationResult result = IdJagAssertionValidation.Validate(
-            header, payload, resourceServerIssuer, registration.ClientId,
-            TimeProvider.GetUtcNow(), TimeSpan.FromSeconds(60));
+        IdJagAssertionValidationResult result = rule is null
+            ? IdJagAssertionValidation.Validate(
+                header, payload, resourceServerIssuer, registration.ClientId,
+                TimeProvider.GetUtcNow(), TimeSpan.FromSeconds(60))
+            : await IdJagAssertionValidation.ValidateAsync(
+                header, payload, resourceServerIssuer, registration.ClientId,
+                TimeProvider.GetUtcNow(), TimeSpan.FromSeconds(60), rule, TestContext.CancellationToken).ConfigureAwait(false);
+        recorder?.Invoke(result);
         if(!result.IsValid)
         {
             return null;
@@ -5655,6 +7011,241 @@ internal sealed class IdJagGrantTests
             MayAct = result.MayAct
         };
     }
+
+
+    /// <summary>
+    /// Redeems one grant that carries a <c>sub_id</c> claim over the loopback listener, the redeem seam
+    /// validating it under <paramref name="rule"/>, and returns the wire answer with the result the seam
+    /// recorded. The grant is minted by the host's own token exchange, whose authorization seam chooses the
+    /// <c>sub_id</c> and the issuer <c>tenant</c>, unless <paramref name="signedClaims"/> is given: then the
+    /// claims builder signs a grant carrying those claims under the host's published signing key, for a claim
+    /// value the mint never produces.
+    /// </summary>
+    /// <param name="rule">Builds the redeem's rule from the host's issuer identifier.</param>
+    /// <param name="mintedSubjectIdentifier">
+    /// Chooses the minted grant's <c>sub_id</c> from the host's issuer identifier, or <see langword="null"/>
+    /// for a grant without one.
+    /// </param>
+    /// <param name="mintedTenant">The minted grant's issuer <c>tenant</c>, or <see langword="null"/> for none.</param>
+    /// <param name="signedClaims">
+    /// Builds the claims the claims builder adds or replaces from the host's issuer identifier, or
+    /// <see langword="null"/> to mint the grant.
+    /// </param>
+    /// <param name="signingMaterial">
+    /// Signing material the host's published JWKS does not hold, or <see langword="null"/>. When given together
+    /// with <paramref name="signedClaims"/> the claims builder signs the grant under it and under the
+    /// <c>kid</c> <see cref="UnknownSigningKeyId"/>, instead of under the host's published signing material.
+    /// </param>
+    /// <returns>
+    /// The redemption's status code and body, the validation result the seam recorded (<see langword="null"/>
+    /// when the seam recorded none), and the host's issuer identifier.
+    /// </returns>
+    private async Task<(int StatusCode, string Body, IdJagAssertionValidationResult? Recorded, string IdpIssuer)> RedeemSubIdGrantAsync(
+        Func<string, IdJagSubjectIdentifierRule> rule,
+        Func<string, SubjectIdentifier?>? mintedSubjectIdentifier = null,
+        string? mintedTenant = null,
+        Func<string, IReadOnlyDictionary<string, object>>? signedClaims = null,
+        PrivateKeyMemory? signingMaterial = null)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        HttpClient http = host.SharedHttpClient!;
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+        string idpIssuer = material.Registration.IssuerUri!.OriginalString;
+        IdJagSubjectIdentifierRule redeemRule = rule(idpIssuer);
+
+        //The issuer identifier is settled once the host is listening, and a minted sub_id can name it, so the
+        //mint seams are wired after the start.
+        await WireMintSeamsAsync(
+            app, WellKnownScopes.OpenId, resourceClientId: null, mintedSubjectIdentifier?.Invoke(idpIssuer), mintedTenant).ConfigureAwait(false);
+
+        IdJagAssertionValidationResult? recorded = null;
+        ServerVerificationKeyResolverDelegate jwksResolver =
+            await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                async (assertion, requestedScope, registration, context, ct) =>
+                    await ValidateIdJagAsync(
+                        assertion, registration, jwksResolver, ResourceAsIssuer, redeemRule, result => recorded = result).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        string jag;
+        if(signedClaims is null)
+        {
+            using HttpResponseMessage mintResponse = await PostMintAsync(http, tokenUrl, ResourceAsIssuer).ConfigureAwait(false);
+            string mintBody = await mintResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(200, (int)mintResponse.StatusCode, mintBody);
+            using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
+            jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        }
+        else
+        {
+            jag = await BuildIdJagWithClaimsAsync(
+                signingMaterial ?? material.SigningPrivateKey,
+                signingMaterial is null ? material.SigningKeyId.Value : UnknownSigningKeyId,
+                idpIssuer,
+                signedClaims(idpIssuer)).ConfigureAwait(false);
+        }
+
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
+        string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)redeemResponse.StatusCode, redeemBody, recorded, idpIssuer);
+    }
+
+
+    /// <summary>
+    /// Asserts that a redeem recorded a comparison of the <c>sub_id</c> claim with the given relation,
+    /// outcome, basis and decision.
+    /// </summary>
+    /// <param name="comparison">The record the redeem's result carries.</param>
+    /// <param name="relation">The expected relation.</param>
+    /// <param name="outcome">The expected outcome.</param>
+    /// <param name="basis">The expected basis.</param>
+    /// <param name="decision">The expected decision.</param>
+    private static void AssertComparison(
+        ComparisonRecord<SubjectIdentifier, IdJagSubjectContext>? comparison,
+        ComparisonRelation relation,
+        ComparisonOutcome outcome,
+        ComparisonBasis basis,
+        ComparisonDecision decision)
+    {
+        Assert.IsNotNull(comparison, "The redeem recorded a comparison of the sub_id claim.");
+        Assert.AreEqual(relation, comparison.Relation);
+        Assert.AreEqual(outcome, comparison.Outcome);
+        Assert.AreEqual(basis, comparison.Basis);
+        Assert.AreEqual(decision, comparison.Decision);
+    }
+
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> is the <paramref name="configured"/> identifier: the same
+    /// format and the same members, each a string equal ordinally, and no other member.
+    /// </summary>
+    /// <param name="candidate">The identifier the grant carries.</param>
+    /// <param name="configured">The identifier the application configured.</param>
+    /// <returns><see langword="true"/> when the two are the same identifier.</returns>
+    private static bool IsSameIdentifier(SubjectIdentifier candidate, SubjectIdentifier configured) =>
+        string.Equals(candidate.Format, configured.Format, StringComparison.Ordinal)
+        && candidate.Members.Count == configured.Members.Count
+        && configured.Members.All(member =>
+            candidate.Members.GetValueOrDefault(member.Key) is string presented
+            && member.Value is string expected
+            && string.Equals(presented, expected, StringComparison.Ordinal));
+
+
+    /// <summary>
+    /// Whether <paramref name="reference"/> is the fixture's End-User as the host's issuer names it: the
+    /// issuer <paramref name="idpIssuer"/>, no tenant, and the subject <see cref="SubjectIdentity"/>.
+    /// </summary>
+    /// <param name="reference">The grant's validated subject.</param>
+    /// <param name="idpIssuer">The host's issuer identifier.</param>
+    /// <returns><see langword="true"/> when the reference names the fixture's End-User.</returns>
+    private static bool IsGrantSubject(IdJagSubjectContext reference, string idpIssuer) =>
+        string.Equals(reference.Issuer, idpIssuer, StringComparison.Ordinal)
+        && reference.Tenant is null
+        && string.Equals(reference.Subject, SubjectIdentity, StringComparison.Ordinal);
+
+
+    /// <summary>
+    /// The application's association of the configured SAML NameID identifier
+    /// (<see cref="ConfiguredSamlIdentifier"/>) with the fixture's End-User under the host's issuer: the
+    /// complete configured identifier holds for that End-User, every other SAML NameID identifier fails, and an
+    /// identifier of another format is left undecided.
+    /// </summary>
+    /// <param name="idpIssuer">The host's issuer identifier, the validated issuer the association is configured for.</param>
+    /// <returns>The association.</returns>
+    private static CompareDelegate<SubjectIdentifier, IdJagSubjectContext> ConfiguredSamlAssociation(string idpIssuer)
+    {
+        SubjectIdentifier configured = ConfiguredSamlIdentifier.ToSubjectIdentifier();
+
+        return (candidate, reference, relation, cancellationToken) => ValueTask.FromResult(candidate switch
+        {
+            _ when IsSameIdentifier(candidate, configured) && IsGrantSubject(reference, idpIssuer) => ComparisonOutcome.Holds,
+            _ when SubjectIdentifierFormats.IsSamlNameId(candidate.Format) => ComparisonOutcome.Fails,
+            _ => ComparisonOutcome.Indeterminate
+        });
+    }
+
+
+    /// <summary>
+    /// A <c>sub_id</c> claim value that is not a well-formed Subject Identifier
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>): a JSON string,
+    /// a JSON array, an object without <c>format</c>, an <c>iss_sub</c> object with a member its format
+    /// does not describe, an <c>aliases</c> object whose one element is an <c>aliases</c> object or whose
+    /// <c>identifiers</c> array is empty, or a <c>saml-nameid</c> object without <c>nameid</c>, with a numeric
+    /// <c>nameid_format</c> or with a member the format does not describe.
+    /// </summary>
+    /// <param name="caseName">
+    /// The value: <c>aString</c>, <c>anArray</c>, <c>anEmptyObject</c>, <c>anUndescribedMember</c>,
+    /// <c>aNestedAliases</c>, <c>anEmptyAliases</c>, <c>aSamlNameIdWithoutNameId</c>,
+    /// <c>aSamlNameIdWithANumericFormat</c> or <c>aSamlNameIdWithAnUndescribedMember</c>.
+    /// </param>
+    /// <param name="idpIssuer">The host's issuer identifier, named by the <c>iss_sub</c> object.</param>
+    /// <returns>The raw claim value.</returns>
+    private static object MalformedSubId(string caseName, string idpIssuer) => caseName switch
+    {
+        "aString" => "a-string",
+        "anArray" => new List<object> { "an", "array" },
+        "anEmptyObject" => new Dictionary<string, object>(StringComparer.Ordinal),
+        "anUndescribedMember" => new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["format"] = "iss_sub",
+            ["iss"] = idpIssuer,
+            ["sub"] = SubjectIdentity,
+            ["extra"] = "x"
+        },
+        "aNestedAliases" => new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["format"] = "aliases",
+            ["identifiers"] = new List<object>
+            {
+                new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["format"] = "aliases",
+                    ["identifiers"] = new List<object>
+                    {
+                        new Dictionary<string, object>(StringComparer.Ordinal)
+                        {
+                            ["format"] = "email",
+                            ["email"] = "alice@example.com"
+                        }
+                    }
+                }
+            }
+        },
+        "anEmptyAliases" => new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["format"] = "aliases",
+            ["identifiers"] = new List<object>()
+        },
+        "aSamlNameIdWithoutNameId" => new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["format"] = "saml-nameid",
+            ["issuer"] = SamlIssuer
+        },
+        "aSamlNameIdWithANumericFormat" => new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["format"] = "saml-nameid",
+            ["issuer"] = SamlIssuer,
+            ["nameid"] = SamlNameId,
+            ["nameid_format"] = 5L
+        },
+        "aSamlNameIdWithAnUndescribedMember" => new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["format"] = "saml-nameid",
+            ["issuer"] = SamlIssuer,
+            ["nameid"] = SamlNameId,
+            ["extra"] = "x"
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+    };
 
 
     private async Task<string> ObtainClientCredentialsAccessTokenAsync(

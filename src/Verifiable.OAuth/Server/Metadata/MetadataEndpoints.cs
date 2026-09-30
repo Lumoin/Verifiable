@@ -161,7 +161,7 @@ public static class MetadataEndpoints
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
-                        "The server is not ready to serve this request."));
+                        WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 ClientRecord? registration = context.ClientRegistration;

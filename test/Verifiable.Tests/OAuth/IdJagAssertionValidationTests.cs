@@ -1,3 +1,5 @@
+using Verifiable.Core.Relations;
+using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
 using Verifiable.OAuth.IdJag;
 
@@ -32,6 +34,21 @@ internal sealed class IdJagAssertionValidationTests
 
     private static DateTimeOffset Now { get; } = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
     private static TimeSpan Skew { get; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>The MSTest-supplied per-test context whose token the asynchronous validations ride.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>
+    /// Validates <paramref name="payload"/> under <paramref name="rule"/> through
+    /// <see cref="IdJagAssertionValidation.ValidateAsync"/> with <see cref="ValidHeader"/>, so the association of
+    /// the rule is consulted where the profile hands the claim to it.
+    /// </summary>
+    /// <param name="payload">The grant's claims.</param>
+    /// <param name="rule">The rule applied to the grant's <c>sub_id</c> claim.</param>
+    /// <returns>The validation result.</returns>
+    private ValueTask<IdJagAssertionValidationResult> ValidateAsync(JwtPayload payload, IdJagSubjectIdentifierRule rule) =>
+        IdJagAssertionValidation.ValidateAsync(
+            ValidHeader(), payload, ResourceServerIssuer, ResourceClientId, Now, Skew, rule, TestContext.CancellationToken);
 
 
     private static JwtHeader ValidHeader() =>
@@ -830,5 +847,281 @@ internal sealed class IdJagAssertionValidationTests
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
         Assert.AreEqual(IdJagValidationFailureReason.MalformedAuthorizedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// The text of an <see cref="IdJagSubjectContext"/> names the grant's issuer and whether a tenant is
+    /// present, and neither the subject's value nor the tenant's value: those two values can identify a person,
+    /// so they stay out of every text a log or a trace receives. The rule is this library's; no clause of a
+    /// specification states it.
+    /// </summary>
+    /// <param name="tenant">The context's tenant, or <see langword="null"/> for a grant that carries none.</param>
+    /// <param name="expectedPresence">The words that state whether a tenant is present.</param>
+    [TestMethod]
+    [DataRow("tenant-acme", "HasTenant=True", DisplayName = "a context with a tenant")]
+    [DataRow(null, "HasTenant=False", DisplayName = "a context without a tenant")]
+    public void TheSubjectContextRendersItsIssuerAndNeitherItsSubjectNorItsTenant(string? tenant, string expectedPresence)
+    {
+        IdJagSubjectContext context = new()
+        {
+            Issuer = IdpIssuer,
+            Subject = Subject,
+            Tenant = tenant
+        };
+
+        string text = context.ToString();
+
+        Assert.Contains(IdpIssuer, text);
+        Assert.DoesNotContain(Subject, text);
+        if(tenant is not null)
+        {
+            Assert.DoesNotContain(tenant, text);
+        }
+
+        Assert.Contains(expectedPresence, text);
+    }
+
+
+    /// <summary>
+    /// The text of an <see cref="IdJagAssertionValidationResult"/> names whether it is valid, its failure
+    /// reason, the grant's issuer, and whether a tenant, a subject identifier and a comparison are present, and
+    /// none of the subject, the tenant, the audience subject or the SAML NameID: those values can identify a
+    /// person, so they stay out of every text a log or a trace receives. The rule is this library's; no clause
+    /// of a specification states it. The successful result, which carries the subject, the tenant, the audience
+    /// subject and the SAML NameID, proves that no personal identifier is rendered; the failed result, which holds
+    /// no subject, tenant or identifier of its own, proves the shape of the text.
+    /// </summary>
+    /// <param name="caseName">The result rendered: <c>success</c> or <c>failure</c>.</param>
+    [TestMethod]
+    [DataRow("success", DisplayName = "a successful result carrying personal identifiers")]
+    [DataRow("failure", DisplayName = "a result refused by the comparison")]
+    public void TheValidationResultRendersNoPersonalIdentifier(string caseName)
+    {
+        string tenant = "tenant-acme";
+        string audienceSubject = "rs-account-7";
+        SamlNameIdSubjectIdentifier samlIdentifier = new()
+        {
+            Issuer = "https://idp.example.com/saml",
+            NameId = "alice@example.com"
+        };
+
+        IdJagSubjectContext reference = new()
+        {
+            Issuer = IdpIssuer,
+            Subject = Subject,
+            Tenant = tenant
+        };
+
+        ComparisonRecord<SubjectIdentifier, IdJagSubjectContext> comparison = new()
+        {
+            Relation = ComparisonRelation.Equal,
+            Outcome = ComparisonOutcome.Fails,
+            Basis = ComparisonBasis.ApplicationRule,
+            Decision = ComparisonDecision.Deny,
+            Candidate = samlIdentifier.ToSubjectIdentifier(),
+            Reference = reference
+        };
+
+        IdJagAssertionValidationResult result = caseName switch
+        {
+            "success" => new IdJagAssertionValidationResult
+            {
+                Subject = Subject,
+                Issuer = IdpIssuer,
+                Tenant = tenant,
+                AudienceSubject = audienceSubject,
+                SubjectIdentifier = samlIdentifier.ToSubjectIdentifier(),
+                SamlNameIdSubjectIdentifier = samlIdentifier
+            },
+            "failure" => IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.SubjectIdentifierMismatch,
+                "The assertion sub_id claim does not identify the End-User the grant names.") with
+            {
+                SubjectIdentifierComparison = comparison
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        string text = result.ToString();
+
+        Assert.DoesNotContain(Subject, text);
+        Assert.DoesNotContain(tenant, text);
+        Assert.DoesNotContain(audienceSubject, text);
+        Assert.DoesNotContain(samlIdentifier.NameId, text);
+        if(caseName == "success")
+        {
+            Assert.Contains("IsValid=True", text);
+            Assert.Contains(IdpIssuer, text);
+            Assert.Contains("HasTenant=True", text);
+            Assert.Contains("HasSubjectIdentifier=True", text);
+        }
+        else
+        {
+            Assert.Contains("IsValid=False", text);
+            Assert.Contains("Reason=SubjectIdentifierMismatch", text);
+            Assert.Contains("HasComparison=True", text);
+        }
+    }
+
+
+    /// <summary>
+    /// A rule keeps its own copy of the formats it accepts: a format added to the set the rule was built from
+    /// does not reach a rule already in use, so an <c>email</c> claim under a required <c>sub_id</c> is an
+    /// unsupported format even after the caller's set gains <c>email</c>. The rule is this library's; no clause
+    /// of a specification states it.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRuleKeepsItsOwnCopyOfTheAcceptedFormats()
+    {
+        HashSet<string> acceptedFormats = new(StringComparer.Ordinal) { "saml-nameid" };
+        IdJagSubjectIdentifierRule rule = new()
+        {
+            Presence = IdJagSubjectIdentifierPresence.Required,
+            AcceptedFormats = acceptedFormats
+        };
+        _ = acceptedFormats.Add("email");
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.SubId] = SubjectIdentifier.Email("alice@example.com").ToWireObject();
+
+        IdJagAssertionValidationResult result = await ValidateAsync(payload, rule).ConfigureAwait(false);
+
+        Assert.AreEqual(IdJagValidationFailureReason.UnsupportedSubjectIdentifierFormat, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A rule compares the formats it accepts by their exact spelling: a set built with a comparer that ignores
+    /// case and holding <c>EMAIL</c> becomes a set that holds <c>EMAIL</c> and not <c>email</c>, so an
+    /// <c>email</c> claim under a required <c>sub_id</c> is an unsupported format.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>: "A Subject
+    /// Identifier MUST conform to a specific Identifier Format and MUST contain a "format" member whose value is
+    /// the name of that Identifier Format." The ordinal comparison of that name is this library's rule; no
+    /// sentence of a specification states it.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRuleComparesAcceptedFormatsByExactSpelling()
+    {
+        IdJagSubjectIdentifierRule rule = new()
+        {
+            Presence = IdJagSubjectIdentifierPresence.Required,
+            AcceptedFormats = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "EMAIL" }
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.SubId] = SubjectIdentifier.Email("alice@example.com").ToWireObject();
+
+        IdJagAssertionValidationResult result = await ValidateAsync(payload, rule).ConfigureAwait(false);
+
+        //The set's own lookup is asked, so its comparer decides the answer.
+        bool isLowerCaseSpellingAccepted = rule.AcceptedFormats.Contains("email");
+        bool isGivenSpellingAccepted = rule.AcceptedFormats.Contains("EMAIL");
+
+        Assert.IsFalse(isLowerCaseSpellingAccepted);
+        Assert.IsTrue(isGivenSpellingAccepted);
+        Assert.AreEqual(IdJagValidationFailureReason.UnsupportedSubjectIdentifierFormat, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A presence value outside <see cref="IdJagSubjectIdentifierPresence"/> is read as
+    /// <see cref="IdJagSubjectIdentifierPresence.Required"/>, so a grant without a <c>sub_id</c> claim is
+    /// refused as missing it. The reading is this library's; no clause of a specification states it.
+    /// </summary>
+    [TestMethod]
+    public async Task APresenceOutsideTheEnumerationIsReadAsRequired()
+    {
+        IdJagSubjectIdentifierRule rule = new() { Presence = (IdJagSubjectIdentifierPresence)99 };
+
+        IdJagAssertionValidationResult result = await ValidateAsync(ValidPayload(), rule).ConfigureAwait(false);
+
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierRequired, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// An outcome outside <see cref="ComparisonOutcome"/> that the association answers is decided as
+    /// <see cref="ComparisonDecision.IndeterminateDeny"/>, and the grant is refused as undetermined, whatever
+    /// the presence of the claim. The decision is this library's; no clause of a specification states it.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOutcomeOutsideTheEnumerationDecidesAsUndetermined()
+    {
+        IdJagSubjectIdentifierRule rule = new()
+        {
+            Relation = ComparisonRelation.Equal,
+            Association = static (candidate, reference, relation, cancellationToken) =>
+                ValueTask.FromResult((ComparisonOutcome)99)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.SubId] = SubjectIdentifier.Email("alice@example.com").ToWireObject();
+
+        IdJagAssertionValidationResult result = await ValidateAsync(payload, rule).ConfigureAwait(false);
+
+        Assert.AreEqual(IdJagValidationFailureReason.SubjectIdentifierUndetermined, result.FailureReason);
+        Assert.IsNotNull(result.SubjectIdentifierComparison);
+        Assert.AreEqual(ComparisonDecision.IndeterminateDeny, result.SubjectIdentifierComparison.Decision);
+    }
+
+
+    /// <summary>
+    /// The association is put to once when it decides a claim: an <c>email</c> claim of another namespace under
+    /// an equality rule is held by the association, which is called exactly once, and the record names the
+    /// application's rule as its basis. The call count is this library's rule; no clause of a specification
+    /// states it.
+    /// </summary>
+    [TestMethod]
+    public async Task TheAssociationIsAskedOnceWhenItDecides()
+    {
+        int associationCalls = 0;
+        IdJagSubjectIdentifierRule rule = new()
+        {
+            Relation = ComparisonRelation.Equal,
+            Association = (candidate, reference, relation, cancellationToken) =>
+            {
+                associationCalls++;
+
+                return ValueTask.FromResult(ComparisonOutcome.Holds);
+            }
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.SubId] = SubjectIdentifier.Email("alice@example.com").ToWireObject();
+
+        IdJagAssertionValidationResult result = await ValidateAsync(payload, rule).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.IsNotNull(result.SubjectIdentifierComparison);
+        Assert.AreEqual(ComparisonOutcome.Holds, result.SubjectIdentifierComparison.Outcome);
+        Assert.AreEqual(ComparisonBasis.ApplicationRule, result.SubjectIdentifierComparison.Basis);
+        Assert.AreEqual(ComparisonDecision.Permit, result.SubjectIdentifierComparison.Decision);
+        Assert.AreEqual(1, associationCalls);
+    }
+
+
+    /// <summary>
+    /// An exception the association throws reaches the caller of the validation unchanged, as the same
+    /// exception instance: it is a defect of the application's delegate, not a value the validation turns into
+    /// a refusal. The rule is this library's; no clause of a specification states it.
+    /// </summary>
+    [TestMethod]
+    public async Task AnExceptionOfTheAssociationReachesTheCaller()
+    {
+        InvalidOperationException fault = new("The application's association failed.");
+        IdJagSubjectIdentifierRule rule = new()
+        {
+            Relation = ComparisonRelation.Equal,
+            Association = (candidate, reference, relation, cancellationToken) => throw fault
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.SubId] = SubjectIdentifier.Email("alice@example.com").ToWireObject();
+
+        InvalidOperationException reached = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => _ = await ValidateAsync(payload, rule).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.AreSame(fault, reached);
     }
 }

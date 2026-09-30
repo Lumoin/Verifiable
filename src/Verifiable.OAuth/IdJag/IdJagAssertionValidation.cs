@@ -1,4 +1,6 @@
 
+using Verifiable.Core.Relations;
+using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
 using Verifiable.OAuth.JwtBearer;
 
@@ -17,8 +19,8 @@ namespace Verifiable.OAuth.IdJag;
 /// Section 5.2 of [RFC7521] applies" signature step: it resolves the verification key for the
 /// grant's <c>iss</c> (only a trusted IdP's key resolves, which is how issuer trust is established —
 /// §9.5 forbids deriving trust from <c>sub_id.issuer</c>), verifies the signature (for example via
-/// <see cref="Jws.VerifyAndDecodeAsync(string, Verifiable.Cryptography.DecodeDelegate, JwtPartDecoder, BaseMemoryPool, Verifiable.Cryptography.PublicKeyMemory, CancellationToken)"/>), and then calls <see cref="Validate"/> to enforce the
-/// ID-JAG-specific claim rules. On success the caller shapes a
+/// <see cref="Jws.VerifyAndDecodeAsync(string, Verifiable.Cryptography.DecodeDelegate, JwtPartDecoder, BaseMemoryPool, Verifiable.Cryptography.PublicKeyMemory, CancellationToken)"/>), and then calls <see cref="Validate"/> or
+/// <see cref="ValidateAsync"/> to enforce the ID-JAG-specific claim rules. On success the caller shapes a
 /// <see cref="JwtBearer.JwtBearerGrant"/> from <see cref="IdJagAssertionValidationResult.Subject"/>
 /// and <see cref="IdJagAssertionValidationResult.Scope"/>; on failure it returns <see langword="null"/>
 /// so the grant is refused with <c>invalid_grant</c>.
@@ -31,13 +33,30 @@ namespace Verifiable.OAuth.IdJag;
 ///   <item><description><c>iss</c> is present and is not the Resource Authorization Server's own issuer (§9.3).</description></item>
 ///   <item><description><c>aud</c> is the Resource Authorization Server's issuer as a string, or a single-element array of it; any other shape (multi-element array, mismatch) is rejected.</description></item>
 ///   <item><description><c>client_id</c> equals the authenticated client.</description></item>
-///   <item><description><c>sub</c> and <c>exp</c> are present, the temporal claims are consistent, and the grant is neither expired nor not-yet-valid (RFC 7521 §5.2).</description></item>
+///   <item><description><c>sub</c> is present and not white space only, <c>exp</c> is present, the temporal claims are consistent, and the grant is neither expired nor not-yet-valid (<see href="https://www.rfc-editor.org/rfc/rfc7521#section-5.2">RFC 7521 Section 5.2</see>).</description></item>
 ///   <item><description>
 ///     an <c>act</c> or <c>may_act</c> claim, when present, is a well-formed
 ///     <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> /
 ///     <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">§4.4</see> object — not a §4.4.1
 ///     rule (ID-JAG §4.3/§9.7 defines no actor processing), but a fail-closed read: a delegation this
 ///     server cannot parse is refused rather than dropped from the token it would issue.
+///   </description></item>
+///   <item><description>
+///     a <c>tenant</c>, <c>aud_tenant</c> or <c>aud_sub</c> claim, when present, is a JSON string with at
+///     least one character that is not white space. The JSON string of <c>tenant</c> and <c>aud_tenant</c> is
+///     the draft's
+///     (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>
+///     defines each as a JSON string and names no JSON type for <c>aud_sub</c>; the quotations stand in
+///     <see cref="IdJagValidationFailureReason.MalformedTenant"/>,
+///     <see cref="IdJagValidationFailureReason.MalformedAudienceTenant"/> and
+///     <see cref="IdJagValidationFailureReason.MalformedAudienceSubject"/>). Refusing a present value of any of
+///     the three that is not a string with at least one character that is not white space, the empty string
+///     included, is this library's fail-closed reading: no sentence of Section 3.1,
+///     <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+///     or
+///     <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-6.3">Section 6.3</see>
+///     states that refusal. A tenant relationship this server cannot read is refused rather than read as
+///     absent.
 ///   </description></item>
 /// </list>
 /// <para>
@@ -48,6 +67,47 @@ namespace Verifiable.OAuth.IdJag;
 /// (<c>typ</c>, same-trust-domain, <c>client_id</c>) around them, so the §3 rules have exactly one
 /// implementation.
 /// </para>
+/// <para>
+/// The <c>sub_id</c> claim is read last, under an <see cref="IdJagSubjectIdentifierRule"/>:
+/// <see cref="ValidateAsync"/> takes the rule, and <see cref="Validate"/> applies
+/// <see cref="IdJagSubjectIdentifierRule.Default"/>, which neither requires nor compares the claim. The step
+/// runs after every rule above, so the subject the claim is compared with is the validated one:
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 9.5</see>:
+/// "The ID-JAG MUST first be validated using the iss claim, signature, audience, expiration, and client
+/// binding according to this specification." In order:
+/// </para>
+/// <list type="number">
+///   <item><description>
+///     An absent claim is refused as <see cref="IdJagValidationFailureReason.SubjectIdentifierRequired"/>
+///     under <see cref="IdJagSubjectIdentifierPresence.Required"/>, and is otherwise nothing to read.
+///   </description></item>
+///   <item><description>
+///     A claim that is not a Subject Identifier (<see cref="SubjectIdentifier.FromWireObject"/> reads none),
+///     or that is not well formed (<see cref="SubjectIdentifier.IsWellFormed"/>: its format member names a
+///     format, and a format the library knows, <see cref="SubjectIdentifierFormats.IsKnown"/>, keeps its member
+///     rules), is refused as <see cref="IdJagValidationFailureReason.MalformedSubjectIdentifier"/> when the rule
+///     requires or compares the claim, and is otherwise surfaced as <see langword="null"/>. An identifier of a
+///     format the library does not know is carried opaque.
+///   </description></item>
+///   <item><description>
+///     A format outside a non-empty <see cref="IdJagSubjectIdentifierRule.AcceptedFormats"/> is refused as
+///     <see cref="IdJagValidationFailureReason.UnsupportedSubjectIdentifierFormat"/> under
+///     <see cref="IdJagSubjectIdentifierPresence.Required"/>; otherwise the identifier is surfaced and, when the
+///     rule compares it, the comparison profile records it <see cref="ComparisonOutcome.Indeterminate"/>, basis
+///     <see cref="ComparisonBasis.None"/>, without asking the association.
+///   </description></item>
+///   <item><description>
+///     When the rule names a <see cref="IdJagSubjectIdentifierRule.Relation"/> or requires the claim, the
+///     identifier is compared with the grant's validated <c>iss</c>, <c>tenant</c> and <c>sub</c>
+///     (<see cref="IdJagSubjectContext"/>) by the library's comparison profile; a
+///     <see cref="ComparisonDecision.Deny"/> is refused as
+///     <see cref="IdJagValidationFailureReason.SubjectIdentifierMismatch"/> and any other decision than
+///     <see cref="ComparisonDecision.Permit"/> as
+///     <see cref="IdJagValidationFailureReason.SubjectIdentifierUndetermined"/>. The record rides the result
+///     on success and on those two refusals
+///     (<see cref="IdJagAssertionValidationResult.SubjectIdentifierComparison"/>).
+///   </description></item>
+/// </list>
 /// </remarks>
 public static class IdJagAssertionValidation
 {
@@ -71,14 +131,54 @@ public static class IdJagAssertionValidation
     /// failed result whose <see cref="IdJagAssertionValidationResult.FailureReason"/> the caller maps
     /// to <c>invalid_grant</c>.
     /// </returns>
+    /// <remarks>
+    /// Applies <see cref="IdJagSubjectIdentifierRule.Default"/> to the <c>sub_id</c> claim: the claim is
+    /// surfaced as read and judged by nothing, so no comparison runs and nothing is awaited.
+    /// <see cref="ValidateAsync"/> applies any other rule.
+    /// </remarks>
     public static IdJagAssertionValidationResult Validate(
         JwtHeader header,
         JwtPayload payload,
         string resourceServerIssuer,
         string authenticatedClientId,
         DateTimeOffset now,
-        TimeSpan clockSkew)
+        TimeSpan clockSkew) =>
+        ValidateClaims(header, payload, resourceServerIssuer, authenticatedClientId, now, clockSkew, IdJagSubjectIdentifierRule.Default, out _);
+
+
+    /// <summary>
+    /// The claim rules both entry points share: every
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// and <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.3">Section 9.3</see>
+    /// rule, then the <c>sub_id</c> step under <paramref name="rule"/> up to the comparison, which is the
+    /// caller's to run.
+    /// </summary>
+    /// <param name="header">The decoded (signature-verified) JWT header.</param>
+    /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
+    /// <param name="resourceServerIssuer">The Resource Authorization Server's own issuer identifier.</param>
+    /// <param name="authenticatedClientId">The <c>client_id</c> of the client authenticated on the redeem request.</param>
+    /// <param name="now">The current instant for expiry / not-before evaluation.</param>
+    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="rule">The rule applied to the grant's <c>sub_id</c> claim.</param>
+    /// <param name="reference">
+    /// The grant's validated subject when the claim is to be compared with it under <paramref name="rule"/>;
+    /// otherwise <see langword="null"/>, and the returned result is final.
+    /// </param>
+    /// <returns>
+    /// The failed result of the first rule the grant breaks, or the successful result carrying the validated
+    /// claims.
+    /// </returns>
+    private static IdJagAssertionValidationResult ValidateClaims(
+        JwtHeader header,
+        JwtPayload payload,
+        string resourceServerIssuer,
+        string authenticatedClientId,
+        DateTimeOffset now,
+        TimeSpan clockSkew,
+        IdJagSubjectIdentifierRule rule,
+        out IdJagSubjectContext? reference)
     {
+        reference = null;
         ArgumentNullException.ThrowIfNull(header);
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceServerIssuer);
@@ -147,12 +247,17 @@ public static class IdJagAssertionValidation
                 "The assertion client_id does not match the authenticated client.");
         }
 
-        //§3 item 2 (RFC 7521 §5.2 / RFC 7523 §3 rule 2.A): the subject the access is requested for.
-        if(!Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Sub, out string? sub))
+        //RFC 7521 Section 5.2 (https://www.rfc-editor.org/rfc/rfc7521#section-5.2) and RFC 7523
+        //Section 3 item 2, case A (https://www.rfc-editor.org/rfc/rfc7523#section-3): the subject the
+        //access is requested for. A value of white space only identifies no principal (this library's
+        //reading of "identifying the principal"; its token factories refuse such a subject), so it is
+        //refused here as a value rather than reaching them.
+        if(!Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Sub, out string? sub)
+            || string.IsNullOrWhiteSpace(sub))
         {
             return IdJagAssertionValidationResult.Failure(
                 IdJagValidationFailureReason.MissingSubject,
-                "The assertion is missing the sub claim.");
+                "The assertion is missing the sub claim or carries one of white space only.");
         }
 
         //§3 items 4–6 (RFC 7521 §5.2 / RFC 7523 §3): exp REQUIRED and not expired; nbf/iat OPTIONAL but,
@@ -198,31 +303,87 @@ public static class IdJagAssertionValidation
                 "The assertion may_act claim is not a well-formed authorized-actor object.");
         }
 
+        //Section 3.1 tenant relationships: the issuer tenant (tenant), the Resource Authorization Server tenant
+        //(aud_tenant) and that server's own subject identifier (aud_sub) are surfaced for the Resource
+        //Authorization Server's subject-identifier scoping (iss + tenant + sub) and subject resolution. A member
+        //that is present and is not a JSON string with at least one character that is not white space is
+        //refused rather than read as absent: the tenant decides which namespace the subject is unique in, and a
+        //grant read as carrying no tenant is one the library's own comparison rule may decide.
+        if(!TryReadOptionalStringClaim(payload, WellKnownJwtClaimNames.Tenant, out string? tenant))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedTenant,
+                "The assertion tenant claim is not a JSON string with a character that is not white space.");
+        }
+
+        if(!TryReadOptionalStringClaim(payload, WellKnownJwtClaimNames.AudienceTenant, out string? audienceTenant))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedAudienceTenant,
+                "The assertion aud_tenant claim is not a JSON string with a character that is not white space.");
+        }
+
+        if(!TryReadOptionalStringClaim(payload, WellKnownJwtClaimNames.AudienceSubject, out string? audienceSubject))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedAudienceSubject,
+                "The assertion aud_sub claim is not a JSON string with a character that is not white space.");
+        }
+
         string? scope = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Scope, out string? scopeValue)
             ? scopeValue
             : null;
 
-        //§3.1 / RFC 7519 §4.1.7: surface jti so a Resource Authorization Server can apply the RFC 7523
-        //§3 (rule 7) replay defense from its own store. Not a §4.4.1 MUST, so absence does not fail here.
+        //Section 3.1 and RFC 7519 Section 4.1.7: surface jti so the redeem seam carries it onto the grant, where
+        //the jwt-bearer grant applies the RFC 7523 Section 3 (rule 7) replay defense. Not a Section 4.4.1 MUST,
+        //so absence does not fail here.
         string? jti = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Jti, out string? jtiValue) ? jtiValue : null;
 
-        //§3.1 tenant relationships: the issuer-tenant (tenant), the Resource Authorization Server tenant
-        //(aud_tenant) and that server's own subject identifier (aud_sub) are surfaced for the Resource
-        //Authorization Server's subject-identifier scoping (iss + tenant + sub) and subject resolution.
-        string? tenant = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Tenant, out string? tenantValue) ? tenantValue : null;
-        string? audienceTenant = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.AudienceTenant, out string? audienceTenantValue) ? audienceTenantValue : null;
-        string? audienceSubject = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.AudienceSubject, out string? audienceSubjectValue) ? audienceSubjectValue : null;
+        //Section 3.1 and Section 3.2.2: the sub_id step, after every Section 4.4.1 and Section 9.3 rule above so
+        //the subject it is compared with is the validated one (Section 9.5). Reading the claim never derives
+        //trust from it. A presence outside the enumeration is read as Required, as the comparison profile
+        //reads it.
+        bool isRequired = rule.Presence is not IdJagSubjectIdentifierPresence.Optional;
+        bool isJudged = isRequired || rule.Relation is not null;
+        bool isPresent = payload.TryGetValue(WellKnownJwtClaimNames.SubId, out object? subIdRaw);
+        if(!isPresent && isRequired)
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.SubjectIdentifierRequired,
+                "The assertion carries no sub_id claim and this server requires one.");
+        }
 
-        //§3.2 / §9.5: surface the saml-nameid sub_id (when well-formed) for the Resource Authorization
-        //Server's subject resolution. Parsing never derives trust from sub_id — the grant is already
-        //validated by iss / signature / audience / client binding above.
-        SamlNameIdSubjectIdentifier? subjectIdentifier =
-            payload.TryGetValue(WellKnownJwtClaimNames.SubId, out object? subIdRaw)
-            && SamlNameIdSubjectIdentifier.TryParse(subIdRaw, out SamlNameIdSubjectIdentifier? parsedSubjectIdentifier)
-                ? parsedSubjectIdentifier
+        //RFC 9493 Section 3: a Subject Identifier is an object whose format member names a format, and every
+        //member follows the rules of its format; a format the library does not know is carried opaque. The mint
+        //reads the same member before it writes the claim.
+        SubjectIdentifier? readIdentifier = isPresent && AsClaimObject(subIdRaw) is { } subIdObject
+            ? SubjectIdentifier.FromWireObject(subIdObject)
+            : null;
+        bool isWellFormed = readIdentifier?.IsWellFormed() is true;
+        if(isPresent && !isWellFormed && isJudged)
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedSubjectIdentifier,
+                "The assertion sub_id claim is not a well-formed Subject Identifier.");
+        }
+
+        SubjectIdentifier? subjectIdentifier = isWellFormed ? readIdentifier : null;
+        bool isAcceptedFormat = subjectIdentifier is null
+            || rule.AcceptedFormats.Count == 0
+            || rule.AcceptedFormats.Contains(subjectIdentifier.Format);
+        if(!isAcceptedFormat && isRequired)
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.UnsupportedSubjectIdentifierFormat,
+                "The assertion sub_id claim uses a Subject Identifier Format this server does not support.");
+        }
+
+        SamlNameIdSubjectIdentifier? samlSubjectIdentifier = subjectIdentifier is not null
+            && SamlNameIdSubjectIdentifier.TryFrom(subjectIdentifier, out SamlNameIdSubjectIdentifier? projectedSubjectIdentifier)
+                ? projectedSubjectIdentifier
                 : null;
 
-        return new IdJagAssertionValidationResult
+        IdJagAssertionValidationResult result = new()
         {
             Subject = sub,
             Issuer = iss,
@@ -231,6 +392,7 @@ public static class IdJagAssertionValidation
             AudienceTenant = audienceTenant,
             AudienceSubject = audienceSubject,
             SubjectIdentifier = subjectIdentifier,
+            SamlNameIdSubjectIdentifier = samlSubjectIdentifier,
             Resource = ReadStringOrArray(payload, OAuthRequestParameterNames.Resource),
             AuthorizationDetails = ReadObjectArray(payload, OAuthRequestParameterNames.AuthorizationDetails),
             ClientId = clientId,
@@ -242,6 +404,87 @@ public static class IdJagAssertionValidation
             IssuedAt = iat,
             Expiration = exp
         };
+
+        //Nothing is compared when the rule neither requires nor compares the claim, or the grant carries none.
+        if(!isJudged || subjectIdentifier is null)
+        {
+            return result;
+        }
+
+        //Every judged, present, well-formed claim goes to the comparison profile, which decides a format the rule
+        //does not accept as it decides every other candidate.
+        reference = new IdJagSubjectContext
+        {
+            Issuer = iss!,
+            Tenant = tenant,
+            Subject = sub
+        };
+
+        return result;
+    }
+
+
+    /// <summary>
+    /// Validates a decoded ID-JAG assertion against the
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// and <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.3">Section 9.3</see>
+    /// claim rules and applies <paramref name="rule"/> to its <c>sub_id</c> claim.
+    /// </summary>
+    /// <param name="header">The decoded (signature-verified) JWT header.</param>
+    /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
+    /// <param name="resourceServerIssuer">
+    /// The Resource Authorization Server's own issuer identifier
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 Section 2</see>): the value the grant's
+    /// <c>aud</c> must name and that its <c>iss</c> must not equal.
+    /// </param>
+    /// <param name="authenticatedClientId">
+    /// The <c>client_id</c> of the client authenticated on the redeem request: the grant's
+    /// <c>client_id</c> claim must equal it.
+    /// </param>
+    /// <param name="now">The current instant for expiry / not-before evaluation.</param>
+    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="rule">The rule the redeem applies to the grant's <c>sub_id</c> claim.</param>
+    /// <param name="cancellationToken">The token that cancels the application's association.</param>
+    /// <returns>
+    /// A successful <see cref="IdJagAssertionValidationResult"/> carrying the validated claims and, when the
+    /// claim was compared, the record of the comparison; or a failed result whose
+    /// <see cref="IdJagAssertionValidationResult.FailureReason"/> the caller maps to <c>invalid_grant</c>.
+    /// </returns>
+    public static async ValueTask<IdJagAssertionValidationResult> ValidateAsync(
+        JwtHeader header,
+        JwtPayload payload,
+        string resourceServerIssuer,
+        string authenticatedClientId,
+        DateTimeOffset now,
+        TimeSpan clockSkew,
+        IdJagSubjectIdentifierRule rule,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        IdJagAssertionValidationResult result = ValidateClaims(
+            header, payload, resourceServerIssuer, authenticatedClientId, now, clockSkew, rule, out IdJagSubjectContext? reference);
+        if(reference is null)
+        {
+            return result;
+        }
+
+        ComparisonRecord<SubjectIdentifier, IdJagSubjectContext> comparison = await IdJagSubjectIdentifierComparison.CompareAsync(
+            result.SubjectIdentifier!, reference, rule, cancellationToken).ConfigureAwait(false);
+
+        //The profile derives the decision; a refusal keeps the record so an audit sees the attempt.
+        IdJagAssertionValidationResult decided = comparison.Decision switch
+        {
+            ComparisonDecision.Permit => result,
+            ComparisonDecision.Deny => IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.SubjectIdentifierMismatch,
+                "The assertion sub_id claim does not identify the End-User the grant names."),
+            _ => IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.SubjectIdentifierUndetermined,
+                "Whether the assertion sub_id claim identifies the End-User the grant names could not be decided.")
+        };
+
+        return decided with { SubjectIdentifierComparison = comparison };
     }
 
 
@@ -261,6 +504,33 @@ public static class IdJagAssertionValidation
         payload.TryGetValue(claimName, out object? raw) && raw is IReadOnlyList<object> list
             ? list
             : null;
+
+
+    /// <summary>
+    /// Reads an optional string claim as one of three things: absent; a JSON string with at least one
+    /// character that is not white space (<see cref="string.IsNullOrWhiteSpace(string?)"/> answers
+    /// <see langword="false"/> for it); or malformed. A claim that is present in any other shape (a number, an
+    /// object, a JSON null, an empty string, a string of white space only) is a defect of the grant, which the
+    /// caller refuses rather than reading the claim as absent: a value of white space only names no tenant and
+    /// no subject, as a <c>sub</c> of white space only names no principal.
+    /// </summary>
+    /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
+    /// <param name="claimName">The name of the claim.</param>
+    /// <param name="value">
+    /// The claim's value when it is a JSON string with at least one character that is not white space;
+    /// otherwise <see langword="null"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the claim is absent or is a JSON string with at least one character that is
+    /// not white space; <see langword="false"/> when it is present and malformed.
+    /// </returns>
+    private static bool TryReadOptionalStringClaim(JwtPayload payload, string claimName, out string? value)
+    {
+        bool isPresent = payload.TryGetValue(claimName, out object? raw);
+        value = raw is string text && !string.IsNullOrWhiteSpace(text) ? text : null;
+
+        return !isPresent || value is not null;
+    }
 
 
     private static string? ReadConfirmationThumbprint(JwtPayload payload)
@@ -425,11 +695,12 @@ public static class IdJagAssertionValidation
     /// <summary>
     /// Views a decoded nested JSON object claim value as a read-only dictionary, accepting either the
     /// read-only or the mutable dictionary shape a JWT payload parser may produce; any other value is
-    /// not an object.
+    /// not an object. The one claim-object view of the ID-JAG readers: the <c>sub_id</c> step here and
+    /// <see cref="SamlNameIdSubjectIdentifier.TryParse"/> read a claim through it.
     /// </summary>
     /// <param name="value">The decoded claim value.</param>
     /// <returns>The object view, or <see langword="null"/> when the value is not a JSON object.</returns>
-    private static IReadOnlyDictionary<string, object>? AsClaimObject(object? value) => value switch
+    internal static IReadOnlyDictionary<string, object>? AsClaimObject(object? value) => value switch
     {
         IReadOnlyDictionary<string, object> readOnly => readOnly,
         IDictionary<string, object> mutable => new Dictionary<string, object>(mutable, StringComparer.Ordinal),

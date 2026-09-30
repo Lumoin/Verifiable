@@ -7,7 +7,8 @@ namespace Verifiable.Core.SecurityEvents;
 /// The member NAMES (JSON object keys) that appear inside a Subject Identifier,
 /// across all formats defined by
 /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 §3</see>
-/// and OpenID Shared Signals Framework 1.0 §3.5.
+/// and OpenID Shared Signals Framework 1.0 Section 3.5, and by the SAML NameID format of
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>.
 /// </summary>
 /// <remarks>
 /// These are NAMES, not values; the format VALUES that select which members
@@ -85,7 +86,10 @@ public static class SubjectIdentifierMemberNames
     /// <summary>The UTF-8 source literal of <see cref="Issuer"/>.</summary>
     public static ReadOnlySpan<byte> IssuerUtf8 => "issuer"u8;
 
-    /// <summary>The <c>issuer</c> member (SAML Assertion ID format) — the SAML assertion's Issuer.</summary>
+    /// <summary>
+    /// The <c>issuer</c> member: the SAML assertion's Issuer (SAML Assertion ID format), and the SAML issuer
+    /// entity identifier (SAML NameID format, REQUIRED).
+    /// </summary>
     public static string Issuer { get; } = Utf8Constants.ToInternedString(IssuerUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AssertionId"/>.</summary>
@@ -102,4 +106,54 @@ public static class SubjectIdentifierMemberNames
     /// Hyphenated to match the (hyphenated) format name.
     /// </summary>
     public static string IpAddresses { get; } = Utf8Constants.ToInternedString(IpAddressesUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="NameId"/>.</summary>
+    public static ReadOnlySpan<byte> NameIdUtf8 => "nameid"u8;
+
+    /// <summary>
+    /// The <c>nameid</c> member (SAML NameID format, REQUIRED): the SAML Assertion Subject &lt;NameID&gt;
+    /// value, per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>.
+    /// </summary>
+    public static string NameId { get; } = Utf8Constants.ToInternedString(NameIdUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="NameIdFormat"/>.</summary>
+    public static ReadOnlySpan<byte> NameIdFormatUtf8 => "nameid_format"u8;
+
+    /// <summary>
+    /// The <c>nameid_format</c> member (SAML NameID format, OPTIONAL): the Format attribute of the
+    /// &lt;NameID&gt;, per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>.
+    /// </summary>
+    public static string NameIdFormat { get; } = Utf8Constants.ToInternedString(NameIdFormatUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="NameQualifier"/>.</summary>
+    public static ReadOnlySpan<byte> NameQualifierUtf8 => "name_qualifier"u8;
+
+    /// <summary>
+    /// The <c>name_qualifier</c> member (SAML NameID format, OPTIONAL): the NameQualifier attribute of the
+    /// &lt;NameID&gt;, per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>.
+    /// </summary>
+    public static string NameQualifier { get; } = Utf8Constants.ToInternedString(NameQualifierUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SpNameQualifier"/>.</summary>
+    public static ReadOnlySpan<byte> SpNameQualifierUtf8 => "sp_name_qualifier"u8;
+
+    /// <summary>
+    /// The <c>sp_name_qualifier</c> member (SAML NameID format, OPTIONAL): the SPNameQualifier attribute of
+    /// the &lt;NameID&gt;, per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>.
+    /// </summary>
+    public static string SpNameQualifier { get; } = Utf8Constants.ToInternedString(SpNameQualifierUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SpProvidedId"/>.</summary>
+    public static ReadOnlySpan<byte> SpProvidedIdUtf8 => "sp_provided_id"u8;
+
+    /// <summary>
+    /// The <c>sp_provided_id</c> member (SAML NameID format, OPTIONAL): the SPProvidedID attribute of the
+    /// &lt;NameID&gt;, per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>.
+    /// </summary>
+    public static string SpProvidedId { get; } = Utf8Constants.ToInternedString(SpProvidedIdUtf8);
 }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 
+using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.IdJag;
@@ -8,33 +9,68 @@ namespace Verifiable.OAuth.IdJag;
 /// The member names of a SAML NameID Subject Identifier (the <c>saml-nameid</c> form of the
 /// <c>sub_id</c> claim) per draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §3.2.1 and
 /// <see href="https://www.rfc-editor.org/rfc/rfc9493">RFC 9493</see>. These are the JSON object member
-/// names inside the <see cref="WellKnownJwtClaimNames.SubId"/> claim.
+/// names inside the <see cref="WellKnownJwtClaimNames.SubId"/> claim, each the spelling of
+/// <see cref="SubjectIdentifierMemberNames"/> or <see cref="SubjectIdentifierFormats"/> so that every name
+/// is spelled once.
 /// </summary>
 public static class SamlNameIdMemberNames
 {
-    /// <summary>The <c>format</c> member — names the Subject Identifier Format (RFC 9493).</summary>
-    public static string Format { get; } = "format";
+    /// <summary>
+    /// The <c>format</c> member: names the Subject Identifier Format
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>);
+    /// <see cref="SubjectIdentifierMemberNames.Format"/>.
+    /// </summary>
+    public static string Format => SubjectIdentifierMemberNames.Format;
 
-    /// <summary>The Subject Identifier Format value identifying a SAML NameID identifier (§3.2.1).</summary>
-    public static string SamlNameIdFormat { get; } = "saml-nameid";
+    /// <summary>
+    /// The Subject Identifier Format value identifying a SAML NameID identifier
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>);
+    /// <see cref="SubjectIdentifierFormats.SamlNameId"/>.
+    /// </summary>
+    public static string SamlNameIdFormat => SubjectIdentifierFormats.SamlNameId;
 
-    /// <summary>The <c>issuer</c> member — the SAML issuer entity identifier (§3.2.1 / SAML §8.3.6).</summary>
-    public static string Issuer { get; } = "issuer";
+    /// <summary>
+    /// The <c>issuer</c> member: the SAML issuer entity identifier
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see> /
+    /// <see href="https://docs.oasis-open.org/security/saml/v2.0/saml-core-2.0-os.pdf">SAML 2.0 Core</see> Section 8.3.6);
+    /// <see cref="SubjectIdentifierMemberNames.Issuer"/>.
+    /// </summary>
+    public static string Issuer => SubjectIdentifierMemberNames.Issuer;
 
-    /// <summary>The <c>nameid</c> member — the SAML Assertion Subject &lt;NameID&gt; value (§3.2.1).</summary>
-    public static string NameId { get; } = "nameid";
+    /// <summary>
+    /// The <c>nameid</c> member: the SAML Assertion Subject &lt;NameID&gt; value
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>);
+    /// <see cref="SubjectIdentifierMemberNames.NameId"/>.
+    /// </summary>
+    public static string NameId => SubjectIdentifierMemberNames.NameId;
 
-    /// <summary>The <c>nameid_format</c> member — the Format attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static string NameIdFormat { get; } = "nameid_format";
+    /// <summary>
+    /// The <c>nameid_format</c> member: the Format attribute of the &lt;NameID&gt;
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>,
+    /// OPTIONAL); <see cref="SubjectIdentifierMemberNames.NameIdFormat"/>.
+    /// </summary>
+    public static string NameIdFormat => SubjectIdentifierMemberNames.NameIdFormat;
 
-    /// <summary>The <c>name_qualifier</c> member — the NameQualifier attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static string NameQualifier { get; } = "name_qualifier";
+    /// <summary>
+    /// The <c>name_qualifier</c> member: the NameQualifier attribute of the &lt;NameID&gt;
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>,
+    /// OPTIONAL); <see cref="SubjectIdentifierMemberNames.NameQualifier"/>.
+    /// </summary>
+    public static string NameQualifier => SubjectIdentifierMemberNames.NameQualifier;
 
-    /// <summary>The <c>sp_name_qualifier</c> member — the SPNameQualifier attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static string SpNameQualifier { get; } = "sp_name_qualifier";
+    /// <summary>
+    /// The <c>sp_name_qualifier</c> member: the SPNameQualifier attribute of the &lt;NameID&gt;
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>,
+    /// OPTIONAL); <see cref="SubjectIdentifierMemberNames.SpNameQualifier"/>.
+    /// </summary>
+    public static string SpNameQualifier => SubjectIdentifierMemberNames.SpNameQualifier;
 
-    /// <summary>The <c>sp_provided_id</c> member — the SPProvidedID attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static string SpProvidedId { get; } = "sp_provided_id";
+    /// <summary>
+    /// The <c>sp_provided_id</c> member: the SPProvidedID attribute of the &lt;NameID&gt;
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>,
+    /// OPTIONAL); <see cref="SubjectIdentifierMemberNames.SpProvidedId"/>.
+    /// </summary>
+    public static string SpProvidedId => SubjectIdentifierMemberNames.SpProvidedId;
 }
 
 
@@ -53,8 +89,12 @@ public static class SamlNameIdMemberNames
 /// configuration or trusted federation metadata. Per §3.2.2 a Resource Authorization Server MUST compare
 /// every member that is part of its subject-resolution identifier set for that SAML issuer, and MUST NOT
 /// resolve by <see cref="NameId"/> alone unless local policy defines it as the sole identifier.
+/// <para>
+/// The NameID and its qualifiers can identify a person, so the debugger display and <see cref="ToString"/>
+/// show the SAML issuer and which optional members are present only.
+/// </para>
 /// </remarks>
-[DebuggerDisplay("SamlNameIdSubjectIdentifier Issuer={Issuer}, NameId={NameId}")]
+[DebuggerDisplay("SamlNameIdSubjectIdentifier(Issuer={Issuer}, HasNameIdFormat={NameIdFormat != null}, HasNameQualifier={NameQualifier != null}, HasSpNameQualifier={SpNameQualifier != null}, HasSpProvidedId={SpProvidedId != null})")]
 public sealed record SamlNameIdSubjectIdentifier
 {
     /// <summary>The SAML issuer entity identifier for the assertion or configured mapping (§3.2.1, REQUIRED).</summary>
@@ -83,92 +123,124 @@ public sealed record SamlNameIdSubjectIdentifier
     /// <summary>
     /// Renders this identifier as the <c>sub_id</c> claim object — <c>format</c> = <c>saml-nameid</c>, the
     /// REQUIRED <c>issuer</c> and <c>nameid</c>, and each optional member included exactly when it is
-    /// present (§3.2.2). The runtime value is a <see cref="Dictionary{TKey, TValue}"/> the JWT payload
-    /// serialiser emits as a nested JSON object.
+    /// present
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">Section 3.2.2</see>):
+    /// the <see cref="SubjectIdentifier.ToWireObject"/> of <see cref="ToSubjectIdentifier"/>.
+    /// The runtime value is a <see cref="Dictionary{TKey, TValue}"/> the JWT payload serialiser emits as a
+    /// nested JSON object.
     /// </summary>
     /// <returns>The claim object for the <c>sub_id</c> claim.</returns>
-    public IReadOnlyDictionary<string, object> ToClaimObject()
+    public IReadOnlyDictionary<string, object> ToClaimObject() => ToSubjectIdentifier().ToWireObject();
+
+
+    /// <summary>
+    /// Renders the SAML issuer and which optional members are present, in the words of the debugger display,
+    /// and neither <see cref="NameId"/> nor the value of any optional member.
+    /// </summary>
+    /// <remarks>
+    /// A record's generated text prints every property, and the NameID and its qualifiers can identify a
+    /// person; an identifier that reaches a log, a trace or an exception message through its text carries none
+    /// of those values. The rule is this library's.
+    /// </remarks>
+    /// <returns>
+    /// The text <c>SamlNameIdSubjectIdentifier(Issuer=..., HasNameIdFormat=..., HasNameQualifier=...,
+    /// HasSpNameQualifier=..., HasSpProvidedId=...)</c>.
+    /// </returns>
+    public override string ToString() =>
+        $"SamlNameIdSubjectIdentifier(Issuer={Issuer}, HasNameIdFormat={NameIdFormat is not null}, HasNameQualifier={NameQualifier is not null}, HasSpNameQualifier={SpNameQualifier is not null}, HasSpProvidedId={SpProvidedId is not null})";
+
+
+    /// <summary>
+    /// Projects this identifier to a Subject Identifier of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>, a
+    /// <see cref="SubjectIdentifier"/> of the
+    /// <see cref="SubjectIdentifierFormats.SamlNameId"/> format: the REQUIRED <c>issuer</c> and
+    /// <c>nameid</c> members and each optional member exactly when it is present, as
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>
+    /// states: "Each optional field MUST be included exactly when the corresponding attribute is present on
+    /// that &lt;NameID&gt; or in the configured mapping." <see cref="ToClaimObject"/> renders this
+    /// projection's wire object.
+    /// </summary>
+    /// <returns>The Subject Identifier.</returns>
+    public SubjectIdentifier ToSubjectIdentifier()
     {
-        Dictionary<string, object> claim = new(StringComparer.Ordinal)
+        Dictionary<string, object> members = new(StringComparer.Ordinal)
         {
-            [SamlNameIdMemberNames.Format] = SamlNameIdMemberNames.SamlNameIdFormat,
             [SamlNameIdMemberNames.Issuer] = Issuer,
             [SamlNameIdMemberNames.NameId] = NameId
         };
 
         if(NameIdFormat is not null)
         {
-            claim[SamlNameIdMemberNames.NameIdFormat] = NameIdFormat;
+            members[SamlNameIdMemberNames.NameIdFormat] = NameIdFormat;
         }
 
         if(NameQualifier is not null)
         {
-            claim[SamlNameIdMemberNames.NameQualifier] = NameQualifier;
+            members[SamlNameIdMemberNames.NameQualifier] = NameQualifier;
         }
 
         if(SpNameQualifier is not null)
         {
-            claim[SamlNameIdMemberNames.SpNameQualifier] = SpNameQualifier;
+            members[SamlNameIdMemberNames.SpNameQualifier] = SpNameQualifier;
         }
 
         if(SpProvidedId is not null)
         {
-            claim[SamlNameIdMemberNames.SpProvidedId] = SpProvidedId;
+            members[SamlNameIdMemberNames.SpProvidedId] = SpProvidedId;
         }
 
-        return claim;
+        return new SubjectIdentifier
+        {
+            Format = SubjectIdentifierFormats.SamlNameId,
+            Members = members
+        };
     }
 
 
     /// <summary>
-    /// Parses a decoded <c>sub_id</c> claim value into a <see cref="SamlNameIdSubjectIdentifier"/> iff it
-    /// is a well-formed SAML NameID Subject Identifier — a JSON object whose <c>format</c> is
-    /// <c>saml-nameid</c> with non-empty <c>issuer</c> and <c>nameid</c> members (§3.2.1). A value that is
-    /// absent, not an object, of a different Subject Identifier Format, or missing a REQUIRED member
-    /// yields <see langword="false"/> — the Resource Authorization Server treats that as "no usable SAML
-    /// NameID" and applies its §3.2.2 policy. Parsing never derives trust from the identifier (§9.5).
+    /// Reads a <see cref="SamlNameIdSubjectIdentifier"/> from a Subject Identifier of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>, a
+    /// <see cref="SubjectIdentifier"/> whose <see cref="SubjectIdentifier.Format"/> is
+    /// <see cref="SubjectIdentifierFormats.SamlNameId"/> and which is valid for that format
+    /// (<see cref="SubjectIdentifier.IsValidForKnownFormat"/>): the REQUIRED <c>issuer</c> and <c>nameid</c>
+    /// non-empty JSON strings, each optional member a JSON string when present, and no other member
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>). Any other
+    /// identifier yields <see langword="false"/>.
     /// </summary>
-    /// <param name="claimValue">The decoded <c>sub_id</c> claim value.</param>
-    /// <param name="identifier">The parsed identifier on success; otherwise <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when a well-formed SAML NameID identifier was parsed.</returns>
-    public static bool TryParse(object? claimValue, out SamlNameIdSubjectIdentifier? identifier)
+    /// <remarks>
+    /// A non-empty <c>issuer</c> and <c>nameid</c> is this library's reading, after the pattern of the formats
+    /// of <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2">RFC 9493 Section 3.2</see>, each of
+    /// which says of its required members that they are "REQUIRED and MUST NOT be null or empty", and no
+    /// sentence of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>,
+    /// which describes each of the two as "A JSON string containing" its value.
+    /// </remarks>
+    /// <param name="identifier">The Subject Identifier to read.</param>
+    /// <param name="samlIdentifier">The SAML NameID identifier on success; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when <paramref name="identifier"/> is a valid SAML NameID identifier.</returns>
+    public static bool TryFrom(SubjectIdentifier identifier, out SamlNameIdSubjectIdentifier? samlIdentifier)
     {
-        identifier = null;
+        ArgumentNullException.ThrowIfNull(identifier);
+        samlIdentifier = null;
 
-        //§3.2.1: format MUST be saml-nameid; a different (or absent) format is not this identifier type.
-        if(!TryReadMember(claimValue, SamlNameIdMemberNames.Format, out string? format)
-            || !string.Equals(format, SamlNameIdMemberNames.SamlNameIdFormat, StringComparison.Ordinal))
+        if(!SubjectIdentifierFormats.IsSamlNameId(identifier.Format)
+            || !identifier.IsValidForKnownFormat()
+            || identifier.Members[SamlNameIdMemberNames.Issuer] is not string issuer
+            || identifier.Members[SamlNameIdMemberNames.NameId] is not string nameId)
         {
             return false;
         }
 
-        //§3.2.1: issuer and nameid are REQUIRED; a malformed identifier missing either is rejected.
-        if(!TryReadMember(claimValue, SamlNameIdMemberNames.Issuer, out string? issuer)
-            || string.IsNullOrEmpty(issuer))
-        {
-            return false;
-        }
-
-        if(!TryReadMember(claimValue, SamlNameIdMemberNames.NameId, out string? nameId)
-            || string.IsNullOrEmpty(nameId))
-        {
-            return false;
-        }
-
-        //§3.2.1: each optional member is surfaced exactly when present (a null member is simply absent).
-        _ = TryReadMember(claimValue, SamlNameIdMemberNames.NameIdFormat, out string? nameIdFormat);
-        _ = TryReadMember(claimValue, SamlNameIdMemberNames.NameQualifier, out string? nameQualifier);
-        _ = TryReadMember(claimValue, SamlNameIdMemberNames.SpNameQualifier, out string? spNameQualifier);
-        _ = TryReadMember(claimValue, SamlNameIdMemberNames.SpProvidedId, out string? spProvidedId);
-
-        identifier = new SamlNameIdSubjectIdentifier
+        samlIdentifier = new SamlNameIdSubjectIdentifier
         {
             Issuer = issuer,
             NameId = nameId,
-            NameIdFormat = nameIdFormat,
-            NameQualifier = nameQualifier,
-            SpNameQualifier = spNameQualifier,
-            SpProvidedId = spProvidedId
+            NameIdFormat = ReadOptionalMember(identifier, SamlNameIdMemberNames.NameIdFormat),
+            NameQualifier = ReadOptionalMember(identifier, SamlNameIdMemberNames.NameQualifier),
+            SpNameQualifier = ReadOptionalMember(identifier, SamlNameIdMemberNames.SpNameQualifier),
+            SpProvidedId = ReadOptionalMember(identifier, SamlNameIdMemberNames.SpProvidedId)
         };
 
         return true;
@@ -176,18 +248,39 @@ public sealed record SamlNameIdSubjectIdentifier
 
 
     /// <summary>
-    /// Reads a string member from a decoded JSON object value, accepting either the read-only or the
-    /// mutable dictionary shape a JWT payload parser may produce.
+    /// Parses a decoded <c>sub_id</c> claim value into a <see cref="SamlNameIdSubjectIdentifier"/> iff it
+    /// is a SAML NameID Subject Identifier valid for its format: the JSON object is projected by
+    /// <see cref="SubjectIdentifier.FromWireObject"/> and read by <see cref="TryFrom"/>. A value that is
+    /// absent, not an object, of a different Subject Identifier Format, or not valid for the
+    /// <c>saml-nameid</c> format
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">Section 3.2.1</see>)
+    /// yields <see langword="false"/>, and the Resource Authorization Server applies its
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">Section 3.2.2</see>
+    /// policy for a malformed or unsupported <c>sub_id</c>. Parsing never derives trust from the identifier
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">Section 9.5</see>).
     /// </summary>
-    private static bool TryReadMember(object? claimValue, string member, out string? value)
+    /// <param name="claimValue">
+    /// The decoded <c>sub_id</c> claim value, in either the read-only or the mutable dictionary shape a JWT
+    /// payload parser may produce.
+    /// </param>
+    /// <param name="identifier">The parsed identifier on success; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when a well-formed SAML NameID identifier was parsed.</returns>
+    public static bool TryParse(object? claimValue, out SamlNameIdSubjectIdentifier? identifier)
     {
-        (bool found, value) = claimValue switch
-        {
-            IReadOnlyDictionary<string, object> readOnly when readOnly.TryGetValue(member, out object? raw) && raw is string s => (true, s),
-            IDictionary<string, object> mutable when mutable.TryGetValue(member, out object? raw) && raw is string s => (true, s),
-            _ => (false, null)
-        };
+        identifier = null;
+        IReadOnlyDictionary<string, object>? claimObject = IdJagAssertionValidation.AsClaimObject(claimValue);
 
-        return found;
+        return claimObject is not null
+            && SubjectIdentifier.FromWireObject(claimObject) is SubjectIdentifier subjectIdentifier
+            && TryFrom(subjectIdentifier, out identifier);
     }
+
+
+    /// <summary>
+    /// Reads the optional member <paramref name="memberName"/> of a SAML NameID Subject Identifier already
+    /// valid for its format, where a present optional member is a JSON string; <see langword="null"/> when
+    /// the member is absent.
+    /// </summary>
+    private static string? ReadOptionalMember(SubjectIdentifier identifier, string memberName) =>
+        identifier.Members.TryGetValue(memberName, out object? value) ? value as string : null;
 }

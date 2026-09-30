@@ -18,8 +18,13 @@ namespace Verifiable.OAuth.TokenExchange;
 /// <see cref="Scope"/>, <see cref="Audience"/>, and <see cref="IssuedTokenType"/> are.
 /// </para>
 /// <para>
-/// A <see langword="null"/> return from the authorizing delegate means the exchange is denied (the
-/// library answers <c>invalid_target</c> per RFC 8693 §2.2.2). With impersonation semantics the
+/// A <see langword="null"/> return from the authorizing delegate means the exchange is denied. The
+/// library answers <c>invalid_grant</c> when the request asked for an ID-JAG (its
+/// <c>requested_token_type</c> the id-jag URN, the error of the example in
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4.3</see>).
+/// Otherwise it answers <c>invalid_target</c> when the request named a <c>resource</c> or an
+/// <c>audience</c> and <c>invalid_request</c> when it named neither, per
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>. With impersonation semantics the
 /// <see cref="Subject"/> is typically the validated subject token's <c>sub</c> — the client becomes
 /// indistinguishable from that subject at the target (RFC 8693 §1.1).
 /// </para>
@@ -55,9 +60,21 @@ public sealed record TokenExchangeAuthorization
     /// <see cref="TokenType.AccessToken"/> mints an RFC 9068 access-token JWT (response
     /// <c>token_type</c> Bearer). <see cref="TokenType.IdJag"/> mints an Identity Assertion JWT
     /// Authorization Grant (<c>typ</c> <c>oauth-id-jag+jwt</c>, response <c>token_type</c>
-    /// <c>N_A</c>) per draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3. Any other value is
-    /// rejected as a <c>server_error</c> (an AS misconfiguration), keeping <c>issued_token_type</c>
-    /// consistent with the returned token per RFC 8693 §2.2.1.
+    /// <c>N_A</c>) per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>.
+    /// <see cref="TokenType.RefreshToken"/> mints an opaque Refresh Token, returned in the
+    /// <c>access_token</c> field with <c>issued_token_type</c> the refresh_token URN and
+    /// <c>token_type</c> <c>N_A</c>: the protocol transition of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.5">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.5</see>,
+    /// where a client exchanges a SAML 2.0 assertion for a Refresh Token and later presents that Refresh
+    /// Token as a <c>subject_token</c> for an ID-JAG.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.3">Section 4.4.3</see>
+    /// states that later step: "If the IdP
+    /// Authorization Server supports Refresh Tokens as a subject_token in Token Exchange, the client can
+    /// skip renewing the Identity Assertion and directly request a new ID-JAG by presenting the Refresh
+    /// Token (see Section 4.3.2)." Any other value is rejected as a <c>server_error</c> (an AS
+    /// misconfiguration), keeping <c>issued_token_type</c> consistent with the returned token per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 Section 2.2.1</see>.
     /// </remarks>
     public TokenType IssuedTokenType { get; init; } = TokenType.AccessToken;
 
@@ -72,11 +89,18 @@ public sealed record TokenExchangeAuthorization
     public string? ResourceClientId { get; init; }
 
     /// <summary>
-    /// The <c>tenant</c> claim of an issued ID-JAG — the tenant identifier for a multi-tenant IdP
-    /// (issuer), per draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1 / §6.1. The IdP MUST include
-    /// it when the issuer is multi-tenant and the tenant context is relevant, so the subject identifier
-    /// scopes as <c>iss + tenant + sub</c> (§6.3). <see langword="null"/> omits the claim (single-tenant
-    /// issuer). Applies only when <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
+    /// The <c>tenant</c> claim of an issued ID-JAG, which
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>
+    /// defines as "tenant: OPTIONAL - JSON string that represents the tenant identifier for a multi-tenant
+    /// issuer" (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-6.1">Section 6.1</see>
+    /// relates the issuer and the tenant).
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-6.3">Section 6.3</see>
+    /// states when the IdP includes it: "When the Resource Authorization Server is multi-tenant, the IdP MUST
+    /// include the tenant claim in the ID-JAG to ensure proper subject identifier scoping." The subject
+    /// identifier then scopes as <c>iss + tenant + sub</c>. <see langword="null"/> or empty omits the claim. A
+    /// value of white space only is the authorization seam's own defect: the ID-JAG mint answers it
+    /// <c>server_error</c> and mints nothing. That rule is this library's.
+    /// Applies only when <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
     /// </summary>
     public string? Tenant { get; init; }
 
@@ -85,7 +109,9 @@ public sealed record TokenExchangeAuthorization
     /// identifier, included only when that server is multi-tenant and the IdP knows the tenant, per
     /// draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1. When present, <see cref="AudienceSubject"/>
     /// is the account identifier within that tenant and the combination <c>aud + aud_tenant + aud_sub</c>
-    /// MUST be unique within the Resource Authorization Server. <see langword="null"/> omits the claim.
+    /// MUST be unique within the Resource Authorization Server. <see langword="null"/> or empty omits the claim.
+    /// A value of white space only is the authorization seam's own defect: the ID-JAG mint answers it
+    /// <c>server_error</c> and mints nothing. That rule is this library's.
     /// Applies only when <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
     /// </summary>
     public string? AudienceTenant { get; init; }
@@ -94,20 +120,65 @@ public sealed record TokenExchangeAuthorization
     /// The <c>aud_sub</c> claim of an issued ID-JAG — the Resource Authorization Server's own identifier
     /// for the End-User (scoped to <see cref="AudienceTenant"/> when present), per
     /// draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1. The Resource Authorization Server MAY use it
-    /// for subject resolution (including JIT provisioning). <see langword="null"/> omits the claim.
+    /// for subject resolution (including JIT provisioning). <see langword="null"/> or empty omits the claim. A
+    /// value of white space only is the authorization seam's own defect: the ID-JAG mint answers it
+    /// <c>server_error</c> and mints nothing. That rule is this library's.
     /// Applies only when <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
     /// </summary>
     public string? AudienceSubject { get; init; }
 
     /// <summary>
-    /// The <c>sub_id</c> claim of an issued ID-JAG — a SAML NameID Subject Identifier (§3.2) that
-    /// identifies the same End-User as <see cref="Subject"/> in the Resource Authorization Server's SAML
-    /// SSO subject namespace, for deployments that resolve users by SAML &lt;NameID&gt; rather than by
-    /// <c>iss</c> + <c>sub</c>. The IdP derives it from the &lt;NameID&gt; it would use for SSO to that
-    /// server (§3.2.2). <see langword="null"/> omits the claim. Applies only when
+    /// The <c>sub_id</c> claim of an issued ID-JAG: any
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493">RFC 9493</see> Subject Identifier the
+    /// authorization seam chooses for the End-User named by <see cref="Subject"/>, written as
+    /// <see cref="Verifiable.Core.SecurityEvents.SubjectIdentifier.ToWireObject"/> renders it.
+    /// <see langword="null"/>, the default, omits the claim. Applies only when
     /// <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
     /// </summary>
-    public IdJag.SamlNameIdSubjectIdentifier? SubjectIdentifier { get; init; }
+    /// <remarks>
+    /// <para>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "sub_id: OPTIONAL - Subject Identifier as defined in [RFC9493]. The sub_id claim MAY be used to
+    /// identify the same End-User as the sub claim using a different identifier namespace from the ID-JAG
+    /// iss and sub." Whether a grant carries it is the seam's choice, which
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.6">Section 9.6</see>
+    /// guides: "The IdP Authorization Server SHOULD include sub_id only when needed by the target Resource
+    /// Authorization Server for subject resolution."
+    /// </para>
+    /// <para>
+    /// The library writes the identifier the seam returns and chooses nothing in it, so what the texts ask of
+    /// the party that chooses the identifier is the seam's.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">Section 3.2.2</see>:
+    /// "When constructing a SAML NameID Subject Identifier, the IdP Authorization Server MUST derive its members
+    /// from the SAML Assertion Subject &lt;NameID&gt; value it would use for SSO to the target Resource
+    /// Authorization Server, or from an equivalent configured mapping that records the SAML &lt;NameID&gt; value
+    /// and attributes the IdP Authorization Server would issue for that subject and Resource Authorization
+    /// Server. Each optional field MUST be included exactly when the corresponding attribute is present on that
+    /// &lt;NameID&gt; or in the configured mapping."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.6">Section 9.6</see>:
+    /// "The IdP Authorization Server SHOULD minimize the subject identifiers included in the ID-JAG to those
+    /// required by the Resource Authorization Server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-6.1">RFC 9493 Section 6.1</see>: "When
+    /// transmitting Subject Identifiers, the transmitter SHOULD take care that they are only transmitting
+    /// multiple identifiers together when it is known that the recipient already knows that the identifiers
+    /// are related" or "when correlation is essential to the use case."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2">RFC 9493 Section 3.2</see>: "Since the
+    /// Subject Identifier Format conveys semantic information, applications SHOULD choose the most specific
+    /// possible format for the identifier in question."
+    /// </para>
+    /// <para>
+    /// An identifier that is not well formed
+    /// (<see cref="Verifiable.Core.SecurityEvents.SubjectIdentifier.IsWellFormed"/>: its format name is blank,
+    /// or its format is one this library recognizes and its members break that format's rules) is the seam's
+    /// own defect: the token exchange answers <c>server_error</c> with
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and mints nothing. An identifier of a
+    /// format this library does not recognize is written as given, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see> lets a format
+    /// be a registered name or a Collision-Resistant Name. A SAML NameID Subject Identifier comes from
+    /// <see cref="IdJag.SamlNameIdSubjectIdentifier.ToSubjectIdentifier"/>.
+    /// </para>
+    /// </remarks>
+    public Verifiable.Core.SecurityEvents.SubjectIdentifier? SubjectIdentifier { get; init; }
 
     /// <summary>
     /// Additional claims to include in the issued ID-JAG beyond the §3.1 core set — the optional ID Token

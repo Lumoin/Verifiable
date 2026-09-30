@@ -420,7 +420,7 @@ public static class Oid4VpEndpoints
                     {
 
                         return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError, "The server is not ready to serve this request."));
+                            OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                     }
 
                     DateTimeOffset postNow = server.TimeProvider.GetUtcNow();
@@ -476,7 +476,7 @@ public static class Oid4VpEndpoints
                 {
 
                     return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "The server is not ready to serve this request."));
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 FlowInput signed = await oauth.ActionExecutor.ExecuteAsync(
@@ -502,7 +502,7 @@ public static class Oid4VpEndpoints
 
                     return ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
-                        "The server is not ready to serve this request.");
+                        WellKnownOAuthErrorDescriptions.ServerNotReady);
                 }
 
                 return ServerHttpResponse.Ok(

@@ -5,7 +5,8 @@ namespace Verifiable.OAuth.IdJag;
 /// <summary>
 /// The outcome of validating an Identity Assertion JWT Authorization Grant (ID-JAG) assertion against
 /// the draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.4.1 / §9.3 claim rules via
-/// <see cref="IdJagAssertionValidation.Validate"/>. A success carries the claims a Resource
+/// <see cref="IdJagAssertionValidation.Validate"/> or <see cref="IdJagAssertionValidation.ValidateAsync"/>. A
+/// success carries the claims a Resource
 /// Authorization Server shapes its access token from; a failure carries the
 /// <see cref="IdJagValidationFailureReason"/> the caller maps to <c>invalid_grant</c>.
 /// </summary>
@@ -61,13 +62,67 @@ public sealed record IdJagAssertionValidationResult
     public string? AudienceSubject { get; init; }
 
     /// <summary>
-    /// The <c>sub_id</c> claim parsed as a SAML NameID Subject Identifier (§3.2), when the grant carries
-    /// a well-formed one; otherwise <see langword="null"/> (absent, not an object, a different Subject
-    /// Identifier Format, or missing a REQUIRED member). Surfaced for the Resource Authorization Server's
-    /// §3.2.2 subject resolution; per §9.5 its <see cref="SamlNameIdSubjectIdentifier.Issuer"/> MUST NOT
-    /// be used to establish trust in the ID-JAG issuer (the grant is validated by its own <c>iss</c>).
+    /// The <c>sub_id</c> claim as read: a JSON object whose <c>format</c> member names a format, a string that
+    /// is not blank (<see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>;
+    /// <see cref="Verifiable.Core.SecurityEvents.SubjectIdentifier.IsWellFormed"/>), whose members
+    /// hold the rules of its format when the format is one the library knows
+    /// (<see cref="Verifiable.Core.SecurityEvents.SubjectIdentifierFormats.IsKnown"/>,
+    /// <see cref="Verifiable.Core.SecurityEvents.SubjectIdentifier.IsValidForKnownFormat"/>), or of a format the
+    /// library does not know, carried opaque. <see langword="null"/> when the claim is absent, is not such an
+    /// object, or names a known format whose rules it breaks.
     /// </summary>
-    public SamlNameIdSubjectIdentifier? SubjectIdentifier { get; init; }
+    /// <remarks>
+    /// <para>
+    /// Surfaced for the Resource Authorization Server's subject resolution
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>).
+    /// The claim is judged only under an <see cref="IdJagSubjectIdentifierRule"/> that requires or compares it;
+    /// <see cref="SubjectIdentifierComparison"/> records that judgement.
+    /// </para>
+    /// <para>
+    /// Under <see cref="IdJagSubjectIdentifierRule.Default"/> the claim is surfaced and judged by nothing, and
+    /// <see cref="SubjectIdentifierComparison"/> is <see langword="null"/>. An application that resolves a
+    /// subject by it takes on what the texts ask of the party that does: the same End-User as <see cref="Subject"/>
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>),
+    /// the refusals of a server that requires the claim
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">Section 3.2.2</see>),
+    /// the association of the validated issuer with a SAML issuer
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">Section 9.5</see>),
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc9493#section-4.1">RFC 9493 Section 4.1</see>: "When
+    /// processing a JWT with both JWT "sub" and "sub_id" Claims, implementations MUST NOT rely on both claims to
+    /// determine the JWT Subject." Or it validates with a rule that compares the claim.
+    /// </para>
+    /// </remarks>
+    public Verifiable.Core.SecurityEvents.SubjectIdentifier? SubjectIdentifier { get; init; }
+
+    /// <summary>
+    /// The <c>sub_id</c> claim read as a SAML NameID Subject Identifier
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.1</see>):
+    /// the projection of <see cref="SubjectIdentifier"/> through
+    /// <see cref="Verifiable.OAuth.IdJag.SamlNameIdSubjectIdentifier.TryFrom"/>; <see langword="null"/> when
+    /// <see cref="SubjectIdentifier"/> is <see langword="null"/> or of another format.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">Section 9.5</see>:
+    /// "When the ID-JAG includes a sub_id claim, the Resource Authorization Server MUST NOT use the
+    /// sub_id.issuer value to establish trust in the ID-JAG issuer." The grant is validated by its own
+    /// <c>iss</c>, so <see cref="Verifiable.OAuth.IdJag.SamlNameIdSubjectIdentifier.Issuer"/> is surfaced as data and never as
+    /// the grant's issuer.
+    /// </remarks>
+    public SamlNameIdSubjectIdentifier? SamlNameIdSubjectIdentifier { get; init; }
+
+    /// <summary>
+    /// The record of the comparison of <see cref="SubjectIdentifier"/> with the grant's validated subject under
+    /// the redeem's <see cref="IdJagSubjectIdentifierRule"/>: the relation, the outcome, whose rule decided it,
+    /// the decision, and the two values compared. <see langword="null"/> when nothing was compared: a
+    /// <see langword="null"/> record means nothing judged the claim.
+    /// </summary>
+    /// <remarks>
+    /// The record rides a successful result and the two refusals the comparison decides,
+    /// <see cref="IdJagValidationFailureReason.SubjectIdentifierMismatch"/> and
+    /// <see cref="IdJagValidationFailureReason.SubjectIdentifierUndetermined"/>, so an audit keeps the attempt
+    /// whichever way it was decided.
+    /// </remarks>
+    public Verifiable.Core.Relations.ComparisonRecord<Verifiable.Core.SecurityEvents.SubjectIdentifier, IdJagSubjectContext>? SubjectIdentifierComparison { get; init; }
 
     /// <summary>
     /// The <c>resource</c> claim value(s) (RFC 8707) carried by the grant, when present — the
@@ -148,15 +203,57 @@ public sealed record IdJagAssertionValidationResult
     public DateTimeOffset? Expiration { get; init; }
 
     /// <summary>
-    /// The <c>jti</c> claim — the grant's unique identifier (§3.1 REQUIRED on the issued ID-JAG;
-    /// RFC 7519 §4.1.7), when present; otherwise <see langword="null"/>. Surfaced so a Resource
-    /// Authorization Server can apply the RFC 7523 §3 (rule 7) replay defense — recording redeemed
-    /// <c>jti</c> values in its own store and refusing reuse — which the library leaves app-side because
-    /// it holds no token store. This is not a §4.4.1 validation MUST, so a grant without <c>jti</c> still
-    /// validates here; an app requiring replay protection refuses an absent or already-seen <c>jti</c> in
-    /// its <see cref="Server.ValidateJwtBearerAssertionDelegate"/>.
+    /// The <c>jti</c> claim, the grant's unique identifier (REQUIRED on the ID-JAG by
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 Section 4.1.7</see>), when
+    /// present; otherwise <see langword="null"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Surfaced so a Resource Authorization Server's <see cref="Server.ValidateJwtBearerAssertionDelegate"/> can
+    /// carry it onto <see cref="JwtBearer.JwtBearerGrant.Jti"/>. The token endpoint's jwt-bearer grant applies
+    /// the replay defense of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> (rule 7) through
+    /// <see cref="Server.JtiReplayGuard.ConsultAsync"/> only when the grant the delegate returns carries
+    /// <see cref="JwtBearer.JwtBearerGrant.Jti"/>, <see cref="JwtBearer.JwtBearerGrant.Issuer"/> and
+    /// <see cref="JwtBearer.JwtBearerGrant.Expiration"/> together, the last two of which the delegate can set
+    /// from <see cref="Issuer"/> and <see cref="Expiration"/>. The guard keys the <c>jti</c> on that issuer under
+    /// <see cref="Server.JtiReplayPurpose.AuthorizationGrantAssertion"/> and applies the exchange's
+    /// <see cref="Server.JtiReplayPolicy"/>: under <see cref="Server.JtiReplayPolicy.Disabled"/> nothing is
+    /// checked; under the other two a <c>jti</c> longer than <see cref="Server.JtiReplayGuard.MaxJtiLength"/>
+    /// or one the store has seen is refused with <c>invalid_grant</c>; with no store wired,
+    /// <see cref="Server.JtiReplayPolicy.OptionalIfStorePresent"/> checks nothing further and
+    /// <see cref="Server.JtiReplayPolicy.Required"/> answers <c>server_error</c>, as does a wired store that
+    /// cannot prove what it records.
+    /// </para>
+    /// <para>
+    /// A <c>jti</c> is not a
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// validation MUST, so this validation accepts a grant without <c>jti</c>; an application requiring replay
+    /// protection refuses an absent <c>jti</c> in its <see cref="Server.ValidateJwtBearerAssertionDelegate"/>.
+    /// </para>
+    /// </remarks>
     public string? Jti { get; init; }
+
+
+    /// <summary>
+    /// Renders whether the result is valid, its failure reason, the grant's issuer, and whether a tenant, a
+    /// subject identifier and a comparison are present, and none of <see cref="Subject"/>, the value of
+    /// <see cref="Tenant"/>, <see cref="AudienceSubject"/> or the NameID of
+    /// <see cref="SamlNameIdSubjectIdentifier"/>.
+    /// </summary>
+    /// <remarks>
+    /// A record's generated text prints every property, and the subject, the tenants, the audience subject, the
+    /// actors and a subject identifier can identify a person; a result that reaches a log, a trace or an
+    /// exception message through its text carries none of those values. The debugger display renders the
+    /// validity and the failure reason, neither of which identifies a person. The rule is this library's.
+    /// </remarks>
+    /// <returns>
+    /// The text <c>IdJagAssertionValidationResult(IsValid=..., Reason=..., Issuer=..., HasTenant=...,
+    /// HasSubjectIdentifier=..., HasComparison=...)</c>.
+    /// </returns>
+    public override string ToString() =>
+        $"IdJagAssertionValidationResult(IsValid={IsValid}, Reason={FailureReason}, Issuer={Issuer}, HasTenant={Tenant is not null}, HasSubjectIdentifier={SubjectIdentifier is not null}, HasComparison={SubjectIdentifierComparison is not null})";
 
 
     /// <summary>

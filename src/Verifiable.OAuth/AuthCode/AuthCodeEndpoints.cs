@@ -5416,6 +5416,19 @@ public static class AuthCodeEndpoints
         //resource trust domain); it defaults to the requesting client when the seam names none.
         string resourceClientId = authorization.ResourceClientId ?? registration.ClientId;
 
+        //What the seam chose is checked before the grant's jti and signing material are obtained, and a defect
+        //of the seam mints nothing: a sub_id that is not well formed (the redeem reads the same member), or a
+        //tenant, aud_tenant or aud_sub that is set and is white space only (the redeem refuses such a claim).
+        //A tenant relationship value that is null or empty omits its claim. The rule is this library's.
+        if((authorization.SubjectIdentifier is { } chosenIdentifier && !chosenIdentifier.IsWellFormed())
+            || (authorization.Tenant is { Length: > 0 } chosenTenant && string.IsNullOrWhiteSpace(chosenTenant))
+            || (authorization.AudienceTenant is { Length: > 0 } chosenAudienceTenant && string.IsNullOrWhiteSpace(chosenAudienceTenant))
+            || (authorization.AudienceSubject is { Length: > 0 } chosenAudienceSubject && string.IsNullOrWhiteSpace(chosenAudienceSubject)))
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+        }
+
         //§3.1 jti: a unique identifier for this grant.
         string jti = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
@@ -5480,14 +5493,19 @@ public static class AuthCodeEndpoints
             extraClaims[WellKnownJwtClaimNames.AudienceSubject] = authorization.AudienceSubject;
         }
 
-        //§3.2: the saml-nameid sub_id identifies the End-User in the Resource Authorization Server's SAML
-        //SSO subject namespace (the same subject as sub). The carrier renders the §3.2.1 object with each
-        //optional member included exactly when present; the runtime Dictionary serialises as a nested JSON
-        //object (the same shape the cnf claim uses).
+        //Section 3.1 lets the grant carry sub_id, an RFC 9493 Subject Identifier naming the same End-User as
+        //sub in another identifier namespace, and Section 9.6 asks the IdP to include it only when the target
+        //Resource Authorization Server needs it to resolve the subject: whether the grant carries one, and
+        //which, is the authorization seam's choice. The identifier was checked above, before the grant's jti
+        //and signing material were obtained: one that is not well formed (SubjectIdentifier.IsWellFormed: a
+        //blank format name, or a format this library recognizes whose member rules it breaks) is the seam's
+        //own defect, answered server_error, and nothing is minted. One of a format this library does not
+        //recognize is written as given, since RFC 9493 Section 3 lets a format be a registered name or a
+        //Collision-Resistant Name.
         if(authorization.SubjectIdentifier is { } subjectIdentifier)
         {
             extraClaims ??= new(StringComparer.Ordinal);
-            extraClaims[WellKnownJwtClaimNames.SubId] = subjectIdentifier.ToClaimObject();
+            extraClaims[WellKnownJwtClaimNames.SubId] = subjectIdentifier.ToWireObject();
         }
 
         //§3.1: "act: OPTIONAL - Actor claim as defined in Section 4.1 of [RFC8693]. When present, this
