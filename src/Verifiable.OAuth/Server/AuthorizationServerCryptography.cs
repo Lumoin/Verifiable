@@ -137,6 +137,33 @@ public sealed class AuthorizationServerCryptography: WiringComponent
 
 
     /// <summary>
+    /// Supplies the signing algorithms discovery advertises per protocol usage.
+    /// Optional. When <see langword="null"/>, discovery uses
+    /// <see cref="Metadata.DefaultSupportedSigningAlgorithms.ResolveAsync"/> to
+    /// preserve the current-key and accepted-client-signature declarations.
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveSupportedSigningAlgorithmsDelegate? ResolveSupportedSigningAlgorithmsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
     /// Builds the <see cref="Verifiable.JCose.JwksDocument"/> to serve at the JWKS endpoint.
     /// Required when <see cref="WellKnownCapabilityIdentifiers.OAuthJwksEndpoint"/> is enabled
     /// for any registration, otherwise optional. Validation requires it when the composition's
