@@ -28,11 +28,28 @@ public static class StructuralEquality
     private const int MaxDepth = 64;
 
     /// <summary>
-    /// Determines whether two materialized-JSON values are structurally equal: dictionaries match iff they have the
-    /// same key set and per-key structurally-equal values (key order is irrelevant), lists match iff they are
-    /// element-wise structurally equal in order, and scalars match by CLR value. The walk is iterative with an
-    /// explicit work stack — never recursion — so its call-stack use is bounded independently of input nesting.
+    /// Determines whether two materialized-JSON values are structurally equal: two maps match iff their member-name
+    /// sets are equal under ordinal comparison and the values under each name are structurally equal, whatever
+    /// comparer either map carries (member order is irrelevant); lists match iff they are element-wise structurally
+    /// equal in order; and scalars match by CLR value. Member names compare code unit by code unit, the comparison
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see> names
+    /// interoperable: "Implementations that transform the textual representation into sequences of Unicode code
+    /// units and then perform the comparison numerically, code unit by code unit, are interoperable in the sense
+    /// that implementations will agree in all cases on equality or inequality of two strings." The walk is
+    /// iterative with an explicit work stack, never recursion, so its call-stack use is bounded independently of
+    /// input nesting.
     /// </summary>
+    /// <remarks>
+    /// A map's own comparer decides which names it can hold, not which names match: a map over a comparer that
+    /// ignores letter case holding <c>account</c> does not match a map holding <c>ACCOUNT</c>. A map whose
+    /// comparer is known to be ordinal is read directly; any other map is read through an ordinal view built for
+    /// the comparison (<see cref="AsOrdinalLookup"/>). A map can hold one name twice, under two strings that are
+    /// ordinally equal, only when its comparer tells such strings apart; its ordinal view then holds fewer names
+    /// than the map. The comparison refuses such a map: it is equal to no value other than itself (the same
+    /// object), so neither of its values under the repeated name decides a match.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 Section 4</see>: "When the names
+    /// within an object are not unique, the behavior of software that receives such an object is unpredictable."
+    /// </remarks>
     /// <param name="left">The first value: a <c>Dictionary&lt;string, object&gt;</c>, a <c>List&lt;object&gt;</c>, a scalar, or <see langword="null"/>.</param>
     /// <param name="right">The second value, of the same materialized shape family.</param>
     /// <returns><see langword="true"/> when the two graphs are structurally equal.</returns>
@@ -64,15 +81,36 @@ public static class StructuralEquality
 
             if(TryAsMap(a, out IReadOnlyDictionary<string, object>? leftMap))
             {
-                if(!TryAsMap(b, out IReadOnlyDictionary<string, object>? rightMap) || leftMap.Count != rightMap.Count)
+                if(!TryAsMap(b, out IReadOnlyDictionary<string, object>? rightMap))
                 {
                     return false;
                 }
 
-                //Equal counts plus every left key present in right implies equal key sets (no duplicate keys exist).
-                foreach(KeyValuePair<string, object> entry in leftMap)
+                //A view holding fewer names than its map means the map holds one name twice; such a map equals
+                //only itself, so the comparison neither reads one of its values nor descends into it.
+                Dictionary<string, object> leftByOrdinalName = AsOrdinalLookup(leftMap);
+                Dictionary<string, object> rightByOrdinalName = AsOrdinalLookup(rightMap);
+                bool hasRepeatedName = leftByOrdinalName.Count != leftMap.Count || rightByOrdinalName.Count != rightMap.Count;
+                if(hasRepeatedName)
                 {
-                    if(!rightMap.TryGetValue(entry.Key, out object? rightValue))
+                    if(!ReferenceEquals(a, b))
+                    {
+                        return false;
+                    }
+
+                    continue;
+                }
+
+                //Each view's names are distinct ordinally: equal counts plus every left name present ordinally in
+                //right implies equal ordinal name sets.
+                if(leftByOrdinalName.Count != rightByOrdinalName.Count)
+                {
+                    return false;
+                }
+
+                foreach(KeyValuePair<string, object> entry in leftByOrdinalName)
+                {
+                    if(!rightByOrdinalName.TryGetValue(entry.Key, out object? rightValue))
                     {
                         return false;
                     }
@@ -116,10 +154,12 @@ public static class StructuralEquality
 
     /// <summary>
     /// Computes a hash code consistent with <see cref="JsonEqual"/>: structurally-equal graphs hash equal. A
-    /// dictionary contributes its entry count and an order-independent combination of its keys, a list its element
-    /// count, and a scalar its own hash. The summary is intentionally shallow — it does not descend into nested
-    /// values — which keeps it cheap while preserving the equal-implies-equal-hash contract (it never claims two
-    /// unequal graphs differ).
+    /// map contributes the count and an order-independent combination of the ordinal hashes of the member names
+    /// of its ordinal view (<see cref="AsOrdinalLookup"/>), the name set <see cref="JsonEqual"/> compares, a list
+    /// its element count, and a scalar its own hash. The summary is intentionally shallow: it does not descend
+    /// into nested values, which keeps it cheap while preserving the equal-implies-equal-hash contract (it never
+    /// claims two unequal graphs differ). A map holding one name twice is equal only to itself, and its hash is
+    /// computed from its own members each time, so equal values hash equal for it too.
     /// </summary>
     /// <param name="value">A materialized-JSON value, or <see langword="null"/>.</param>
     /// <returns>A hash code over <paramref name="value"/>.</returns>
@@ -132,14 +172,15 @@ public static class StructuralEquality
 
         if(TryAsMap(value, out IReadOnlyDictionary<string, object>? map))
         {
-            //XOR over keys is order-independent, matching the key-set equality JsonEqual uses for dictionaries.
-            int keyAccumulator = 0;
-            foreach(string key in map.Keys)
+            //XOR over the ordinal names is order-independent, matching the ordinal name-set equality JsonEqual uses.
+            Dictionary<string, object> byOrdinalName = AsOrdinalLookup(map);
+            int nameAccumulator = 0;
+            foreach(string name in byOrdinalName.Keys)
             {
-                keyAccumulator ^= key.GetHashCode(StringComparison.Ordinal);
+                nameAccumulator ^= name.GetHashCode(StringComparison.Ordinal);
             }
 
-            return HashCode.Combine(map.Count, keyAccumulator);
+            return HashCode.Combine(byOrdinalName.Count, nameAccumulator);
         }
 
         if(TryAsList(value, out IReadOnlyList<object>? list))
@@ -216,5 +257,56 @@ public static class StructuralEquality
         list = value as IReadOnlyList<object>;
 
         return list is not null;
+    }
+
+
+    /// <summary>
+    /// The view of <paramref name="map"/> that finds a member name code unit by code unit, the comparison
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see> names
+    /// interoperable: the map itself when it is a <see cref="Dictionary{TKey, TValue}"/> whose comparer is ordinal,
+    /// else a copy of its members into a map over <see cref="StringComparer.Ordinal"/>, built for one comparison.
+    /// </summary>
+    /// <remarks>
+    /// A map over a comparer that ignores letter case finds <c>ACCOUNT</c> under <c>account</c>; its ordinal view
+    /// does not. The copy keeps the first of any names that are ordinally equal, so the view's names are distinct
+    /// ordinally whatever comparer the map carries. A view holding fewer names than its map is the refusal's
+    /// signal: <see cref="JsonEqual"/> holds such a map equal to itself only and reads none of its values through
+    /// the view.
+    /// </remarks>
+    /// <param name="map">A materialized JSON object.</param>
+    /// <returns>A map holding the members of <paramref name="map"/> and looking their names up ordinally.</returns>
+    private static Dictionary<string, object> AsOrdinalLookup(IReadOnlyDictionary<string, object> map) => map switch
+    {
+        Dictionary<string, object> dictionary when IsOrdinal(dictionary.Comparer) => dictionary,
+        _ => CopyByOrdinalName(map)
+    };
+
+
+    /// <summary>
+    /// Whether <paramref name="comparer"/> compares strings code unit by code unit: the default string equality
+    /// comparer, which a <see cref="Dictionary{TKey, TValue}"/> built without a comparer reports, or
+    /// <see cref="StringComparer.Ordinal"/>.
+    /// </summary>
+    /// <param name="comparer">The comparer a map reports.</param>
+    /// <returns><see langword="true"/> when the comparer is known to be ordinal.</returns>
+    private static bool IsOrdinal(IEqualityComparer<string> comparer) =>
+        ReferenceEquals(comparer, EqualityComparer<string>.Default) || ReferenceEquals(comparer, StringComparer.Ordinal);
+
+
+    /// <summary>
+    /// Copies the members of <paramref name="map"/> into a map over <see cref="StringComparer.Ordinal"/>, keeping
+    /// the first of any names that are ordinally equal.
+    /// </summary>
+    /// <param name="map">A materialized JSON object whose comparer is not known to be ordinal.</param>
+    /// <returns>The ordinal copy.</returns>
+    private static Dictionary<string, object> CopyByOrdinalName(IReadOnlyDictionary<string, object> map)
+    {
+        var byOrdinalName = new Dictionary<string, object>(map.Count, StringComparer.Ordinal);
+        foreach(KeyValuePair<string, object> entry in map)
+        {
+            _ = byOrdinalName.TryAdd(entry.Key, entry.Value);
+        }
+
+        return byOrdinalName;
     }
 }

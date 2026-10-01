@@ -196,6 +196,14 @@ public sealed record IdJagSubjectIdentifierRule
     /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.3.1">OpenID Shared Signals Framework 1.0 Section 3.3.1</see>
     /// reads "All members within a Complex Subject MUST represent attributes of the same Subject Principal."
     /// </para>
+    /// <para>
+    /// The library's table-shaped association is <see cref="IdJagSubjectAssociationDictionary"/>: the
+    /// application lists, under each validated grant subject, the Subject Identifiers it knows that End-User by,
+    /// changes the entries at any time, and wires <see cref="IdJagSubjectAssociationDictionary.CompareAsync"/>
+    /// here. It compares every member of a candidate with the listed identifiers and decides nothing for a
+    /// subject it holds no entry for; an application that resolves a subject by fewer members, by a single
+    /// alias or by a canonicalized value supplies its own delegate.
+    /// </para>
     /// </remarks>
     public CompareDelegate<SubjectIdentifier, IdJagSubjectContext>? Association { get; init; }
 }

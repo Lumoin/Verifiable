@@ -308,6 +308,69 @@ internal sealed class DidCommEqualityTests
     }
 
 
+    /// <summary>
+    /// <see cref="StructuralEquality.JsonEqual"/> compares object member names code unit by code unit whatever
+    /// comparer a map carries: a map over a comparer that ignores letter case holding <c>account</c> and
+    /// <c>realm</c> is not equal, in either order of the operands, to an ordinal map holding <c>account</c> and <c>ACCOUNT</c>;
+    /// two maps over that comparer whose names differ only in letter case are not equal; and the same names
+    /// under mixed comparers are equal, with equal <see cref="StructuralEquality.JsonHashCode"/> values.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>: "Software
+    /// implementations are typically required to test names of object members for equality." and
+    /// "Implementations that transform the textual representation into sequences of Unicode code units and then
+    /// perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+    /// implementations will agree in all cases on equality or inequality of two strings."
+    /// </summary>
+    [TestMethod]
+    public void JsonEqualComparesMemberNamesOrdinallyWhateverComparerAMapCarries()
+    {
+        var ignoringCase = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { ["account"] = "alice", ["realm"] = "example" };
+        var twoSpellings = new Dictionary<string, object>(StringComparer.Ordinal) { ["account"] = "alice", ["ACCOUNT"] = "alice" };
+        var ignoringCaseCapitalized = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { ["Account"] = "alice" };
+        var ignoringCaseLowered = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { ["account"] = "alice" };
+        var ordinalSameNames = new Dictionary<string, object>(StringComparer.Ordinal) { ["realm"] = "example", ["account"] = "alice" };
+
+        Assert.IsFalse(StructuralEquality.JsonEqual(ignoringCase, twoSpellings));
+        Assert.IsFalse(StructuralEquality.JsonEqual(twoSpellings, ignoringCase));
+        Assert.IsFalse(StructuralEquality.JsonEqual(ignoringCaseCapitalized, ignoringCaseLowered));
+        Assert.IsFalse(StructuralEquality.JsonEqual(ignoringCaseLowered, ignoringCaseCapitalized));
+
+        //The same names under mixed comparers are the same member-name set.
+        Assert.IsTrue(StructuralEquality.JsonEqual(ignoringCase, ordinalSameNames));
+        Assert.IsTrue(StructuralEquality.JsonEqual(ordinalSameNames, ignoringCase));
+        Assert.AreEqual(StructuralEquality.JsonHashCode(ignoringCase), StructuralEquality.JsonHashCode(ordinalSameNames));
+    }
+
+
+    /// <summary>
+    /// <see cref="StructuralEquality.JsonEqual"/> refuses a map that holds one member name twice: a map over a
+    /// comparer that tells two string instances of the same code units apart, holding <c>realm</c> under two
+    /// instances with two different values, is not equal, in both orders of the operands, to an ordinal map
+    /// holding <c>realm</c> once with one of those values, and it is equal to itself. Refusing such a map, rather
+    /// than reading one of its values, is this library's reading of the clause.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 Section 4</see>: "The names within an
+    /// object SHOULD be unique." and "When the names within an object are not unique, the behavior of software
+    /// that receives such an object is unpredictable."
+    /// </summary>
+    [TestMethod]
+    public void JsonEqualRefusesAMapHoldingOneMemberNameTwice()
+    {
+        string firstRealm = "realm";
+        string secondRealm = new(firstRealm.ToCharArray());
+        var twoRealms = new Dictionary<string, object>(ReferenceEqualityComparer.Instance)
+        {
+            [firstRealm] = "example",
+            [secondRealm] = "other"
+        };
+
+        var oneRealm = new Dictionary<string, object>(StringComparer.Ordinal) { ["realm"] = "example" };
+
+        Assert.HasCount(2, twoRealms);
+        Assert.IsFalse(StructuralEquality.JsonEqual(twoRealms, oneRealm));
+        Assert.IsFalse(StructuralEquality.JsonEqual(oneRealm, twoRealms));
+        Assert.IsTrue(StructuralEquality.JsonEqual(twoRealms, twoRealms));
+    }
+
+
     /// <summary><see cref="StructuralEquality.SequenceEqual"/> treats two nulls as equal and a null as unequal to a non-null sequence.</summary>
     [TestMethod]
     public void SequenceEqualNullHandling()

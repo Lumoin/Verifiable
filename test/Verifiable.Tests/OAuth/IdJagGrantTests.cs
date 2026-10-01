@@ -4707,6 +4707,180 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// A server that requires the <c>sub_id</c> claim and wires an <see cref="IdJagSubjectAssociationDictionary"/>
+    /// as its association redeems a grant whose identifier the dictionary lists under the grant's validated
+    /// subject, refuses a grant whose identifier it does not list, and refuses a fresh grant as undecided once
+    /// the application removes the entry after a first redemption the entry decided.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>:
+    /// "If the Resource Authorization Server requires a SAML NameID Subject Identifier for subject resolution,
+    /// it MUST reject the token request with an invalid_grant error as defined in Section 5.2 of [RFC6749] if
+    /// any of the following is true:" and the third is "the sub_id claim is not authorized by local policy for
+    /// the validated ID-JAG issuer."
+    /// </summary>
+    /// <param name="caseName">
+    /// The dictionary: <c>listed</c> (the grant's identifier under its subject), <c>notListed</c> (another
+    /// email under its subject) or <c>removed</c> (the entry removed between two redemptions).
+    /// </param>
+    [TestMethod]
+    [DataRow("listed", DisplayName = "the grant's sub_id is listed under its subject")]
+    [DataRow("notListed", DisplayName = "another email is listed under the grant's subject")]
+    [DataRow("removed", DisplayName = "the entry is removed between two redemptions of fresh grants")]
+    public async Task TheAssociationDictionaryDecidesARequiredSubIdAsync(string caseName)
+    {
+        IdJagSubjectAssociationDictionary associations = new();
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            idpIssuer =>
+            {
+                associations[new IdJagSubjectContext { Issuer = idpIssuer, Subject = SubjectIdentity }] = caseName switch
+                {
+                    "notListed" => [SubjectIdentifier.Email("mallory@example.com")],
+                    _ => [SubjectIdentifier.Email("alice@example.com")]
+                };
+
+                return new IdJagSubjectIdentifierRule
+                {
+                    Presence = IdJagSubjectIdentifierPresence.Required,
+                    Association = associations.CompareAsync
+                };
+            },
+            mintedSubjectIdentifier: static _ => SubjectIdentifier.Email("alice@example.com"),
+            betweenRedemptions: caseName == "removed" ? RemoveTheEntry : null).ConfigureAwait(false);
+
+        (int expectedStatusCode, string? expectedBody, ComparisonOutcome expectedOutcome, ComparisonDecision expectedDecision, IdJagValidationFailureReason? expectedFailure) = caseName switch
+        {
+            "listed" => (200, (string?)null, ComparisonOutcome.Holds, ComparisonDecision.Permit, (IdJagValidationFailureReason?)null),
+            "notListed" => (400, JagRefusal, ComparisonOutcome.Fails, ComparisonDecision.Deny, IdJagValidationFailureReason.SubjectIdentifierMismatch),
+            "removed" => (400, JagRefusal, ComparisonOutcome.Indeterminate, ComparisonDecision.IndeterminateDeny, IdJagValidationFailureReason.SubjectIdentifierUndetermined),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        Assert.AreEqual(expectedStatusCode, statusCode, body);
+        if(expectedBody is not null)
+        {
+            Assert.AreEqual(expectedBody, body);
+        }
+
+        Assert.IsNotNull(recorded, body);
+        Assert.AreEqual(expectedFailure, recorded.FailureReason);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, expectedOutcome, ComparisonBasis.ApplicationRule, expectedDecision);
+
+        //The application removes the entry under traffic once the first redemption, which the entry decided, is answered.
+        void RemoveTheEntry(string idpIssuer, int firstStatusCode, IdJagAssertionValidationResult? firstRecorded)
+        {
+            Assert.AreEqual(200, firstStatusCode);
+            Assert.IsNotNull(firstRecorded);
+            AssertComparison(
+                firstRecorded.SubjectIdentifierComparison, ComparisonRelation.Equal, ComparisonOutcome.Holds, ComparisonBasis.ApplicationRule, ComparisonDecision.Permit);
+            Assert.IsTrue(associations.TryRemove(new IdJagSubjectContext { Issuer = idpIssuer, Subject = SubjectIdentity }, out _));
+        }
+    }
+
+
+    /// <summary>
+    /// A server that requires the <c>sub_id</c> claim and wires an <see cref="IdJagSubjectAssociationDictionary"/>
+    /// as its association compares the member names of the grant's identifier with those of the listed one code
+    /// unit by code unit, whatever comparer the listed identifier's member map carries: under a listed identifier
+    /// whose map ignores letter case and holds <c>account</c> and <c>realm</c>, a grant whose <c>sub_id</c> holds
+    /// <c>account</c> and <c>ACCOUNT</c> is refused with <c>invalid_grant</c> as an identifier the local policy
+    /// does not authorize, and a grant whose <c>sub_id</c> holds <c>account</c> and <c>realm</c> is redeemed.
+    /// Under a listed identifier whose map tells two string instances of the same code units apart and holds
+    /// <c>realm</c> twice with two different values, a grant whose <c>sub_id</c> holds <c>account</c> and one of
+    /// those <c>realm</c> values is refused the same way: such a map is equal to no other map.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+    /// "Implementations that transform the textual representation into sequences of Unicode code units and then
+    /// perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+    /// implementations will agree in all cases on equality or inequality of two strings."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 Section 4</see>: "When the names
+    /// within an object are not unique, the behavior of software that receives such an object is unpredictable."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.2.2">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.2.2</see>
+    /// refuses a grant when "the sub_id claim is not authorized by local policy for the validated ID-JAG
+    /// issuer."
+    /// </summary>
+    /// <param name="caseName">
+    /// The grant's <c>sub_id</c> members against the listed map: <c>twoSpellings</c> (<c>account</c> and
+    /// <c>ACCOUNT</c>) or <c>listedNames</c> (<c>account</c> and <c>realm</c>) against a map that ignores letter
+    /// case, or <c>oneOfTwoValues</c> (<c>account</c> and the first <c>realm</c> value) against a map holding
+    /// <c>realm</c> twice.
+    /// </param>
+    [TestMethod]
+    [DataRow("twoSpellings", DisplayName = "the sub_id holds one listed member name under two spellings")]
+    [DataRow("listedNames", DisplayName = "the sub_id holds the listed member names")]
+    [DataRow("oneOfTwoValues", DisplayName = "the sub_id holds one of two values the listed map holds under one member name")]
+    public async Task TheAssociationDictionaryComparesMemberNamesOrdinallyAsync(string caseName)
+    {
+        IdJagSubjectAssociationDictionary associations = new();
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            idpIssuer =>
+            {
+                associations[new IdJagSubjectContext { Issuer = idpIssuer, Subject = SubjectIdentity }] =
+                [
+                    new SubjectIdentifier
+                    {
+                        Format = "urn:example:principal",
+                        Members = caseName switch
+                        {
+                            "oneOfTwoValues" => ListedMapHoldingRealmTwice(),
+                            _ => new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { ["account"] = "alice", ["realm"] = "example" }
+                        }
+                    }
+                ];
+
+                return new IdJagSubjectIdentifierRule
+                {
+                    Presence = IdJagSubjectIdentifierPresence.Required,
+                    Association = associations.CompareAsync
+                };
+            },
+            mintedSubjectIdentifier: _ => new SubjectIdentifier
+            {
+                Format = "urn:example:principal",
+                Members = caseName switch
+                {
+                    "twoSpellings" => new Dictionary<string, object>(StringComparer.Ordinal) { ["account"] = "alice", ["ACCOUNT"] = "alice" },
+                    "listedNames" or "oneOfTwoValues" => new Dictionary<string, object>(StringComparer.Ordinal) { ["account"] = "alice", ["realm"] = "example" },
+                    _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+                }
+            }).ConfigureAwait(false);
+
+        (int expectedStatusCode, string? expectedBody, ComparisonOutcome expectedOutcome, ComparisonDecision expectedDecision, IdJagValidationFailureReason? expectedFailure) = caseName switch
+        {
+            "twoSpellings" or "oneOfTwoValues" => (400, JagRefusal, ComparisonOutcome.Fails, ComparisonDecision.Deny, IdJagValidationFailureReason.SubjectIdentifierMismatch),
+            "listedNames" => (200, (string?)null, ComparisonOutcome.Holds, ComparisonDecision.Permit, (IdJagValidationFailureReason?)null),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        Assert.AreEqual(expectedStatusCode, statusCode, body);
+        if(expectedBody is not null)
+        {
+            Assert.AreEqual(expectedBody, body);
+        }
+
+        Assert.IsNotNull(recorded, body);
+        Assert.AreEqual(expectedFailure, recorded.FailureReason);
+        AssertComparison(
+            recorded.SubjectIdentifierComparison, ComparisonRelation.Equal, expectedOutcome, ComparisonBasis.ApplicationRule, expectedDecision);
+
+        //The listed map holds account once and realm twice, under two string instances of the same code units.
+        static Dictionary<string, object> ListedMapHoldingRealmTwice()
+        {
+            string firstRealm = "realm";
+            string secondRealm = new(firstRealm.ToCharArray());
+            var listed = new Dictionary<string, object>(ReferenceEqualityComparer.Instance)
+            {
+                ["account"] = "alice",
+                [firstRealm] = "example",
+                [secondRealm] = "other"
+            };
+
+            Assert.HasCount(3, listed);
+
+            return listed;
+        }
+    }
+
+
+    /// <summary>
     /// In a grant of a multi-tenant issuer, <c>iss</c> and <c>sub</c> alone do not name the End-User, so an
     /// <c>iss_sub</c> restating them is decided only by the application's association, which sees the tenant:
     /// undecided without one (redeemed under the OPTIONAL claim, refused where the claim is required), and
@@ -7814,9 +7988,14 @@ internal sealed class IdJagGrantTests
     /// The list that receives every replay record the host's store holds once the redemption is answered, or
     /// <see langword="null"/> to collect none.
     /// </param>
+    /// <param name="betweenRedemptions">
+    /// Called with the host's issuer identifier, the first redemption's status code and the validation result
+    /// the seam recorded for it, or <see langword="null"/> for one redemption. When given, the host redeems a
+    /// first grant, calls it, and redeems a second grant minted or signed afresh, whose answer is returned.
+    /// </param>
     /// <returns>
-    /// The redemption's status code and body, the validation result the seam recorded (<see langword="null"/>
-    /// when the seam recorded none), and the host's issuer identifier.
+    /// The last redemption's status code and body, the validation result the seam recorded for it
+    /// (<see langword="null"/> when the seam recorded none), and the host's issuer identifier.
     /// </returns>
     private async Task<(int StatusCode, string Body, IdJagAssertionValidationResult? Recorded, string IdpIssuer)> RedeemSubIdGrantAsync(
         Func<string, IdJagSubjectIdentifierRule> rule,
@@ -7829,7 +8008,8 @@ internal sealed class IdJagGrantTests
         string? servedCulture = null,
         string? resourceServerIssuer = null,
         IReadOnlyDictionary<string, string>? scopeAudiences = null,
-        List<JtiSeenState>? replayRecords = null)
+        List<JtiSeenState>? replayRecords = null,
+        Action<string, int, IdJagAssertionValidationResult?>? betweenRedemptions = null)
     {
         await using TestHostShell app = new(TimeProvider);
         using ServedCultureScope? culture = servedCulture is null
@@ -7871,34 +8051,50 @@ internal sealed class IdJagGrantTests
                         assertion, registration, jwksResolver, resourceServerIssuer ?? ResourceAsIssuer, redeemRule, result => recorded = result).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
-        string jag;
-        if(signedClaims is null)
+        (int StatusCode, string Body) answer = await RedeemFreshGrantAsync().ConfigureAwait(false);
+        int redemptions = 1;
+        if(betweenRedemptions is not null)
         {
-            using HttpResponseMessage mintResponse = await PostMintAsync(http, tokenUrl, ResourceAsIssuer).ConfigureAwait(false);
-            string mintBody = await mintResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(200, (int)mintResponse.StatusCode, mintBody);
-            using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
-            jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
-        }
-        else
-        {
-            jag = await BuildIdJagWithClaimsAsync(
-                signingMaterial ?? material.SigningPrivateKey,
-                signingMaterial is null ? material.SigningKeyId.Value : UnknownSigningKeyId,
-                idpIssuer,
-                signedClaims(idpIssuer),
-                omittedClaims).ConfigureAwait(false);
+            betweenRedemptions(idpIssuer, answer.StatusCode, recorded);
+            recorded = null;
+            answer = await RedeemFreshGrantAsync().ConfigureAwait(false);
+            redemptions = 2;
         }
 
-        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(
-            http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
-        string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-        //The mint and the redemption are token requests, a hand-built grant's redemption the only one.
-        culture?.AssertEveryRequestWasServedUnder(servedCulture!, signedClaims is null ? 2 : 1);
+        //Each mint and each redemption is a token request, a hand-built grant's redemption the only one per grant.
+        culture?.AssertEveryRequestWasServedUnder(servedCulture!, redemptions * (signedClaims is null ? 2 : 1));
         replayRecords?.AddRange(app.FlowStore.Values.Select(static entry => entry.State).OfType<JtiSeenState>());
 
-        return ((int)redeemResponse.StatusCode, redeemBody, recorded, idpIssuer);
+        return (answer.StatusCode, answer.Body, recorded, idpIssuer);
+
+        //Mints or signs a grant afresh and redeems it, so a second redemption never presents the first grant.
+        async Task<(int StatusCode, string Body)> RedeemFreshGrantAsync()
+        {
+            string jag;
+            if(signedClaims is null)
+            {
+                using HttpResponseMessage mintResponse = await PostMintAsync(http, tokenUrl, ResourceAsIssuer).ConfigureAwait(false);
+                string mintBody = await mintResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.AreEqual(200, (int)mintResponse.StatusCode, mintBody);
+                using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
+                jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            }
+            else
+            {
+                jag = await BuildIdJagWithClaimsAsync(
+                    signingMaterial ?? material.SigningPrivateKey,
+                    signingMaterial is null ? material.SigningKeyId.Value : UnknownSigningKeyId,
+                    idpIssuer,
+                    signedClaims(idpIssuer),
+                    omittedClaims).ConfigureAwait(false);
+            }
+
+            using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(
+                http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
+            string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            return ((int)redeemResponse.StatusCode, redeemBody);
+        }
     }
 
 
