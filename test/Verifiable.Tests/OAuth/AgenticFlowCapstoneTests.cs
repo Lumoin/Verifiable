@@ -508,8 +508,13 @@ internal sealed class AgenticFlowCapstoneTests
     /// <summary>
     /// The ICHAIN-024 ceiling: a mint requesting a JAG scope outside the scopes AS1 granted
     /// alongside the id_token's issuance at step 3 is denied — the fixture's authorization seam
-    /// enforces requested ⊆ ceiling, and a denied id-jag exchange maps to <c>invalid_grant</c>
-    /// (ID-JAG §4.3.4.3).
+    /// enforces that the requested scope is a subset of the ceiling, and a denied id-jag exchange that names its
+    /// audience maps to <c>invalid_target</c>, per <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>:
+    /// "If the authorization server is unwilling or unable to issue a token for any target service indicated by the
+    /// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response."
+    /// The library cannot tell why the authorization seam denied, so it reads a denial of a request that names a
+    /// <c>resource</c> or an <c>audience</c> as unwillingness to issue for that target, a denial on the scope
+    /// included; that reading is this library's rule.
     /// </summary>
     [TestMethod]
     public async Task MintRequestingScopeBeyondStep3GrantIsDenied()
@@ -527,7 +532,7 @@ internal sealed class AgenticFlowCapstoneTests
         Assert.IsFalse(mintResult.IsSuccess,
             "A mint requesting scope beyond the step-3 grant must be denied (ICHAIN-024).");
         OAuthProtocolError protocolError = Assert.IsInstanceOfType<OAuthProtocolError>(mintResult.Error);
-        Assert.AreEqual(OAuthErrors.InvalidGrant, protocolError.ErrorCode);
+        Assert.AreEqual("invalid_target", protocolError.ErrorCode);
     }
 
 

@@ -13,6 +13,7 @@ using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.TokenExchange;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -587,16 +588,13 @@ internal sealed class TokenExchangeGrantTests
     /// A validated <c>subject_token</c> whose <see cref="ValidatedSecurityToken.Subject"/> is white space only names
     /// no subject, and the exchange answers it as a <c>subject_token</c> that is not valid even when the
     /// authorization seam copies that subject into the issued token, as an impersonation policy does: an exchange
-    /// for an access token is answered 400 with the body
-    /// <c>{"error":"invalid_request","error_description":"The subject_token is not valid."}</c>, an exchange that
-    /// asks for an ID-JAG is answered 400 with the body
-    /// <c>{"error":"invalid_grant","error_description":"The subject_token is not valid."}</c> (the error the
-    /// example of
+    /// for an access token, an exchange that asks for an ID-JAG, and an exchange for an access token that presents an
+    /// <c>actor_token</c> are each answered 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The subject_token is not valid."}</c>. The ID-JAG
+    /// request is answered with the same code:
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4.3</see>
-    /// carries, a Token Error response of
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> shown there
-    /// after "e.g:"; answering <c>invalid_grant</c> for a mint is this library's choice), and an exchange for an
-    /// access token that presents an <c>actor_token</c> is answered as the first. No token is issued, so the host's
+    /// reads "On an error condition, the IdP returns an OAuth 2.0 Token Error response as defined in Section 5.2 of
+    /// [RFC6749], e.g:", an example that names no code for this case. No token is issued, so the host's
     /// identifier seam is asked for no <c>jti</c>, and the refusal comes before the actor token is validated and
     /// before the authorization seam is called: the actor token's validation and the seam each count no call. The
     /// validated token restates the token's claims, and the library cannot tell a subject token whose subject is
@@ -626,7 +624,7 @@ internal sealed class TokenExchangeGrantTests
             "idJag" => (
                 TokenType.IdJag,
                 false,
-                "{\"error\":\"invalid_grant\",\"error_description\":\"The subject_token is not valid.\"}"),
+                "{\"error\":\"invalid_request\",\"error_description\":\"The subject_token is not valid.\"}"),
             "accessTokenWithActor" => (
                 TokenType.AccessToken,
                 true,
@@ -640,7 +638,7 @@ internal sealed class TokenExchangeGrantTests
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
         //The host's identifier seam, the actor token's validation and the authorization seam count their calls.
-        int tokenIdentifierCalls = 0;
+        Func<int> countTokenIdentifiers = static () => 0;
         int actorValidationCalls = 0;
         int authorizationCalls = 0;
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
@@ -677,16 +675,7 @@ internal sealed class TokenExchangeGrantTests
                         });
                 };
 
-            Verifiable.Server.GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
-            candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
-            {
-                if(purpose.Equals(WellKnownIdentifierPurposes.OAuthJti))
-                {
-                    tokenIdentifierCalls++;
-                }
-
-                return original(purpose, context, ct);
-            };
+            countTokenIdentifiers = CountTokenIdentifiers(candidateIntegration);
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -708,11 +697,11 @@ internal sealed class TokenExchangeGrantTests
             host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         string record = $"{DescribeExchangeAnswer((int)response.StatusCode, body)} token identifiers generated "
-            + $"{tokenIdentifierCalls} actor validations {actorValidationCalls} authorization calls {authorizationCalls}";
+            + $"{countTokenIdentifiers()} actor validations {actorValidationCalls} authorization calls {authorizationCalls}";
 
         Assert.AreEqual(400, (int)response.StatusCode, record);
         Assert.AreEqual(expectedBody, body, record);
-        Assert.AreEqual(0, tokenIdentifierCalls, $"No token identifier is generated for a subject token that is not valid. {record}");
+        Assert.AreEqual(0, countTokenIdentifiers(), $"No token identifier is generated for a subject token that is not valid. {record}");
         Assert.AreEqual(0, actorValidationCalls, $"The actor token is not validated for a subject token that is not valid. {record}");
         Assert.AreEqual(0, authorizationCalls, $"The authorization seam is not called for a subject token that is not valid. {record}");
     }
@@ -4033,6 +4022,738 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason,
+    /// or are unacceptable based on policy, the authorization server MUST construct an error response, as
+    /// specified in Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request"
+    /// error code." The application's request seam refuses the request's <c>requested_token_type</c>, the
+    /// parameter
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>
+    /// defines as "requested_token_type: REQUIRED - The value urn:ietf:params:oauth:token-type:id-jag indicates
+    /// that an Identity Assertion JWT Authorization Grant is being requested.", and the exchange is answered 400
+    /// <c>invalid_request</c> with the seam's description. The seam runs before the <c>subject_token</c> is
+    /// validated (handed to <see cref="ValidateTokenExchangeTokenDelegate"/>), a rule of this library: the
+    /// subject-token validator is never called.
+    /// </summary>
+    [TestMethod]
+    public async Task ARequestSeamRefusalAnswersBeforeTheSubjectTokenIsValidatedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        int subjectTokenValidations = 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                {
+                    _ = Interlocked.Increment(ref subjectTokenValidations);
+
+                    return ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+                };
+            WirePermissivePolicy(candidateIntegration);
+            candidateIntegration.ValidateTokenExchangeRequestAsync =
+                static (request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeRequestRefusal?>(new TokenExchangeRequestRefusal
+                    {
+                        Parameter = "requested_token_type",
+                        Description = "requested_token_type must be urn:ietf:params:oauth:token-type:id-jag."
+                    });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(host.SharedHttpClient!, tokenUrl, TokenType.AccessToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            """{"error":"invalid_request","error_description":"requested_token_type must be urn:ietf:params:oauth:token-type:id-jag."}""",
+            body);
+        Assert.AreEqual(0, subjectTokenValidations, "The subject token must not be validated once the request seam has refused the request.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see>: "Client
+    /// authentication to the authorization server is done using the normal mechanisms provided by OAuth 2.0."
+    /// A client that fails authentication is answered 401 <c>invalid_client</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>), and the
+    /// application's request seam, which this library calls after client authentication, is never called.
+    /// </summary>
+    [TestMethod]
+    public async Task AnUnauthenticatedClientIsRefusedBeforeTheRequestSeamAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+
+        Func<int> countRequestSeamCalls = static () => 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            countRequestSeamCalls = CountRequestSeamCalls(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(
+            host.SharedHttpClient!, tokenUrl, TokenType.AccessToken, clientSecret: "not-the-secret-of-the-machine")
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(401, status, body);
+        Assert.AreEqual("""{"error":"invalid_client","error_description":"Client authentication failed."}""", body);
+        Assert.AreEqual(0, countRequestSeamCalls(), "The request seam must not be called for a client that failed authentication.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see>:
+    /// "requested_token_type OPTIONAL. An identifier, as described in Section 3, for the type of the requested
+    /// security token. If the requested type is unspecified, the issued token type is at the discretion of the
+    /// authorization server". With no request seam wired, an exchange without <c>requested_token_type</c> is
+    /// answered 200 and its <c>issued_token_type</c> is the type the authorization seam chose.
+    /// </summary>
+    [TestMethod]
+    public async Task WithoutTheRequestSeamRequestedTokenTypeStaysOptionalAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(host.SharedHttpClient!, tokenUrl, requestedTokenType: null)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        Assert.AreEqual(
+            "urn:ietf:params:oauth:token-type:access_token",
+            ReadMember(body, OAuthRequestParameterNames.IssuedTokenType),
+            "The issued_token_type must be the type the authorization seam chose.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// authorization server is unwilling or unable to issue a token for any target service indicated by the
+    /// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error
+    /// response." <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>: "The
+    /// following error code is provided for an authorization server to indicate problems with the requested
+    /// resource(s) in response to an authorization request or access token request." A refusal of the request seam
+    /// that names <c>resource</c> or <c>audience</c> is answered 400 <c>invalid_target</c> with the seam's
+    /// description.
+    /// </summary>
+    /// <param name="parameter">The parameter the seam refuses, which the request names.</param>
+    /// <param name="description">The seam's reason.</param>
+    [TestMethod]
+    [DataRow("resource", "This resource is not served.")]
+    [DataRow("audience", "This audience is not served.")]
+    public async Task ARefusalOfATargetIsAnsweredInvalidTargetAsync(string parameter, string description)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeRequestAsync =
+                (request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeRequestRefusal?>(new TokenExchangeRequestRefusal
+                    {
+                        Parameter = parameter,
+                        Description = description
+                    });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        bool isResource = string.Equals(parameter, "resource", StringComparison.Ordinal);
+        (int status, string body) = await PostExchangeAsync(
+            host.SharedHttpClient!,
+            tokenUrl,
+            TokenType.AccessToken,
+            resource: isResource ? "https://wiki.rs.example/api" : null,
+            audience: isResource ? null : "https://svc.example/orders").ConfigureAwait(false);
+
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual($$"""{"error":"invalid_target","error_description":"{{description}}"}""", body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "Values for
+    /// the "error_description" parameter MUST NOT include characters outside the set %x20-21 / %x23-5B /
+    /// %x5D-7E." A description of the request seam that holds a QUOTATION MARK (U+0022) and a LATIN SMALL LETTER
+    /// E WITH ACUTE (U+00E9) is written without them. Reducing the description to the characters the set allows,
+    /// rather than refusing it, is a rule of this library:
+    /// <see cref="Verifiable.Server.ErrorDescriptionCharset.Sanitize(string?)"/> removes every other character.
+    /// </summary>
+    [TestMethod]
+    public async Task ARefusalDescriptionIsWrittenInsideTheRfc6749CharsetAsync()
+    {
+        string quotationMark = char.ConvertFromUtf32(0x0022);
+        string description = "Refused: " + char.ConvertFromUtf32(0x00E9) + " and " + quotationMark + "quoted" + quotationMark;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeRequestAsync =
+                (request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeRequestRefusal?>(new TokenExchangeRequestRefusal
+                    {
+                        Parameter = "scope",
+                        Description = description
+                    });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(host.SharedHttpClient!, tokenUrl, TokenType.AccessToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual("""{"error":"invalid_request","error_description":"Refused:  and quoted"}""", body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see>:
+    /// "requested_token_type OPTIONAL. An identifier, as described in Section 3, for the type of the requested
+    /// security token. If the requested type is unspecified, the issued token type is at the discretion of the
+    /// authorization server and may be dictated by knowledge of the requirements of the service or resource indicated
+    /// by the "resource" or "audience" parameter." The type is the server's to choose only when the request leaves it
+    /// unspecified, so a stated type the authorization seam does not issue is a request the server does not honor,
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> gives the
+    /// answer: "If the request itself is not valid or if either the "subject_token" or "actor_token" are invalid for
+    /// any reason, or are unacceptable based on policy, the authorization server MUST construct an error response, as
+    /// specified in Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error
+    /// code." An exchange that states the access token type while the authorization seam chooses an ID-JAG, and one
+    /// that states the ID-JAG type while the seam chooses an access token, are each answered 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The requested_token_type cannot be issued for this request."}</c>,
+    /// and the host's identifier seam is asked for no <c>jti</c>.
+    /// </summary>
+    /// <param name="caseName">
+    /// The stated type and the authorization seam's choice: <c>accessTokenStatedIdJagChosen</c> or
+    /// <c>idJagStatedAccessTokenChosen</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("accessTokenStatedIdJagChosen", DisplayName = "the access token type stated, an ID-JAG chosen")]
+    [DataRow("idJagStatedAccessTokenChosen", DisplayName = "the ID-JAG type stated, an access token chosen")]
+    public async Task AStatedRequestedTokenTypeTheAuthorizationDoesNotIssueIsRefusedAsync(string caseName)
+    {
+        (TokenType requestedTokenType, TokenType issuedTokenType) = caseName switch
+        {
+            "accessTokenStatedIdJagChosen" => (TokenType.AccessToken, TokenType.IdJag),
+            "idJagStatedAccessTokenChosen" => (TokenType.IdJag, TokenType.AccessToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, isIdJagAllowed: true)
+            .ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        Func<int> countTokenIdentifiers = static () => 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = issuedTokenType
+                        });
+
+            countTokenIdentifiers = CountTokenIdentifiers(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(
+            host.SharedHttpClient!, tokenUrl, requestedTokenType, audience: ResourceServerAudience).ConfigureAwait(false);
+        string record = $"{status} '{body}' token identifiers generated {countTokenIdentifiers()}";
+
+        Assert.AreEqual(400, status, record);
+        Assert.AreEqual(
+            """{"error":"invalid_request","error_description":"The requested_token_type cannot be issued for this request."}""",
+            body,
+            record);
+        Assert.AreEqual(0, countTokenIdentifiers(), $"No token identifier is generated for a type the request did not state. {record}");
+    }
+
+
+    /// <summary>
+    /// The token endpoint calls the application's request seam only after its own checks of the request, a rule of
+    /// this library, so a request those checks refuse never reaches the seam. A <c>resource</c> with a fragment is
+    /// answered 400 with the library's <c>invalid_target</c> body:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see> reads "The value
+    /// of the "resource" parameter MUST be an absolute URI, as specified by Section 4.3 of [RFC3986], that MAY include
+    /// a query component and MUST NOT include a fragment component.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see> provides the code: "The
+    /// following error code is provided for an authorization server to indicate problems with the requested
+    /// resource(s) in response to an authorization request or access token request." An <c>audience</c> of one space
+    /// is answered 400 <c>invalid_request</c>, the code
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> gives a request
+    /// that is not valid. A registration whose profile requires a DPoP proof that sends none is answered 400
+    /// <c>use_dpop_nonce</c>, the refusal <see cref="RegistrationRequiringDpopWithoutAProofIsRefused"/> proves. In
+    /// each case the request seam counts no call.
+    /// </summary>
+    /// <param name="caseName">
+    /// The request the library refuses: <c>resourceWithFragment</c>, <c>audienceOfOneSpace</c> or
+    /// <c>missingDpopProof</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow("resourceWithFragment", DisplayName = "a resource with a fragment")]
+    [DataRow("audienceOfOneSpace", DisplayName = "an audience of one space")]
+    [DataRow("missingDpopProof", DisplayName = "a registration that requires a DPoP proof, with none")]
+    public async Task ARequestTheLibraryRefusesNeverReachesTheRequestSeamAsync(string caseName)
+    {
+        (PolicyProfile? Profile, string? Resource, string? Audience, string ExpectedError, string? ExpectedBody) refusedRequest = caseName switch
+        {
+            "resourceWithFragment" => (null, "https://api.example/x#frag", null, "invalid_target", MalformedResourceBody),
+            "audienceOfOneSpace" => (
+                null,
+                null,
+                " ",
+                "invalid_request",
+                """{"error":"invalid_request","error_description":"The audience parameter must not contain a whitespace-only occurrence."}"""),
+            "missingDpopProof" => (PolicyProfile.Haip10, null, null, "use_dpop_nonce", null),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+        (PolicyProfile? profile, string? resource, string? audience, string expectedError, string? expectedBody) = refusedRequest;
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, profile).ConfigureAwait(false);
+        await WireImpersonationSeamsAsync(app).ConfigureAwait(false);
+        if(profile is not null)
+        {
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        }
+
+        Func<int> countRequestSeamCalls = static () => 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            countRequestSeamCalls = CountRequestSeamCalls(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        if(resource is not null)
+        {
+            form.Add(OAuthRequestParameterNames.Resource, resource);
+        }
+
+        if(audience is not null)
+        {
+            form.Add(OAuthRequestParameterNames.Audience, audience);
+        }
+
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{(int)response.StatusCode} '{body}' request seam calls {countRequestSeamCalls()}";
+
+        Assert.AreEqual(400, (int)response.StatusCode, record);
+        Assert.AreEqual(expectedError, ReadMember(body, "error"), record);
+        if(expectedBody is not null)
+        {
+            Assert.AreEqual(expectedBody, body, record);
+        }
+
+        Assert.AreEqual(0, countRequestSeamCalls(), $"The request seam must not be called for a request the library refuses. {record}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." An <c>authorization_details</c> of
+    /// one space is sent with a value, and the library's own read of the parameter would drop it before either seam,
+    /// so neither could parse it as
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.3</see>
+    /// requires: "If authorization_details is present, the IdP MUST parse it as a JSON array and process each
+    /// authorization detail object according to [RFC9396]." The token exchange answers it as the token endpoint
+    /// answers an <c>authorization_details</c> it cannot parse, 400 with the body
+    /// <c>{"error":"invalid_authorization_details","error_description":"authorization_details could not be parsed."}</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9396#section-5">RFC 9396 Section 5</see>: "The AS MUST refuse
+    /// to process any unknown authorization details type or authorization details not conforming to the respective
+    /// type definition."; <see href="https://www.rfc-editor.org/rfc/rfc9396#section-6">RFC 9396 Section 6</see> names
+    /// the code at the token request: "Otherwise, the AS refuses the request with the error code
+    /// invalid_authorization_details (similar to invalid_scope)."), before the request seam, the subject token's
+    /// validation and the authorization seam, each of which counts no call. Refusing the value, rather than leaving
+    /// it to the seams that parse every other value, is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AnAuthorizationDetailsOfWhiteSpaceIsRefusedBeforeEitherSeamAsync()
+    {
+        OutgoingFormFields form = ExchangeFormOfTheFixtureSubject();
+        form.Add(OAuthRequestParameterNames.AuthorizationDetails, " ");
+
+        (int status, string body, int requestSeamCalls, int tokenValidations, int authorizations, _, _, string record) =
+            await PostThroughCountingSeamsAsync(form).ConfigureAwait(false);
+
+        Assert.AreEqual(400, status, record);
+        Assert.AreEqual(
+            """{"error":"invalid_authorization_details","error_description":"authorization_details could not be parsed."}""",
+            body,
+            record);
+        Assert.AreEqual(0, requestSeamCalls, $"The request seam must not be called. {record}");
+        Assert.AreEqual(0, tokenValidations, $"The subject token must not be validated. {record}");
+        Assert.AreEqual(0, authorizations, $"The authorization seam must not be called. {record}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." An <c>authorization_details</c>
+    /// sent empty is such a parameter: the exchange is answered 200, and the authorization seam receives a request
+    /// whose <see cref="TokenExchangeRequest.AuthorizationDetails"/> is <see langword="null"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyAuthorizationDetailsIsOmittedAsync()
+    {
+        OutgoingFormFields form = ExchangeFormOfTheFixtureSubject();
+        form.Add(OAuthRequestParameterNames.AuthorizationDetails, string.Empty);
+
+        (int status, _, _, _, int authorizations, TokenExchangeRequest? authorizedRequest, _, string record) =
+            await PostThroughCountingSeamsAsync(form).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, record);
+        Assert.AreEqual(1, authorizations, $"The request must reach the authorization seam once. {record}");
+        Assert.IsNotNull(authorizedRequest, record);
+        Assert.IsNull(authorizedRequest.AuthorizationDetails, $"An empty authorization_details is omitted. {record}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." and "Request and response
+    /// parameters MUST NOT be included more than once."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see> lets two of its
+    /// parameters repeat, <c>resource</c> and <c>audience</c>, each to name several targets. A token exchange that
+    /// sends <c>subject_token</c>, <c>subject_token_type</c>, <c>actor_token</c>, <c>actor_token_type</c>,
+    /// <c>requested_token_type</c>, <c>scope</c> or <c>authorization_details</c> with a value more than once is
+    /// answered 400 with
+    /// <c>{"error":"invalid_request","error_description":"A token exchange parameter was sent more than once."}</c>,
+    /// the code <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> gives
+    /// a request that is not valid, before the request seam, the token validation and the authorization seam, each
+    /// of which counts no call. An occurrence of white space only is sent with a value, so an <c>actor_token</c> of
+    /// one space beside a valued <c>actor_token</c> is such a repeat. Read as absent, a repeated
+    /// <c>requested_token_type</c> would leave the issued type to the authorization seam, a repeated
+    /// <c>actor_token</c> with its type would turn a delegation into an impersonation, a repeated <c>scope</c> would
+    /// hand the authorization seam no requested scope, and a repeated <c>authorization_details</c> would carry no
+    /// authorization details into the issued token. Refusing the request is this library's reading of the two
+    /// sentences.
+    /// </summary>
+    /// <param name="caseName">
+    /// The repeated parameter: <c>requestedTokenType</c>, <c>actorToken</c> (its type sent once),
+    /// <c>actorTokenAndItsType</c> (each sent twice), <c>scope</c>, <c>authorizationDetails</c>, <c>subjectToken</c>
+    /// and <c>subjectTokenType</c> (each sent twice), or <c>actorTokenOfWhiteSpace</c> (an <c>actor_token</c> of one
+    /// space, then one with a value, its type once).
+    /// </param>
+    [TestMethod]
+    [DataRow("requestedTokenType", DisplayName = "requested_token_type sent twice")]
+    [DataRow("actorToken", DisplayName = "actor_token sent twice, actor_token_type once")]
+    [DataRow("actorTokenAndItsType", DisplayName = "actor_token and actor_token_type each sent twice")]
+    [DataRow("scope", DisplayName = "scope sent twice")]
+    [DataRow("authorizationDetails", DisplayName = "authorization_details sent twice")]
+    [DataRow("subjectToken", DisplayName = "subject_token sent twice")]
+    [DataRow("subjectTokenType", DisplayName = "subject_token_type sent twice")]
+    [DataRow("actorTokenOfWhiteSpace", DisplayName = "actor_token of one space beside one with a value")]
+    public async Task ASingleValuedParameterSentMoreThanOnceIsRefusedBeforeEitherSeamAsync(string caseName)
+    {
+        string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
+        string authorizationDetails = """[{"type":"example"}]""";
+
+        //The form of the fixture's subject sends subject_token and subject_token_type once each, so one more
+        //occurrence of either sends it twice.
+        (string Name, string Value, int Times)[] repeated = caseName switch
+        {
+            "requestedTokenType" => [(OAuthRequestParameterNames.RequestedTokenType, accessTokenType, 2)],
+            "actorToken" => [(OAuthRequestParameterNames.ActorToken, ActorTokenValue, 2), (OAuthRequestParameterNames.ActorTokenType, accessTokenType, 1)],
+            "actorTokenAndItsType" => [(OAuthRequestParameterNames.ActorToken, ActorTokenValue, 2), (OAuthRequestParameterNames.ActorTokenType, accessTokenType, 2)],
+            "scope" => [(OAuthRequestParameterNames.Scope, GrantedScope, 2)],
+            "authorizationDetails" => [(OAuthRequestParameterNames.AuthorizationDetails, authorizationDetails, 2)],
+            "subjectToken" => [(OAuthRequestParameterNames.SubjectToken, SubjectTokenValue, 1)],
+            "subjectTokenType" => [(OAuthRequestParameterNames.SubjectTokenType, accessTokenType, 1)],
+            "actorTokenOfWhiteSpace" => [(OAuthRequestParameterNames.ActorToken, " ", 1), (OAuthRequestParameterNames.ActorToken, ActorTokenValue, 1), (OAuthRequestParameterNames.ActorTokenType, accessTokenType, 1)],
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        OutgoingFormFields form = ExchangeFormOfTheFixtureSubject();
+        foreach((string name, string value, int times) in repeated)
+        {
+            for(int i = 0; i < times; i++)
+            {
+                form.Add(name, value);
+            }
+        }
+
+        (int status, string body, int requestSeamCalls, int tokenValidations, int authorizations, _, _, string record) =
+            await PostThroughCountingSeamsAsync(form).ConfigureAwait(false);
+
+        Assert.AreEqual(400, status, record);
+        Assert.AreEqual(
+            """{"error":"invalid_request","error_description":"A token exchange parameter was sent more than once."}""",
+            body,
+            record);
+        Assert.AreEqual(0, requestSeamCalls, $"The request seam must not be called. {record}");
+        Assert.AreEqual(0, tokenValidations, $"No token must be validated. {record}");
+        Assert.AreEqual(0, authorizations, $"The authorization seam must not be called. {record}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." A token exchange that sends
+    /// <c>actor_token=</c> and then <c>actor_token</c> with a value, its <c>actor_token_type</c> once, sends
+    /// <c>actor_token</c> once: it is answered 200 as the delegation that sends the valued occurrence alone, the
+    /// request seam and the authorization seam are each called once, the subject token and the actor token are each
+    /// validated, and the authorization seam receives the actor token's value and its type.
+    /// </summary>
+    [TestMethod]
+    public async Task AnActorTokenSentWithoutAValueBesideOneWithAValueIsOneOccurrenceAsync()
+    {
+        OutgoingFormFields form = ExchangeFormOfTheFixtureSubject();
+        form.Add(OAuthRequestParameterNames.ActorToken, string.Empty);
+        form.Add(OAuthRequestParameterNames.ActorToken, ActorTokenValue);
+        form.Add(OAuthRequestParameterNames.ActorTokenType, TokenTypeNames.GetName(TokenType.AccessToken));
+
+        (int status, _, int requestSeamCalls, int tokenValidations, int authorizations, TokenExchangeRequest? authorizedRequest, _, string record) =
+            await PostThroughCountingSeamsAsync(form).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, record);
+        Assert.AreEqual(1, requestSeamCalls, $"The request seam must be called once. {record}");
+        Assert.AreEqual(2, tokenValidations, $"The subject token and the actor token must each be validated. {record}");
+        Assert.AreEqual(1, authorizations, $"The request must reach the authorization seam once. {record}");
+        Assert.IsNotNull(authorizedRequest, record);
+        Assert.AreEqual(ActorTokenValue, authorizedRequest.ActorToken, $"The actor token is the valued occurrence. {record}");
+        Assert.AreEqual(TokenType.AccessToken, authorizedRequest.ActorTokenType, $"The actor token's type is the one sent. {record}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." A token exchange that sends
+    /// <c>requested_token_type=</c> and then
+    /// <c>requested_token_type=urn:ietf:params:oauth:token-type:access_token</c> sends <c>requested_token_type</c>
+    /// once: it is answered 200 as the request that states that type once, and the authorization seam, called once,
+    /// receives the access token type as the requested type.
+    /// </summary>
+    [TestMethod]
+    public async Task ARequestedTokenTypeSentWithoutAValueBesideOneWithAValueIsOneOccurrenceAsync()
+    {
+        OutgoingFormFields form = ExchangeFormOfTheFixtureSubject();
+        form.Add(OAuthRequestParameterNames.RequestedTokenType, string.Empty);
+        form.Add(OAuthRequestParameterNames.RequestedTokenType, TokenTypeNames.GetName(TokenType.AccessToken));
+
+        (int status, _, int requestSeamCalls, _, int authorizations, TokenExchangeRequest? authorizedRequest, _, string record) =
+            await PostThroughCountingSeamsAsync(form).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, record);
+        Assert.AreEqual(1, requestSeamCalls, $"The request seam must be called once. {record}");
+        Assert.AreEqual(1, authorizations, $"The request must reach the authorization seam once. {record}");
+        Assert.IsNotNull(authorizedRequest, record);
+        Assert.AreEqual(TokenType.AccessToken, authorizedRequest.RequestedTokenType, $"The requested type is the valued occurrence. {record}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." The token exchange treats such an
+    /// occurrence as omitted when it reads the request and leaves the request as it was received: a token exchange
+    /// that sends <c>actor_token=</c> and then <c>actor_token</c> with a value, its <c>actor_token_type</c> once, is
+    /// answered 200, and the incoming request the authorization seam's context carries
+    /// (<see cref="Verifiable.Server.IncomingRequest.Fields"/>) holds both occurrences of <c>actor_token</c> as they
+    /// were sent, the empty one first. Reading the omission without writing into the request is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOccurrenceSentWithoutAValueStaysInTheRequestTheApplicationSeesAsync()
+    {
+        OutgoingFormFields form = ExchangeFormOfTheFixtureSubject();
+        form.Add(OAuthRequestParameterNames.ActorToken, string.Empty);
+        form.Add(OAuthRequestParameterNames.ActorToken, ActorTokenValue);
+        form.Add(OAuthRequestParameterNames.ActorTokenType, TokenTypeNames.GetName(TokenType.AccessToken));
+
+        (int status, _, _, _, int authorizations, _, Verifiable.Server.RequestFields? authorizedFields, string record) =
+            await PostThroughCountingSeamsAsync(form).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, record);
+        Assert.AreEqual(1, authorizations, $"The request must reach the authorization seam once. {record}");
+        Assert.IsNotNull(authorizedFields, $"The authorization seam's context must carry the incoming request. {record}");
+        string[] actorTokenOccurrences = [.. authorizedFields.GetValues(OAuthRequestParameterNames.ActorToken)];
+        Assert.AreSequenceEqual(
+            new[] { string.Empty, ActorTokenValue },
+            actorTokenOccurrences,
+            $"The request keeps every actor_token occurrence as sent; it holds [{string.Join(", ", actorTokenOccurrences.Select(static value => $"'{value}'"))}]. {record}");
+    }
+
+
+    /// <summary>
+    /// Builds the token exchange form of the fixture's subject token: <c>grant_type</c>, <c>subject_token</c> and
+    /// <c>subject_token_type</c> (the access token type), each once, without client authentication.
+    /// </summary>
+    /// <returns>The form, to which a row adds its own parameters.</returns>
+    private static OutgoingFormFields ExchangeFormOfTheFixtureSubject() =>
+        new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+
+
+    /// <summary>
+    /// Posts <paramref name="form"/> with the client's <c>client_secret_post</c> authentication to the token
+    /// exchange over the loopback listener, with three counting seams wired: a request seam that refuses nothing, a
+    /// token validator that accepts every token as the fixture's subject, and an authorization seam that issues an
+    /// access token and keeps the request it receives and the request fields its context carries.
+    /// </summary>
+    /// <param name="form">The form a row sends, without client authentication.</param>
+    /// <returns>
+    /// The answer, each seam's call count, the request the authorization seam received and the fields of the
+    /// incoming request its context carried.
+    /// </returns>
+    private async Task<(int StatusCode, string Body, int RequestSeamCalls, int TokenValidations, int Authorizations, TokenExchangeRequest? AuthorizedRequest, Verifiable.Server.RequestFields? AuthorizedFields, string Record)> PostThroughCountingSeamsAsync(OutgoingFormFields form)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        int tokenValidations = 0;
+        int authorizations = 0;
+        TokenExchangeRequest? authorizedRequest = null;
+        Verifiable.Server.RequestFields? authorizedFields = null;
+        Func<int> countRequestSeamCalls = static () => 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                {
+                    _ = Interlocked.Increment(ref tokenValidations);
+
+                    return ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+                };
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    _ = Interlocked.Increment(ref authorizations);
+                    _ = Interlocked.Exchange(ref authorizedRequest, request);
+                    _ = Interlocked.Exchange(ref authorizedFields, context.IncomingRequest?.Fields);
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = TokenType.AccessToken
+                        });
+                };
+
+            countRequestSeamCalls = CountRequestSeamCalls(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!,
+            tokenUrl,
+            form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret)),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int requestSeamCalls = countRequestSeamCalls();
+        int tokenValidationCount = Volatile.Read(ref tokenValidations);
+        int authorizationCount = Volatile.Read(ref authorizations);
+        string record = $"{(int)response.StatusCode} '{body}' request seam calls {requestSeamCalls} token validations "
+            + $"{tokenValidationCount} authorizations {authorizationCount}";
+
+        return (
+            (int)response.StatusCode, body, requestSeamCalls, tokenValidationCount, authorizationCount,
+            Volatile.Read(ref authorizedRequest), Volatile.Read(ref authorizedFields), record);
+    }
+
+
+    /// <summary>
+    /// Installs on the editable candidate an identifier seam that counts the token identifiers
+    /// (<see cref="WellKnownIdentifierPurposes.OAuthJti"/>) the host is asked for and hands every request to the seam
+    /// it wraps.
+    /// </summary>
+    /// <param name="candidateIntegration">The editable candidate the seam is installed on.</param>
+    /// <returns>Reads how many token identifiers the host has been asked for.</returns>
+    private static Func<int> CountTokenIdentifiers(AuthorizationServerIntegration candidateIntegration)
+    {
+        int tokenIdentifierCalls = 0;
+        Verifiable.Server.GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
+        candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
+        {
+            if(purpose.Equals(WellKnownIdentifierPurposes.OAuthJti))
+            {
+                _ = Interlocked.Increment(ref tokenIdentifierCalls);
+            }
+
+            return original(purpose, context, ct);
+        };
+
+        return () => Volatile.Read(ref tokenIdentifierCalls);
+    }
+
+
+    /// <summary>
+    /// Installs on the editable candidate a request seam that counts its calls and refuses nothing.
+    /// </summary>
+    /// <param name="candidateIntegration">The editable candidate the seam is installed on.</param>
+    /// <returns>Reads how many times the request seam has been called.</returns>
+    private static Func<int> CountRequestSeamCalls(AuthorizationServerIntegration candidateIntegration)
+    {
+        int requestSeamCalls = 0;
+        candidateIntegration.ValidateTokenExchangeRequestAsync =
+            (request, registration, context, ct) =>
+            {
+                _ = Interlocked.Increment(ref requestSeamCalls);
+
+                return ValueTask.FromResult<TokenExchangeRequestRefusal?>(null);
+            };
+
+        return () => Volatile.Read(ref requestSeamCalls);
+    }
+
+
+    /// <summary>
     /// Registers a truly grant-only confidential client — no
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> — allowed the
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability plus
@@ -4422,20 +5143,32 @@ internal sealed class TokenExchangeGrantTests
 
     /// <summary>
     /// Posts an RFC 8693 section 2.1 impersonation exchange asking for <paramref name="requestedTokenType"/>,
-    /// authenticated by the fixture's client secret, and returns the response's status code and body.
+    /// naming <paramref name="resource"/> and <paramref name="audience"/> when they are given, authenticated by
+    /// <paramref name="clientSecret"/> through <c>client_secret_post</c>, and returns the response's status code
+    /// and body.
     /// </summary>
     /// <param name="http">The client the host is reached with.</param>
     /// <param name="tokenUrl">The token endpoint.</param>
-    /// <param name="requestedTokenType">The <c>requested_token_type</c> the request carries.</param>
+    /// <param name="requestedTokenType">The <c>requested_token_type</c> the request carries, or <see langword="null"/> for none.</param>
+    /// <param name="resource">The <c>resource</c> the request names, or <see langword="null"/> for none.</param>
+    /// <param name="audience">The <c>audience</c> the request names, or <see langword="null"/> for none.</param>
+    /// <param name="clientSecret">The secret the client presents; the fixture's own secret by default.</param>
     private async Task<(int StatusCode, string Body)> PostExchangeAsync(
-        HttpClient http, Uri tokenUrl, TokenType requestedTokenType)
+        HttpClient http,
+        Uri tokenUrl,
+        TokenType? requestedTokenType,
+        string? resource = null,
+        string? audience = null,
+        string clientSecret = ClientSecret)
     {
         OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
             SubjectToken = SubjectTokenValue,
             SubjectTokenType = TokenType.AccessToken,
-            RequestedTokenType = requestedTokenType
-        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+            RequestedTokenType = requestedTokenType,
+            Resource = resource is null ? [] : [resource],
+            Audience = audience
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(clientSecret));
 
         using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
             http, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);

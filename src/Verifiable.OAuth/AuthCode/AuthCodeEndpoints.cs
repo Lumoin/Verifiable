@@ -4632,6 +4632,86 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// The single-valued parameters of a token exchange request: those
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see> defines other than
+    /// <c>resource</c> and <c>audience</c>, which that section lets repeat, and <c>grant_type</c>, by which the endpoint
+    /// is matched, together with <c>authorization_details</c>, the token request parameter of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-6">RFC 9396 Section 6</see> ("The
+    /// authorization_details token request parameter can be used to specify the authorization details that a client
+    /// wants the AS to assign to an access token."). The single value is
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>'s rule: "Request and
+    /// response parameters MUST NOT be included more than once." <see cref="BuildTokenExchange"/> refuses a request
+    /// that sends one of them with a value more than once, and counts no occurrence sent without a value (the same
+    /// section: "Parameters sent without a value MUST be treated as if they were omitted from the request.").
+    /// </summary>
+    private static string[] SingleValuedTokenExchangeParameters { get; } =
+    [
+        OAuthRequestParameterNames.SubjectToken,
+        OAuthRequestParameterNames.SubjectTokenType,
+        OAuthRequestParameterNames.ActorToken,
+        OAuthRequestParameterNames.ActorTokenType,
+        OAuthRequestParameterNames.RequestedTokenType,
+        OAuthRequestParameterNames.Scope,
+        OAuthRequestParameterNames.AuthorizationDetails
+    ];
+
+
+    /// <summary>
+    /// The fixed <c>error_description</c> of the <c>invalid_request</c> <see cref="BuildTokenExchange"/> answers a
+    /// request that sends a parameter of <see cref="SingleValuedTokenExchangeParameters"/> with a value more than once; it names no
+    /// parameter and no value.
+    /// </summary>
+    private static string RepeatedTokenExchangeParameterDescription { get; } =
+        "A token exchange parameter was sent more than once.";
+
+
+    /// <summary>
+    /// Reads the one occurrence of the single-valued parameter <paramref name="name"/> that carries a value, for
+    /// <see cref="BuildTokenExchange"/>'s reads after its repeat check has refused a request that sends one of
+    /// <see cref="SingleValuedTokenExchangeParameters"/> with a value more than once. An occurrence that is null or
+    /// empty is a parameter sent without a value and is omitted
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request."); an occurrence of white space only
+    /// is a value. The request's fields are read and never written, so every seam that reads the incoming request
+    /// sees it as it was received.
+    /// </summary>
+    /// <param name="fields">The request's fields, as received.</param>
+    /// <param name="name">The parameter name.</param>
+    /// <param name="value">
+    /// The one occurrence with a value, or <see cref="string.Empty"/> when no occurrence or more than one carries a
+    /// value.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when exactly one occurrence of <paramref name="name"/> carries a value; otherwise
+    /// <see langword="false"/>.
+    /// </returns>
+    private static bool TryGetSingleValued(RequestFields fields, string name, out string value)
+    {
+        string? valuedOccurrence = null;
+        foreach(string occurrence in fields.GetValues(name))
+        {
+            if(string.IsNullOrEmpty(occurrence))
+            {
+                continue;
+            }
+
+            if(valuedOccurrence is not null)
+            {
+                value = string.Empty;
+
+                return false;
+            }
+
+            valuedOccurrence = occurrence;
+        }
+
+        value = valuedOccurrence ?? string.Empty;
+
+        return valuedOccurrence is not null;
+    }
+
+
+    /// <summary>
     /// Builds the OAuth 2.0 Token Exchange grant candidate
     /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>) on the
     /// shared token endpoint URL — IMPERSONATION and DELEGATION. Stateless: the client authenticates
@@ -4773,17 +4853,33 @@ public static class AuthCodeEndpoints
                     return (null, dpopOutcome.FailureResponse!);
                 }
 
+                //RFC 6749 Section 3.2: "Parameters sent without a value MUST be treated as if they were omitted from the
+                //request." and "Request and response parameters MUST NOT be included more than once." RFC 8693 Section
+                //2.1 lets "resource" and "audience" repeat. An occurrence sent without a value is omitted, so the count
+                //reads only the occurrences with a value: a null or empty occurrence is not counted, and an occurrence of
+                //white space only is a value and is counted. Each of the other parameters is read below as its one
+                //occurrence with a value (TryGetSingleValued), so one sent with a value more than once could be read as
+                //no value at all: a repeated requested_token_type would leave the issued type to the authorization seam,
+                //and a repeated actor_token would turn a delegation into an impersonation. Such a request is answered
+                //with Section 2.2.2's code for a request that is not valid ("The value of the "error" parameter MUST be
+                //the "invalid_request" error code.") and one fixed description that names no value, before the subject
+                //token is read, before the request seam and before the subject token is validated. The request's fields
+                //are read and never written, so the application's seams see the request as it was received.
+                if(SingleValuedTokenExchangeParameters.Any(parameter => fields.GetValues(parameter).Count(static value => !string.IsNullOrEmpty(value)) > 1))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, RepeatedTokenExchangeParameterDescription));
+                }
+
                 //RFC 8693 §2.1: subject_token is REQUIRED.
-                if(!fields.TryGetValue(OAuthRequestParameterNames.SubjectToken, out string? subjectToken)
-                    || string.IsNullOrEmpty(subjectToken))
+                if(!TryGetSingleValued(fields, OAuthRequestParameterNames.SubjectToken, out string subjectToken))
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "The subject_token parameter is required."));
                 }
 
                 //RFC 8693 §2.1/§3: subject_token_type is REQUIRED and must be a known token-type URI.
-                if(!fields.TryGetValue(OAuthRequestParameterNames.SubjectTokenType, out string? subjectTokenTypeValue)
-                    || string.IsNullOrEmpty(subjectTokenTypeValue)
+                if(!TryGetSingleValued(fields, OAuthRequestParameterNames.SubjectTokenType, out string subjectTokenTypeValue)
                     || !TokenTypeNames.TryParse(subjectTokenTypeValue, out TokenType subjectTokenType))
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -4795,17 +4891,15 @@ public static class AuthCodeEndpoints
                 //is present, actor_token_type is REQUIRED and must be a known token-type URI (§3), and
                 //it MUST be absent when actor_token is absent. Parse both before reaching the validation
                 //and authorization seams so a malformed acting-party request fails closed up front.
-                bool hasActorToken = fields.TryGetValue(OAuthRequestParameterNames.ActorToken, out string? actorToken)
-                    && !string.IsNullOrEmpty(actorToken);
-                bool hasActorTokenTypeValue = fields.TryGetValue(OAuthRequestParameterNames.ActorTokenType, out string? actorTokenTypeValue)
-                    && !string.IsNullOrEmpty(actorTokenTypeValue);
+                bool hasActorToken = TryGetSingleValued(fields, OAuthRequestParameterNames.ActorToken, out string actorToken);
+                bool hasActorTokenTypeValue = TryGetSingleValued(fields, OAuthRequestParameterNames.ActorTokenType, out string actorTokenTypeValue);
 
                 TokenType? actorTokenType = null;
                 if(hasActorToken)
                 {
                     //RFC 8693 §2.1: "actor_token_type ... REQUIRED when actor_token is present in the request."
                     if(!hasActorTokenTypeValue
-                        || !TokenTypeNames.TryParse(actorTokenTypeValue!, out TokenType parsedActorTokenType))
+                        || !TokenTypeNames.TryParse(actorTokenTypeValue, out TokenType parsedActorTokenType))
                     {
                         return (null, ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
@@ -4825,8 +4919,7 @@ public static class AuthCodeEndpoints
                 //RFC 8693 §2.1/§3: requested_token_type is OPTIONAL but, when present, must parse to
                 //a known token-type URI. The issued type is the authorization seam's decision.
                 TokenType? requestedTokenType = null;
-                if(fields.TryGetValue(OAuthRequestParameterNames.RequestedTokenType, out string? requestedTokenTypeValue)
-                    && !string.IsNullOrEmpty(requestedTokenTypeValue))
+                if(TryGetSingleValued(fields, OAuthRequestParameterNames.RequestedTokenType, out string requestedTokenTypeValue))
                 {
                     if(!TokenTypeNames.TryParse(requestedTokenTypeValue, out TokenType parsedRequestedTokenType))
                     {
@@ -4956,11 +5049,38 @@ public static class AuthCodeEndpoints
                     }
                 }
 
+                //RFC 8693 Section 2.1's scope is "A list of space-delimited, case-sensitive strings, as defined in Section
+                //3.3 of [RFC6749]". A scope of white space only holds no scope-token under RFC 6749 Section 3.3's grammar,
+                //"scope-token = 1*( %x21 / %x23-5B / %x5D-7E )", and the library reads such a scope as omitted at every
+                //token request (ResolveEffectiveScope's summary gives the reading). The reading is of the value's
+                //content: on the wire the value is sent with a value, so the repeat check above counts it. An
+                //authorization_details of white space only is read otherwise, below: it is not a JSON array, and the
+                //library refuses it, because its own read would drop it before either seam could parse it. The reading
+                //is this library's.
                 string? requestedScope = null;
-                if(fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
+                if(TryGetSingleValued(fields, OAuthRequestParameterNames.Scope, out string scopeValue)
                     && !string.IsNullOrWhiteSpace(scopeValue))
                 {
                     requestedScope = scopeValue;
+                }
+
+                //RFC 6749 Section 3.2: "Parameters sent without a value MUST be treated as if they were omitted from the
+                //request." An authorization_details of white space only is sent with a value, and the library's own read
+                //(ReadAuthorizationDetails) would drop it before either seam, so neither could refuse it. It is answered
+                //as this endpoint answers an authorization_details it cannot parse (RFC 9396 Section 5: "The AS MUST
+                //refuse to process any unknown authorization details type or authorization details not conforming to the
+                //respective type definition."; RFC 9396 Section 6 names the code at the token request: "Otherwise, the AS
+                //refuses the request with the error code invalid_authorization_details (similar to invalid_scope)."),
+                //before the request seam and before the subject token is validated. Parsing and processing any other value
+                //is the application's, in its seams: draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.3, "If
+                //authorization_details is present, the IdP MUST parse it as a JSON array and process each authorization
+                //detail object according to [RFC9396]." The reading is this library's.
+                bool hasAuthorizationDetails = TryGetSingleValued(
+                    fields, OAuthRequestParameterNames.AuthorizationDetails, out string authorizationDetailsValue);
+                if(hasAuthorizationDetails && string.IsNullOrWhiteSpace(authorizationDetailsValue))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidAuthorizationDetails, "authorization_details could not be parsed."));
                 }
 
                 Verifiable.OAuth.TokenExchange.TokenExchangeRequest exchangeRequest = new()
@@ -4976,8 +5096,34 @@ public static class AuthCodeEndpoints
 
                     //ID-JAG §4.3.3: authorization_details is carried verbatim for the IdP's seam to
                     //parse and process per RFC 9396; base RFC 8693 token exchange ignores it.
-                    AuthorizationDetails = ReadAuthorizationDetails(fields)
+                    AuthorizationDetails = hasAuthorizationDetails ? authorizationDetailsValue : null
                 };
+
+                //The application's request seam, when it is wired, decides whether this server serves the
+                //request's shape before the subject_token is validated, and names the parameter it refuses. The
+                //library derives the code from that parameter: resource and audience give invalid_target
+                //(RFC 8693 Section 2.2.2's SHOULD for a target service the server is unwilling or unable to
+                //issue a token for; RFC 8707 Section 2: "The following error code is provided for an
+                //authorization server to indicate problems with the requested resource(s) in response to an
+                //authorization request or access token request."), every other parameter gives invalid_request
+                //(RFC 8693 Section 2.2.2's MUST for a request that is not valid). The description is written
+                //through the error body's sanitizer.
+                if(oauth.ValidateTokenExchangeRequestAsync is { } validateExchangeRequest)
+                {
+                    Verifiable.OAuth.TokenExchange.TokenExchangeRequestRefusal? requestRefusal =
+                        await validateExchangeRequest(exchangeRequest, registration, context, ct).ConfigureAwait(false);
+                    if(requestRefusal is not null)
+                    {
+                        string requestRefusalError = requestRefusal.Parameter switch
+                        {
+                            string parameter when string.Equals(parameter, OAuthRequestParameterNames.Resource, StringComparison.Ordinal)
+                                || string.Equals(parameter, OAuthRequestParameterNames.Audience, StringComparison.Ordinal) => OAuthErrors.InvalidTarget,
+                            _ => OAuthErrors.InvalidRequest
+                        };
+
+                        return (null, ServerHttpResponse.BadRequest(requestRefusalError, requestRefusal.Description));
+                    }
+                }
 
                 //RFC 8693 §2.1: validate the subject_token for its indicated type. The application is
                 //the trust authority; a null result means the token is invalid, untrusted, or expired.
@@ -4996,13 +5142,14 @@ public static class AuthCodeEndpoints
                         subjectToken, subjectTokenType, registration, context, ct).ConfigureAwait(false);
                 if(validatedSubject is null || string.IsNullOrWhiteSpace(validatedSubject.Subject))
                 {
-                    //ID-JAG §4.3.3 / §4.3.4.3: an ID-JAG mint whose subject token (the Identity
-                    //Assertion) fails validation — including the §4.3.3 MUST that its audience match
-                    //the authenticating client_id — is a grant failure (invalid_grant), not the base
-                    //RFC 8693 §2.2.2 invalid_request used for a plain token exchange.
+                    //An ID-JAG mint's subject token (the Identity Assertion) that fails validation, the
+                    //draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.3 MUST that its audience match
+                    //the authenticating client_id included, is answered with the same Section 2.2.2 invalid_request:
+                    //that draft's Section 4.3.4.3 reads "On an error condition, the IdP returns an OAuth 2.0 Token
+                    //Error response as defined in Section 5.2 of [RFC6749], e.g:", an example that does not set the
+                    //MUST aside.
                     return (null, ServerHttpResponse.BadRequest(
-                        requestedTokenType == TokenType.IdJag ? OAuthErrors.InvalidGrant : OAuthErrors.InvalidRequest,
-                        "The subject_token is not valid."));
+                        OAuthErrors.InvalidRequest, "The subject_token is not valid."));
                 }
 
                 //DELEGATION (RFC 8693 §1.1): an actor_token was presented. Validate it through the same
@@ -5076,15 +5223,10 @@ public static class AuthCodeEndpoints
                         validatedSubject, validatedActor, exchangeRequest, registration, context, ct).ConfigureAwait(false);
                 if(authorization is null)
                 {
-                    //ID-JAG §4.3.4.3: a denied ID-JAG mint (for example audience validation failing)
-                    //is invalid_grant. The base RFC 8693 §2.2.2 mapping — invalid_target for a named
-                    //resource/audience target, else invalid_request — applies to a plain exchange.
-                    if(requestedTokenType == TokenType.IdJag)
-                    {
-                        return (null, ServerHttpResponse.BadRequest(
-                            OAuthErrors.InvalidGrant, "The id-jag token exchange was not authorized."));
-                    }
-
+                    //A denied ID-JAG mint follows the same Section 2.2.2 mapping: an ID-JAG request names its
+                    //Resource Authorization Server as the audience, so its denial is invalid_target.
+                    //draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4.3's invalid_grant is the code
+                    //of an example ("e.g:"), not a rule for this case.
                     bool hasNamedTarget = exchangeRequest.Resource.Count > 0 || exchangeRequest.Audience.Count > 0;
 
                     return (null, ServerHttpResponse.BadRequest(
@@ -5126,6 +5268,18 @@ public static class AuthCodeEndpoints
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
                         "This authorization server issues only access tokens, id-jag grants, or refresh tokens for token exchange; this issued_token_type is not supported."));
+                }
+
+                //RFC 8693 Section 2.1 leaves the issued type to the server only when the request does not state one: "If
+                //the requested type is unspecified, the issued token type is at the discretion of the authorization
+                //server". A stated requested_token_type the authorization seam does not issue is a request this server
+                //does not honor, answered with Section 2.2.2's code for a request that is not valid ("The value of the
+                //"error" parameter MUST be the "invalid_request" error code.") before any token identifier, signing
+                //material or stored state is obtained. An unstated type stays the seam's choice.
+                if(requestedTokenType is { } statedTokenType && authorization.IssuedTokenType != statedTokenType)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "The requested_token_type cannot be issued for this request."));
                 }
 
                 //ID-JAG §9.8.1.2-shaped proof-of-possession matrix: reads the proof outcome already
@@ -5508,6 +5662,28 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// The fixed <c>error_description</c> of the <c>invalid_request</c> <see cref="BuildIdJagMintResponseAsync"/>
+    /// answers when the authorization seam issues an ID-JAG without shaping its audience and the request names no
+    /// <c>audience</c>: an ID-JAG names one Resource Authorization Server
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>).
+    /// The text names the issued ID-JAG, since the request may have stated no <c>requested_token_type</c>.
+    /// </summary>
+    private static string IdJagAudienceNamedNoneDescription { get; } =
+        "An ID-JAG is issued for exactly one audience; the request named none.";
+
+
+    /// <summary>
+    /// The fixed <c>error_description</c> of the <c>invalid_request</c> <see cref="BuildIdJagMintResponseAsync"/>
+    /// answers when the authorization seam issues an ID-JAG without shaping its audience and the request names more
+    /// than one <c>audience</c>: an ID-JAG names one Resource Authorization Server
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>).
+    /// The text names the issued ID-JAG, since the request may have stated no <c>requested_token_type</c>.
+    /// </summary>
+    private static string IdJagAudienceNamedSeveralDescription { get; } =
+        "An ID-JAG is issued for exactly one audience; the request named several.";
+
+
+    /// <summary>
     /// Mints an Identity Assertion JWT Authorization Grant (ID-JAG) and writes the
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2">RFC 8693 §2.2</see> Token
     /// Exchange response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1
@@ -5573,18 +5749,30 @@ public static class AuthCodeEndpoints
         //§3.1 aud / §4.3: the audience is the Resource Authorization Server's issuer identifier. The
         //authorization seam's shaped audience wins — §4.3 lets the IdP resolve an implementation-
         //specific audience value (e.g. a URN) to the RS issuer it stamps into aud — otherwise the
-        //request's REQUIRED audience is used verbatim.
-        string? resourceAudience =
-            authorization.Audience is { Count: > 0 } shaped ? shaped[0]
-            : exchangeRequest.Audience.Count > 0 ? exchangeRequest.Audience[0]
-            : null;
-        if(string.IsNullOrEmpty(resourceAudience))
+        //request's REQUIRED audience is used verbatim. An ID-JAG names one Resource Authorization Server
+        //(draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3: "audience: REQUIRED - The identifier of
+        //the Resource Authorization Server in another trust domain as the intended audience for the ID-JAG."), so
+        //when the seam shaped no audience a request naming none or several is answered with RFC 8693 Section
+        //2.2.2's invalid_request for a request that is not valid, with a fixed description that names the issued
+        //ID-JAG (IdJagAudienceNamedNoneDescription, IdJagAudienceNamedSeveralDescription), before the grant's jti is
+        //obtained. The count is keyed on what is issued, a rule of this library.
+        if(authorization.Audience is not { Count: > 0 })
         {
-            //§4.3.4.3: an ID-JAG mint failure (audience validation) is invalid_grant.
-            return (null, ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant,
-                "The id-jag audience could not be resolved to a Resource Authorization Server identifier."));
+            ServerHttpResponse? audienceCountRefusal = exchangeRequest.Audience.Count switch
+            {
+                0 => ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, IdJagAudienceNamedNoneDescription),
+                1 => null,
+                _ => ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, IdJagAudienceNamedSeveralDescription)
+            };
+            if(audienceCountRefusal is not null)
+            {
+                return (null, audienceCountRefusal);
+            }
         }
+
+        string resourceAudience = authorization.Audience is { Count: > 0 } shaped
+            ? shaped[0]
+            : exchangeRequest.Audience[0];
 
         //§3.1 client_id: the client at the Resource Authorization Server that will act on behalf of the
         //subject. It MAY differ from the requesting client (an independent client relationship in the
@@ -5592,14 +5780,19 @@ public static class AuthCodeEndpoints
         string resourceClientId = authorization.ResourceClientId ?? registration.ClientId;
 
         //What the seam chose is checked before the grant's jti and signing material are obtained, and a defect
-        //of the seam mints nothing: a sub_id that is not well formed (the redeem reads the same member), a
-        //granted resource the resource indicator grammar refuses (Section 3.1 makes the claim an RFC 8707
-        //Section 2 resource identifier, and the redeem refuses such a claim), a granted scope that is set and
-        //breaks the grammar of RFC 6749 Section 3.3 (Section 3.1 makes the claim a list in that format, and the
-        //redeem refuses such a claim), or a tenant, aud_tenant or aud_sub that is set and is white space only (the
-        //redeem refuses such a claim). A tenant relationship value that is null or empty omits its claim, as an
-        //empty scope does. The rule is this library's.
-        if((authorization.SubjectIdentifier is { } chosenIdentifier && !chosenIdentifier.IsWellFormed())
+        //of the seam mints nothing: a shaped audience whose first value is null, empty or white space only (it
+        //names no Resource Authorization Server for the aud claim), a shaped audience of more than one value (the
+        //one aud claim of an ID-JAG holds one Resource Authorization Server, and the library does not choose among
+        //them), a sub_id that is not well formed (the redeem reads the same member), a granted resource the
+        //resource indicator grammar refuses (Section 3.1 makes the claim an RFC 8707 Section 2 resource
+        //identifier, and the redeem refuses such a claim), a granted scope that is set and breaks the grammar of
+        //RFC 6749 Section 3.3 (Section 3.1 makes the claim a list in that format, and the redeem refuses such a
+        //claim), or a tenant, aud_tenant or aud_sub that is set and is white space only (the redeem refuses such a
+        //claim). A tenant relationship value that is null or empty omits its claim, as an empty scope does. The
+        //rule is this library's.
+        if(string.IsNullOrWhiteSpace(resourceAudience)
+            || authorization.Audience is { Count: > 1 }
+            || (authorization.SubjectIdentifier is { } chosenIdentifier && !chosenIdentifier.IsWellFormed())
             || (authorization.Resource is { Count: > 0 } chosenResources
                 && chosenResources.Any(static chosenResource => !ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(chosenResource)))
             || (authorization.Scope is { Length: > 0 } chosenScope && !ScopeTokenSyntax.IsScopeList(chosenScope))

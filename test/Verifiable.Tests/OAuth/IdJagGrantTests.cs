@@ -365,12 +365,19 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
-    /// §4.3.3 / §4.3.4.3: an id-jag mint whose subject token (the Identity Assertion) fails validation
-    /// — for example the §4.3.3 MUST that its audience match the authenticating client — is a grant
-    /// failure (<c>invalid_grant</c>), not the base RFC 8693 <c>invalid_request</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or
+    /// are unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+    /// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code." An
+    /// id-jag mint whose subject token the validation seam does not accept is answered 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The subject_token is not valid."}</c>, the code of every
+    /// token exchange:
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4.3</see>
+    /// reads "On an error condition, the IdP returns an OAuth 2.0 Token Error response as defined in Section 5.2 of
+    /// [RFC6749], e.g:", an example that does not set the code aside.
     /// </summary>
     [TestMethod]
-    public async Task MintWithInvalidSubjectTokenIsInvalidGrant()
+    public async Task MintWithInvalidSubjectTokenIsInvalidRequest()
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
@@ -394,15 +401,25 @@ internal sealed class IdJagGrantTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
-        Assert.Contains(OAuthErrors.InvalidGrant, body);
+        Assert.AreEqual("""{"error":"invalid_request","error_description":"The subject_token is not valid."}""", body);
     }
 
 
     /// <summary>
-    /// §4.3.4.3: a denied id-jag exchange (the authorization seam refuses) is <c>invalid_grant</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// authorization server is unwilling or unable to issue a token for any target service indicated by the
+    /// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>: "The following error
+    /// code is provided for an authorization server to indicate problems with the requested resource(s) in response
+    /// to an authorization request or access token request." An id-jag mint that names its Resource Authorization
+    /// Server as the <c>audience</c> and that the authorization seam refuses is answered 400 with the body
+    /// <c>{"error":"invalid_target","error_description":"The token exchange was not authorized."}</c>, the answer of
+    /// every token exchange that names a target. The library cannot tell why the authorization seam denied, so it
+    /// reads a denial of a request that names a <c>resource</c> or an <c>audience</c> as unwillingness to issue for
+    /// that target; that reading is this library's rule.
     /// </summary>
     [TestMethod]
-    public async Task MintDeniedByPolicyIsInvalidGrant()
+    public async Task MintDeniedByPolicyIsInvalidTarget()
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
@@ -428,7 +445,7 @@ internal sealed class IdJagGrantTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
-        Assert.Contains(OAuthErrors.InvalidGrant, body);
+        Assert.AreEqual("""{"error":"invalid_target","error_description":"The token exchange was not authorized."}""", body);
     }
 
 
@@ -1886,8 +1903,13 @@ internal sealed class IdJagGrantTests
     /// <summary>
     /// §4.3.3: for an ID-Token subject token the IdP MUST validate that the assertion's audience
     /// matches the <c>client_id</c> of the authenticating client. With a seam that enforces this, a
-    /// subject token whose audience is a different client is rejected (<c>invalid_grant</c>), while one
-    /// whose audience is the authenticating client mints an ID-JAG.
+    /// subject token whose audience is a different client is rejected 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The subject_token is not valid."}</c>, while one whose
+    /// audience is the authenticating client mints an ID-JAG. The code is
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>'s: "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or
+    /// are unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+    /// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code."
     /// </summary>
     [TestMethod]
     public async Task MintEnforcesSubjectTokenAudienceEqualsClient()
@@ -1922,12 +1944,12 @@ internal sealed class IdJagGrantTests
         string matchedBody = await matched.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)matched.StatusCode, matchedBody);
 
-        //Audience != authenticated client → invalid_grant (§4.3.3 / §4.3.4.3).
+        //Audience != authenticated client: a subject token that is not valid, invalid_request.
         using HttpResponseMessage mismatched = await PostMintWithSubjectAsync(http, tokenUrl, ResourceAsIssuer, "https://other-rp.example")
             .ConfigureAwait(false);
         string mismatchedBody = await mismatched.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)mismatched.StatusCode, mismatchedBody);
-        Assert.Contains(OAuthErrors.InvalidGrant, mismatchedBody);
+        Assert.AreEqual("""{"error":"invalid_request","error_description":"The subject_token is not valid."}""", mismatchedBody);
     }
 
 
@@ -3705,13 +3727,19 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
-    /// §4.3.3 / §4.3.4.3: a Refresh Token <c>subject_token</c> the IdP cannot validate — not one it
-    /// issued, revoked, or bound to a different client — is a grant failure (<c>invalid_grant</c>). The
-    /// §4.3.3 validation seam returns null for any Refresh Token other than the one it issued to this
-    /// client, mirroring the standard refresh_token-grant validation the IdP would apply.
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.3: a Refresh Token <c>subject_token</c> the IdP
+    /// cannot validate, one it did not issue, one revoked, or one bound to a different client, is a subject token that is
+    /// not valid, answered 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The subject_token is not valid."}</c> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or
+    /// are unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+    /// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code." The
+    /// Section 4.3.3 validation seam returns null for any Refresh Token other than the one it issued to this client,
+    /// mirroring the standard refresh_token-grant validation the IdP would apply.
     /// </summary>
     [TestMethod]
-    public async Task MintWithInvalidRefreshTokenSubjectIsInvalidGrant()
+    public async Task MintWithInvalidRefreshTokenSubjectIsInvalidRequest()
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
@@ -3726,18 +3754,26 @@ internal sealed class IdJagGrantTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
-        Assert.Contains(OAuthErrors.InvalidGrant, body);
+        Assert.AreEqual("""{"error":"invalid_request","error_description":"The subject_token is not valid."}""", body);
     }
 
 
     /// <summary>
     /// §4.3.3: a refresh-token-subject exchange whose requested scope exceeds the Refresh Token's
-    /// authorization context is denied with <c>invalid_grant</c> — the issued ID-JAG cannot widen the
-    /// authority the Refresh Token carried. The authorization seam sees both the validated subject's
-    /// scope (the RT context) and the requested scope and refuses the escalation.
+    /// authorization context is denied: the issued ID-JAG cannot widen the authority the Refresh Token carried.
+    /// The authorization seam sees both the validated subject's scope (the RT context) and the requested scope and
+    /// refuses the escalation. The request names its Resource Authorization Server as the <c>audience</c>, so the
+    /// refusal is answered 400 with the body
+    /// <c>{"error":"invalid_target","error_description":"The token exchange was not authorized."}</c>, under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// authorization server is unwilling or unable to issue a token for any target service indicated by the
+    /// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response."
+    /// The library cannot tell why the authorization seam denied, so it reads a denial of a request that names a
+    /// <c>resource</c> or an <c>audience</c> as unwillingness to issue for that target, a denial on the scope
+    /// included; that reading is this library's rule.
     /// </summary>
     [TestMethod]
-    public async Task MintWithRefreshTokenSubjectScopeBeyondContextIsInvalidGrant()
+    public async Task MintWithRefreshTokenSubjectScopeBeyondContextIsInvalidTarget()
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
@@ -3753,7 +3789,7 @@ internal sealed class IdJagGrantTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
-        Assert.Contains(OAuthErrors.InvalidGrant, body);
+        Assert.AreEqual("""{"error":"invalid_target","error_description":"The token exchange was not authorized."}""", body);
     }
 
 
@@ -5560,6 +5596,9 @@ internal sealed class IdJagGrantTests
     /// </param>
     /// <param name="resource">The granted <c>resource</c> entries the seam supplies, or <see langword="null"/> for none.</param>
     /// <param name="grantedScope">The granted <c>scope</c> the seam supplies, or <see langword="null"/> for <see cref="ChatScope"/>.</param>
+    /// <param name="shapedAudience">
+    /// The <see cref="TokenExchangeAuthorization.Audience"/> the seam supplies, or <see langword="null"/> for none.
+    /// </param>
     private async Task AssertTheMintAnswersNotReadyAsync(
         SubjectIdentifier? subjectIdentifier = null,
         string? tenant = null,
@@ -5567,7 +5606,8 @@ internal sealed class IdJagGrantTests
         string? audienceSubject = null,
         string? authorizedSubject = null,
         IReadOnlyList<string>? resource = null,
-        string? grantedScope = null)
+        string? grantedScope = null,
+        IReadOnlyList<string>? shapedAudience = null)
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
@@ -5580,22 +5620,14 @@ internal sealed class IdJagGrantTests
             audienceTenant: audienceTenant,
             audienceSubject: audienceSubject,
             authorizedSubject: authorizedSubject,
-            resource: resource).ConfigureAwait(false);
+            resource: resource,
+            shapedAudience: shapedAudience).ConfigureAwait(false);
 
         //The host's identifier seam counts the grant identifiers it is asked for.
-        int grantIdentifierCalls = 0;
+        Func<int> countGrantIdentifiers = static () => 0;
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
-            candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
-            {
-                if(purpose.Equals(WellKnownIdentifierPurposes.OAuthJti))
-                {
-                    grantIdentifierCalls++;
-                }
-
-                return original(purpose, context, ct);
-            };
+            countGrantIdentifiers = CountGrantIdentifiers(candidateIntegration);
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -5605,9 +5637,9 @@ internal sealed class IdJagGrantTests
         using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        string record = $"{(int)response.StatusCode} '{body}' grant identifiers generated {grantIdentifierCalls}";
+        string record = $"{(int)response.StatusCode} '{body}' grant identifiers generated {countGrantIdentifiers()}";
         Assert.AreEqual(500, (int)response.StatusCode, record);
-        Assert.AreEqual(0, grantIdentifierCalls, $"No grant identifier is generated for a refused value of the seam. {record}");
+        Assert.AreEqual(0, countGrantIdentifiers(), $"No grant identifier is generated for a refused value of the seam. {record}");
 
         //The body is the error object alone: no access_token member carries a grant.
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -5615,6 +5647,31 @@ internal sealed class IdJagGrantTests
         Assert.HasCount(2, root.EnumerateObject());
         Assert.AreEqual("server_error", root.GetProperty("error").GetString());
         Assert.AreEqual("The server is not ready to serve this request.", root.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// Installs on the editable candidate an identifier seam that counts the grant identifiers
+    /// (<see cref="WellKnownIdentifierPurposes.OAuthJti"/>) the host is asked for and hands every request to the seam
+    /// it wraps.
+    /// </summary>
+    /// <param name="candidateIntegration">The editable candidate the seam is installed on.</param>
+    /// <returns>Reads how many grant identifiers the host has been asked for.</returns>
+    private static Func<int> CountGrantIdentifiers(AuthorizationServerIntegration candidateIntegration)
+    {
+        int grantIdentifierCalls = 0;
+        GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
+        candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
+        {
+            if(purpose.Equals(WellKnownIdentifierPurposes.OAuthJti))
+            {
+                _ = Interlocked.Increment(ref grantIdentifierCalls);
+            }
+
+            return original(purpose, context, ct);
+        };
+
+        return () => Volatile.Read(ref grantIdentifierCalls);
     }
 
 
@@ -5721,7 +5778,12 @@ internal sealed class IdJagGrantTests
     /// Section 4.5: a SAML 2.0 Assertion is accepted as the <c>subject_token</c> (<c>subject_token_type</c> =
     /// the saml2 URN) for an ID-JAG mint. The Section 4.5 MUST that the SAML Audience / SPEntityID map to the
     /// authenticated client is enforced by the validation seam: an assertion bound to this client mints;
-    /// one bound to a different SP is rejected with <c>invalid_grant</c>.
+    /// one bound to a different SP is a subject token that is not valid, rejected 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The subject_token is not valid."}</c> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or
+    /// are unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+    /// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code."
     /// </summary>
     [TestMethod]
     public async Task MintWithSamlAssertionSubjectTokenMintsIdJag()
@@ -5759,11 +5821,11 @@ internal sealed class IdJagGrantTests
         using JsonDocument jagPayload = DecodePayload(jag);
         Assert.AreEqual(SubjectIdentity, jagPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
 
-        //SAML Audience maps to a different SP, so the answer is invalid_grant (Section 4.5 mapping MUST).
+        //SAML Audience maps to a different SP: the Section 4.5 mapping MUST fails, a subject token that is not valid.
         using HttpResponseMessage mismatched = await PostSamlMintAsync(http, tokenUrl, "https://other-sp.example").ConfigureAwait(false);
         string mismatchedBody = await mismatched.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)mismatched.StatusCode, mismatchedBody);
-        Assert.Contains(OAuthErrors.InvalidGrant, mismatchedBody);
+        Assert.AreEqual("""{"error":"invalid_request","error_description":"The subject_token is not valid."}""", mismatchedBody);
     }
 
 
@@ -7526,6 +7588,9 @@ internal sealed class IdJagGrantTests
     /// <param name="authorizedSubject">
     /// The subject the authorization names, or <see langword="null"/> for the validated subject token's subject.
     /// </param>
+    /// <param name="shapedAudience">
+    /// The <see cref="TokenExchangeAuthorization.Audience"/> the authorization shapes, or <see langword="null"/> for none.
+    /// </param>
     private static void WireIdJagAuthorization(
         AuthorizationServerIntegration candidateIntegration,
         string grantedScope,
@@ -7535,7 +7600,8 @@ internal sealed class IdJagGrantTests
         IReadOnlyList<string>? resource = null,
         string? audienceTenant = null,
         string? audienceSubject = null,
-        string? authorizedSubject = null)
+        string? authorizedSubject = null,
+        IReadOnlyList<string>? shapedAudience = null)
     {
         candidateIntegration.AuthorizeTokenExchangeAsync =
             (subject, actor, request, registration, context, ct) =>
@@ -7544,6 +7610,7 @@ internal sealed class IdJagGrantTests
                     {
                         Subject = authorizedSubject ?? subject.Subject,
                         Scope = grantedScope,
+                        Audience = shapedAudience ?? [],
                         IssuedTokenType = TokenType.IdJag,
                         ResourceClientId = resourceClientId,
                         SubjectIdentifier = subjectIdentifier,
@@ -7573,6 +7640,9 @@ internal sealed class IdJagGrantTests
     /// The subject the authorization names, or <see langword="null"/> for the validated subject token's subject.
     /// </param>
     /// <param name="resource">The granted <c>resource</c> entries the mint writes as sent, or <see langword="null"/> for none.</param>
+    /// <param name="shapedAudience">
+    /// The <see cref="TokenExchangeAuthorization.Audience"/> the authorization shapes, or <see langword="null"/> for none.
+    /// </param>
     private static async Task WireMintSeamsAsync(
         TestHostShell app,
         string grantedScope,
@@ -7582,7 +7652,8 @@ internal sealed class IdJagGrantTests
         string? audienceTenant = null,
         string? audienceSubject = null,
         string? authorizedSubject = null,
-        IReadOnlyList<string>? resource = null)
+        IReadOnlyList<string>? resource = null,
+        IReadOnlyList<string>? shapedAudience = null)
     {
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
@@ -7602,7 +7673,8 @@ internal sealed class IdJagGrantTests
                 resource: resource,
                 audienceTenant: audienceTenant,
                 audienceSubject: audienceSubject,
-                authorizedSubject: authorizedSubject);
+                authorizedSubject: authorizedSubject,
+                shapedAudience: shapedAudience);
         }).ConfigureAwait(false);
 
     }
@@ -8127,5 +8199,175 @@ internal sealed class IdJagGrantTests
         byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], Pool);
 
         return JsonDocument.Parse(payloadBytes);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>
+    /// defines the Token Exchange request for an ID-JAG with "requested_token_type: REQUIRED - The value
+    /// urn:ietf:params:oauth:token-type:id-jag indicates that an Identity Assertion JWT Authorization Grant is
+    /// being requested." and "audience: REQUIRED - The identifier of the Resource Authorization Server in another
+    /// trust domain as the intended audience for the ID-JAG." With <see cref="IdJagMintRequestRule"/> wired over
+    /// the set {<see cref="ResourceAsIssuer"/>}, an exchange of an ID Token naming that one audience without the
+    /// id-jag <c>requested_token_type</c> (absent, or the access token type) is answered 400
+    /// <c>invalid_request</c> with the rule's description, the code
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> gives a request
+    /// that is not valid ("The value of the "error" parameter MUST be the "invalid_request" error code."), and
+    /// reaches neither the subject-token validator nor the authorization seam; one naming the id-jag type mints an
+    /// ID-JAG. Which requests the rule reads as ID-JAG requests is a rule of this library: a request it cannot
+    /// classify passes it untouched and reaches the authorization seam once, whether it names one audience outside
+    /// the set, an access token as its subject, no audience, or two. The library's own audience count holds the
+    /// last two once the authorization seam has chosen to issue an ID-JAG without shaping its audience: an ID-JAG
+    /// names one Resource Authorization Server, so a request naming none is answered 400 with
+    /// <c>{"error":"invalid_request","error_description":"An ID-JAG is issued for exactly one audience; the request named none."}</c>
+    /// and one naming two with
+    /// <c>{"error":"invalid_request","error_description":"An ID-JAG is issued for exactly one audience; the request named several."}</c>,
+    /// and the host's identifier seam is asked for no grant <c>jti</c>.
+    /// </summary>
+    /// <param name="requestedTokenType">The <c>requested_token_type</c> the request carries, or <see langword="null"/> for none.</param>
+    /// <param name="subjectTokenType">The <c>subject_token_type</c> the request carries.</param>
+    /// <param name="audiences">The <c>audience</c> values the request names.</param>
+    /// <param name="outcome">
+    /// The answer: <c>ruleRefusal</c>, <c>minted</c>, <c>noAudience</c> or <c>twoAudiences</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow(null, "urn:ietf:params:oauth:token-type:id_token", new[] { ResourceAsIssuer }, "ruleRefusal")]
+    [DataRow("urn:ietf:params:oauth:token-type:access_token", "urn:ietf:params:oauth:token-type:id_token", new[] { ResourceAsIssuer }, "ruleRefusal")]
+    [DataRow("urn:ietf:params:oauth:token-type:id-jag", "urn:ietf:params:oauth:token-type:id_token", new[] { ResourceAsIssuer }, "minted")]
+    [DataRow(null, "urn:ietf:params:oauth:token-type:id_token", new string[] { }, "noAudience")]
+    [DataRow(null, "urn:ietf:params:oauth:token-type:id_token", new[] { ResourceAsIssuer, "https://another-resource-server.example/" }, "twoAudiences")]
+    [DataRow(null, "urn:ietf:params:oauth:token-type:id_token", new[] { "https://another-resource-server.example/" }, "minted")]
+    [DataRow(null, "urn:ietf:params:oauth:token-type:access_token", new[] { ResourceAsIssuer }, "minted")]
+    public async Task TheIdJagMintRuleRequiresTheIdJagTypeForItsAudiencesAsync(
+        string? requestedTokenType, string subjectTokenType, string[] audiences, string outcome)
+    {
+        string ruleRefusal =
+            """{"error":"invalid_request","error_description":"requested_token_type must be urn:ietf:params:oauth:token-type:id-jag."}""";
+        string? expectedRefusal = outcome switch
+        {
+            "ruleRefusal" => ruleRefusal,
+            "noAudience" =>
+                """{"error":"invalid_request","error_description":"An ID-JAG is issued for exactly one audience; the request named none."}""",
+            "twoAudiences" =>
+                """{"error":"invalid_request","error_description":"An ID-JAG is issued for exactly one audience; the request named several."}""",
+            "minted" => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null)
+        };
+        bool isRefusedByTheRule = string.Equals(outcome, "ruleRefusal", StringComparison.Ordinal);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+
+        int subjectTokenValidations = 0;
+        int authorizations = 0;
+        Func<int> countGrantIdentifiers = static () => 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            ValidateTokenExchangeTokenDelegate validate = candidateIntegration.ValidateTokenExchangeTokenAsync!;
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                {
+                    _ = Interlocked.Increment(ref subjectTokenValidations);
+
+                    return validate(token, tokenType, registration, context, ct);
+                };
+
+            AuthorizeTokenExchangeDelegate authorize = candidateIntegration.AuthorizeTokenExchangeAsync!;
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    _ = Interlocked.Increment(ref authorizations);
+
+                    return authorize(subject, actor, request, registration, context, ct);
+                };
+
+            candidateIntegration.ValidateTokenExchangeRequestAsync = IdJagMintRequestRule.Build([ResourceAsIssuer]);
+            countGrantIdentifiers = CountGrantIdentifiers(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        //The mint form with the row's requested_token_type, subject_token_type and audience values in place of its own.
+        OutgoingFormFields form = new(BuildMintForm(ResourceAsIssuer).Where(static field =>
+            !string.Equals(field.Key, OAuthRequestParameterNames.RequestedTokenType, StringComparison.Ordinal)
+            && !string.Equals(field.Key, OAuthRequestParameterNames.SubjectTokenType, StringComparison.Ordinal)
+            && !string.Equals(field.Key, OAuthRequestParameterNames.Audience, StringComparison.Ordinal)));
+        if(requestedTokenType is not null)
+        {
+            form.Add(OAuthRequestParameterNames.RequestedTokenType, requestedTokenType);
+        }
+
+        form.Add(OAuthRequestParameterNames.SubjectTokenType, subjectTokenType);
+        foreach(string audience in audiences)
+        {
+            form.Add(OAuthRequestParameterNames.Audience, audience);
+        }
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{(int)response.StatusCode} '{body}' subject token validations {subjectTokenValidations} "
+            + $"authorizations {authorizations} grant identifiers generated {countGrantIdentifiers()}";
+
+        if(expectedRefusal is not null)
+        {
+            Assert.AreEqual(400, (int)response.StatusCode, record);
+            Assert.AreEqual(expectedRefusal, body, record);
+            Assert.AreEqual(0, countGrantIdentifiers(), $"No grant identifier is generated for a refused request. {record}");
+            Assert.AreEqual(isRefusedByTheRule ? 0 : 1, subjectTokenValidations, $"The subject token is read only once the rule has passed the request. {record}");
+            Assert.AreEqual(isRefusedByTheRule ? 0 : 1, authorizations, $"The authorization seam runs only once the rule has passed the request. {record}");
+
+            return;
+        }
+
+        Assert.AreEqual(200, (int)response.StatusCode, record);
+        Assert.AreEqual(1, authorizations, $"The request must reach the authorization seam once. {record}");
+        using JsonDocument minted = JsonDocument.Parse(body);
+        Assert.AreEqual(
+            "urn:ietf:params:oauth:token-type:id-jag",
+            minted.RootElement.GetProperty(OAuthRequestParameterNames.IssuedTokenType).GetString());
+    }
+
+
+    /// <summary>
+    /// The authorization seam's shaped <see cref="TokenExchangeAuthorization.Audience"/> names the Resource
+    /// Authorization Server an ID-JAG is issued for:
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>
+    /// reads "When such a value is used, the IdP Authorization Server resolves it to the corresponding Resource
+    /// Authorization Server identifier and issues the ID-JAG with that identifier in the aud claim." A shaped
+    /// audience whose first value is white space only names no Resource Authorization Server; it is the seam's own
+    /// defect, answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and the
+    /// host's identifier seam is asked for no grant <c>jti</c>, as
+    /// <see cref="MintRefusesAWhiteSpaceTenantRelationshipValueFromTheSeamAsync"/> answers the same seam's tenant
+    /// value of white space only. Answering the seam's defect <c>server_error</c> is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task MintRefusesAShapedAudienceOfWhiteSpaceFromTheSeamAsync()
+    {
+        await AssertTheMintAnswersNotReadyAsync(shapedAudience: [" "]).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An ID-JAG is issued for one Resource Authorization Server:
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>
+    /// reads "audience: REQUIRED - The identifier of the Resource Authorization Server in another trust domain as
+    /// the intended audience for the ID-JAG." An authorization seam that chooses the id-jag issued type and shapes
+    /// a <see cref="TokenExchangeAuthorization.Audience"/> of two values names more than the one Resource
+    /// Authorization Server the grant's <c>aud</c> claim holds; it is the seam's own defect, answered 500 with the
+    /// body <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and
+    /// the host's identifier seam is asked for no grant <c>jti</c>, as
+    /// <see cref="MintRefusesAShapedAudienceOfWhiteSpaceFromTheSeamAsync"/> answers a shaped audience that names no
+    /// Resource Authorization Server. Answering the seam's defect <c>server_error</c> is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task MintRefusesAShapedAudienceOfSeveralFromTheSeamAsync()
+    {
+        await AssertTheMintAnswersNotReadyAsync(
+            shapedAudience: [ResourceAsIssuer, "https://another-resource-server.example/"]).ConfigureAwait(false);
     }
 }

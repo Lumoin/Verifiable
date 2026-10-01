@@ -723,11 +723,15 @@ public delegate ValueTask<bool> ValidateClientCredentialsDelegate(
 /// <c>System.Net.*</c> dependency, so the network reach lives in the application.
 /// </para>
 /// <para>
-/// Return <see langword="null"/> when the token is invalid, untrusted, or expired — the endpoint
-/// then rejects the request with <c>invalid_grant</c> per
-/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see>, leaking
-/// nothing about why. A non-null result is the validated subject the authorization step shapes the
-/// issued token from.
+/// Return <see langword="null"/> when the token is invalid, untrusted, or expired. The endpoint then answers 400
+/// <c>invalid_request</c> with the description <c>The subject_token is not valid.</c> (or
+/// <c>The actor_token is not valid.</c>), leaking nothing about why, whatever token type the request asks for, an
+/// ID-JAG included:
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> reads "If the
+/// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or are
+/// unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+/// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code." A
+/// non-null result is the validated subject the authorization step shapes the issued token from.
 /// </para>
 /// </remarks>
 /// <param name="token">The <c>subject_token</c> value, exactly as presented on the wire. Confidential.</param>
@@ -785,16 +789,25 @@ public delegate ValueTask<TokenExchange.ValidatedSecurityToken?> ValidateTokenEx
 /// discretionary: RFC 8693 §1.1 leaves whether a composite token is issued to the authorization server.
 /// </para>
 /// <para>
-/// Return <see langword="null"/> when the exchange is denied. The endpoint maps the denial by what
-/// was requested: for an ID-JAG mint (<see cref="TokenExchange.TokenExchangeRequest.RequestedTokenType"/>
-/// id-jag) it answers <c>invalid_grant</c>, matching the
-/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 §4.3.4.3</see>
-/// error response example (<c>error_description</c> "Audience validation failed"); for a plain
-/// exchange that named a <c>resource</c> or an <c>audience</c> it answers <c>invalid_target</c>, the
-/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see> SHOULD for
-/// a server "unwilling or unable to issue a token for any target service indicated by the
-/// <c>resource</c> or <c>audience</c> parameters"; for a plain exchange naming no target it answers
-/// that same section's <c>invalid_request</c> MUST for a request that "is not valid".
+/// Return <see langword="null"/> when the exchange is denied. The endpoint answers 400 with the description
+/// <c>The token exchange was not authorized.</c>, whatever token type the request asks for, an ID-JAG included: an
+/// exchange that names a <c>resource</c> or an <c>audience</c> is answered <c>invalid_target</c>, per
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>, "If the
+/// authorization server is unwilling or unable to issue a token for any target service indicated by the "resource"
+/// or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response.", and one that
+/// names neither is answered <c>invalid_request</c>, that section's code for a request that is not valid ("The value
+/// of the "error" parameter MUST be the "invalid_request" error code.").
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4.3</see>
+/// reads "On an error condition, the IdP returns an OAuth 2.0 Token Error response as defined in Section 5.2 of
+/// [RFC6749], e.g:"; its <c>invalid_grant</c> is the code of that example.
+/// </para>
+/// <para>
+/// A <see cref="TokenExchange.TokenExchangeAuthorization.IssuedTokenType"/> that differs from a
+/// <see cref="TokenExchange.TokenExchangeRequest.RequestedTokenType"/> the request states is answered 400
+/// <c>invalid_request</c> with the description <c>The requested_token_type cannot be issued for this request.</c>,
+/// before any token is issued: <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see>
+/// leaves the issued type to the server only "If the requested type is unspecified". A request that states no type
+/// leaves the choice to this seam.
 /// </para>
 /// </remarks>
 /// <param name="subjectToken">The validated <c>subject_token</c> claims accepted by the validating seam.</param>
@@ -810,6 +823,68 @@ public delegate ValueTask<TokenExchange.ValidatedSecurityToken?> ValidateTokenEx
 public delegate ValueTask<TokenExchange.TokenExchangeAuthorization?> AuthorizeTokenExchangeDelegate(
     TokenExchange.ValidatedSecurityToken subjectToken,
     TokenExchange.ValidatedSecurityToken? actorToken,
+    TokenExchange.TokenExchangeRequest request,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Decides whether this server serves the shape of a Token Exchange request
+/// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see>) before its
+/// <c>subject_token</c> is validated (handed to <see cref="ValidateTokenExchangeTokenDelegate"/>), and names the
+/// parameter it refuses. The application decides and gives its reason; the library writes the error.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The token endpoint calls this seam after client authentication, after the issuer resolution, after the RFC 9449
+/// proof check and after its own parameter checks (a single-valued parameter sent with a value more than once,
+/// under <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>'s "Request and
+/// response parameters MUST NOT be included more than once."; the <c>subject_token_type</c>,
+/// <c>actor_token_type</c> and <c>requested_token_type</c> identifiers, the <c>resource</c> grammar and fold, the
+/// <c>audience</c> set, the ID-JAG audience count and an <c>authorization_details</c> of white space only), and
+/// before it hands the <c>subject_token</c> to <see cref="ValidateTokenExchangeTokenDelegate"/>. A request shape the
+/// application does not serve is so refused without a subject token ever reaching the application's validator. When
+/// the seam is not wired the endpoint skips it.
+/// </para>
+/// <para>
+/// The request carries the presented <c>subject_token</c> and <c>actor_token</c> unvalidated
+/// (<see cref="TokenExchange.TokenExchangeRequest.SubjectToken"/>, <see cref="TokenExchange.TokenExchangeRequest.ActorToken"/>).
+/// The seam judges the request's shape; it must not trust, return or log those two values. The record's text
+/// (<see cref="TokenExchange.TokenExchangeRequest.ToString"/>) leaves both out.
+/// </para>
+/// <para>
+/// Return <see langword="null"/> to continue. A <see cref="TokenExchange.TokenExchangeRequestRefusal"/> is
+/// answered 400 with the error code the library derives from
+/// <see cref="TokenExchange.TokenExchangeRequestRefusal.Parameter"/> and with
+/// <see cref="TokenExchange.TokenExchangeRequestRefusal.Description"/> as the <c>error_description</c>,
+/// reduced to the character set of
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> by the error
+/// body's writer. <see cref="OAuthRequestParameterNames.Resource"/> and
+/// <see cref="OAuthRequestParameterNames.Audience"/> give <c>invalid_target</c>:
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> reads "If the
+/// authorization server is unwilling or unable to issue a token for any target service indicated by the
+/// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response.",
+/// and <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see> reads "The following
+/// error code is provided for an authorization server to indicate problems with the requested resource(s) in
+/// response to an authorization request or access token request.". Every other parameter gives
+/// <c>invalid_request</c>: RFC 8693 Section 2.2.2 reads "If the request itself is not valid or if either the
+/// "subject_token" or "actor_token" are invalid for any reason, or are unacceptable based on policy, the
+/// authorization server MUST construct an error response, as specified in Section 5.2 of [RFC6749]. The value
+/// of the "error" parameter MUST be the "invalid_request" error code."
+/// </para>
+/// <para>
+/// <see cref="IdJag.IdJagMintRequestRule"/> builds one such seam for the ID-JAG mint. An application that has
+/// its own checks as well composes the two in its own delegate: it calls the rule's delegate first, returns a
+/// refusal it answers, and otherwise runs its own checks.
+/// </para>
+/// </remarks>
+/// <param name="request">The Token Exchange request after the library's parameter checks.</param>
+/// <param name="registration">The authenticated client requesting the exchange.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The refusal naming the refused parameter, or <see langword="null"/> to continue.</returns>
+public delegate ValueTask<TokenExchange.TokenExchangeRequestRefusal?> ValidateTokenExchangeRequestDelegate(
     TokenExchange.TokenExchangeRequest request,
     ClientRecord registration,
     ExchangeContext context,

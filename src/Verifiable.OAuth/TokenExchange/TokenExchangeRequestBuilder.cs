@@ -26,6 +26,15 @@ public sealed record TokenExchangeActor
 
     /// <summary>The type of <see cref="Token"/> (RFC 8693 §2.1 <c>actor_token_type</c>).</summary>
     public required TokenType TokenType { get; init; }
+
+
+    /// <summary>
+    /// Renders the actor's shape as the record's text: the token type and whether a token is present.
+    /// <see cref="Token"/> is the presented <c>actor_token</c> and is never written, a rule of this library.
+    /// </summary>
+    /// <returns>The actor's shape, without the presented token.</returns>
+    public override string ToString() =>
+        $"TokenExchangeActor {{ TokenType = {TokenTypeNames.GetName(TokenType)}, IsTokenPresent = {!string.IsNullOrEmpty(Token)} }}";
 }
 
 
@@ -99,6 +108,21 @@ public sealed record TokenExchangeBuilderOptions
     /// caller's.
     /// </summary>
     public string? Scope { get; init; }
+
+
+    /// <summary>
+    /// Renders the options' shape as the record's text: the token types, whether an acting party is present, how many
+    /// <c>resource</c> values there are, and whether an <c>audience</c> and a <c>scope</c> are present.
+    /// <see cref="SubjectToken"/> and the <see cref="TokenExchangeActor.Token"/> of <see cref="Actor"/> are the presented
+    /// tokens and are never written, a rule of this library.
+    /// </summary>
+    /// <returns>The options' shape, without either presented token.</returns>
+    public override string ToString() =>
+        $"TokenExchangeBuilderOptions {{ SubjectTokenType = {TokenTypeNames.GetName(SubjectTokenType)}, "
+        + $"IsActorPresent = {Actor is not null}, "
+        + $"ActorTokenType = {(Actor is { } actor ? TokenTypeNames.GetName(actor.TokenType) : string.Empty)}, "
+        + $"RequestedTokenType = {(RequestedTokenType is { } requestedTokenType ? TokenTypeNames.GetName(requestedTokenType) : string.Empty)}, "
+        + $"ResourceCount = {Resource.Count}, IsAudiencePresent = {Audience is not null}, IsScopePresent = {Scope is not null} }}";
 }
 
 

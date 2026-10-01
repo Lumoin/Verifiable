@@ -1629,7 +1629,12 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// token-exchange grant with no validation seam would mint tokens for any subject-token string
     /// (fail-closed, the §3.2.1-style materialization the other grants use). The application is the
     /// trust authority: it owns which issuers and keys it accepts, and any remote key fetch is its
-    /// concern (the library takes no <c>System.Net.*</c> dependency).
+    /// concern (the library takes no <c>System.Net.*</c> dependency). A <see langword="null"/> return is
+    /// answered 400 <c>invalid_request</c> whatever token type the request asks for, an ID-JAG included:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> reads "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or
+    /// are unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+    /// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code."
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws
@@ -1659,8 +1664,16 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// BOTH this seam and <see cref="ValidateTokenExchangeTokenAsync"/> are wired — an advertised
     /// grant that cannot make the impersonation policy decision would be a fail-open authorization
     /// boundary (fail-closed, the §3.2.1-style materialization). The application owns the policy
-    /// "which entities are permitted to impersonate other entities" (§2.1); a <see langword="null"/>
-    /// return denies the exchange and the endpoint answers <c>invalid_target</c> (§2.2.2).
+    /// "which entities are permitted to impersonate other entities" (RFC 8693 Section 2.1). A <see langword="null"/>
+    /// return denies the exchange, whatever token type the request asks for, an ID-JAG included: the endpoint
+    /// answers 400 <c>invalid_target</c> when the request names a <c>resource</c> or an <c>audience</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// authorization server is unwilling or unable to issue a token for any target service indicated by the
+    /// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response.")
+    /// and <c>invalid_request</c> when it names neither. An issued type that differs from a stated
+    /// <c>requested_token_type</c> is answered 400 <c>invalid_request</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see> leaves the type to
+    /// the server only "If the requested type is unspecified").
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws
@@ -1670,6 +1683,45 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// Delegate targets own synchronization of mutable application state.
     /// </remarks>
     public AuthorizeTokenExchangeDelegate? AuthorizeTokenExchangeAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// The OPTIONAL Token Exchange request seam: decides whether this server serves the shape of a request
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see>) after client
+    /// authentication and the library's own parameter checks and before the <c>subject_token</c> is validated
+    /// (handed to <see cref="ValidateTokenExchangeTokenAsync"/>), and names the parameter it refuses. The library
+    /// answers a refusal 400 with the code it derives from the parameter
+    /// (<see cref="TokenExchange.TokenExchangeRequestRefusal"/>): <c>invalid_target</c> for <c>resource</c> and
+    /// <c>audience</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// authorization server is unwilling or unable to issue a token for any target service indicated by the
+    /// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response."),
+    /// and <c>invalid_request</c> for every other parameter (that section's "The value of the "error" parameter MUST
+    /// be the "invalid_request" error code."). <see langword="null"/>, the default, skips the seam; the grant's
+    /// activation does not depend on it. <see cref="IdJag.IdJagMintRequestRule"/> builds one for the ID-JAG mint.
+    /// </summary>
+    /// <remarks>
+    /// The request carries the presented <c>subject_token</c> and <c>actor_token</c> unvalidated. The seam judges the
+    /// request's shape; it must not trust, return or log those two values. The record's text
+    /// (<see cref="TokenExchange.TokenExchangeRequest.ToString"/>) leaves both out.
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ValidateTokenExchangeRequestDelegate? ValidateTokenExchangeRequestAsync
     {
         get;
         set

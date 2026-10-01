@@ -18,13 +18,17 @@ namespace Verifiable.OAuth.TokenExchange;
 /// <see cref="Scope"/>, <see cref="Audience"/>, and <see cref="IssuedTokenType"/> are.
 /// </para>
 /// <para>
-/// A <see langword="null"/> return from the authorizing delegate means the exchange is denied. The
-/// library answers <c>invalid_grant</c> when the request asked for an ID-JAG (its
-/// <c>requested_token_type</c> the id-jag URN, the error of the example in
-/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4.3</see>).
-/// Otherwise it answers <c>invalid_target</c> when the request named a <c>resource</c> or an
-/// <c>audience</c> and <c>invalid_request</c> when it named neither, per
-/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>. With impersonation semantics the
+/// A <see langword="null"/> return from the authorizing delegate means the exchange is denied. The token endpoint
+/// answers 400 <c>invalid_target</c> when the request named a <c>resource</c> or an <c>audience</c>, under
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+/// authorization server is unwilling or unable to issue a token for any target service indicated by the
+/// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response."
+/// It answers 400 <c>invalid_request</c> when the request named neither, the code of the same section's MUST:
+/// "The value of the "error" parameter MUST be the "invalid_request" error code." The description is
+/// <c>The token exchange was not authorized.</c> in either case. An ID-JAG request names its Resource
+/// Authorization Server as the <c>audience</c>, so its denial is <c>invalid_target</c>. The library cannot tell
+/// why the delegate denied, so it reads a denial of a request that names a target as unwillingness to issue for
+/// that target, a rule of this library. With impersonation semantics the
 /// <see cref="Subject"/> is typically the validated subject token's <c>sub</c> — the client becomes
 /// indistinguishable from that subject at the target (RFC 8693 §1.1).
 /// </para>
@@ -51,7 +55,15 @@ public sealed record TokenExchangeAuthorization
 
     /// <summary>
     /// The audience(s) the issued token is shaped for — the target service(s) the request's
-    /// <c>resource</c> / <c>audience</c> named (RFC 8693 §2.1.1). MAY be empty.
+    /// <c>resource</c> / <c>audience</c> named (RFC 8693 Section 2.1.1). MAY be empty. For an issued ID-JAG
+    /// (<see cref="IssuedTokenType"/> <see cref="TokenType.IdJag"/>) the list names at most one Resource
+    /// Authorization Server, the one the grant's <c>aud</c> claim holds
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>:
+    /// "audience: REQUIRED - The identifier of the Resource Authorization Server in another trust domain as the
+    /// intended audience for the ID-JAG."). A list of several values, or one whose first value is null, empty or white
+    /// space only, is the authorization seam's own defect, which the token exchange answers <c>server_error</c> before
+    /// any grant identifier is obtained; an empty list leaves the audience to the request's one <c>audience</c>. That
+    /// rule is this library's.
     /// </summary>
     public IReadOnlyList<string> Audience { get; init; } = [];
 

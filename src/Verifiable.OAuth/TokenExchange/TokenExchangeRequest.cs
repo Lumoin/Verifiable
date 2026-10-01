@@ -13,6 +13,8 @@ namespace Verifiable.OAuth.TokenExchange;
 /// authentication at the token endpoint, not by a body parameter. The presence of
 /// <see cref="ActorToken"/> selects delegation over impersonation per
 /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-1.1">RFC 8693 §1.1</see>.
+/// The record carries the presented <see cref="SubjectToken"/> and <see cref="ActorToken"/>; its text shows the
+/// request's shape and neither token (<see cref="ToString"/>).
 /// </remarks>
 [DebuggerDisplay("TokenExchangeRequest SubjectTokenType={SubjectTokenType}, Delegation={ActorToken != null}")]
 public sealed record TokenExchangeRequest
@@ -76,4 +78,21 @@ public sealed record TokenExchangeRequest
 
     /// <summary>The grant type. Always <c>urn:ietf:params:oauth:grant-type:token-exchange</c>.</summary>
     public string GrantType { get; init; } = "urn:ietf:params:oauth:grant-type:token-exchange";
+
+
+    /// <summary>
+    /// Renders the request's shape as the record's text: the token types, whether an <c>actor_token</c> is present,
+    /// how many <c>resource</c> and <c>audience</c> values the request names, whether it carries a <c>scope</c> and an
+    /// <c>authorization_details</c>, and the grant type. <see cref="SubjectToken"/> and <see cref="ActorToken"/> are
+    /// the presented tokens and are never written, a rule of this library, so a seam or a log that renders the request
+    /// writes neither.
+    /// </summary>
+    /// <returns>The request's shape, without either presented token.</returns>
+    public override string ToString() =>
+        $"TokenExchangeRequest {{ SubjectTokenType = {TokenTypeNames.GetName(SubjectTokenType)}, "
+        + $"IsActorTokenPresent = {!string.IsNullOrEmpty(ActorToken)}, "
+        + $"ActorTokenType = {(ActorTokenType is { } actorTokenType ? TokenTypeNames.GetName(actorTokenType) : string.Empty)}, "
+        + $"RequestedTokenType = {(RequestedTokenType is { } requestedTokenType ? TokenTypeNames.GetName(requestedTokenType) : string.Empty)}, "
+        + $"ResourceCount = {Resource.Count}, AudienceCount = {Audience.Count}, IsScopePresent = {Scope is not null}, "
+        + $"IsAuthorizationDetailsPresent = {AuthorizationDetails is not null}, GrantType = {GrantType} }}";
 }

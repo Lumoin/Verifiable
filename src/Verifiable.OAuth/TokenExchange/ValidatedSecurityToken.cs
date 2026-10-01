@@ -18,7 +18,14 @@ namespace Verifiable.OAuth.TokenExchange;
 /// <para>
 /// A <see langword="null"/> return from the validating delegate means the token is invalid,
 /// untrusted, or expired and the request MUST be rejected; a non-null instance means the token is
-/// good and carries the claims the authorization step and the issued token are shaped from.
+/// good and carries the claims the authorization step and the issued token are shaped from. The token endpoint
+/// answers a <see langword="null"/> result for the <c>subject_token</c> 400 <c>invalid_request</c> with
+/// <c>The subject_token is not valid.</c>, whatever type the request asks for, an ID-JAG included, and one for the
+/// <c>actor_token</c> 400 <c>invalid_request</c> with <c>The actor_token is not valid.</c>, under
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the request
+/// itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or are
+/// unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+/// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code."
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ValidatedSecurityToken Subject={Subject}, Issuer={Issuer}")]
@@ -33,9 +40,8 @@ public sealed record ValidatedSecurityToken
     /// the token's claims, and the library cannot tell a token whose <c>sub</c> is blank from a validation that lost
     /// it, so the token exchange answers either token whose subject is null, empty or white space only as a token that
     /// is not valid (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>),
-    /// before the authorization seam is asked: a <c>subject_token</c> with <c>invalid_request</c>, or with
-    /// <c>invalid_grant</c> when the request asks for an ID-JAG, and an <c>actor_token</c> with <c>invalid_request</c>.
-    /// That choice is this library's.
+    /// before the authorization seam is asked: either with <c>invalid_request</c>, whatever type the request asks
+    /// for, an ID-JAG included. That choice is this library's.
     /// </summary>
     public required string Subject { get; init; }
 

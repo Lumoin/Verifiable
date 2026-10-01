@@ -62,6 +62,19 @@ public sealed record IdJagMintOptions
 
     /// <summary>The validity window of the signed client assertion (RFC 7523 §3). Defaults to one minute.</summary>
     public TimeSpan ClientAssertionLifetime { get; init; } = TimeSpan.FromMinutes(1);
+
+
+    /// <summary>
+    /// Renders the options' shape as the record's text: the audience, the subject token type, how many
+    /// <c>resource</c> values there are, whether a <c>scope</c> and an <c>authorization_details</c> are present, and
+    /// the <see cref="SigningKeyId"/>. <see cref="SubjectToken"/> is the presented <c>subject_token</c> and is never
+    /// written, a rule of this library.
+    /// </summary>
+    /// <returns>The options' shape, without the presented token.</returns>
+    public override string ToString() =>
+        $"IdJagMintOptions {{ Audience = {Audience}, SubjectTokenType = {TokenTypeNames.GetName(SubjectTokenType)}, "
+        + $"ResourceCount = {Resource.Count}, IsScopePresent = {Scope is not null}, "
+        + $"IsAuthorizationDetailsPresent = {AuthorizationDetails is not null}, SigningKeyId = {SigningKeyId} }}";
 }
 
 
@@ -90,6 +103,16 @@ public sealed record IdJagRedeemOptions
 
     /// <summary>The validity window of the signed client assertion (RFC 7523 §3). Defaults to one minute.</summary>
     public TimeSpan ClientAssertionLifetime { get; init; } = TimeSpan.FromMinutes(1);
+
+
+    /// <summary>
+    /// Renders the options' shape as the record's text: whether an assertion is present and the
+    /// <see cref="SigningKeyId"/>. <see cref="Assertion"/> is the presented ID-JAG and is never written, a rule of
+    /// this library.
+    /// </summary>
+    /// <returns>The options' shape, without the presented assertion.</returns>
+    public override string ToString() =>
+        $"IdJagRedeemOptions {{ IsAssertionPresent = {!string.IsNullOrEmpty(Assertion)}, SigningKeyId = {SigningKeyId} }}";
 }
 
 
