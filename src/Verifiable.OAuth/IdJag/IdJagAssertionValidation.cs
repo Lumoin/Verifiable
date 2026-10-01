@@ -58,14 +58,46 @@ namespace Verifiable.OAuth.IdJag;
 ///     states that refusal. A tenant relationship this server cannot read is refused rather than read as
 ///     absent.
 ///   </description></item>
+///   <item><description>
+///     <c>iat</c> and <c>jti</c> are present, the <c>jti</c> a JSON string with at least one character that is
+///     not white space (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>
+///     makes both REQUIRED where <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>
+///     leaves them OPTIONAL); a grant without either is refused as
+///     <see cref="IdJagValidationFailureReason.MissingIssuedAt"/> or
+///     <see cref="IdJagValidationFailureReason.MissingJti"/>. Refusing a <c>jti</c> of white space only is this
+///     library's fail-closed reading: no sentence of Section 3.1 or Section 4.4.1 states it.
+///   </description></item>
+///   <item><description>
+///     a <c>scope</c> claim, when present, is a JSON string of scope tokens delimited by single spaces
+///     (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>:
+///     "If the scope claim is present, the Resource Authorization Server MUST process it according to Section
+///     3.3 of [RFC6749]."; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 Section 3.3</see>:
+///     "scope-token = 1*( %x21 / %x23-5B / %x5D-7E )"); any other value is refused as
+///     <see cref="IdJagValidationFailureReason.MalformedScope"/>.
+///   </description></item>
+///   <item><description>
+///     a <c>resource</c> claim, when present, is a JSON string or a non-empty JSON array of JSON strings, each an
+///     <c>absolute-URI</c> without a fragment by <see cref="ResourceIndicatorSyntax"/>
+///     (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>:
+///     "If the resource claim is present, the Resource Authorization Server MUST process it according to Section
+///     2 of [RFC8707]."), surfaced folded (<see cref="IdJagAssertionValidationResult.Resource"/>); any other value
+///     is refused as <see cref="IdJagValidationFailureReason.MalformedResource"/>. Refusing an empty string and an
+///     empty array is this library's fail-closed reading: no sentence of Section 3.1 or Section 4.4.1 states it.
+///   </description></item>
+///   <item><description>
+///     an <c>authorization_details</c> claim, when present, is a JSON array
+///     (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>:
+///     "MUST parse it as a JSON array"); any other value is refused as
+///     <see cref="IdJagValidationFailureReason.MalformedAuthorizationDetails"/>.
+///   </description></item>
 /// </list>
 /// <para>
-/// The <c>iss</c>/<c>sub</c>/<c>aud</c>/<c>exp</c>/<c>nbf</c>/<c>iat</c> checks above are the generic
-/// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 §3</see> rule set every jwt-bearer
-/// assertion (ID-JAG or otherwise) must satisfy; this type CONSUMES
-/// <see cref="Rfc7523AssertionValidation"/> for those checks and layers only the ID-JAG-specific ones
-/// (<c>typ</c>, same-trust-domain, <c>client_id</c>) around them, so the §3 rules have exactly one
-/// implementation.
+/// The <c>iss</c>, <c>sub</c>, <c>aud</c>, <c>exp</c>, <c>nbf</c> and <c>iat</c> checks are the
+/// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> rule set every jwt-bearer
+/// assertion must satisfy, consumed from <see cref="Rfc7523AssertionValidation"/> so they have exactly one
+/// implementation. The ID-JAG rules are layered around them: the <c>typ</c> header, the same trust domain, the
+/// <c>client_id</c>, the REQUIRED <c>iat</c> and <c>jti</c>, and the reads of the tenant relationship, actor,
+/// <c>scope</c>, <c>resource</c> and <c>authorization_details</c> claims.
 /// </para>
 /// <para>
 /// The <c>sub_id</c> claim is read last, under an <see cref="IdJagSubjectIdentifierRule"/>:
@@ -269,6 +301,15 @@ public static class IdJagAssertionValidation
             return IdJagAssertionValidationResult.Failure(MapTemporalFailure(temporalOutcome), temporalFailureDescription);
         }
 
+        //Section 3.1 makes iat REQUIRED where RFC 7523 Section 3 leaves it OPTIONAL, so a grant whose temporal
+        //claims hold without an iat is refused here; a present iat that is not numeric keeps the temporal answer.
+        if(iat is null)
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MissingIssuedAt,
+                "The assertion is missing the iat claim.");
+        }
+
         //§9.8.1: a cnf claim binds the grant to a key. A cnf that is present but yields no usable jkt
         //thumbprint is rejected rather than silently treated as unbound, which would let a malformed
         //binding downgrade to a Bearer token and skip the proof-of-possession requirement.
@@ -330,14 +371,53 @@ public static class IdJagAssertionValidation
                 "The assertion aud_sub claim is not a JSON string with a character that is not white space.");
         }
 
-        string? scope = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Scope, out string? scopeValue)
-            ? scopeValue
-            : null;
+        //Section 4.4.1: a present scope claim is processed according to Section 3.3 of RFC 6749, so it is a JSON string
+        //of scope tokens delimited by single spaces; any other value refuses the grant rather than being read as
+        //absent or carried unchecked.
+        bool isScopePresent = payload.TryGetValue(WellKnownJwtClaimNames.Scope, out object? scopeRaw);
+        string? scope = scopeRaw as string;
+        if(isScopePresent && (scope is null || !ScopeTokenSyntax.IsScopeList(scope)))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedScope,
+                "The assertion scope claim is not a space-delimited list of scope tokens (RFC 6749 section 3.3).");
+        }
 
-        //Section 3.1 and RFC 7519 Section 4.1.7: surface jti so the redeem seam carries it onto the grant, where
-        //the jwt-bearer grant applies the RFC 7523 Section 3 (rule 7) replay defense. Not a Section 4.4.1 MUST,
-        //so absence does not fail here.
-        string? jti = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Jti, out string? jtiValue) ? jtiValue : null;
+        //Section 3.1 makes jti REQUIRED (RFC 7519 Section 4.1.7); the redeem seam carries it onto the grant, where
+        //the jwt-bearer grant applies the RFC 7523 Section 3 (rule 7) replay defense. A value of white space only
+        //identifies no JWT, as a sub of white space only identifies no principal: refusing it is this library's
+        //fail-closed reading, which no sentence of Section 3.1 or Section 4.4.1 states.
+        if(!Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Jti, out string? jti)
+            || string.IsNullOrWhiteSpace(jti))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MissingJti,
+                "The assertion is missing the jti claim.");
+        }
+
+        //Section 4.4.1: a present resource claim is processed according to Section 2 of RFC 8707, so every value
+        //is checked against the resource indicator grammar and surfaced folded; a value outside it refuses the
+        //grant rather than being dropped or carried as sent. An empty string and an empty array are refused too,
+        //this library's fail-closed reading, which no sentence of Section 3.1 or Section 4.4.1 states. The fold
+        //reaches the resource claim only: the grant's own aud is compared as signed by ValidateAudience above,
+        //ordinally, so an aud that differs from the issuer in the case of its scheme or host is AudienceMismatch.
+        List<string>? resource = ReadStringOrArray(payload, OAuthRequestParameterNames.Resource);
+        if(resource is null)
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedResource,
+                "The assertion resource claim is not an absolute URI (RFC 3986 section 4.3) without a fragment, or an array of such values.");
+        }
+
+        //Section 4.4.1: a present authorization_details claim is parsed as a JSON array; the shape of each
+        //authorization detail object is the application's to process.
+        IReadOnlyList<object>? authorizationDetails = ReadObjectArray(payload, OAuthRequestParameterNames.AuthorizationDetails);
+        if(authorizationDetails is null && payload.ContainsKey(OAuthRequestParameterNames.AuthorizationDetails))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedAuthorizationDetails,
+                "The assertion authorization_details claim is not a JSON array.");
+        }
 
         //Section 3.1 and Section 3.2.2: the sub_id step, after every Section 4.4.1 and Section 9.3 rule above so
         //the subject it is compared with is the validated one (Section 9.5). Reading the claim never derives
@@ -393,8 +473,8 @@ public static class IdJagAssertionValidation
             AudienceSubject = audienceSubject,
             SubjectIdentifier = subjectIdentifier,
             SamlNameIdSubjectIdentifier = samlSubjectIdentifier,
-            Resource = ReadStringOrArray(payload, OAuthRequestParameterNames.Resource),
-            AuthorizationDetails = ReadObjectArray(payload, OAuthRequestParameterNames.AuthorizationDetails),
+            Resource = resource,
+            AuthorizationDetails = authorizationDetails,
             ClientId = clientId,
             ConfirmationKeyThumbprint = confirmationThumbprint,
             Act = act,
@@ -488,6 +568,16 @@ public static class IdJagAssertionValidation
     }
 
 
+    /// <summary>
+    /// Maps the outcome of the shared time-claim rules
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> items 4 to 6, read by
+    /// <see cref="Rfc7523AssertionValidation.ValidateTemporalClaims"/>) to the ID-JAG failure reason of the same
+    /// name. <see cref="Rfc7523TemporalOutcome.Valid"/>, which the caller never passes, and a value outside the
+    /// enumeration map to <see cref="IdJagValidationFailureReason.InconsistentTemporalClaims"/>, so the map fails
+    /// closed.
+    /// </summary>
+    /// <param name="outcome">The outcome of the time-claim rules.</param>
+    /// <returns>The ID-JAG failure reason.</returns>
     private static IdJagValidationFailureReason MapTemporalFailure(Rfc7523TemporalOutcome outcome) => outcome switch
     {
         Rfc7523TemporalOutcome.MissingExpiration => IdJagValidationFailureReason.MissingExpiration,
@@ -500,6 +590,19 @@ public static class IdJagAssertionValidation
     };
 
 
+    /// <summary>
+    /// Reads the <c>authorization_details</c> claim as the JSON array
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// requires ("MUST parse it as a JSON array"), its elements as decoded: the shape of each authorization
+    /// detail object is the application's to process
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>).
+    /// </summary>
+    /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
+    /// <param name="claimName">The name of the claim, <c>authorization_details</c>.</param>
+    /// <returns>
+    /// The array, or <see langword="null"/> when the claim is absent or is not a JSON array; the caller refuses
+    /// a present claim this answers <see langword="null"/> for.
+    /// </returns>
     private static IReadOnlyList<object>? ReadObjectArray(JwtPayload payload, string claimName) =>
         payload.TryGetValue(claimName, out object? raw) && raw is IReadOnlyList<object> list
             ? list
@@ -533,6 +636,18 @@ public static class IdJagAssertionValidation
     }
 
 
+    /// <summary>
+    /// Reads the <c>jkt</c> member of the grant's <c>cnf</c> claim, the JWK SHA-256 thumbprint that binds the grant
+    /// to a proof-of-possession key
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.8.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 9.8.1</see>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7800#section-3.1">RFC 7800 Section 3.1</see>).
+    /// </summary>
+    /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
+    /// <returns>
+    /// The thumbprint, or <see langword="null"/> when the claim is absent, is not a JSON object, or carries no
+    /// non-empty string <c>jkt</c>; the caller refuses a present claim this answers <see langword="null"/> for.
+    /// </returns>
     private static string? ReadConfirmationThumbprint(JwtPayload payload)
     {
         if(!payload.TryGetValue(WellKnownJwtClaimNames.Cnf, out object? raw))
@@ -708,48 +823,56 @@ public static class IdJagAssertionValidation
     };
 
 
-    private static List<string> ReadStringOrArray(JwtPayload payload, string claimName)
+    /// <summary>
+    /// Reads the <c>resource</c> claim, which
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>
+    /// carries as "either a single URI or an array of URIs", as one of three things: absent, read as no value;
+    /// a JSON string, or a non-empty JSON array whose every element is a JSON string, each value accepted by
+    /// <see cref="ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(ReadOnlySpan{char})"/> (the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.3">RFC 3986 Section 4.3</see>
+    /// <c>absolute-URI</c> without a fragment that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see> requires); or
+    /// malformed. Every accepted value is surfaced folded by <see cref="ResourceIndicatorSyntax.Fold(string)"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see>: the
+    /// scheme and host lowered, every other part as sent), in the order given. An empty string, an empty array,
+    /// an element that is not a JSON string, a value the grammar refuses and any other JSON type are malformed:
+    /// one bad element refuses the claim whole, so no value is dropped and no value is carried unchecked.
+    /// </summary>
+    /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
+    /// <param name="claimName">The name of the claim, <c>resource</c>.</param>
+    /// <returns>
+    /// The folded values, empty when the claim is absent; <see langword="null"/> when the claim is present and
+    /// malformed.
+    /// </returns>
+    private static List<string>? ReadStringOrArray(JwtPayload payload, string claimName)
     {
         if(!payload.TryGetValue(claimName, out object? raw))
         {
             return [];
         }
 
-        if(raw is string s)
+        if(raw is string single)
         {
-            return string.IsNullOrEmpty(s) ? [] : [s];
+            return ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(single) ? [ResourceIndicatorSyntax.Fold(single)] : null;
         }
 
-        //Array elements may decode as object (List<object>, including covariant string[]) or, when
-        //a typed list is supplied, as string. Keep every non-empty string; ignore other shapes.
-        if(raw is IEnumerable<object> mixed)
+        //Array elements decode as object (List<object>, a covariant string[] or typed list of strings included).
+        if(raw is not IEnumerable<object?> elements)
         {
-            List<string> list = [];
-            foreach(object item in mixed)
+            return null;
+        }
+
+        List<string> folded = [];
+        foreach(object? element in elements)
+        {
+            if(element is not string value || !ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(value))
             {
-                if(item is string str && !string.IsNullOrEmpty(str))
-                {
-                    list.Add(str);
-                }
+                return null;
             }
 
-            return list;
+            folded.Add(ResourceIndicatorSyntax.Fold(value));
         }
 
-        if(raw is IEnumerable<string> typed)
-        {
-            List<string> list = [];
-            foreach(string item in typed)
-            {
-                if(!string.IsNullOrEmpty(item))
-                {
-                    list.Add(item);
-                }
-            }
-
-            return list;
-        }
-
-        return [];
+        return folded.Count == 0 ? null : folded;
     }
 }

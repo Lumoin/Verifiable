@@ -193,5 +193,75 @@ public enum IdJagValidationFailureReason
     /// a string, as the <c>tenant</c> and <c>aud_tenant</c> claims beside it are, and refusing any other value
     /// is this library's reading.
     /// </summary>
-    MalformedAudienceSubject
+    MalformedAudienceSubject,
+
+    /// <summary>
+    /// The <c>resource</c> claim is present and is not a JSON string the resource indicator grammar accepts, nor
+    /// a non-empty JSON array of such strings.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>
+    /// defines the claim as "resource: OPTIONAL - The Resource Identifier (Section 2 of [RFC8707]) of the
+    /// Resource Server (either a single URI or an array of URIs)." and
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// states "If the resource claim is present, the Resource Authorization Server MUST process it according to
+    /// Section 2 of [RFC8707]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>: "Its value MUST be
+    /// an absolute URI, as specified by Section 4.3 of [RFC3986]. The URI MUST NOT include a fragment component."
+    /// An empty string, an empty array and an element that is not a JSON string are refused with the values the
+    /// grammar refuses; refusing the empty string and the empty array is this library's fail-closed reading: no
+    /// sentence of Section 3.1 or Section 4.4.1 states it. A grant carrying such a claim is not a valid JWT for
+    /// this server, so the answer is the one of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "If the
+    /// JWT is not valid, or the current time is not within the token's valid time window for use, the
+    /// authorization server constructs an error response as defined in OAuth 2.0 [RFC6749]. The value of the
+    /// "error" parameter MUST be the "invalid_grant" error code." Reading a malformed <c>resource</c> claim as
+    /// a JWT that is not valid, rather than as RFC 8707's <c>invalid_target</c> for a request parameter, is this
+    /// library's reading.
+    /// </summary>
+    MalformedResource,
+
+    /// <summary>
+    /// The <c>authorization_details</c> claim is present and is not a JSON array.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the authorization_details claim is present, the Resource Authorization Server MUST parse it as a
+    /// JSON array and process each authorization detail object according to [RFC9396]." The shape of each
+    /// element is the application's to process.
+    /// </summary>
+    MalformedAuthorizationDetails,
+
+    /// <summary>
+    /// The <c>jti</c> claim is absent, or is not a JSON string with at least one character that is not white
+    /// space.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "jti: REQUIRED - Unique ID of this JWT as defined in Section 4.1.7 of [RFC7519]."
+    /// Refusing a <c>jti</c> of white space only is this library's fail-closed reading: no sentence of Section 3.1
+    /// or <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// states it.
+    /// </summary>
+    MissingJti,
+
+    /// <summary>
+    /// The <c>iat</c> claim is absent.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "iat: REQUIRED - as defined in Section 4.1.6 of [RFC7519]." A present <c>iat</c> that is not a numeric
+    /// timestamp is <see cref="InconsistentTemporalClaims"/>.
+    /// </summary>
+    MissingIssuedAt,
+
+    /// <summary>
+    /// The <c>scope</c> claim is present and is not a JSON string whose value is a space-delimited list of scope
+    /// tokens.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>
+    /// defines the claim as "scope: OPTIONAL - a JSON string containing a space-separated list of scopes
+    /// associated with the token, in the format described in Section 3.3 of [RFC6749]." and
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// states "If the scope claim is present, the Resource Authorization Server MUST process it according to
+    /// Section 3.3 of [RFC6749]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 Section 3.3</see> gives the
+    /// grammar "scope = scope-token *( SP scope-token )" and "scope-token = 1*( %x21 / %x23-5B / %x5D-7E )", so an
+    /// empty string, a leading, trailing or doubled space, a tab and a character outside that set each break it.
+    /// Refusing such a grant, rather than reading the claim as absent or carrying it unchecked, is decided by
+    /// this library: a grant carrying the claim is not a valid JWT for this server, and the answer is the
+    /// <c>invalid_grant</c> of <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>.
+    /// </summary>
+    MalformedScope
 }

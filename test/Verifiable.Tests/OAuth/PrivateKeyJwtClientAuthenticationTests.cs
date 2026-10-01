@@ -229,6 +229,238 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// An <c>exp</c>, <c>iat</c> or <c>nbf</c> whose number names no instant a <see cref="DateTimeOffset"/> can
+    /// hold refuses the client assertion as a malformed time claim, and the check answers a result rather than
+    /// throwing: the integer 1000000000000000, as the library's decoder hands it (a 64-bit integer), and a number
+    /// beyond a 64-bit integer, which the decoder hands as a <see cref="decimal"/>. Each is a NumericDate, and
+    /// refusing it is this library's fail-closed reading: no instant the checks compare can hold it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>: "NumericDate A JSON
+    /// numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified UTC
+    /// date/time, ignoring leap seconds."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4, for the
+    /// <c>exp</c>: "Note that the authorization server may reject JWTs with an "exp" claim value that is
+    /// unreasonably far in the future."
+    /// </summary>
+    /// <param name="claimName">The time claim the value is set on.</param>
+    /// <param name="caseName">The value: <c>tenToTheFifteen</c> or <c>beyondALong</c>.</param>
+    [TestMethod]
+    [DataRow("exp", "tenToTheFifteen", DisplayName = "an exp of 1e15")]
+    [DataRow("iat", "tenToTheFifteen", DisplayName = "an iat of 1e15")]
+    [DataRow("nbf", "tenToTheFifteen", DisplayName = "an nbf of 1e15")]
+    [DataRow("exp", "beyondALong", DisplayName = "an exp beyond a 64-bit integer")]
+    public void ATimeClaimNoInstantCanHoldIsRejected(string claimName, string caseName)
+    {
+        object value = caseName switch
+        {
+            "tenToTheFifteen" => (object)1_000_000_000_000_000L,
+            "beyondALong" => 100_000_000_000_000_000_000m,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[claimName] = value;
+
+        PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.Contains($"{claimName} claim", result.FailureReason!);
+        Assert.Contains("malformed", result.FailureReason!);
+    }
+
+
+    /// <summary>
+    /// A fractional <c>exp</c> keeps its fraction, and the fraction decides under the clock: an <c>exp</c> half a
+    /// second past the edge of the clock skew is not expired, as a <see cref="decimal"/> (the library's decoder)
+    /// or a <see cref="double"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>: "This is equivalent
+    /// to the IEEE Std 1003.1, 2013 Edition [POSIX.1] definition "Seconds Since the Epoch", in which each day is
+    /// accounted for by exactly 86400 seconds, other than that non-integer values can be represented."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4: "The
+    /// authorization server MUST reject any JWT with an expiration time that has passed, subject to allowable
+    /// clock skew between systems."
+    /// </summary>
+    /// <param name="caseName">The shape of the fractional value: <c>decimal</c> or <c>double</c>.</param>
+    [TestMethod]
+    [DataRow("decimal", DisplayName = "an exp half a second inside the skew, as a decimal")]
+    [DataRow("double", DisplayName = "an exp half a second inside the skew, as a double")]
+    public void AFractionalExpirationIsKeptAndDecides(string caseName)
+    {
+        long edgeSeconds = Now.Add(-Skew).ToUnixTimeSeconds();
+        object expiration = caseName switch
+        {
+            "decimal" => edgeSeconds + 0.5m,
+            "double" => edgeSeconds + 0.5d,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = Now.AddMinutes(-10).ToUnixTimeSeconds();
+        payload[WellKnownJwtClaimNames.Exp] = expiration;
+
+        PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
+
+        Assert.IsTrue(result.IsValid, result.FailureReason);
+        Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(edgeSeconds).AddMilliseconds(500), result.Expiration);
+    }
+
+
+    /// <summary>
+    /// An <c>exp</c> at the last instant a <see cref="DateTimeOffset"/> holds is not expired under a skew of 60
+    /// seconds, and the check answers a result rather than throwing: the last whole second, 253402300799, as a
+    /// 64-bit integer, and its last tick, 253402300799.9999999, as a <see cref="decimal"/>. Accepting an expiry
+    /// that far ahead is this library's choice.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4: "The
+    /// authorization server MUST reject any JWT with an expiration time that has passed, subject to allowable
+    /// clock skew between systems. Note that the authorization server may reject JWTs with an "exp" claim value
+    /// that is unreasonably far in the future."
+    /// </summary>
+    /// <param name="caseName">The value: <c>lastWholeSecond</c> or <c>lastTick</c>.</param>
+    [TestMethod]
+    [DataRow("lastWholeSecond", DisplayName = "an exp of 253402300799")]
+    [DataRow("lastTick", DisplayName = "an exp of 253402300799.9999999")]
+    public void AnExpirationAtTheLastRepresentableInstantIsNotExpired(string caseName)
+    {
+        (object expiration, DateTimeOffset expectedExpiration) = caseName switch
+        {
+            "lastWholeSecond" => ((object)253_402_300_799L, DateTimeOffset.FromUnixTimeSeconds(253_402_300_799)),
+            "lastTick" => (253_402_300_799.9999999m, DateTimeOffset.MaxValue),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Exp] = expiration;
+
+        PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
+
+        Assert.IsTrue(result.IsValid, result.FailureReason);
+        Assert.AreEqual(expectedExpiration, result.Expiration);
+    }
+
+
+    /// <summary>
+    /// An <c>exp</c>, <c>iat</c> or <c>nbf</c> that is a JSON string holding digits refuses the client assertion
+    /// as a malformed time claim, whatever instant the digits would name as a number.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section 4.1.4</see>, of the
+    /// <c>exp</c>, <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">Section 4.1.5</see>, of the
+    /// <c>nbf</c>, and <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">Section 4.1.6</see>, of
+    /// the <c>iat</c>: "Its value MUST be a number containing a NumericDate value."
+    /// </summary>
+    /// <param name="claimName">The time claim the string is set on.</param>
+    /// <param name="digits">The string, digits that as a number would name an instant the checks accept.</param>
+    [TestMethod]
+    [DataRow("exp", "1700000000", DisplayName = "an exp of the string 1700000000")]
+    [DataRow("iat", "1311280910", DisplayName = "an iat of the string 1311280910")]
+    [DataRow("nbf", "1311280910", DisplayName = "an nbf of the string 1311280910")]
+    public void ATimeClaimThatIsAJsonStringIsRejected(string claimName, string digits)
+    {
+        JwtPayload payload = ValidPayload();
+        payload[claimName] = digits;
+
+        PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
+
+        Assert.IsFalse(result.IsValid, $"The string {digits} was read as the {claimName} claim.");
+        Assert.Contains($"{claimName} claim", result.FailureReason!);
+        Assert.Contains("malformed", result.FailureReason!);
+    }
+
+
+    /// <summary>
+    /// The edge of the skew decides the expiry to the tick: an <c>exp</c> exactly one skew before the clock
+    /// refuses the client assertion as expired, and one a tick later (a fraction of 0.0000001 second) is not
+    /// expired, its fraction kept.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4: "The
+    /// authorization server MUST reject any JWT with an expiration time that has passed, subject to allowable
+    /// clock skew between systems."
+    /// </summary>
+    /// <param name="caseName">The <c>exp</c>: <c>atTheEdge</c> or <c>oneTickLater</c>.</param>
+    [TestMethod]
+    [DataRow("atTheEdge", DisplayName = "an exp exactly one skew before the clock")]
+    [DataRow("oneTickLater", DisplayName = "an exp one tick later than that")]
+    public void TheEdgeOfTheSkewDecidesTheExpiryToTheTick(string caseName)
+    {
+        long edgeSeconds = Now.Add(-Skew).ToUnixTimeSeconds();
+        (object expiration, string? expectedFailureStart, DateTimeOffset? expectedExpiration) = caseName switch
+        {
+            "atTheEdge" => ((object)edgeSeconds, "The client assertion has expired", (DateTimeOffset?)null),
+            "oneTickLater" => (edgeSeconds + 0.0000001m, null, DateTimeOffset.FromUnixTimeSeconds(edgeSeconds).AddTicks(1)),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = Now.AddMinutes(-10).ToUnixTimeSeconds();
+        payload[WellKnownJwtClaimNames.Exp] = expiration;
+
+        PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
+
+        Assert.AreEqual(expectedFailureStart is null, result.IsValid, result.FailureReason);
+        Assert.AreEqual(expectedExpiration, result.Expiration);
+        Assert.StartsWith(expectedFailureStart ?? string.Empty, result.FailureReason ?? string.Empty, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// The edge of the skew decides the not-before to the tick: an <c>nbf</c> exactly one skew after the clock is
+    /// in force, and one a tick later (a fraction of 0.0000001 second) refuses the client assertion as not yet
+    /// valid.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 5: "The JWT MAY
+    /// contain an "nbf" (not before) claim that identifies the time before which the token MUST NOT be accepted
+    /// for processing."
+    /// </summary>
+    /// <param name="caseName">The <c>nbf</c>: <c>atTheEdge</c> or <c>oneTickLater</c>.</param>
+    [TestMethod]
+    [DataRow("atTheEdge", DisplayName = "an nbf exactly one skew after the clock")]
+    [DataRow("oneTickLater", DisplayName = "an nbf one tick later than that")]
+    public void TheEdgeOfTheSkewDecidesTheNotBeforeToTheTick(string caseName)
+    {
+        long edgeSeconds = Now.Add(Skew).ToUnixTimeSeconds();
+        (object notBefore, string? expectedFailure) = caseName switch
+        {
+            "atTheEdge" => ((object)edgeSeconds, (string?)null),
+            "oneTickLater" => (edgeSeconds + 0.0000001m, "The client assertion is not yet valid (nbf is in the future beyond the skew tolerance)."),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Nbf] = notBefore;
+
+        PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
+
+        Assert.AreEqual(expectedFailure, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// The edge of the skew decides the issue time to the tick: an <c>iat</c> exactly one skew after the clock is
+    /// accepted, and one a tick later (a fraction of 0.0000001 second) refuses the client assertion as issued in
+    /// the future. Refusing an <c>iat</c> beyond the skew after the clock is this library's check, which no
+    /// sentence of RFC 7523 Section 3 states;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// </summary>
+    /// <param name="caseName">The <c>iat</c>: <c>atTheEdge</c> or <c>oneTickLater</c>.</param>
+    [TestMethod]
+    [DataRow("atTheEdge", DisplayName = "an iat exactly one skew after the clock")]
+    [DataRow("oneTickLater", DisplayName = "an iat one tick later than that")]
+    public void TheEdgeOfTheSkewDecidesTheIssueTimeToTheTick(string caseName)
+    {
+        long edgeSeconds = Now.Add(Skew).ToUnixTimeSeconds();
+        (object issuedAt, string? expectedFailure) = caseName switch
+        {
+            "atTheEdge" => ((object)edgeSeconds, (string?)null),
+            "oneTickLater" => (edgeSeconds + 0.0000001m, "The client assertion iat is in the future beyond the skew tolerance."),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = issuedAt;
+
+        PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
+
+        Assert.AreEqual(expectedFailure, result.FailureReason);
+    }
+
+
     //Part B — the full BuildValidator() pipeline: real compact-JWS parsing, key resolution from a
     //ClientJwks JSON document, real P-256 signature verification, then Validate. TestHostShell supplies
     //a fully-wired EndpointServer (codecs, crypto); the ClientRecord under test is a local `with` copy

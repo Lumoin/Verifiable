@@ -125,17 +125,37 @@ public sealed record IdJagAssertionValidationResult
     public Verifiable.Core.Relations.ComparisonRecord<Verifiable.Core.SecurityEvents.SubjectIdentifier, IdJagSubjectContext>? SubjectIdentifierComparison { get; init; }
 
     /// <summary>
-    /// The <c>resource</c> claim value(s) (RFC 8707) carried by the grant, when present — the
-    /// Resource Server target(s) the Resource Authorization Server processes per §4.4.1. Empty when
-    /// the grant carries no <c>resource</c> claim.
+    /// The <c>resource</c> claim value(s) carried by the grant, in the order given: the Resource Server targets
+    /// the Resource Authorization Server processes per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// ("MUST process it according to Section 2 of [RFC8707]"). Every value is an <c>absolute-URI</c> without a
+    /// fragment that the resource indicator grammar accepted
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>), folded: its
+    /// scheme and host lowered and every other part as sent
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see>). A
+    /// claim with any other value fails the validation as
+    /// <see cref="IdJagValidationFailureReason.MalformedResource"/>. Empty when the grant carries no
+    /// <c>resource</c> claim.
     /// </summary>
+    /// <remarks>
+    /// Which of the resources to grant is the application's policy
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>:
+    /// "The Resource Authorization Server evaluates the resource identifiers and determines which resources to
+    /// grant access to based on policy."), and so is processing it together with <see cref="AuthorizationDetails"/>
+    /// when the grant carries both, and keeping the two consistent.
+    /// </remarks>
     public IReadOnlyList<string> Resource { get; init; } = [];
 
     /// <summary>
-    /// The decoded <c>authorization_details</c> claim (a JSON array of authorization detail objects)
-    /// carried by the grant, when present — the RFC 9396 structured authorization the Resource
-    /// Authorization Server processes per §4.4.1 to decide what to grant in the access token.
-    /// <see langword="null"/> when the grant carries no <c>authorization_details</c> claim.
+    /// The decoded <c>authorization_details</c> claim carried by the grant, a JSON array of authorization detail
+    /// objects: the <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396</see> structured
+    /// authorization the Resource Authorization Server processes per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// ("MUST parse it as a JSON array") to decide what to grant in the access token. A present claim that is
+    /// not a JSON array fails the validation as
+    /// <see cref="IdJagValidationFailureReason.MalformedAuthorizationDetails"/>; the shape of each element is the
+    /// application's to process. <see langword="null"/> when the grant carries no <c>authorization_details</c>
+    /// claim.
     /// </summary>
     public IReadOnlyList<object>? AuthorizationDetails { get; init; }
 
@@ -193,20 +213,41 @@ public sealed record IdJagAssertionValidationResult
     /// </remarks>
     public IReadOnlyDictionary<string, object>? MayAct { get; init; }
 
-    /// <summary>The <c>scope</c> claim, when present.</summary>
+    /// <summary>
+    /// The <c>scope</c> claim, when present: on a success a JSON string of scope tokens delimited by single spaces,
+    /// by the grammar of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 Section 3.3</see>;
+    /// a present claim of any other value fails the validation as
+    /// <see cref="IdJagValidationFailureReason.MalformedScope"/>. <see langword="null"/> when the grant carries no
+    /// <c>scope</c> claim.
+    /// </summary>
+    /// <remarks>
+    /// Which scopes to grant is the application's policy
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "The Resource Authorization Server evaluates the scopes and determines which scopes to grant in the access
+    /// token based on policy."), and so is processing it together with <see cref="AuthorizationDetails"/> when the
+    /// grant carries both, and keeping the two consistent.
+    /// </remarks>
     public string? Scope { get; init; }
 
-    /// <summary>The <c>iat</c> claim, when present.</summary>
+    /// <summary>
+    /// The <c>iat</c> claim, REQUIRED on the ID-JAG by
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>
+    /// ("iat: REQUIRED - as defined in Section 4.1.6 of [RFC7519]."): never <see langword="null"/> on a successful
+    /// validation, since a grant without it fails as <see cref="IdJagValidationFailureReason.MissingIssuedAt"/>;
+    /// <see langword="null"/> only on a failed result.
+    /// </summary>
     public DateTimeOffset? IssuedAt { get; init; }
 
     /// <summary>The <c>exp</c> claim.</summary>
     public DateTimeOffset? Expiration { get; init; }
 
     /// <summary>
-    /// The <c>jti</c> claim, the grant's unique identifier (REQUIRED on the ID-JAG by
-    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>;
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 Section 4.1.7</see>), when
-    /// present; otherwise <see langword="null"/>.
+    /// The <c>jti</c> claim, the grant's unique identifier, REQUIRED on the ID-JAG by
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>
+    /// ("jti: REQUIRED - Unique ID of this JWT as defined in Section 4.1.7 of [RFC7519]."): never
+    /// <see langword="null"/> on a successful validation, since a grant without a <c>jti</c> that is a JSON
+    /// string with at least one character that is not white space fails as
+    /// <see cref="IdJagValidationFailureReason.MissingJti"/>; <see langword="null"/> only on a failed result.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -227,10 +268,8 @@ public sealed record IdJagAssertionValidationResult
     /// cannot prove what it records.
     /// </para>
     /// <para>
-    /// A <c>jti</c> is not a
-    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
-    /// validation MUST, so this validation accepts a grant without <c>jti</c>; an application requiring replay
-    /// protection refuses an absent <c>jti</c> in its <see cref="Server.ValidateJwtBearerAssertionDelegate"/>.
+    /// A delegate that copies <see cref="Jti"/>, <see cref="Issuer"/> and <see cref="Expiration"/> onto the grant
+    /// it returns therefore hands the guard every validated ID-JAG, since all three are present on a success.
     /// </para>
     /// </remarks>
     public string? Jti { get; init; }

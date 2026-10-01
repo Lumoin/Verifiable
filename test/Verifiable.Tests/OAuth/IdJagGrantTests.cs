@@ -17,6 +17,7 @@ using Verifiable.OAuth.IdJag;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.OAuth.Server.States;
 using Verifiable.OAuth.TokenExchange;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -2241,6 +2242,572 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// A minted ID-JAG whose <c>resource</c> claim spells its scheme and host in upper case is redeemed over the
+    /// wire with the claim folded: the access token's <c>aud</c> carries the scheme and host lowered and the path
+    /// as sent. The grant's own <c>aud</c> is compared as signed, which
+    /// <see cref="AnIdJagAudienceDifferingFromTheIssuerOnlyInCaseIsRefusedAtTheRedeemAsync"/> and
+    /// <see cref="AnIssuerSpelledWithCapitalsRedeemsTheSameAudienceAsSignedAsync"/> prove. The row runs inside a
+    /// <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the resource claim is present, the Resource Authorization Server MUST process it according to
+    /// Section 2 of [RFC8707]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see>: "the
+    /// scheme and host are case-insensitive and therefore should be normalized to lowercase."
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnIdJagResourceClaimIsFoldedAtTheRedeemAsync()
+    {
+        (int statusCode, string body, _, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            mintedResource: ["HTTPS://API.CHAT.EXAMPLE/files"],
+            servedCulture: "tr-TR").ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        using JsonDocument redeemDoc = JsonDocument.Parse(body);
+        string accessToken = redeemDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument tokenPayload = DecodePayload(accessToken);
+        JsonElement aud = tokenPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud);
+        Assert.AreEqual(JsonValueKind.Array, aud.ValueKind);
+        Assert.AreEqual(1, aud.GetArrayLength());
+        Assert.AreEqual("https://api.chat.example/files", aud[0].GetString());
+    }
+
+
+    /// <summary>
+    /// An ID-JAG whose <c>resource</c> claim is outside the resource indicator grammar, or outside the claim's two
+    /// shapes, is refused over the wire with <c>invalid_grant</c> before the <c>sub_id</c> step: hand-built grants
+    /// carrying a value naming the Kelvin sign (U+212A) in its host, a value with a malformed percent triplet, an
+    /// array with an element that is not a JSON string, an empty array, a JSON <c>null</c>, and an array holding a
+    /// <c>null</c> beside a valid value. The rows run inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the resource claim is present, the Resource Authorization Server MUST process it according to Section
+    /// 2 of [RFC8707]."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>
+    /// names the claim's shapes: "(either a single URI or an array of URIs)".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>: "Its value MUST be
+    /// an absolute URI, as specified by Section 4.3 of [RFC3986]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value of
+    /// the "error" parameter MUST be the "invalid_grant" error code."
+    /// Refusing the empty array is this library's fail-closed reading: no sentence of Section 3.1 or Section 4.4.1
+    /// states it. Answering <c>invalid_grant</c>, not RFC 8707's <c>invalid_target</c>, is this library's reading.
+    /// </summary>
+    /// <param name="caseName">The malformed claim the hand-built grant carries.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("nonAsciiHost", DisplayName = "a hand-built value naming the Kelvin sign in its host")]
+    [DataRow("malformedTriplet", DisplayName = "a hand-built value with a malformed percent triplet")]
+    [DataRow("nonStringElement", DisplayName = "a hand-built array with a number element")]
+    [DataRow("emptyArray", DisplayName = "a hand-built empty array")]
+    [DataRow("jsonNull", DisplayName = "a hand-built JSON null")]
+    [DataRow("arrayHoldingNull", DisplayName = "a hand-built array holding a null")]
+    public async Task AMalformedIdJagResourceClaimIsRefusedAtTheRedeemAsync(string caseName)
+    {
+        object? resource = caseName switch
+        {
+            "nonAsciiHost" => "https://" + char.ConvertFromUtf32(0x212A) + "eycloak.example/",
+            "malformedTriplet" => "https://api.example.com/%GG",
+            "nonStringElement" => new object[] { "https://api.example.com/files", 5 },
+            "emptyArray" => Array.Empty<object>(),
+            "jsonNull" => null,
+            "arrayHoldingNull" => new object?[] { "https://api.example.com/files", null },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertRefusedBeforeTheAssociationAsync(
+            _ => new Dictionary<string, object>(StringComparer.Ordinal) { [OAuthRequestParameterNames.Resource] = resource! },
+            IdJagValidationFailureReason.MalformedResource).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>authorization_details</c> claim is a JSON string or a JSON <c>null</c>, not a
+    /// JSON array, is refused over the wire with <c>invalid_grant</c> before the <c>sub_id</c> step. The rows run
+    /// inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the authorization_details claim is present, the Resource Authorization Server MUST parse it as a
+    /// JSON array and process each authorization detail object according to [RFC9396]."
+    /// </summary>
+    /// <param name="caseName">The claim the hand-built grant carries: <c>aString</c> or <c>jsonNull</c>.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("aString", DisplayName = "a JSON string")]
+    [DataRow("jsonNull", DisplayName = "a JSON null")]
+    public async Task ANonArrayAuthorizationDetailsClaimIsRefusedAtTheRedeemAsync(string caseName)
+    {
+        object? authorizationDetails = caseName switch
+        {
+            "aString" => "not-an-array",
+            "jsonNull" => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertRefusedBeforeTheAssociationAsync(
+            _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.AuthorizationDetails] = authorizationDetails!
+            },
+            IdJagValidationFailureReason.MalformedAuthorizationDetails).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG without a <c>jti</c>, or without an <c>iat</c>, is refused over the wire with
+    /// <c>invalid_grant</c> before the <c>sub_id</c> step. The rows run inside a <see cref="ServedCultureScope"/>
+    /// set to "tr-TR".
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "jti: REQUIRED - Unique ID of this JWT as defined in Section 4.1.7 of [RFC7519]." and "iat: REQUIRED -
+    /// as defined in Section 4.1.6 of [RFC7519]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value of
+    /// the "error" parameter MUST be the "invalid_grant" error code."
+    /// </summary>
+    /// <param name="omittedClaim">The REQUIRED claim the grant does not carry: <c>jti</c> or <c>iat</c>.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("jti", DisplayName = "a grant without jti")]
+    [DataRow("iat", DisplayName = "a grant without iat")]
+    public async Task AnIdJagWithoutJtiOrIatIsRefusedAtTheRedeemAsync(string omittedClaim)
+    {
+        IdJagValidationFailureReason expected = omittedClaim switch
+        {
+            "jti" => IdJagValidationFailureReason.MissingJti,
+            "iat" => IdJagValidationFailureReason.MissingIssuedAt,
+            _ => throw new ArgumentOutOfRangeException(nameof(omittedClaim), omittedClaim, null)
+        };
+
+        await AssertRefusedBeforeTheAssociationAsync(
+            static _ => new Dictionary<string, object>(StringComparer.Ordinal),
+            expected,
+            omittedClaims: [omittedClaim]).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>aud</c> differs from the Resource Authorization Server's issuer only in the
+    /// case of its scheme and host is refused over the wire with <c>invalid_grant</c> before the <c>sub_id</c>
+    /// step: the grant's own <c>aud</c> is compared as signed, not folded as its <c>resource</c> claim is. The
+    /// rows run inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 3: "In the
+    /// absence of an application profile specifying otherwise, compliant applications MUST compare the audience
+    /// values using the Simple String Comparison method defined in Section 6.2.1 of RFC 3986 [RFC3986]."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the aud claim does not match the Resource Authorization Server's issuer identifier, the Resource
+    /// Authorization Server MUST reject the JWT with an invalid_grant error as defined in Section 5.2 of
+    /// [RFC6749]."
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnIdJagAudienceDifferingFromTheIssuerOnlyInCaseIsRefusedAtTheRedeemAsync()
+    {
+        await AssertRefusedBeforeTheAssociationAsync(
+            static _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Aud] = "HTTPS://RESOURCE-AS.EXAMPLE.COM/"
+            },
+            IdJagValidationFailureReason.AudienceMismatch).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A Resource Authorization Server whose issuer is spelled with capitals in its host redeems over the wire a
+    /// hand-built ID-JAG whose <c>aud</c> carries the same spelling, and the validated <c>aud</c> is the signed
+    /// spelling, not a folded one.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 3: "In the
+    /// absence of an application profile specifying otherwise, compliant applications MUST compare the audience
+    /// values using the Simple String Comparison method defined in Section 6.2.1 of RFC 3986 [RFC3986]."
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnIssuerSpelledWithCapitalsRedeemsTheSameAudienceAsSignedAsync()
+    {
+        const string capitalIssuer = "https://Resource-AS.Example.COM/";
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: static _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Aud] = capitalIssuer
+            },
+            servedCulture: "tr-TR",
+            resourceServerIssuer: capitalIssuer).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.HasCount(1, recorded.Audience);
+        Assert.AreEqual(capitalIssuer, recorded.Audience[0]);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>scope</c> claim carries a tab between two scope tokens is refused over the
+    /// wire with <c>invalid_grant</c> before the <c>sub_id</c> step. The rows run inside a
+    /// <see cref="ServedCultureScope"/> set to "tr-TR". Refusing the grant for a malformed scope claim, rather
+    /// than reading the claim as absent, is decided by this library.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the scope claim is present, the Resource Authorization Server MUST process it according to Section 3.3
+    /// of [RFC6749]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 Section 3.3</see>: "scope =
+    /// scope-token *( SP scope-token )" and "scope-token = 1*( %x21 / %x23-5B / %x5D-7E )".
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AMalformedIdJagScopeClaimIsRefusedAtTheRedeemAsync()
+    {
+        await AssertRefusedBeforeTheAssociationAsync(
+            static _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Scope] = WellKnownScopes.OpenId + char.ConvertFromUtf32(0x0009) + "chat.read"
+            },
+            IdJagValidationFailureReason.MalformedScope).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>exp</c>, <c>iat</c> or <c>nbf</c> names no instant a <see cref="DateTimeOffset"/>
+    /// can hold is refused over the wire with <c>invalid_grant</c> before the <c>sub_id</c> step: the integer
+    /// 1000000000000000 and a number beyond a 64-bit integer. Each is a NumericDate, and refusing it is this
+    /// library's fail-closed reading: no instant the checks compare can hold it. The rows run inside a
+    /// <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>: "NumericDate A JSON
+    /// numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified UTC
+    /// date/time, ignoring leap seconds."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4, for the
+    /// <c>exp</c>: "Note that the authorization server may reject JWTs with an "exp" claim value that is
+    /// unreasonably far in the future."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value of
+    /// the "error" parameter MUST be the "invalid_grant" error code."
+    /// </summary>
+    /// <param name="claimName">The time claim the value is set on.</param>
+    /// <param name="caseName">The value: <c>tenToTheFifteen</c> or <c>beyondALong</c>.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("exp", "tenToTheFifteen", DisplayName = "a hand-built exp of 1e15")]
+    [DataRow("iat", "tenToTheFifteen", DisplayName = "a hand-built iat of 1e15")]
+    [DataRow("nbf", "tenToTheFifteen", DisplayName = "a hand-built nbf of 1e15")]
+    [DataRow("exp", "beyondALong", DisplayName = "a hand-built exp beyond a 64-bit integer")]
+    public async Task AnIdJagNumericDateNoInstantCanHoldIsRefusedAtTheRedeemAsync(string claimName, string caseName)
+    {
+        object value = caseName switch
+        {
+            "tenToTheFifteen" => (object)1_000_000_000_000_000L,
+            "beyondALong" => 100_000_000_000_000_000_000m,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertRefusedBeforeTheAssociationAsync(
+            _ => new Dictionary<string, object>(StringComparer.Ordinal) { [claimName] = value },
+            IdJagValidationFailureReason.InconsistentTemporalClaims).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>exp</c> is the last instant a <see cref="DateTimeOffset"/> holds is redeemed
+    /// over the wire under the redeem seam's skew of 60 seconds, not answered with an error of the server: the
+    /// last whole second, 253402300799, and its last tick, 253402300799.9999999. The expiry check and the replay
+    /// record the token endpoint keeps for the grant's <c>jti</c> leave no sum outside the representable
+    /// instants: the one replay record of the grant is kept until <see cref="DateTimeOffset.MaxValue"/>, the last
+    /// instant, since the expiry and the tolerance pass it. Accepting an expiry that far ahead is this library's
+    /// choice. The rows run inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4: "The
+    /// authorization server MUST reject any JWT with an expiration time that has passed, subject to allowable
+    /// clock skew between systems. Note that the authorization server may reject JWTs with an "exp" claim value
+    /// that is unreasonably far in the future."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 7: "The
+    /// authorization server MAY ensure that JWTs are not replayed by maintaining the set of used "jti" values for
+    /// the length of time for which the JWT would be considered valid based on the applicable "exp" instant."
+    /// </summary>
+    /// <param name="caseName">The value: <c>lastWholeSecond</c> or <c>lastTick</c>.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("lastWholeSecond", DisplayName = "a hand-built exp of 253402300799")]
+    [DataRow("lastTick", DisplayName = "a hand-built exp of 253402300799.9999999")]
+    public async Task AnIdJagExpirationAtTheLastRepresentableInstantIsRedeemedAsync(string caseName)
+    {
+        (object expiration, DateTimeOffset expectedExpiration) = caseName switch
+        {
+            "lastWholeSecond" => ((object)253_402_300_799L, DateTimeOffset.FromUnixTimeSeconds(253_402_300_799)),
+            "lastTick" => (253_402_300_799.9999999m, DateTimeOffset.MaxValue),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        List<JtiSeenState> replayRecords = [];
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Exp] = expiration
+            },
+            servedCulture: "tr-TR",
+            replayRecords: replayRecords).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(expectedExpiration, recorded.Expiration);
+        JtiSeenState grantRecord = Assert.ContainsSingle(replayRecords);
+        Assert.AreEqual(JtiReplayPurpose.AuthorizationGrantAssertion, grantRecord.Purpose);
+        Assert.AreEqual(recorded.Jti, grantRecord.Jti);
+        Assert.AreEqual(DateTimeOffset.MaxValue, grantRecord.ExpiresAt);
+    }
+
+
+    /// <summary>
+    /// A <c>private_key_jwt</c> client assertion whose <c>exp</c> is the last instant a
+    /// <see cref="DateTimeOffset"/> holds authenticates the client of a JWT bearer redeem over the wire under the
+    /// token endpoint's skew of 60 seconds, with the library's replay check of the client assertion's
+    /// <c>jti</c> wired, not answered with an error of the server: the last whole second, 253402300799, and its
+    /// last tick, 253402300799.9999999. The one replay record of the client assertion is kept until
+    /// <see cref="DateTimeOffset.MaxValue"/>, the last instant, since the expiry and the tolerance pass it, and a
+    /// second presentation of the same client assertion is refused as a replay with <c>invalid_client</c>.
+    /// Accepting an expiry that far ahead is this library's choice.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 7: "The
+    /// authorization server MAY ensure that JWTs are not replayed by maintaining the set of used "jti" values for
+    /// the length of time for which the JWT would be considered valid based on the applicable "exp" instant."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">RFC 7523 Section 3.2</see>: "The value of
+    /// the "error" parameter MUST be the "invalid_client" error code."
+    /// </summary>
+    /// <param name="caseName">The value: <c>lastWholeSecond</c> or <c>lastTick</c>.</param>
+    [TestMethod]
+    [DataRow("lastWholeSecond", DisplayName = "a client assertion exp of 253402300799")]
+    [DataRow("lastTick", DisplayName = "a client assertion exp of 253402300799.9999999")]
+    public async Task AClientAssertionExpiringAtTheLastRepresentableInstantAuthenticatesTheRedeemAsync(string caseName)
+    {
+        object expiration = caseName switch
+        {
+            "lastWholeSecond" => (object)253_402_300_799L,
+            "lastTick" => 253_402_300_799.9999999m,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                static (assertion, requestedScope, registration, context, ct) =>
+                    ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+        }).ConfigureAwait(false);
+
+        (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
+            await StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(app, material).ConfigureAwait(false);
+        try
+        {
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync =
+                    PrivateKeyJwtClientAuthentication.BuildValidator(
+                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
+            }).ConfigureAwait(false);
+
+            string clientAssertion = await BuildIdJagWithClaimsAsync(
+                clientKeys.PrivateKey,
+                MintRedeemSigningKeyId,
+                ClientId,
+                new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    [WellKnownJwtClaimNames.Sub] = ClientId,
+                    [WellKnownJwtClaimNames.Aud] = tokenEndpoint.OriginalString,
+                    [WellKnownJwtClaimNames.Exp] = expiration
+                },
+                omittedClaims: [WellKnownJwtClaimNames.ClientId, WellKnownJwtClaimNames.Scope],
+                headerType: WellKnownJwkValues.TypeJwt).ConfigureAwait(false);
+            Dictionary<string, string> form = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
+                [OAuthRequestParameterNames.ClientAssertion] = clientAssertion,
+                [OAuthRequestParameterNames.Assertion] = "opaque-grant-the-accepting-validator-does-not-inspect"
+            };
+
+            using HttpResponseMessage first = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenEndpoint, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string firstBody = await first.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(200, (int)first.StatusCode, firstBody);
+            JtiSeenState clientAssertionRecord = Assert.ContainsSingle(
+                app.FlowStore.Values.Select(static entry => entry.State).OfType<JtiSeenState>());
+            Assert.AreEqual(JtiReplayPurpose.ClientAssertion, clientAssertionRecord.Purpose);
+            Assert.AreEqual(ClientId, clientAssertionRecord.Issuer);
+            Assert.AreEqual(DateTimeOffset.MaxValue, clientAssertionRecord.ExpiresAt);
+
+            using HttpResponseMessage second = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenEndpoint, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string secondBody = await second.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(401, (int)second.StatusCode, secondBody);
+            Assert.Contains(OAuthErrors.InvalidClient, secondBody);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>exp</c> lies half a second past the edge of the clock skew is redeemed over
+    /// the wire: the fraction of the NumericDate is kept, and it decides that the grant has not expired under the
+    /// injected clock. The row runs inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>: "This is equivalent
+    /// to the IEEE Std 1003.1, 2013 Edition [POSIX.1] definition "Seconds Since the Epoch", in which each day is
+    /// accounted for by exactly 86400 seconds, other than that non-integer values can be represented."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4: "The
+    /// authorization server MUST reject any JWT with an expiration time that has passed, subject to allowable
+    /// clock skew between systems."
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AFractionalIdJagExpirationIsKeptAtTheRedeemAsync()
+    {
+        //The redeem seam allows a skew of 60 seconds; the expiry lies half a second inside it.
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        long edgeSeconds = now.AddSeconds(-60).ToUnixTimeSeconds();
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Iat] = now.AddMinutes(-2).ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = edgeSeconds + 0.5m
+            },
+            servedCulture: "tr-TR").ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(edgeSeconds).AddMilliseconds(500), recorded.Expiration);
+    }
+
+
+    /// <summary>
+    /// A redeem that granted a <c>resource</c> and a <c>scope</c> answers both: the response carries the granted
+    /// scope as its <c>scope</c> member, which the request, naming none, makes REQUIRED, and the granted resource
+    /// as the access token's <c>aud</c>, since RFC 8707 Section 2 defines no response member for it.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "The Resource Authorization Server MUST include the granted resource (if any), scope (if any), and
+    /// authorization_details (if any) in the access token response."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "OPTIONAL, if
+    /// identical to the scope requested by the client; otherwise, REQUIRED."
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task ARedeemThatGrantsAResourceAndAScopeAnswersBothAsync()
+    {
+        (int statusCode, string body, _, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: static _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.Resource] = "https://api.chat.example/files"
+            },
+            servedCulture: "tr-TR").ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        using JsonDocument redeemDoc = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownScopes.OpenId, redeemDoc.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString());
+        string accessToken = redeemDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument tokenPayload = DecodePayload(accessToken);
+        JsonElement aud = tokenPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud);
+        Assert.AreEqual(1, aud.GetArrayLength());
+        Assert.AreEqual("https://api.chat.example/files", aud[0].GetString());
+    }
+
+
+    /// <summary>
+    /// A redeem of a hand-built ID-JAG that carries no <c>resource</c> claim and whose <c>scope</c> claim names two
+    /// scopes the registration maps to two audiences issues an access token whose <c>aud</c> names both, the
+    /// union the default audience resolver answers, where RFC 9068 Section 3 says the server should refuse the
+    /// request. That union is a deviation of the default resolver; an application that wants the refusal supplies
+    /// its own <see cref="ResolveAccessTokenAudienceDelegate"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>: "If the values in the
+    /// "scope" parameter refer to different default resource indicator values, the authorization server SHOULD
+    /// reject the request with "invalid_scope" as described in Section 4.1.2.1 of [RFC6749]."
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task ARedeemNamingNoResourceUnderTwoMappedScopesIssuesTheUnionAsync()
+    {
+        const string chatAudience = "https://chat.example/api";
+        (int statusCode, string body, _, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: static _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Scope] = WellKnownScopes.OpenId + " chat.read"
+            },
+            servedCulture: "tr-TR",
+            scopeAudiences: new Dictionary<string, string>(StringComparer.Ordinal) { ["chat.read"] = chatAudience })
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        using JsonDocument redeemDoc = JsonDocument.Parse(body);
+        string accessToken = redeemDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument tokenPayload = DecodePayload(accessToken);
+        string?[] aud = [.. tokenPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud).EnumerateArray().Select(static element => element.GetString())];
+        Assert.AreSequenceEqual(new string?[] { ResourceServerAudience, chatAudience }, aud);
+    }
+
+
+    /// <summary>
+    /// Redeems two hand-built grants over the loopback listener under one rule whose association counts the calls
+    /// it receives, and asserts that the first is refused before the <c>sub_id</c> step while the second reaches
+    /// the association once. The first carries <paramref name="refusedClaims"/> without
+    /// <paramref name="omittedClaims"/> and is refused with <c>invalid_grant</c> as <paramref name="expected"/>, the
+    /// association never called; the second is a valid companion grant, redeemed. Both carry an <c>iss_sub</c>
+    /// <c>sub_id</c> of another issuer, which the comparison profile hands to the association, and every request is
+    /// served under "tr-TR".
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-9.5">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 9.5</see>:
+    /// "The ID-JAG MUST first be validated using the iss claim, signature, audience, expiration, and client
+    /// binding according to this specification."
+    /// </summary>
+    /// <param name="refusedClaims">Builds the claims the refused grant adds or replaces from the host's issuer identifier.</param>
+    /// <param name="expected">The reason the redeem records for the refused grant.</param>
+    /// <param name="omittedClaims">The core claims the refused grant leaves out, or <see langword="null"/> for none.</param>
+    private async Task AssertRefusedBeforeTheAssociationAsync(
+        Func<string, IReadOnlyDictionary<string, object>> refusedClaims,
+        IdJagValidationFailureReason expected,
+        IReadOnlyCollection<string>? omittedClaims = null)
+    {
+        int associationCalls = 0;
+        IdJagSubjectIdentifierRule countingRule = new()
+        {
+            Relation = ComparisonRelation.Equal,
+            Association = (candidate, reference, relation, cancellationToken) =>
+            {
+                _ = Interlocked.Increment(ref associationCalls);
+
+                return ValueTask.FromResult(ComparisonOutcome.Holds);
+            }
+        };
+        Dictionary<string, object> subjectIdentifierClaim = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.SubId] = SubjectIdentifier.IssuerSubject("https://other-idp.example", "alice-at-other").ToWireObject()
+        };
+
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            _ => countingRule,
+            signedClaims: idpIssuer => new Dictionary<string, object>(refusedClaims(idpIssuer), StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.SubId] = subjectIdentifierClaim[WellKnownJwtClaimNames.SubId]
+            },
+            omittedClaims: omittedClaims,
+            servedCulture: "tr-TR").ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(JagRefusal, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(expected, recorded.FailureReason);
+        Assert.IsNull(recorded.SubjectIdentifierComparison, "A grant refused before the sub_id step records no comparison.");
+        Assert.AreEqual(0, Volatile.Read(ref associationCalls), "A grant refused before the sub_id step never reaches the association.");
+
+        (int companionStatusCode, string companionBody, _, _) = await RedeemSubIdGrantAsync(
+            _ => countingRule,
+            signedClaims: _ => subjectIdentifierClaim,
+            servedCulture: "tr-TR").ConfigureAwait(false);
+
+        Assert.AreEqual(200, companionStatusCode, companionBody);
+        Assert.AreEqual(1, Volatile.Read(ref associationCalls), "The valid companion grant reaches the association once.");
+    }
+
+
+    /// <summary>
     /// §4.3.4: when the granted scope narrows to nothing while the client requested a scope, the
     /// response carries an empty <c>scope</c> (the granted value differs from the request, so it is
     /// REQUIRED), and the JAG omits the empty scope claim.
@@ -3606,7 +4173,15 @@ internal sealed class IdJagGrantTests
     }
 
 
-    /// <summary>Decodes the header and payload of a compact JWS for direct redeem-side validation.</summary>
+    /// <summary>
+    /// Decodes the header and payload of a compact JWS for redeem-side validation with the library's own JWT
+    /// part decoder, <see cref="JwtPartJson.Default"/>, the one a deployment hands
+    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>:
+    /// it keeps a JSON <c>null</c> member and a <c>null</c> array element as data and reads a JSON number as a
+    /// 64-bit integer, or as a <see cref="decimal"/> when it is not one, so the claim rules see the grant as signed.
+    /// </summary>
+    /// <param name="compactJws">The compact JWS, three dot-separated segments.</param>
+    /// <returns>The decoded header and payload.</returns>
     private static (JwtHeader Header, JwtPayload Payload) ParseJwtParts(string compactJws)
     {
         string[] parts = compactJws.Split('.');
@@ -3615,13 +4190,13 @@ internal sealed class IdJagGrantTests
         JwtHeader header;
         using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], Pool))
         {
-            header = JwsAccessTokenTestSupport.Parser.ParseHeader(headerBytes.Memory);
+            header = new JwtHeader(JwtPartJson.Default(headerBytes.Memory.Span));
         }
 
         JwtPayload payload;
         using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
         {
-            payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
+            payload = new JwtPayload(JwtPartJson.Default(payloadBytes.Memory.Span));
         }
 
         return (header, payload);
@@ -4911,6 +5486,66 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// An authorization seam that grants a <c>resource</c> the resource indicator grammar refuses is answered
+    /// <c>server_error</c> with the fixed description and no grant is minted, and the refusal comes before the
+    /// grant's <c>jti</c> is generated: the value is the seam's own defect, and a grant carrying it is one this
+    /// library's redeem refuses. Answering it <c>server_error</c> is decided by this library, as it is for a
+    /// <c>sub_id</c> that is not well formed or a tenant relationship value of white space only.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "resource: OPTIONAL - The Resource Identifier (Section 2 of [RFC8707]) of the Resource Server (either a
+    /// single URI or an array of URIs)."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>: "Its value MUST be
+    /// an absolute URI, as specified by Section 4.3 of [RFC3986]. The URI MUST NOT include a fragment component."
+    /// </summary>
+    /// <param name="caseName">The value the seam grants: <c>nonAsciiHost</c>, <c>malformedTriplet</c> or <c>fragment</c>.</param>
+    [TestMethod]
+    [DataRow("nonAsciiHost", DisplayName = "a granted value naming the Kelvin sign in its host")]
+    [DataRow("malformedTriplet", DisplayName = "a granted value with a malformed percent triplet")]
+    [DataRow("fragment", DisplayName = "a granted value with a fragment beside a valid value")]
+    public async Task MintRefusesAResourceTheGrammarRefusesFromTheSeamAsync(string caseName)
+    {
+        IReadOnlyList<string> resource = caseName switch
+        {
+            "nonAsciiHost" => ["https://" + char.ConvertFromUtf32(0x212A) + "eycloak.example/"],
+            "malformedTriplet" => ["https://api.example.com/%GG"],
+            "fragment" => ["https://api.example.com/files", "https://api.example.com/x#frag"],
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertTheMintAnswersNotReadyAsync(resource: resource).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An authorization seam that grants a <c>scope</c> the scope grammar refuses is answered <c>server_error</c>
+    /// with the fixed description and no grant is minted, and the refusal comes before the grant's <c>jti</c> is
+    /// generated: the value is the seam's own defect, and a grant carrying it is one this library's redeem
+    /// refuses. Answering it <c>server_error</c> is decided by this library, as it is for a granted
+    /// <c>resource</c> the resource indicator grammar refuses.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "scope: OPTIONAL - a JSON string containing a space-separated list of scopes associated with the token, in
+    /// the format described in Section 3.3 of [RFC6749]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 Section 3.3</see>: "scope =
+    /// scope-token *( SP scope-token )" and "scope-token = 1*( %x21 / %x23-5B / %x5D-7E )".
+    /// </summary>
+    /// <param name="caseName">The value the seam grants: <c>tab</c> or <c>doubledSpace</c>.</param>
+    [TestMethod]
+    [DataRow("tab", DisplayName = "a granted scope with a tab between two tokens")]
+    [DataRow("doubledSpace", DisplayName = "a granted scope with a doubled space between two tokens")]
+    public async Task MintRefusesAScopeTheGrammarRefusesFromTheSeamAsync(string caseName)
+    {
+        string grantedScope = caseName switch
+        {
+            "tab" => WellKnownScopes.OpenId + char.ConvertFromUtf32(0x0009) + "chat.read",
+            "doubledSpace" => WellKnownScopes.OpenId + "  chat.read",
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertTheMintAnswersNotReadyAsync(grantedScope: grantedScope).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Mints over the loopback listener with an authorization seam that supplies the given values and asserts
     /// that nothing is minted: the answer is 500 with the <c>server_error</c> object alone, carrying the fixed
     /// description, and the host's identifier seam is asked for no grant identifier.
@@ -4923,24 +5558,29 @@ internal sealed class IdJagGrantTests
     /// The <see cref="TokenExchangeAuthorization.Subject"/> the seam supplies, or <see langword="null"/> for the
     /// validated subject token's subject.
     /// </param>
+    /// <param name="resource">The granted <c>resource</c> entries the seam supplies, or <see langword="null"/> for none.</param>
+    /// <param name="grantedScope">The granted <c>scope</c> the seam supplies, or <see langword="null"/> for <see cref="ChatScope"/>.</param>
     private async Task AssertTheMintAnswersNotReadyAsync(
         SubjectIdentifier? subjectIdentifier = null,
         string? tenant = null,
         string? audienceTenant = null,
         string? audienceSubject = null,
-        string? authorizedSubject = null)
+        string? authorizedSubject = null,
+        IReadOnlyList<string>? resource = null,
+        string? grantedScope = null)
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
         await WireMintSeamsAsync(
             app,
-            ChatScope,
+            grantedScope ?? ChatScope,
             resourceClientId: null,
             subjectIdentifier: subjectIdentifier,
             tenant: tenant,
             audienceTenant: audienceTenant,
             audienceSubject: audienceSubject,
-            authorizedSubject: authorizedSubject).ConfigureAwait(false);
+            authorizedSubject: authorizedSubject,
+            resource: resource).ConfigureAwait(false);
 
         //The host's identifier seam counts the grant identifiers it is asked for.
         int grantIdentifierCalls = 0;
@@ -6454,22 +7094,30 @@ internal sealed class IdJagGrantTests
     /// redeem requires (<c>iss</c>, <c>sub</c>, <c>aud</c>, <c>client_id</c>, a fresh <c>jti</c>,
     /// <c>iat</c>, <c>exp</c> and <c>scope</c>), and each entry of <paramref name="claims"/> is added or
     /// replaces the claim of its name: <c>sub</c>, <c>sub_id</c>, <c>tenant</c>, <c>resource</c>,
-    /// <c>act</c> or <c>may_act</c>.
+    /// <c>authorization_details</c>, <c>act</c> or <c>may_act</c>. Each name in
+    /// <paramref name="omittedClaims"/> is then removed, so a grant can lack a core claim such as <c>jti</c>
+    /// or <c>iat</c>. With <paramref name="headerType"/> the same claims builder signs another JWT the
+    /// token endpoint reads, such as a client assertion whose <c>iss</c>, <c>sub</c>, <c>aud</c> and
+    /// <c>exp</c> the claims set.
     /// </summary>
     /// <param name="signingKey">The IdP signing key.</param>
     /// <param name="keyId">The <c>kid</c> the Resource Authorization Server resolves the signing key by.</param>
     /// <param name="issuer">The IdP issuer identifier.</param>
     /// <param name="claims">The claims to add or replace, by name, with their raw values.</param>
+    /// <param name="omittedClaims">The names of the claims the grant does not carry, or <see langword="null"/> for none.</param>
+    /// <param name="headerType">The <c>typ</c> of the protected header, or <see langword="null"/> for <c>oauth-id-jag+jwt</c>.</param>
     /// <returns>The compact JWS.</returns>
     private async Task<string> BuildIdJagWithClaimsAsync(
         PrivateKeyMemory signingKey,
         string keyId,
         string issuer,
-        IReadOnlyDictionary<string, object> claims)
+        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyCollection<string>? omittedClaims = null,
+        string? headerType = null)
     {
         DateTimeOffset now = TimeProvider.GetUtcNow();
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-        JwtHeader header = JwtHeader.ForSigning(algorithm, "oauth-id-jag+jwt", keyId);
+        JwtHeader header = JwtHeader.ForSigning(algorithm, headerType ?? "oauth-id-jag+jwt", keyId);
         JwtPayload payload = new(capacity: 8 + claims.Count)
         {
             [WellKnownJwtClaimNames.Iss] = issuer,
@@ -6485,6 +7133,11 @@ internal sealed class IdJagGrantTests
         foreach(KeyValuePair<string, object> claim in claims)
         {
             payload[claim.Key] = claim.Value;
+        }
+
+        foreach(string omittedClaim in omittedClaims ?? [])
+        {
+            _ = payload.Remove(omittedClaim);
         }
 
         UnsignedJwt unsigned = new(header, payload);
@@ -6907,7 +7560,7 @@ internal sealed class IdJagGrantTests
     /// fixture's Identity Assertion and surfaces its subject, and an authorization seam that selects the
     /// id-jag issued type with the given granted scope, (optional) resource client_id, (optional)
     /// <c>sub_id</c> identifier, (optional) issuer <c>tenant</c>, (optional) <c>aud_tenant</c> and (optional)
-    /// <c>aud_sub</c>.
+    /// <c>aud_sub</c>, and (optional) granted <c>resource</c> entries.
     /// </summary>
     /// <param name="app">The host shell whose server is wired.</param>
     /// <param name="grantedScope">The scope the grant carries.</param>
@@ -6919,6 +7572,7 @@ internal sealed class IdJagGrantTests
     /// <param name="authorizedSubject">
     /// The subject the authorization names, or <see langword="null"/> for the validated subject token's subject.
     /// </param>
+    /// <param name="resource">The granted <c>resource</c> entries the mint writes as sent, or <see langword="null"/> for none.</param>
     private static async Task WireMintSeamsAsync(
         TestHostShell app,
         string grantedScope,
@@ -6927,7 +7581,8 @@ internal sealed class IdJagGrantTests
         string? tenant = null,
         string? audienceTenant = null,
         string? audienceSubject = null,
-        string? authorizedSubject = null)
+        string? authorizedSubject = null,
+        IReadOnlyList<string>? resource = null)
     {
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
@@ -6944,6 +7599,7 @@ internal sealed class IdJagGrantTests
                 resourceClientId,
                 subjectIdentifier,
                 tenant,
+                resource: resource,
                 audienceTenant: audienceTenant,
                 audienceSubject: audienceSubject,
                 authorizedSubject: authorizedSubject);
@@ -6953,10 +7609,11 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
-    /// The Resource Authorization Server's <c>ValidateJwtBearerAssertionAsync</c> wiring: verify the
-    /// ID-JAG signature against the IdP JWKS (resolved by <c>kid</c>) and apply the §4.4.1 / §9.3 claim
-    /// rules via <see cref="IdJagAssertionValidation"/>. Returns <see langword="null"/> (→
-    /// <c>invalid_grant</c>) on any failure, mirroring a real RS.
+    /// The Resource Authorization Server's <c>ValidateJwtBearerAssertionAsync</c> wiring: decode the ID-JAG with
+    /// the library's own JWT part decoder (<see cref="ParseJwtParts"/>), verify its signature against the IdP JWKS
+    /// (resolved by <c>kid</c>) and apply the Section 4.4.1 and Section 9.3 claim rules via
+    /// <see cref="IdJagAssertionValidation"/>. Returns <see langword="null"/>, so the token endpoint answers
+    /// <c>invalid_grant</c>, on any failure, as a Resource Authorization Server does.
     /// </summary>
     /// <param name="assertion">The compact JWS the redeem request carries.</param>
     /// <param name="registration">The authenticated client's registration.</param>
@@ -6976,18 +7633,12 @@ internal sealed class IdJagGrantTests
         IdJagSubjectIdentifierRule? rule = null,
         Action<IdJagAssertionValidationResult>? recorder = null)
     {
-        string[] parts = assertion.Split('.');
-        if(parts.Length != 3)
+        if(assertion.Split('.').Length != 3)
         {
             return null;
         }
 
-        JwtHeader header;
-        using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], Pool))
-        {
-            header = JwsAccessTokenTestSupport.Parser.ParseHeader(headerBytes.Memory);
-        }
-
+        (JwtHeader header, JwtPayload payload) = ParseJwtParts(assertion);
         if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj) || kidObj is not string kid)
         {
             return null;
@@ -7006,12 +7657,6 @@ internal sealed class IdJagGrantTests
         if(!signatureValid)
         {
             return null;
-        }
-
-        JwtPayload payload;
-        using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
-        {
-            payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
         }
 
         IdJagAssertionValidationResult result = rule is null
@@ -7073,6 +7718,30 @@ internal sealed class IdJagGrantTests
     /// with <paramref name="signedClaims"/> the claims builder signs the grant under it and under the
     /// <c>kid</c> <see cref="UnknownSigningKeyId"/>, instead of under the host's published signing material.
     /// </param>
+    /// <param name="mintedResource">
+    /// The <c>resource</c> entries the mint's authorization seam grants and the mint writes as sent, or
+    /// <see langword="null"/> for none.
+    /// </param>
+    /// <param name="omittedClaims">
+    /// The names of the core claims the claims builder leaves out of the grant it signs, or
+    /// <see langword="null"/> for none; read only with <paramref name="signedClaims"/>.
+    /// </param>
+    /// <param name="servedCulture">
+    /// The culture every request is served under, inside a <see cref="ServedCultureScope"/> that asserts it for
+    /// the token requests the redemption made, or <see langword="null"/> to serve under the process culture.
+    /// </param>
+    /// <param name="resourceServerIssuer">
+    /// The Resource Authorization Server's issuer identifier the redeem seam compares the grant's <c>aud</c> with,
+    /// or <see langword="null"/> for <see cref="ResourceAsIssuer"/>.
+    /// </param>
+    /// <param name="scopeAudiences">
+    /// Further scopes the registration allows, each mapped to the one audience the default audience resolver
+    /// answers for it, or <see langword="null"/> for none.
+    /// </param>
+    /// <param name="replayRecords">
+    /// The list that receives every replay record the host's store holds once the redemption is answered, or
+    /// <see langword="null"/> to collect none.
+    /// </param>
     /// <returns>
     /// The redemption's status code and body, the validation result the seam recorded (<see langword="null"/>
     /// when the seam recorded none), and the host's issuer identifier.
@@ -7082,10 +7751,24 @@ internal sealed class IdJagGrantTests
         Func<string, SubjectIdentifier?>? mintedSubjectIdentifier = null,
         string? mintedTenant = null,
         Func<string, IReadOnlyDictionary<string, object>>? signedClaims = null,
-        PrivateKeyMemory? signingMaterial = null)
+        PrivateKeyMemory? signingMaterial = null,
+        IReadOnlyList<string>? mintedResource = null,
+        IReadOnlyCollection<string>? omittedClaims = null,
+        string? servedCulture = null,
+        string? resourceServerIssuer = null,
+        IReadOnlyDictionary<string, string>? scopeAudiences = null,
+        List<JtiSeenState>? replayRecords = null)
     {
         await using TestHostShell app = new(TimeProvider);
+        using ServedCultureScope? culture = servedCulture is null
+            ? null
+            : await ServedCultureScope.CreateAsync(app, servedCulture, TestContext.CancellationToken).ConfigureAwait(false);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        foreach(KeyValuePair<string, string> scopeAudience in scopeAudiences ?? new Dictionary<string, string>())
+        {
+            _ = await app.AddScopeWithAudienceAsync(
+                material, scopeAudience.Key, scopeAudience.Value, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        }
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -7098,7 +7781,12 @@ internal sealed class IdJagGrantTests
         //The issuer identifier is settled once the host is listening, and a minted sub_id can name it, so the
         //mint seams are wired after the start.
         await WireMintSeamsAsync(
-            app, WellKnownScopes.OpenId, resourceClientId: null, mintedSubjectIdentifier?.Invoke(idpIssuer), mintedTenant).ConfigureAwait(false);
+            app,
+            WellKnownScopes.OpenId,
+            resourceClientId: null,
+            mintedSubjectIdentifier?.Invoke(idpIssuer),
+            mintedTenant,
+            resource: mintedResource).ConfigureAwait(false);
 
         IdJagAssertionValidationResult? recorded = null;
         ServerVerificationKeyResolverDelegate jwksResolver =
@@ -7108,7 +7796,7 @@ internal sealed class IdJagGrantTests
             candidateIntegration.ValidateJwtBearerAssertionAsync =
                 async (assertion, requestedScope, registration, context, ct) =>
                     await ValidateIdJagAsync(
-                        assertion, registration, jwksResolver, ResourceAsIssuer, redeemRule, result => recorded = result).ConfigureAwait(false);
+                        assertion, registration, jwksResolver, resourceServerIssuer ?? ResourceAsIssuer, redeemRule, result => recorded = result).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
         string jag;
@@ -7126,12 +7814,17 @@ internal sealed class IdJagGrantTests
                 signingMaterial ?? material.SigningPrivateKey,
                 signingMaterial is null ? material.SigningKeyId.Value : UnknownSigningKeyId,
                 idpIssuer,
-                signedClaims(idpIssuer)).ConfigureAwait(false);
+                signedClaims(idpIssuer),
+                omittedClaims).ConfigureAwait(false);
         }
 
         using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(
             http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The mint and the redemption are token requests, a hand-built grant's redemption the only one.
+        culture?.AssertEveryRequestWasServedUnder(servedCulture!, signedClaims is null ? 2 : 1);
+        replayRecords?.AddRange(app.FlowStore.Values.Select(static entry => entry.State).OfType<JtiSeenState>());
 
         return ((int)redeemResponse.StatusCode, redeemBody, recorded, idpIssuer);
     }

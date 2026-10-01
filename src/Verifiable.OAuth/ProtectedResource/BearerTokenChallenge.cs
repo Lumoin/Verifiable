@@ -125,7 +125,7 @@ public static class BearerTokenChallenge
                 "error_description contains characters outside %x20-21 / %x23-5B / %x5D-7E (RFC 6750 §3).", nameof(errorDescription));
         }
 
-        if(hasScope && !IsScopeList(scope!))
+        if(hasScope && !ScopeTokenSyntax.IsScopeList(scope!))
         {
             throw new ArgumentException(
                 "scope must be single-space-delimited scope-tokens of %x21 / %x23-5B / %x5D-7E characters (RFC 6750 §3).", nameof(scope));
@@ -353,14 +353,6 @@ public static class BearerTokenChallenge
         c is (>= ' ' and <= '!') or (>= '#' and <= '[') or (>= ']' and <= '~');
 
 
-    /// <summary>
-    /// The RFC 6749 Appendix A NQCHAR set restated by RFC 6750 §3 for scope
-    /// values: %x21 / %x23-5B / %x5D-7E.
-    /// </summary>
-    private static bool IsNqChar(char c) =>
-        c is '!' or (>= '#' and <= '[') or (>= ']' and <= '~');
-
-
     private static bool IsWithinNqsCharset(string value)
     {
         foreach(char c in value)
@@ -372,39 +364,6 @@ public static class BearerTokenChallenge
         }
 
         return true;
-    }
-
-
-    /// <summary>
-    /// Validates the RFC 6750 §3 scope shape restated from RFC 6749 §3.3:
-    /// scope-tokens of NQCHAR characters delimited by single %x20 spaces, with
-    /// no leading, trailing, or consecutive delimiters.
-    /// </summary>
-    private static bool IsScopeList(string value)
-    {
-        bool isPreviousDelimiter = true;
-        foreach(char c in value)
-        {
-            if(c == ' ')
-            {
-                if(isPreviousDelimiter)
-                {
-                    return false;
-                }
-
-                isPreviousDelimiter = true;
-                continue;
-            }
-
-            if(!IsNqChar(c))
-            {
-                return false;
-            }
-
-            isPreviousDelimiter = false;
-        }
-
-        return !isPreviousDelimiter;
     }
 
 

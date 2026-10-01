@@ -241,40 +241,49 @@ public static class PrivateKeyJwtClientAuthentication
                 "The client assertion is missing the jti claim.");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out bool expPresent, out DateTimeOffset exp)
-            || !expPresent)
+        //The time claims are read by the one reader the RFC 7523 claim rules share: a number, a fraction kept, and
+        //a JSON string or a number no instant can hold refused as malformed.
+        if(JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Exp, out _, out DateTimeOffset exp) != Validation.NumericDateReadResult.Value)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 "The client assertion is missing or has a malformed exp claim (RFC 7523 §3 item 4).");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out bool iatPresent, out DateTimeOffset iat))
+        Validation.NumericDateReadResult iatRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Iat, out _, out DateTimeOffset iat);
+        if(iatRead == Validation.NumericDateReadResult.Malformed)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 "The client assertion iat claim is malformed.");
         }
 
-        if(iatPresent && exp <= iat)
+        bool isIatPresent = iatRead == Validation.NumericDateReadResult.Value;
+        if(isIatPresent && exp <= iat)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 "The client assertion exp is at or before iat (non-positive lifetime).");
         }
 
         //iat sanity: an assertion claiming to have been issued in the future is nonsensical
-        //regardless of its exp.
-        if(iatPresent && iat > now + clockSkew)
+        //regardless of its exp. Every comparison of a time claim with the clock and its skew below goes
+        //through the difference of the two instants, which any two instants a DateTimeOffset holds can
+        //form, so no sum leaves the representable range.
+        if(isIatPresent && iat - now > clockSkew)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 "The client assertion iat is in the future beyond the skew tolerance.");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out bool nbfPresent, out DateTimeOffset nbf))
+        Validation.NumericDateReadResult nbfRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Nbf, out _, out DateTimeOffset nbf);
+        if(nbfRead == Validation.NumericDateReadResult.Malformed)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 "The client assertion nbf claim is malformed.");
         }
 
-        if(nbfPresent)
+        if(nbfRead == Validation.NumericDateReadResult.Value)
         {
             if(exp <= nbf)
             {
@@ -282,14 +291,14 @@ public static class PrivateKeyJwtClientAuthentication
                     "The client assertion exp is at or before nbf (the validity window never opens).");
             }
 
-            if(nbf > now + clockSkew)
+            if(nbf - now > clockSkew)
             {
                 return PrivateKeyJwtClientAuthenticationResult.Rejected(
                     "The client assertion is not yet valid (nbf is in the future beyond the skew tolerance).");
             }
         }
 
-        if(exp + clockSkew <= now)
+        if(now - exp >= clockSkew)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 "The client assertion has expired (RFC 7523 §3 item 4).");
@@ -691,13 +700,18 @@ public static class PrivateKeyJwtClientAuthentication
 
                     if(checkJtiReplayAsync is not null)
                     {
-                        //RFC 7523 §3 rule 7: the recorded jti is retained "for the length of time for
-                        //which the JWT would be considered valid based on the applicable exp instant" —
-                        //here that is exp plus the clock-skew tolerance Validate just accepted the
-                        //assertion's timing under, not the bare exp.
+                        //RFC 7523 Section 3 item 7: the recorded jti is retained "for the length of time for
+                        //which the JWT would be considered valid based on the applicable "exp" instant", here
+                        //the exp plus the clock-skew tolerance Validate accepted the assertion's timing under,
+                        //not the bare exp. An expiry within the tolerance of the last instant a DateTimeOffset
+                        //holds is recorded until that instant, so the sum never leaves the representable range.
+                        DateTimeOffset assertionExpiry = result.Expiration!.Value;
+                        DateTimeOffset recordedUntil = DateTimeOffset.MaxValue - assertionExpiry <= context.ClockSkewTolerance
+                            ? DateTimeOffset.MaxValue
+                            : assertionExpiry + context.ClockSkewTolerance;
                         JtiReplayOutcome outcome = await checkJtiReplayAsync(
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            result.Expiration!.Value + context.ClockSkewTolerance, cancellationToken).ConfigureAwait(false);
+                            recordedUntil, cancellationToken).ConfigureAwait(false);
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove
@@ -732,50 +746,6 @@ public static class PrivateKeyJwtClientAuthentication
         value = null;
 
         return false;
-    }
-
-
-    /// <summary>
-    /// Reads an epoch-seconds temporal claim. Returns <see langword="false"/> when the claim is
-    /// present but not a numeric timestamp; sets <paramref name="present"/> to whether the claim was
-    /// there at all. The <c>== Math.Floor(…)</c> checks test whether a directly-deserialized
-    /// <see cref="double"/>/<see cref="float"/> already holds an exact integer value — no arithmetic
-    /// is performed on the claim, so the exact comparison carries no floating-point rounding risk.
-    /// </summary>
-    private static bool TryReadEpochSeconds(
-        JwtPayload payload, string claimName, out bool present, out DateTimeOffset value)
-    {
-        value = default;
-        if(!payload.TryGetValue(claimName, out object? raw))
-        {
-            present = false;
-
-            return true;
-        }
-
-        present = true;
-        long? seconds = raw switch
-        {
-            long l => l,
-            int i => i,
-            short s => s,
-            byte b => b,
-            ulong u when u <= long.MaxValue => (long)u,
-            uint ui => ui,
-            double d when d >= long.MinValue && d <= long.MaxValue && d == Math.Floor(d) => (long)d,
-            float f when f >= long.MinValue && f <= long.MaxValue && f == Math.Floor(f) => (long)f,
-            string text when long.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long parsed) => parsed,
-            _ => null,
-        };
-
-        if(seconds is null)
-        {
-            return false;
-        }
-
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds.Value);
-
-        return true;
     }
 
 

@@ -432,30 +432,333 @@ internal sealed class IdJagAssertionValidationTests
     }
 
 
+    /// <summary>
+    /// A present <c>authorization_details</c> claim that is not a JSON array is refused, not read as absent.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the authorization_details claim is present, the Resource Authorization Server MUST parse it as a
+    /// JSON array and process each authorization detail object according to [RFC9396]."
+    /// </summary>
     [TestMethod]
-    public void NonArrayAuthorizationDetailsSurfacesNull()
+    public void NonArrayAuthorizationDetailsIsMalformed()
     {
         JwtPayload payload = ValidPayload();
         payload["authorization_details"] = "not-an-array";
 
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
-        Assert.IsTrue(result.IsValid, result.FailureDescription);
-        Assert.IsNull(result.AuthorizationDetails);
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedAuthorizationDetails, result.FailureReason);
+        Assert.AreEqual("The assertion authorization_details claim is not a JSON array.", result.FailureDescription);
     }
 
 
+    /// <summary>
+    /// A <c>resource</c> array with an element that is not a JSON string is refused whole, not read with the
+    /// element dropped.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the resource claim is present, the Resource Authorization Server MUST process it according to
+    /// Section 2 of [RFC8707]." <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>:
+    /// "Its value MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]."
+    /// </summary>
     [TestMethod]
-    public void ResourceArrayDropsNonStringElements()
+    public void ResourceArrayWithANonStringElementIsMalformedResource()
     {
         JwtPayload payload = ValidPayload();
         payload["resource"] = new object[] { "https://api.chat.example/files", 123L };
 
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedResource, result.FailureReason);
+        Assert.AreEqual(
+            "The assertion resource claim is not an absolute URI (RFC 3986 section 4.3) without a fragment, or an array of such values.",
+            result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// A <c>resource</c> claim outside the resource indicator grammar, or outside the claim's two shapes, is
+    /// refused: a value with a fragment, a host naming the Kelvin sign (U+212A), a malformed percent triplet, an
+    /// empty scheme, an <c>https</c> value with a userinfo, the empty string, the empty array, a number, a
+    /// boolean, an object, a JSON <c>null</c>, and an array holding a <c>null</c> beside a valid value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>: "Its value MUST be
+    /// an absolute URI, as specified by Section 4.3 of [RFC3986]. The URI MUST NOT include a fragment
+    /// component."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>
+    /// names the claim's shapes: "(either a single URI or an array of URIs)".
+    /// The userinfo case is refused under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.4">RFC 9110 Section 4.2.4</see>: "Before
+    /// making use of an "http" or "https" URI reference received from an untrusted source, a recipient SHOULD
+    /// parse for userinfo and treat its presence as an error; it is likely being used to obscure the authority
+    /// for the sake of phishing attacks."
+    /// Refusing the empty string and the empty array is this library's fail-closed reading: no sentence of
+    /// Section 3.1 or
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// states it.
+    /// </summary>
+    /// <param name="caseName">The malformed value the claim carries.</param>
+    [TestMethod]
+    [DataRow("fragment", DisplayName = "a value with a fragment")]
+    [DataRow("nonAsciiHost", DisplayName = "a host naming the Kelvin sign")]
+    [DataRow("malformedTriplet", DisplayName = "a malformed percent triplet")]
+    [DataRow("emptyScheme", DisplayName = "an empty scheme")]
+    [DataRow("httpsUserinfo", DisplayName = "an https value with a userinfo")]
+    [DataRow("emptyString", DisplayName = "the empty string")]
+    [DataRow("emptyArray", DisplayName = "the empty array")]
+    [DataRow("number", DisplayName = "a number")]
+    [DataRow("boolean", DisplayName = "a boolean")]
+    [DataRow("object", DisplayName = "an object")]
+    [DataRow("jsonNull", DisplayName = "a JSON null")]
+    [DataRow("arrayHoldingNull", DisplayName = "an array holding a null")]
+    public void AResourceClaimOutsideTheGrammarIsMalformedResource(string caseName)
+    {
+        object? resource = caseName switch
+        {
+            "fragment" => "https://api.example.com/x#frag",
+            "nonAsciiHost" => "https://" + char.ConvertFromUtf32(0x212A) + "eycloak.example/",
+            "malformedTriplet" => "https://api.example.com/%GG",
+            "emptyScheme" => ":foo",
+            "httpsUserinfo" => "https://user@api.example.com/",
+            "emptyString" => string.Empty,
+            "emptyArray" => Array.Empty<object>(),
+            "number" => 5L,
+            "boolean" => true,
+            "object" => new Dictionary<string, object>(StringComparer.Ordinal) { ["uri"] = "https://api.example.com/files" },
+            "jsonNull" => null,
+            "arrayHoldingNull" => new object?[] { "https://api.example.com/files", null },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        //The payload indexer stores a JSON null as the library's decoder does: a present member whose value is null.
+        JwtPayload payload = ValidPayload();
+        payload["resource"] = resource!;
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedResource, result.FailureReason);
+        Assert.AreEqual(
+            "The assertion resource claim is not an absolute URI (RFC 3986 section 4.3) without a fragment, or an array of such values.",
+            result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// Every accepted <c>resource</c> value is surfaced with its scheme and host lowered and its other parts as
+    /// sent, in the order given, for a single string and for an array.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see>: "When
+    /// a URI uses components of the generic syntax, the component syntax equivalence rules always apply;
+    /// namely, that the scheme and host are case-insensitive and therefore should be normalized to lowercase."
+    /// </summary>
+    /// <param name="caseName">The shape of the claim: <c>string</c> or <c>array</c>.</param>
+    [TestMethod]
+    [DataRow("string", DisplayName = "a single string")]
+    [DataRow("array", DisplayName = "an array of two strings")]
+    public void AResourceClaimIsFoldedAtTheRedeem(string caseName)
+    {
+        (object Sent, string[] Expected) foldCase = caseName switch
+        {
+            "string" => ("HTTPS://API.CHAT.EXAMPLE/Files", ["https://api.chat.example/Files"]),
+            "array" => (new object[] { "HTTPS://A.EXAMPLE/x", "https://b.example/Y" }, ["https://a.example/x", "https://b.example/Y"]),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload["resource"] = foldCase.Sent;
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
         Assert.IsTrue(result.IsValid, result.FailureDescription);
-        Assert.HasCount(1, result.Resource);
-        Assert.AreEqual("https://api.chat.example/files", result.Resource[0]);
+        Assert.AreSequenceEqual(foldCase.Expected, result.Resource);
+    }
+
+
+    /// <summary>
+    /// A grant without a <c>jti</c>, or with one of white space only, is refused.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "jti: REQUIRED - Unique ID of this JWT as defined in Section 4.1.7 of [RFC7519]."
+    /// Refusing a <c>jti</c> of white space only is this library's fail-closed reading: no sentence of Section 3.1
+    /// or
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>
+    /// states it.
+    /// </summary>
+    /// <param name="caseName">The claim's shape: <c>absent</c> or <c>whiteSpace</c>.</param>
+    [TestMethod]
+    [DataRow("absent", DisplayName = "no jti")]
+    [DataRow("whiteSpace", DisplayName = "a jti of white space only")]
+    public void AMissingJtiIsRefused(string caseName)
+    {
+        string? jti = caseName switch
+        {
+            "absent" => null,
+            "whiteSpace" => " ",
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        _ = payload.Remove(WellKnownJwtClaimNames.Jti);
+        if(jti is not null)
+        {
+            payload[WellKnownJwtClaimNames.Jti] = jti;
+        }
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MissingJti, result.FailureReason);
+        Assert.AreEqual("The assertion is missing the jti claim.", result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// A grant without an <c>iat</c> is refused.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "iat: REQUIRED - as defined in Section 4.1.6 of [RFC7519]."
+    /// </summary>
+    [TestMethod]
+    public void AMissingIssuedAtIsRefused()
+    {
+        JwtPayload payload = ValidPayload();
+        _ = payload.Remove(WellKnownJwtClaimNames.Iat);
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MissingIssuedAt, result.FailureReason);
+        Assert.AreEqual("The assertion is missing the iat claim.", result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// A present <c>iat</c> that is not a number is refused with the time claims' reason, not read as absent.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "Its value
+    /// MUST be a number containing a NumericDate value."
+    /// </summary>
+    [TestMethod]
+    public void NonNumericIssuedAtIsInconsistent()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = "soon";
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.InconsistentTemporalClaims, result.FailureReason);
+        Assert.AreEqual("The assertion iat claim is not a numeric timestamp.", result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// An <c>aud</c> that differs from the Resource Authorization Server's issuer only in the case of its scheme
+    /// and host is refused: the grant's own <c>aud</c> is compared as signed, character for character.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 3: "In the
+    /// absence of an application profile specifying otherwise, compliant applications MUST compare the audience
+    /// values using the Simple String Comparison method defined in Section 6.2.1 of RFC 3986 [RFC3986]."
+    /// </summary>
+    [TestMethod]
+    public void AnAudienceDifferingFromTheIssuerOnlyInCaseIsAudienceMismatch()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Aud] = "HTTPS://RS.EXAMPLE.COM/";
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.AudienceMismatch, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A Resource Authorization Server whose issuer is spelled with capitals in its host accepts a grant whose
+    /// <c>aud</c> carries the same spelling, and surfaces that <c>aud</c> as signed, not folded.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 3: "In the
+    /// absence of an application profile specifying otherwise, compliant applications MUST compare the audience
+    /// values using the Simple String Comparison method defined in Section 6.2.1 of RFC 3986 [RFC3986]."
+    /// </summary>
+    [TestMethod]
+    public void AnIssuerSpelledWithCapitalsAcceptsTheSameAudienceAsSigned()
+    {
+        const string capitalIssuer = "https://RS.Example.COM/";
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Aud] = capitalIssuer;
+
+        IdJagAssertionValidationResult result = IdJagAssertionValidation.Validate(
+            ValidHeader(), payload, capitalIssuer, ResourceClientId, Now, Skew);
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.HasCount(1, result.Audience);
+        Assert.AreEqual(capitalIssuer, result.Audience[0]);
+    }
+
+
+    /// <summary>
+    /// A present <c>scope</c> claim that is not a JSON string, or whose value breaks the scope grammar, is
+    /// refused: a number, a JSON <c>null</c>, the empty string, a doubled space, a tab, a leading space, a
+    /// trailing space, a quotation mark (%x22), a reverse solidus (%x5C), the delete character (%x7F) and the
+    /// Kelvin sign (U+212A), a code point above %x7E. Refusing the grant for a malformed scope claim, rather than
+    /// reading the claim as absent, is decided by this library.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.4.1</see>:
+    /// "If the scope claim is present, the Resource Authorization Server MUST process it according to Section 3.3
+    /// of [RFC6749]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 Section 3.3</see>: "scope =
+    /// scope-token *( SP scope-token )" and "scope-token = 1*( %x21 / %x23-5B / %x5D-7E )".
+    /// </summary>
+    /// <param name="caseName">The malformed value the claim carries.</param>
+    [TestMethod]
+    [DataRow("number", DisplayName = "a number")]
+    [DataRow("jsonNull", DisplayName = "a JSON null")]
+    [DataRow("emptyString", DisplayName = "the empty string")]
+    [DataRow("doubledSpace", DisplayName = "a doubled space")]
+    [DataRow("tab", DisplayName = "a tab")]
+    [DataRow("leadingSpace", DisplayName = "a leading space")]
+    [DataRow("trailingSpace", DisplayName = "a trailing space")]
+    [DataRow("quotationMark", DisplayName = "a quotation mark")]
+    [DataRow("reverseSolidus", DisplayName = "a reverse solidus")]
+    [DataRow("deleteCharacter", DisplayName = "the delete character")]
+    [DataRow("kelvinSign", DisplayName = "the Kelvin sign")]
+    public void AMalformedScopeClaimIsMalformedScope(string caseName)
+    {
+        object? scope = caseName switch
+        {
+            "number" => 123L,
+            "jsonNull" => null,
+            "emptyString" => string.Empty,
+            "doubledSpace" => "a  b",
+            "tab" => "a" + char.ConvertFromUtf32(0x0009) + "b",
+            "leadingSpace" => " a",
+            "trailingSpace" => "a ",
+            "quotationMark" => "a" + char.ConvertFromUtf32(0x0022) + "b",
+            "reverseSolidus" => "a" + char.ConvertFromUtf32(0x5C) + "b",
+            "deleteCharacter" => "a" + char.ConvertFromUtf32(0x7F) + "b",
+            "kelvinSign" => "a" + char.ConvertFromUtf32(0x212A) + "b",
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Scope] = scope!;
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedScope, result.FailureReason);
+        Assert.AreEqual(
+            "The assertion scope claim is not a space-delimited list of scope tokens (RFC 6749 section 3.3).",
+            result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// A <c>scope</c> claim of one token made of the edges of the token set is surfaced as
+    /// <see cref="IdJagAssertionValidationResult.Scope"/> as signed: <c>!#[]~</c> (%x21, %x23, %x5B, %x5D and
+    /// %x7E) and <c>!</c> alone.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 Section 3.3</see>: "scope =
+    /// scope-token *( SP scope-token )" and "scope-token = 1*( %x21 / %x23-5B / %x5D-7E )".
+    /// </summary>
+    /// <param name="scope">The scope claim's value.</param>
+    [TestMethod]
+    [DataRow("!#[]~", DisplayName = "the token of the set's edges")]
+    [DataRow("!", DisplayName = "the token of %x21 alone")]
+    public void AScopeTokenAtTheEdgesOfTheTokenSetIsSurfaced(string scope)
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Scope] = scope;
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.AreEqual(scope, result.Scope);
     }
 
 

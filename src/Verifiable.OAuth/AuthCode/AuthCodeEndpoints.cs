@@ -5592,10 +5592,17 @@ public static class AuthCodeEndpoints
         string resourceClientId = authorization.ResourceClientId ?? registration.ClientId;
 
         //What the seam chose is checked before the grant's jti and signing material are obtained, and a defect
-        //of the seam mints nothing: a sub_id that is not well formed (the redeem reads the same member), or a
-        //tenant, aud_tenant or aud_sub that is set and is white space only (the redeem refuses such a claim).
-        //A tenant relationship value that is null or empty omits its claim. The rule is this library's.
+        //of the seam mints nothing: a sub_id that is not well formed (the redeem reads the same member), a
+        //granted resource the resource indicator grammar refuses (Section 3.1 makes the claim an RFC 8707
+        //Section 2 resource identifier, and the redeem refuses such a claim), a granted scope that is set and
+        //breaks the grammar of RFC 6749 Section 3.3 (Section 3.1 makes the claim a list in that format, and the
+        //redeem refuses such a claim), or a tenant, aud_tenant or aud_sub that is set and is white space only (the
+        //redeem refuses such a claim). A tenant relationship value that is null or empty omits its claim, as an
+        //empty scope does. The rule is this library's.
         if((authorization.SubjectIdentifier is { } chosenIdentifier && !chosenIdentifier.IsWellFormed())
+            || (authorization.Resource is { Count: > 0 } chosenResources
+                && chosenResources.Any(static chosenResource => !ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(chosenResource)))
+            || (authorization.Scope is { Length: > 0 } chosenScope && !ScopeTokenSyntax.IsScopeList(chosenScope))
             || (authorization.Tenant is { Length: > 0 } chosenTenant && string.IsNullOrWhiteSpace(chosenTenant))
             || (authorization.AudienceTenant is { Length: > 0 } chosenAudienceTenant && string.IsNullOrWhiteSpace(chosenAudienceTenant))
             || (authorization.AudienceSubject is { Length: > 0 } chosenAudienceSubject && string.IsNullOrWhiteSpace(chosenAudienceSubject)))
@@ -6040,10 +6047,15 @@ public static class AuthCodeEndpoints
                     //the application's ValidateJwtBearerAssertionDelegate is the trust authority for
                     //that instant (§3 rules 4-5) and the library cannot read its timing tolerance, so
                     //the recorded window floors at the library's own clock-skew tolerance, never
-                    //shorter than what the JAR and private_key_jwt callers honour.
+                    //shorter than what the JAR and private_key_jwt callers honour. An expiry within the tolerance of
+                    //the last instant a DateTimeOffset holds is recorded until that instant, so the sum never
+                    //leaves the representable range.
+                    DateTimeOffset recordedUntil = DateTimeOffset.MaxValue - assertionExpiry <= context.ClockSkewTolerance
+                        ? DateTimeOffset.MaxValue
+                        : assertionExpiry + context.ClockSkewTolerance;
                     JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
                         server, context, registration.TenantId, JtiReplayPurpose.AuthorizationGrantAssertion,
-                        assertionIssuer, assertionJti, assertionExpiry + context.ClockSkewTolerance, ct).ConfigureAwait(false);
+                        assertionIssuer, assertionJti, recordedUntil, ct).ConfigureAwait(false);
 
                     ServerHttpResponse? jtiFailure = jtiOutcome switch
                     {

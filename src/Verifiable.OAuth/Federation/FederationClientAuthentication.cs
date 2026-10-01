@@ -1,4 +1,3 @@
-using System.Globalization;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
@@ -116,33 +115,39 @@ public static class FederationClientAuthentication
         }
 
         //exp is REQUIRED; a present-but-malformed temporal claim is rejected
-        //rather than silently ignored, which would suppress the expiry check.
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out bool expPresent, out DateTimeOffset exp)
-            || !expPresent)
+        //rather than silently ignored, which would suppress the expiry check. The time claims are read by the
+        //one reader the RFC 7523 claim rules share: a number, a fraction kept, and a JSON string or a number no
+        //instant can hold refused as malformed.
+        if(JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Exp, out _, out DateTimeOffset exp) != Validation.NumericDateReadResult.Value)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT is missing or has a malformed exp claim.");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out bool iatPresent, out DateTimeOffset iat))
+        Validation.NumericDateReadResult iatRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Iat, out _, out DateTimeOffset iat);
+        if(iatRead == Validation.NumericDateReadResult.Malformed)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT iat claim is malformed.");
         }
 
-        if(iatPresent && exp <= iat)
+        if(iatRead == Validation.NumericDateReadResult.Value && exp <= iat)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT exp is at or before iat (non-positive lifetime).");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out bool nbfPresent, out DateTimeOffset nbf))
+        Validation.NumericDateReadResult nbfRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Nbf, out _, out DateTimeOffset nbf);
+        if(nbfRead == Validation.NumericDateReadResult.Malformed)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT nbf claim is malformed.");
         }
 
-        if(nbfPresent)
+        if(nbfRead == Validation.NumericDateReadResult.Value)
         {
             if(exp <= nbf)
             {
@@ -150,14 +155,17 @@ public static class FederationClientAuthentication
                     "The client authentication JWT exp is at or before nbf (the validity window never opens).");
             }
 
-            if(nbf > now + clockSkew)
+            //The comparisons of a time claim with the clock and its skew go through the difference of the two
+            //instants, which any two instants a DateTimeOffset holds can form, so no sum leaves the
+            //representable range.
+            if(nbf - now > clockSkew)
             {
                 return FederationClientAuthenticationResult.Rejected(
                     "The client authentication JWT is not yet valid (nbf is in the future beyond the skew tolerance).");
             }
         }
 
-        if(exp + clockSkew <= now)
+        if(now - exp >= clockSkew)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT has expired.");
@@ -219,49 +227,5 @@ public static class FederationClientAuthentication
         }
 
         return null;
-    }
-
-
-    /// <summary>
-    /// Reads an epoch-seconds temporal claim. Returns <see langword="false"/> when
-    /// the claim is present but not a numeric timestamp; sets
-    /// <paramref name="present"/> to whether the claim was there at all. The
-    /// <c>== Math.Floor(…)</c> checks test whether a directly-deserialized
-    /// <see cref="double"/>/<see cref="float"/> already holds an exact integer value —
-    /// no arithmetic is performed on the claim, so the exact comparison carries no
-    /// floating-point rounding risk.
-    /// </summary>
-    private static bool TryReadEpochSeconds(
-        JwtPayload payload, string claimName, out bool present, out DateTimeOffset value)
-    {
-        value = default;
-        if(!payload.TryGetValue(claimName, out object? raw))
-        {
-            present = false;
-            return true;
-        }
-
-        present = true;
-        long? seconds = raw switch
-        {
-            long l => l,
-            int i => i,
-            short s => s,
-            byte b => b,
-            ulong u when u <= long.MaxValue => (long)u,
-            uint ui => ui,
-            double d when d >= long.MinValue && d <= long.MaxValue && d == Math.Floor(d) => (long)d,
-            float f when f >= long.MinValue && f <= long.MaxValue && f == Math.Floor(f) => (long)f,
-            string text when long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed) => parsed,
-            _ => null,
-        };
-
-        if(seconds is null)
-        {
-            return false;
-        }
-
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds.Value);
-        return true;
     }
 }

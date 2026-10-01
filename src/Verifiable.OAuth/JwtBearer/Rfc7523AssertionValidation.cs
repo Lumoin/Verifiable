@@ -1,6 +1,7 @@
 using System.Diagnostics;
 
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.JwtBearer;
 
@@ -46,7 +47,8 @@ public enum Rfc7523AssertionValidationFailureReason
     /// <summary>
     /// The temporal claims are internally inconsistent — <c>exp</c> at or before <c>iat</c> or
     /// <c>nbf</c> (the validity window never opens, independent of the current clock), or an
-    /// <c>exp</c>/<c>iat</c>/<c>nbf</c> claim that is present but not a numeric timestamp.
+    /// <c>exp</c>, <c>iat</c> or <c>nbf</c> claim that is present and is not a number, or is a NumericDate this
+    /// server cannot represent.
     /// </summary>
     InconsistentTemporalClaims
 }
@@ -146,7 +148,7 @@ internal enum Rfc7523TemporalOutcome
     /// <summary>The assertion is not yet valid.</summary>
     NotYetValid,
 
-    /// <summary>The temporal claims are internally inconsistent or not numeric timestamps.</summary>
+    /// <summary>The temporal claims are internally inconsistent, not numbers, or NumericDates this server cannot represent.</summary>
     InconsistentTemporalClaims
 }
 
@@ -291,44 +293,51 @@ public static class Rfc7523AssertionValidation
         issuedAt = null;
         failureDescription = null;
 
-        EpochReadResult expRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset exp);
-        if(expRead != EpochReadResult.Value)
+        NumericDateReadResult expRead = ReadNumericDate(payload, WellKnownJwtClaimNames.Exp, out bool isExpNumber, out DateTimeOffset exp);
+        if(expRead != NumericDateReadResult.Value)
         {
-            failureDescription = expRead == EpochReadResult.Absent
-                ? "The assertion is missing the exp claim."
-                : "The assertion exp claim is not a numeric timestamp.";
+            failureDescription = (expRead, isExpNumber) switch
+            {
+                (NumericDateReadResult.Absent, _) => "The assertion is missing the exp claim.",
+                (_, true) => "The assertion exp claim is a NumericDate this server cannot represent.",
+                _ => "The assertion exp claim is not a numeric timestamp."
+            };
 
-            return expRead == EpochReadResult.Absent
+            return expRead == NumericDateReadResult.Absent
                 ? Rfc7523TemporalOutcome.MissingExpiration
                 : Rfc7523TemporalOutcome.InconsistentTemporalClaims;
         }
 
-        EpochReadResult iatRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat);
-        if(iatRead == EpochReadResult.Malformed)
+        NumericDateReadResult iatRead = ReadNumericDate(payload, WellKnownJwtClaimNames.Iat, out bool isIatNumber, out DateTimeOffset iat);
+        if(iatRead == NumericDateReadResult.Malformed)
         {
-            failureDescription = "The assertion iat claim is not a numeric timestamp.";
+            failureDescription = isIatNumber
+                ? "The assertion iat claim is a NumericDate this server cannot represent."
+                : "The assertion iat claim is not a numeric timestamp.";
 
             return Rfc7523TemporalOutcome.InconsistentTemporalClaims;
         }
 
         //Structural temporal consistency, independent of the clock: an exp at or before iat has no
         //positive lifetime and is nonsensical regardless of when it is checked.
-        if(iatRead == EpochReadResult.Value && exp <= iat)
+        if(iatRead == NumericDateReadResult.Value && exp <= iat)
         {
             failureDescription = "The assertion exp is at or before iat (non-positive lifetime).";
 
             return Rfc7523TemporalOutcome.InconsistentTemporalClaims;
         }
 
-        EpochReadResult nbfRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out DateTimeOffset nbf);
-        if(nbfRead == EpochReadResult.Malformed)
+        NumericDateReadResult nbfRead = ReadNumericDate(payload, WellKnownJwtClaimNames.Nbf, out bool isNbfNumber, out DateTimeOffset nbf);
+        if(nbfRead == NumericDateReadResult.Malformed)
         {
-            failureDescription = "The assertion nbf claim is not a numeric timestamp.";
+            failureDescription = isNbfNumber
+                ? "The assertion nbf claim is a NumericDate this server cannot represent."
+                : "The assertion nbf claim is not a numeric timestamp.";
 
             return Rfc7523TemporalOutcome.InconsistentTemporalClaims;
         }
 
-        if(nbfRead == EpochReadResult.Value)
+        if(nbfRead == NumericDateReadResult.Value)
         {
             if(exp <= nbf)
             {
@@ -337,7 +346,10 @@ public static class Rfc7523AssertionValidation
                 return Rfc7523TemporalOutcome.InconsistentTemporalClaims;
             }
 
-            if(nbf > now + clockSkew)
+            //The instants are compared through their difference, which every two instants a DateTimeOffset
+            //holds can form, so a not-before at either edge of the representable range is compared rather than
+            //added to.
+            if(nbf - now > clockSkew)
             {
                 failureDescription = "The assertion nbf is in the future beyond the skew tolerance.";
 
@@ -345,7 +357,9 @@ public static class Rfc7523AssertionValidation
             }
         }
 
-        if(exp + clockSkew <= now)
+        //The expiry plus the skew can pass the last instant a DateTimeOffset holds, so the expiry is compared with
+        //the clock through their difference: an expiry within the skew of the largest instant is not expired.
+        if(now - exp >= clockSkew)
         {
             failureDescription = "The assertion has expired.";
 
@@ -353,7 +367,7 @@ public static class Rfc7523AssertionValidation
         }
 
         expiration = exp;
-        issuedAt = iatRead == EpochReadResult.Value ? iat : null;
+        issuedAt = iatRead == NumericDateReadResult.Value ? iat : null;
 
         return Rfc7523TemporalOutcome.Valid;
     }
@@ -395,37 +409,59 @@ public static class Rfc7523AssertionValidation
         items.Count == 1 && items[0] is string s && !string.IsNullOrEmpty(s) ? s : null;
 
 
-    private enum EpochReadResult
-    {
-        Absent,
-        Value,
-        Malformed
-    }
-
-
-    private static EpochReadResult TryReadEpochSeconds(JwtPayload payload, string claimName, out DateTimeOffset value)
+    /// <summary>
+    /// Reads a time claim, an <c>exp</c>, <c>nbf</c> or <c>iat</c>, as the NumericDate
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see> defines, "A JSON
+    /// numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified UTC
+    /// date/time, ignoring leap seconds", where "non-integer values can be represented". This is the one reader
+    /// of a time claim the RFC 7523 Section 3 claim rules here, <see cref="Server.PrivateKeyJwtClientAuthentication"/>
+    /// and <see cref="Federation.FederationClientAuthentication"/> share.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section 4.1.4</see>, of the
+    /// <c>exp</c>, <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">Section 4.1.5</see>, of the
+    /// <c>nbf</c>, and <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">Section 4.1.6</see>, of
+    /// the <c>iat</c>, each read "Its value MUST be a number containing a NumericDate value.", so a JSON string is
+    /// no time claim, digits included, and is malformed. A number of any CLR numeric shape a decoder hands
+    /// (<see cref="long"/>, <see cref="int"/>, <see cref="short"/>, <see cref="byte"/>, <see cref="ulong"/>,
+    /// <see cref="uint"/>, <see cref="double"/>, <see cref="float"/>, <see cref="decimal"/>) is read through
+    /// <see cref="JwtTemporalChecks.TryFromUnixSeconds(decimal, out DateTimeOffset)"/> or its
+    /// <see cref="double"/> overload, which keep the fraction to the tick and answer a value no
+    /// <see cref="DateTimeOffset"/> can hold, or one that is not finite, as not representable rather than
+    /// throwing. Such a number is a NumericDate this server cannot represent, and it is malformed as well:
+    /// refusing it is this library's fail-closed reading, since no instant the checks compare can hold it.
+    /// </summary>
+    /// <param name="payload">The decoded JWT payload.</param>
+    /// <param name="claimName">The name of the time claim: <c>exp</c>, <c>nbf</c> or <c>iat</c>.</param>
+    /// <param name="isNumber">
+    /// Whether a present claim is a number, so a caller can tell a NumericDate this server cannot represent
+    /// from a value that is no number; <see langword="false"/> for an absent claim.
+    /// </param>
+    /// <param name="value">The instant the claim names when the read answers <see cref="NumericDateReadResult.Value"/>.</param>
+    /// <returns>Whether the claim is absent, names an instant, or is malformed.</returns>
+    internal static NumericDateReadResult ReadNumericDate(
+        JwtPayload payload, string claimName, out bool isNumber, out DateTimeOffset value)
     {
         value = default;
+        isNumber = false;
         if(!payload.TryGetValue(claimName, out object? raw))
         {
-            return EpochReadResult.Absent;
+            return NumericDateReadResult.Absent;
         }
 
-        long? seconds = raw switch
+        bool isRepresentable;
+        (isNumber, isRepresentable) = raw switch
         {
-            long l => l,
-            int i => i,
-            double d => (long)d,
-            decimal dec => (long)dec,
-            _ => null
+            long l => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)l, out value)),
+            int i => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)i, out value)),
+            short s => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)s, out value)),
+            byte b => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)b, out value)),
+            ulong u => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)u, out value)),
+            uint ui => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)ui, out value)),
+            double d => (true, JwtTemporalChecks.TryFromUnixSeconds(d, out value)),
+            float f => (true, JwtTemporalChecks.TryFromUnixSeconds((double)f, out value)),
+            decimal dec => (true, JwtTemporalChecks.TryFromUnixSeconds(dec, out value)),
+            _ => (false, false)
         };
-        if(seconds is null)
-        {
-            return EpochReadResult.Malformed;
-        }
 
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds.Value);
-
-        return EpochReadResult.Value;
+        return isRepresentable ? NumericDateReadResult.Value : NumericDateReadResult.Malformed;
     }
 }
