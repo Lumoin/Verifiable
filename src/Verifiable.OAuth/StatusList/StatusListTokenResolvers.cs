@@ -16,11 +16,10 @@ namespace Verifiable.OAuth.StatusList;
 /// <remarks>
 /// <para>
 /// Mirrors the composition idiom of <see cref="Verifiable.Core.Did.Methods.Web.WebDidResolver.BuildResolving"/>:
-/// the returned delegate closes over the injected transport, context, and codecs, and every caller-visible
-/// failure surfaces as a typed <see cref="StatusListResolutionException"/> — never a raw fetch or
-/// verification fault — so <see cref="Oid4Vp.Server.VpTokenCredentialStatus.CheckAsync"/> answers
-/// <c>StatusUndeterminable</c> rather than faulting the request. <see cref="OperationCanceledException"/>
-/// is the only exception besides that one that propagates.
+/// the returned delegate closes over the injected transport, context, and codecs. Fetch failures return
+/// <see cref="StatusListTokenResolutionFailure"/> with their evidence. Token validation failures retain
+/// the <see cref="StatusListResolutionException"/> contract. Transport cancellation propagates only
+/// when the caller's token is cancelled; the guarded fetch classifies a transport's own timeout.
 /// </para>
 /// <para>
 /// The fetch always requests <see cref="StatusListTokenFormat.Jwt"/>: "When the status claim is
@@ -80,6 +79,7 @@ public static class StatusListTokenResolvers
         return async (resolutionContext, cancellationToken) =>
         {
             ArgumentNullException.ThrowIfNull(resolutionContext);
+            cancellationToken.ThrowIfCancellationRequested();
 
             string uri = resolutionContext.Reference.Uri;
 
@@ -99,10 +99,27 @@ public static class StatusListTokenResolvers
 
             if(!fetch.IsFetched)
             {
-                throw new StatusListResolutionException(
-                    uri,
-                    $"The Status List Token fetch for '{uri}' ended with {fetch.Outcome}" +
-                    (fetch.DenyReason is not null ? $": {fetch.DenyReason}" : "."));
+                return new StatusListTokenResolutionFailure
+                {
+                    Kind = fetch.Outcome switch
+                    {
+                        StatusListTokenFetchOutcome.TransportFailed => StatusListTokenResolutionFailureKind.Unreachable,
+                        StatusListTokenFetchOutcome.TooLarge => StatusListTokenResolutionFailureKind.TooLarge,
+                        StatusListTokenFetchOutcome.PolicyDenied => StatusListTokenResolutionFailureKind.PolicyDenied,
+                        StatusListTokenFetchOutcome.RedirectNotFollowed => StatusListTokenResolutionFailureKind.RedirectNotFollowed,
+                        StatusListTokenFetchOutcome.UnsuccessfulStatus => StatusListTokenResolutionFailureKind.UnsuccessfulStatus,
+                        StatusListTokenFetchOutcome.ContentTypeMismatch => StatusListTokenResolutionFailureKind.ContentTypeMismatch,
+                        _ => throw new InvalidOperationException("A fetched Status List Token cannot be a fetch failure.")
+                    },
+                    RequestedUri = statusListUri,
+                    FinalUri = fetch.FinalUri,
+                    RedirectCount = fetch.RedirectCount,
+                    FailureKind = fetch.FailureKind,
+                    TooLarge = fetch.TooLarge,
+                    StatusCode = fetch.StatusCode,
+                    ContentType = fetch.ContentType,
+                    DenyReason = fetch.DenyReason
+                };
             }
 
             if(fetch.Body.Length == 0)

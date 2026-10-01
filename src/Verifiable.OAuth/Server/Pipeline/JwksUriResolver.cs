@@ -47,6 +47,7 @@ public static class JwksUriResolver
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         OutboundRequest request = new()
         {
@@ -55,23 +56,15 @@ public static class JwksUriResolver
             MaxResponseBytes = options.MaximumDocumentBytes
         };
 
-        OutboundFetchResult fetch;
-        try
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            WrappedCancellation.ThrowIfCarried(exception);
             return new JwksUriResolution
             {
                 Outcome = JwksUriResolutionOutcome.Unreachable,
-                FailureKind = exception.GetType(),
+                FailureKind = failureKind,
                 Defect = "Transport failure while fetching the JWK Set."
             };
         }

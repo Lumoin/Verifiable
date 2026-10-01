@@ -279,6 +279,8 @@ public static class WebVhDidResolver
 
         return async (did, options, context, cancellationToken) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             //One committed resolution timestamp is read once and used for every not-in-the-future versionTime
             //check (and proof-expiry check) across this resolve, so entries are judged against a single instant
             //rather than a clock that advances mid-replay (did:webvh v1.0, Read: a stable resolution clock).
@@ -577,7 +579,7 @@ public static class WebVhDidResolver
     /// </summary>
     private enum WebVhFetchFailureCause
     {
-        /// <summary>The application transport threw (cancellation excepted).</summary>
+        /// <summary>The application transport failed, including its own timeout.</summary>
         TransportFailed,
 
         /// <summary>The outbound-fetch policy refused the target, or a redirect hop, before any terminal response.</summary>
@@ -678,10 +680,8 @@ public static class WebVhDidResolver
 
     /// <summary>
     /// Drives one guarded fetch, distinguishing a size refusal, a transport failure, a policy refusal,
-    /// and a terminal response whose status was not 200. Size and transport failures retain their evidence. Cancellation
-    /// is always propagated, never turned into a failure cause, and so is one the transport carries inside an
-    /// exception of its own (<see cref="WrappedCancellation"/>), so the caller can tell its own cancellation from a
-    /// fetch that ended on its own budget.
+    /// and a terminal response whose status was not 200. Size and transport failures retain their evidence.
+    /// The guarded fetch propagates caller cancellation and classifies the transport's own timeout.
     /// </summary>
     /// <param name="target">The URL to fetch.</param>
     /// <param name="maxResponseBytes">The response size this fetch is bounded to.</param>
@@ -698,23 +698,13 @@ public static class WebVhDidResolver
     {
         OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = maxResponseBytes };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            //Keep the transport failure kind without publishing its message. Carried cancellation propagates.
-            WrappedCancellation.ThrowIfCarried(exception);
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
 
+        if(fetch.FailureKind is Type failureKind)
+        {
             return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.TransportFailed, StatusCode: 0)
             {
-                Failure = new DidRetrievalUnreachable(exception.GetType())
+                Failure = new DidRetrievalUnreachable(failureKind)
             };
         }
 

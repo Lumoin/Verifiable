@@ -229,6 +229,8 @@ public static class WebPlusDidResolver
 
         return async (did, options, context, cancellationToken) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             string logUrl;
             try
             {
@@ -450,9 +452,8 @@ public static class WebPlusDidResolver
 
     /// <summary>
     /// Drives one guarded fetch for the microledger, returning the response only on a successful 200, or
-    /// typed problem details on a refusal, transport failure, or non-200 status. Cancellation is always propagated, bare or
-    /// carried inside the transport's own exception (<see cref="WrappedCancellation"/>), so the caller can tell its own
-    /// cancellation from a fetch that ended on its own budget.
+    /// typed problem details on a refusal, transport failure, or non-200 status. The guarded fetch propagates
+    /// caller cancellation and returns the transport's own timeout with the other transport failure kinds.
     /// </summary>
     /// <param name="target">The microledger URL to fetch.</param>
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
@@ -467,23 +468,11 @@ public static class WebPlusDidResolver
     {
         OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = OutboundFetchPolicy.DefaultMaxResponseBytes };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            //A transport/network failure is a not-found from this helper's perspective, cancellation
-            //excepted above. A cancellation the transport carries inside its own exception propagates as that
-            //cancellation, as a bare one does.
-            WrappedCancellation.ThrowIfCarried(exception);
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
 
-            return (null, DidResolutionErrors.NotFound with { RetrievalFailure = new DidRetrievalUnreachable(exception.GetType()) });
+        if(fetch.FailureKind is Type failureKind)
+        {
+            return (null, DidResolutionErrors.NotFound with { RetrievalFailure = new DidRetrievalUnreachable(failureKind) });
         }
 
         if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)

@@ -55,6 +55,7 @@ public static class JwtVcIssuerMetadataDocuments
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         //§4: "The iss MUST be a case-sensitive URL using the HTTPS scheme that contains scheme, host
         //and, optionally, port number and path components as defined in [RFC3986], but no query or
@@ -79,23 +80,15 @@ public static class JwtVcIssuerMetadataDocuments
             MaxResponseBytes = options.MaximumDocumentBytes
         };
 
-        OutboundFetchResult fetch;
-        try
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            WrappedCancellation.ThrowIfCarried(exception);
             return new JwtVcIssuerMetadataResolution
             {
                 Outcome = JwtVcIssuerMetadataResolutionOutcome.Unreachable,
-                FailureKind = exception.GetType(),
+                FailureKind = failureKind,
                 Defect = "Transport failure while fetching the JWT VC Issuer Metadata."
             };
         }
@@ -264,6 +257,7 @@ public static class JwtVcIssuerMetadataDocuments
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(!resolution.IsResolved)
         {

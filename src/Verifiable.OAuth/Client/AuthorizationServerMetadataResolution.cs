@@ -50,8 +50,9 @@ public sealed class AuthorizationServerMetadataIssuerMismatch: AuthorizationServ
 public sealed class AuthorizationServerMetadataUnreachable: AuthorizationServerMetadataResolution
 {
     /// <summary>
-    /// The transport exception's concrete type. The application-supplied transport's failure
-    /// taxonomy is preserved without copying exception messages or retaining exceptions.
+    /// The guarded fetch's transport failure kind. Own-budget cancellation is classified as
+    /// <see cref="TimeoutException"/>; other exception types retain the transport's taxonomy.
+    /// No exception messages or instances are retained.
     /// </summary>
     public required Type FailureKind { get; init; }
 }

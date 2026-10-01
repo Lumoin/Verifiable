@@ -18,7 +18,10 @@ public enum OutboundFetchOutcome
     TooManyRedirects,
 
     /// <summary>The response reader stopped because a declared or observed length exceeded the byte limit.</summary>
-    TooLarge
+    TooLarge,
+
+    /// <summary>The transport failed, including a timeout while the caller's token was live.</summary>
+    Unreachable
 }
 
 
@@ -26,8 +29,9 @@ public enum OutboundFetchOutcome
 /// The outcome of a guarded <see cref="OutboundFetch"/>. Fail-closed by return,
 /// not by exception: a denied or over-long fetch yields a non-<see cref="OutboundFetchOutcome.Fetched"/>
 /// outcome with a diagnostic <see cref="DenyReason"/>, never a thrown policy
-/// error. A size refusal carries <see cref="TooLarge"/> instead of a partial response. Carries provenance (requested vs final URL, hop count) suitable for an
-/// audit/trust log.
+/// error. A size refusal carries <see cref="TooLarge"/> instead of a partial response; a transport
+/// failure carries <see cref="FailureKind"/>. Carries provenance (requested vs final URL, hop count)
+/// suitable for an audit/trust log.
 /// </summary>
 public sealed record OutboundFetchResult
 {
@@ -43,7 +47,14 @@ public sealed record OutboundFetchResult
     /// <summary>The size refusal evidence when the outcome is <see cref="OutboundFetchOutcome.TooLarge"/>.</summary>
     public OutboundResponseTooLarge? TooLarge { get; init; }
 
-    /// <summary>A diagnostic reason for a non-fetched outcome. Do not surface verbatim to untrusted callers.</summary>
+    /// <summary>
+    /// The transport failure's concrete type when the outcome is Unreachable. A bare or wrapped
+    /// cancellation while the caller's token is live is classified as <see cref="TimeoutException"/>.
+    /// No exception instance or message is retained.
+    /// </summary>
+    public Type? FailureKind { get; init; }
+
+    /// <summary>A diagnostic reason for a policy or redirect refusal. Do not surface verbatim to untrusted callers.</summary>
     public string? DenyReason { get; init; }
 
     /// <summary>

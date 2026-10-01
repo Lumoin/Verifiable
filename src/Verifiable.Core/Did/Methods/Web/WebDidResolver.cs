@@ -126,10 +126,9 @@ public static class WebDidResolver
     /// The fetch and the parse are boundaries over dependencies that throw. A transport failure is a
     /// <see cref="DidResolutionErrors.NotFound"/>; <paramref name="documentDeserializer"/> is a caller-supplied
     /// delegate over untrusted fetched bytes, so any exception it raises is a document that could not be read,
-    /// refused with <see cref="InvalidDidDocumentReason.Malformed"/>. A cancellation propagates from both, and so does
-    /// one the transport carries inside an exception of its own
-    /// (<see cref="WrappedCancellation"/>), so the caller can
-    /// tell its own cancellation from a fetch that ended on its own budget.
+    /// refused with <see cref="InvalidDidDocumentReason.Malformed"/>. The guarded fetch propagates caller
+    /// cancellation and reports the transport's own timeout as <see cref="DidRetrievalUnreachable"/>.
+    /// Cancellation from the document parser retains its existing exception contract.
     /// </para>
     /// <para>
     /// The fetch is bounded by <see cref="OutboundFetchPolicy.DefaultMaxResponseBytes"/>: the request carries it as
@@ -162,6 +161,8 @@ public static class WebDidResolver
 
         return async (did, options, context, cancellationToken) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             string documentUrl;
             try
             {
@@ -179,26 +180,13 @@ public static class WebDidResolver
 
             OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = OutboundFetchPolicy.DefaultMaxResponseBytes };
 
-            OutboundFetchResult fetch;
-            try
-            {
-                //Fully qualified: within Verifiable.Core.* the bare name binds to the OutboundFetch
-                //namespace, not the static class of the same leaf name.
-                fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-            }
-            catch(OperationCanceledException)
-            {
-                throw;
-            }
-            catch(Exception exception)
-            {
-                //A transport/network failure is a not-found from the resolver's perspective. A cancellation the
-                //transport carries inside its own exception propagates as that cancellation, as a bare one does.
-                WrappedCancellation.ThrowIfCarried(exception);
+            OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
 
+            if(fetch.FailureKind is Type failureKind)
+            {
                 return DidResolutionResult.Failure(DidResolutionErrors.NotFound with
                 {
-                    RetrievalFailure = new DidRetrievalUnreachable(exception.GetType())
+                    RetrievalFailure = new DidRetrievalUnreachable(failureKind)
                 });
             }
 

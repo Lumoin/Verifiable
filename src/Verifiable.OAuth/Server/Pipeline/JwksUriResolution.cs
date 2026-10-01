@@ -70,7 +70,7 @@ public sealed record JwksUriResolution
     /// <summary>The guarded fetch's size evidence when the outcome is TooLarge.</summary>
     public OutboundResponseTooLarge? TooLarge { get; init; }
 
-    /// <summary>The concrete transport exception type when the outcome is Unreachable.</summary>
+    /// <summary>The guarded fetch's transport kind; own-budget cancellation is classified as TimeoutException.</summary>
     public Type? FailureKind { get; init; }
 
     /// <summary>
@@ -109,7 +109,7 @@ public sealed record JwksUriResolution
 /// <remarks>
 /// <see cref="JwksUriResolver.ResolveAsync"/> is the library's one attempt: it performs the guarded
 /// fetch and the RFC 7517 §5 validation and reports a <see cref="JwksUriResolution"/> together with
-/// the <see cref="JwksUriResolution.Freshness"/> its headers imply; only cancellation propagates as an
+/// the <see cref="JwksUriResolution.Freshness"/> its headers imply; only caller cancellation propagates as an
 /// exception. It caches nothing and retains no state between calls — THIS delegate's implementation
 /// is the caching layer. It owns the store, honours
 /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>'s freshness

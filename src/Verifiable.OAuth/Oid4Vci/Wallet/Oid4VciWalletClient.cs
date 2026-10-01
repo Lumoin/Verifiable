@@ -197,6 +197,7 @@ public sealed class Oid4VciWalletClient
     {
         ArgumentNullException.ThrowIfNull(credentialOfferUri);
         ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(Configuration.FetchCredentialOffer is null)
         {
@@ -218,25 +219,17 @@ public sealed class Oid4VciWalletClient
             MaxResponseBytes = Configuration.MaximumCredentialOfferBytes
         };
 
-        OutboundFetchResult fetch;
-        try
+        OutboundFetchResult fetch = await OutboundFetch.FetchAsync(
+            request, context, Configuration.FetchCredentialOffer, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
-            fetch = await OutboundFetch.FetchAsync(
-                request, context, Configuration.FetchCredentialOffer, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            WrappedCancellation.ThrowIfCarried(exception);
             return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(new Oid4VciRequestFailure
             {
                 Kind = Oid4VciRequestFailureKind.Unreachable,
                 Endpoint = credentialOfferUri,
                 StatusCode = null,
-                FailureKind = exception.GetType()
+                FailureKind = failureKind
             });
         }
 

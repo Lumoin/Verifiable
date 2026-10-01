@@ -55,7 +55,7 @@ public sealed record StatusListTokenFetchResult
     /// <summary>The guarded fetch's size evidence when the outcome is TooLarge.</summary>
     public OutboundResponseTooLarge? TooLarge { get; init; }
 
-    /// <summary>The concrete exception type when the transport failed.</summary>
+    /// <summary>The guarded fetch's transport kind; own-budget cancellation is classified as TimeoutException.</summary>
     public Type? FailureKind { get; init; }
 
     /// <summary>
@@ -146,6 +146,7 @@ public static class StatusListTokenFetch
         ArgumentNullException.ThrowIfNull(statusListUri);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxResponseBytes);
 
         string mediaType = MediaTypeFor(format);
@@ -153,38 +154,19 @@ public static class StatusListTokenFetch
         OutboundRequest request = new()
         {
             Target = statusListUri,
-            Method = "GET",
+            Method = WellKnownHttpMethods.Get,
             Headers = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.Accept, mediaType)),
             MaxResponseBytes = maxResponseBytes
         };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            //Fully qualified: within Verifiable.* the bare name binds to the OutboundFetch
-            //namespace, not the static class of the same leaf name.
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            return new StatusListTokenFetchResult
-            {
-                Outcome = StatusListTokenFetchOutcome.TransportFailed,
-                FailureKind = exception.GetType(),
-                DenyReason = "Transport failure while fetching the Status List Token.",
-                FinalUri = statusListUri
-            };
-        }
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
 
         if(!fetch.IsFetched || fetch.Response is null)
         {
             StatusListTokenFetchOutcome outcome = fetch.Outcome switch
             {
+                OutboundFetchOutcome.Unreachable => StatusListTokenFetchOutcome.TransportFailed,
                 OutboundFetchOutcome.TooLarge => StatusListTokenFetchOutcome.TooLarge,
                 OutboundFetchOutcome.DeniedByPolicy => StatusListTokenFetchOutcome.PolicyDenied,
                 OutboundFetchOutcome.RedirectNotFollowed or OutboundFetchOutcome.TooManyRedirects
@@ -202,6 +184,7 @@ public static class StatusListTokenFetch
             {
                 Outcome = outcome,
                 TooLarge = fetch.TooLarge,
+                FailureKind = fetch.FailureKind,
                 DenyReason = fetch.DenyReason,
                 FinalUri = fetch.FinalUri,
                 RedirectCount = fetch.RedirectCount

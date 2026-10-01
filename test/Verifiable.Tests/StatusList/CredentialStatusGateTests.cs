@@ -1,3 +1,4 @@
+using Verifiable.Core;
 using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestDataProviders;
@@ -32,8 +33,12 @@ internal sealed class CredentialStatusGateTests
         using var list = StatusListType.Create(64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ListUri, Now, list);
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), StatusListFixtures.ResolverFor(token, Now), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.IsTrue(outcome.IsValid);
         Assert.AreEqual(StatusTypes.Valid, outcome.Status);
@@ -47,8 +52,12 @@ internal sealed class CredentialStatusGateTests
         list[CredentialIndex] = StatusTypes.Invalid;
         var token = new StatusListToken(ListUri, Now, list);
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), StatusListFixtures.ResolverFor(token, Now), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.IsFalse(outcome.IsValid);
         Assert.AreEqual(StatusTypes.Invalid, outcome.Status);
@@ -62,8 +71,12 @@ internal sealed class CredentialStatusGateTests
         list[CredentialIndex] = StatusTypes.Suspended;
         var token = new StatusListToken(ListUri, Now, list);
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), StatusListFixtures.ResolverFor(token, Now), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.IsFalse(outcome.IsValid);
         Assert.AreEqual(StatusTypes.Suspended, outcome.Status);
@@ -111,8 +124,12 @@ internal sealed class CredentialStatusGateTests
         DateTimeOffset cachedAt = Now;
         DateTimeOffset checkedAt = Now.AddMinutes(5);
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), StatusListFixtures.ResolverFor(token, cachedAt), checkedAt, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.IsTrue(outcome.IsValid, "ttl breach alone must not invalidate a still-unexpired credential status.");
         Assert.AreEqual(StatusTypes.Valid, outcome.Status);
@@ -134,8 +151,12 @@ internal sealed class CredentialStatusGateTests
             TimeToLive = 1
         };
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), StatusListFixtures.ResolverFor(token, Now), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.IsTrue(outcome.IsValid);
         Assert.IsFalse(outcome.ShouldRefresh, "A resolution reporting the current instant must not be reported stale.");
@@ -153,7 +174,7 @@ internal sealed class CredentialStatusGateTests
     [TestMethod]
     public async Task AResolverSignalingResolutionFailureSurfacesAsStatusListValidationException()
     {
-        static ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken ct = default) =>
+        static ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken ct = default) =>
             throw new StatusListResolutionException(context.Reference.Uri, "The status list host refused the connection.");
 
         StatusListValidationException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
@@ -177,7 +198,7 @@ internal sealed class CredentialStatusGateTests
     [TestMethod]
     public async Task AResolverReturningNullSurfacesAsStatusListResolutionException()
     {
-        static ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken ct = default) => ValueTask.FromResult<ResolvedStatusListToken?>(null);
+        static ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken ct = default) => ValueTask.FromResult<StatusListTokenResolution?>(null);
 
         StatusListResolutionException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
             async () => await CredentialStatusGate.CheckAsync(
@@ -239,13 +260,21 @@ internal sealed class CredentialStatusGateTests
         DateTimeOffset checkedAt = Now.AddSeconds(30);
         StatusListResolutionContext resolutionContext = StatusListFixtures.ContextFor(CredentialIndex, ListUri);
 
-        CredentialStatusOutcome unbounded = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> unboundedResult = await CredentialStatusGate.CheckAsync(
             resolutionContext, StatusListFixtures.ResolverFor(token, Now), checkedAt,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        CredentialStatusOutcome bounded = await CredentialStatusGate.CheckAsync(
+        Assert.IsTrue(unboundedResult.IsSuccess);
+        Assert.IsNotNull(unboundedResult.Value);
+        CredentialStatusOutcome unbounded = unboundedResult.Value;
+
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> boundedResult = await CredentialStatusGate.CheckAsync(
             resolutionContext, StatusListFixtures.ResolverFor(token, Now), checkedAt, null, cachingBounds,
             TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(boundedResult.IsSuccess);
+        Assert.IsNotNull(boundedResult.Value);
+        CredentialStatusOutcome bounded = boundedResult.Value;
 
         Assert.IsTrue(unbounded.ShouldRefresh,
             "Without configured bounds the published ten-second ttl is already breached thirty seconds after resolution.");
@@ -273,12 +302,12 @@ internal sealed class CredentialStatusGateTests
         int invocations = 0;
         string? requestedUri = null;
 
-        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             invocations++;
             requestedUri = context.Reference.Uri;
 
-            return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+            return ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
             {
                 Token = token,
                 ResolvedAt = Now,
@@ -286,9 +315,13 @@ internal sealed class CredentialStatusGateTests
             });
         }
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), resolver, Now,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.AreEqual(1, invocations, "One status evaluation resolves the Status List Token once.");
         Assert.AreEqual(ListUri, requestedUri, "The resolver is asked for the uri the credential's status_list claim carries.");
@@ -310,16 +343,20 @@ internal sealed class CredentialStatusGateTests
         using var list = StatusListType.Create(64, StatusListBitSize.OneBit, metered.Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ListUri, Now, list);
 
-        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+        ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
             {
                 Token = token,
                 ResolvedAt = Now,
                 IsTokenOwned = true
             });
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), resolver, Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.IsTrue(outcome.IsValid);
         Assert.AreEqual(0L, metered.OutstandingCount, "An owned resolution's pooled Status List must be released once the gate has read it.");
@@ -339,18 +376,25 @@ internal sealed class CredentialStatusGateTests
         using var list = StatusListType.Create(64, StatusListBitSize.OneBit, metered.Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ListUri, Now, list);
 
-        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+        ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
             {
                 Token = token,
                 ResolvedAt = Now,
                 IsTokenOwned = false
             });
 
-        CredentialStatusOutcome first = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> firstResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), resolver, Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        CredentialStatusOutcome second = await CredentialStatusGate.CheckAsync(
+
+        Assert.IsTrue(firstResult.IsSuccess);
+        Assert.IsNotNull(firstResult.Value);
+        CredentialStatusOutcome first = firstResult.Value;
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> secondResult = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), resolver, Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(secondResult.IsSuccess);
+        Assert.IsNotNull(secondResult.Value);
+        CredentialStatusOutcome second = secondResult.Value;
 
         Assert.IsTrue(first.IsValid);
         Assert.IsTrue(second.IsValid, "A second check against the same cached, not-owned resolution must still read a live Status List.");
@@ -390,8 +434,12 @@ internal sealed class CredentialStatusGateTests
         (ResolveVerifiedStatusListTokenDelegate resolver, IReadOnlyList<StatusListResolutionContext> seen) =
             StatusListFixtures.RecordingResolverFor(StatusListFixtures.ResolverFor(token, Now));
 
-        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> outcomeResult = await CredentialStatusGate.CheckAsync(
             resolutionContext, resolver, Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcomeResult.IsSuccess);
+        Assert.IsNotNull(outcomeResult.Value);
+        CredentialStatusOutcome outcome = outcomeResult.Value;
 
         Assert.IsTrue(outcome.IsValid, "The resolution answered, so the status is read from it.");
         Assert.HasCount(1, seen, "One status evaluation hands the resolver one context.");

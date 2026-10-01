@@ -59,6 +59,7 @@ public static class AuthorizationServerMetadataDocuments
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(parseDocument);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         //RFC 8414 §2: "REQUIRED. The authorization server's issuer identifier, which is a URL that
         //uses the 'https' scheme and has no query or fragment components." A MUST-tier shape defect
@@ -78,20 +79,12 @@ public static class AuthorizationServerMetadataDocuments
             MaxResponseBytes = options.MaximumDocumentBytes
         };
 
-        OutboundFetchResult fetch;
-        try
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            WrappedCancellation.ThrowIfCarried(exception);
-            return new AuthorizationServerMetadataUnreachable { FailureKind = exception.GetType() };
+            return new AuthorizationServerMetadataUnreachable { FailureKind = failureKind };
         }
 
         if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)

@@ -100,7 +100,7 @@ internal sealed class StatusListTokenResolversTests
 
         clock.Advance(FetchDelay);
 
-        ResolvedStatusListToken? resolved = await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false);
+        ResolvedStatusListToken resolved = Assert.IsInstanceOfType<ResolvedStatusListToken>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
         Assert.IsNotNull(resolved, "A published, conforming Status List Token resolves.");
 
@@ -209,8 +209,8 @@ internal sealed class StatusListTokenResolversTests
         }
 
         ScriptedOutboundTransport transport = Serving(ListUrl, StatusListJwtMediaType, compactJws);
-        ResolvedStatusListToken? resolved = await ResolverOver(transport.Delegate, resolveIssuerKey, Clock())(
-            ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false);
+        ResolvedStatusListToken resolved = Assert.IsInstanceOfType<ResolvedStatusListToken>(await ResolverOver(transport.Delegate, resolveIssuerKey, Clock())(
+            ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
         Assert.IsNotNull(resolved, "The key resolver answered, so the token resolves.");
 
@@ -248,10 +248,10 @@ internal sealed class StatusListTokenResolversTests
         ScriptedOutboundTransport transport = Serving(refusedUrl, StatusListJwtMediaType, compactJws);
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(transport.Delegate, KeyOf(issuerPublic), Clock());
 
-        StatusListResolutionException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
-            async () => await resolve(ContextFor(refusedUrl), TestContext.CancellationToken).ConfigureAwait(false));
+        StatusListTokenResolutionFailure failure = Assert.IsInstanceOfType<StatusListTokenResolutionFailure>(await resolve(ContextFor(refusedUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
-        Assert.AreEqual(refusedUrl, caught.Uri, "The resolution failure names the uri no verified token could be obtained for.");
+        Assert.AreEqual(StatusListTokenResolutionFailureKind.PolicyDenied, failure.Kind);
+        Assert.AreEqual(refusedUrl, failure.RequestedUri.OriginalString, "The resolution failure names the uri no verified token could be obtained for.");
         Assert.IsEmpty(transport.Calls, "A refused target MUST NOT be contacted.");
     }
 
@@ -272,10 +272,11 @@ internal sealed class StatusListTokenResolversTests
         ScriptedOutboundTransport transport = new(new() { [ListUrl] = ScriptedOutboundResponse.WithStatus(404) });
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(transport.Delegate, KeyOf(issuerPublic), Clock());
 
-        StatusListResolutionException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
-            async () => await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
+        StatusListTokenResolutionFailure failure = Assert.IsInstanceOfType<StatusListTokenResolutionFailure>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
-        Assert.AreEqual(ListUrl, caught.Uri, "The resolution failure names the uri that answered outside the 2xx range.");
+        Assert.AreEqual(StatusListTokenResolutionFailureKind.UnsuccessfulStatus, failure.Kind);
+        Assert.AreEqual(404, failure.StatusCode);
+        Assert.AreEqual(ListUrl, failure.RequestedUri.OriginalString, "The resolution failure names the uri that answered outside the 2xx range.");
     }
 
 
@@ -304,10 +305,12 @@ internal sealed class StatusListTokenResolversTests
         ScriptedOutboundTransport transport = Serving(ListUrl, StatusListCwtMediaType, compactJws);
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(transport.Delegate, KeyOf(issuerPublic), Clock());
 
-        StatusListResolutionException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
-            async () => await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
+        StatusListTokenResolutionFailure failure = Assert.IsInstanceOfType<StatusListTokenResolutionFailure>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
-        Assert.AreEqual(ListUrl, caught.Uri, "The resolution failure names the uri that answered in the other format.");
+        Assert.AreEqual(StatusListTokenResolutionFailureKind.ContentTypeMismatch, failure.Kind);
+        Assert.AreEqual(StatusListCwtMediaType, failure.ContentType);
+        Assert.AreEqual(200, failure.StatusCode);
+        Assert.AreEqual(ListUrl, failure.RequestedUri.OriginalString, "The resolution failure names the uri that answered in the other format.");
     }
 
 
@@ -326,15 +329,16 @@ internal sealed class StatusListTokenResolversTests
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
 
-        //Raises the transport failure the existing resolver reports as a resolution exception.
+        //Raises the transport failure the resolution returns with its failure kind.
         static ValueTask<OutboundTransportResult> failing(OutboundRequest request, Verifiable.Core.ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The Status Provider refused the connection.");
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(failing, KeyOf(issuerPublic), Clock());
 
-        StatusListResolutionException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
-            async () => await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
+        StatusListTokenResolutionFailure failure = Assert.IsInstanceOfType<StatusListTokenResolutionFailure>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
-        Assert.AreEqual(ListUrl, caught.Uri, "The resolution failure names the uri that could not be reached.");
+        Assert.AreEqual(StatusListTokenResolutionFailureKind.Unreachable, failure.Kind);
+        Assert.AreEqual(typeof(InvalidOperationException), failure.FailureKind);
+        Assert.AreEqual(ListUrl, failure.RequestedUri.OriginalString, "The resolution failure names the uri that could not be reached.");
     }
 
 
@@ -518,8 +522,8 @@ internal sealed class StatusListTokenResolversTests
         ScriptedOutboundTransport transport = Serving(ListUrl, StatusListJwtMediaType, compactJws);
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(transport.Delegate, KeyOf(issuerPublic), Clock());
 
-        ResolvedStatusListToken? first = await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false);
-        ResolvedStatusListToken? second = await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false);
+        ResolvedStatusListToken first = Assert.IsInstanceOfType<ResolvedStatusListToken>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
+        ResolvedStatusListToken second = Assert.IsInstanceOfType<ResolvedStatusListToken>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
         Assert.IsNotNull(first, "The first resolution succeeded.");
         Assert.IsNotNull(second, "The second resolution succeeded.");
@@ -556,7 +560,7 @@ internal sealed class StatusListTokenResolversTests
         ScriptedOutboundTransport transport = Serving(ListUrl, StatusListJwtMediaType, compactJws);
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(transport.Delegate, KeyOf(issuerPublic), Clock());
 
-        using ResolvedStatusListToken? resolved = await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false);
+        using ResolvedStatusListToken resolved = Assert.IsInstanceOfType<ResolvedStatusListToken>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
         Assert.IsNotNull(resolved);
         Assert.IsTrue(resolved.IsTokenOwned, "A per-call fetch-and-verify resolution mints a Status List nothing else references, so it must be owned.");
@@ -587,8 +591,7 @@ internal sealed class StatusListTokenResolversTests
 
 
     /// <summary>
-    /// Records the existing exception-only resolution boundary. The guarded fetch now returns size
-    /// evidence, but this delegate still discards that evidence when it raises a resolution exception.
+    /// The resolution returns the guarded reader's size refusal, keeping the limit and observed length.
     /// </summary>
     [TestMethod]
     public async Task ABodyOverTheBoundIsAResolutionFailureNamingTheUri()
@@ -613,10 +616,11 @@ internal sealed class StatusListTokenResolversTests
             Clock(),
             maxResponseBytes: compactJws.Length - 1);
 
-        StatusListResolutionException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
-            async () => await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
+        StatusListTokenResolutionFailure failure = Assert.IsInstanceOfType<StatusListTokenResolutionFailure>(await resolve(ContextFor(ListUrl), TestContext.CancellationToken).ConfigureAwait(false));
 
-        Assert.AreEqual(ListUrl, caught.Uri, "The resolution failure names the uri whose answer exceeded the configured bound.");
+        Assert.AreEqual(StatusListTokenResolutionFailureKind.TooLarge, failure.Kind);
+        Assert.AreEqual(new OutboundResponseTooLarge(compactJws.Length - 1, compactJws.Length, OutboundResponseLengthKind.Observed), failure.TooLarge);
+        Assert.AreEqual(ListUrl, failure.RequestedUri.OriginalString, "The resolution failure names the uri whose answer exceeded the configured bound.");
     }
 
 
@@ -739,9 +743,9 @@ internal sealed class StatusListTokenResolversTests
             StatusListFixtures.RecordingKeyResolverFor(KeyOf(issuerPublic));
 
         ScriptedOutboundTransport transport = Serving(ListUrl, StatusListJwtMediaType, compactJws);
-        ResolvedStatusListToken? resolved = await ResolverOver(transport.Delegate, resolveIssuerKey, Clock())(
+        ResolvedStatusListToken resolved = Assert.IsInstanceOfType<ResolvedStatusListToken>(await ResolverOver(transport.Delegate, resolveIssuerKey, Clock())(
             StatusListFixtures.ContextFor(new StatusListReference(RevokedIndex, ListUrl), referencedTokenIssuer, referencedTokenIssuerKey),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            TestContext.CancellationToken).ConfigureAwait(false));
 
         Assert.IsNotNull(resolved, "The key resolver answered, so the token resolves.");
 

@@ -1215,14 +1215,7 @@ internal sealed class WebVhDidResolverResolvingTests
     }
 
 
-    /// <summary>
-    /// <see href="https://identity.foundation/didwebvh/v1.0/#read-resolve">did:webvh v1.0 Read</see>: "notFound — The DID
-    /// Log or the resource referenced by a DID URL was not found." A DID Log fetch that was cancelled has not found the log
-    /// absent. When the transport reports that cancellation inside an exception of its own, as the inner exception of its
-    /// own fault or among an aggregate's inner exceptions, the resolver lets it propagate as the cancellation it is instead
-    /// of answering notFound, both when the caller abandoned the resolution while the fetch ran and when the fetch ended on
-    /// its own budget while the caller still waits, so the caller tells the two apart by its own token.
-    /// </summary>
+    /// <summary>Caller cancellation propagates; a wrapped transport timeout retains its typed retrieval kind.</summary>
     /// <param name="cancellationShape">How the transport carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
     /// <param name="isCallerCancelled">Whether the caller abandons the resolution while the fetch runs.</param>
     [TestMethod]
@@ -1230,7 +1223,7 @@ internal sealed class WebVhDidResolverResolvingTests
     [DataRow("wrapped", true)]
     [DataRow("aggregated", false)]
     [DataRow("aggregated", true)]
-    public async Task DidLogFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
+    public async Task DidLogFetchCancellationCarriedInsideTheTransportFaultDistinguishesCallerCancellationFromTimeout(string cancellationShape, bool isCallerCancelled)
     {
         using WebVhController controller = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
@@ -1240,10 +1233,20 @@ internal sealed class WebVhDidResolverResolvingTests
         ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
-        await CarriedCancellationFixtures.AssertPropagatesAsTheCancellationAsync(
-            async () => await resolver(log.Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false),
-            isCallerCancelled,
-            caller.Token).ConfigureAwait(false);
+        if(isCallerCancelled)
+        {
+            OperationCanceledException caught = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+                async () => await resolver(log.Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false)).ConfigureAwait(false);
+            Assert.AreEqual(caller.Token, caught.CancellationToken);
+        }
+        else
+        {
+            DidResolutionResult result = await resolver(log.Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false);
+            Assert.IsFalse(result.IsSuccessful);
+            Assert.IsNotNull(result.ResolutionMetadata.Error);
+            DidRetrievalUnreachable failure = Assert.IsInstanceOfType<DidRetrievalUnreachable>(result.ResolutionMetadata.Error.RetrievalFailure);
+            Assert.AreEqual(typeof(TimeoutException), failure.FailureKind);
+        }
     }
 
 

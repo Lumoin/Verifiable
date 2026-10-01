@@ -1,3 +1,4 @@
+using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.StatusLists;
 using Verifiable.OAuth.Server;
@@ -93,7 +94,8 @@ internal static class VpTokenCredentialStatus
     /// the flow step ends.
     /// </para>
     /// <para>
-    /// Undeterminable (400 <see cref="VerifierFlowRefusalKind.StatusUndeterminable"/>): any
+    /// Undeterminable (400 <see cref="VerifierFlowRefusalKind.StatusUndeterminable"/>): a typed
+    /// <see cref="StatusListTokenResolutionFailure"/> or any
     /// <see cref="Core.StatusLists.StatusListValidationException"/> — a subject mismatch, an expired list, an
     /// out-of-range index, or its <see cref="Core.StatusLists.StatusListResolutionException"/> subtype (the
     /// resolver could not obtain the Status List Token at all, including a <see langword="null"/> return).
@@ -147,11 +149,21 @@ internal static class VpTokenCredentialStatus
 
         try
         {
-            CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+            Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> result = await CredentialStatusGate.CheckAsync(
                 resolutionContext, resolveVerifiedStatusListToken, now, freshnessPolicy, cachingBounds, cancellationToken)
                 .ConfigureAwait(false);
 
-            return CredentialStatusCheck.Determined(outcome);
+            if(!result.IsSuccess)
+            {
+                VerifierFlowRefusal refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.StatusUndeterminable);
+                string logReason =
+                    $"Credential status could not be determined for credential query '{credentialQueryId}': " +
+                    $"Status List Token resolution ended with {result.Error.Kind}.";
+
+                return CredentialStatusCheck.Undeterminable(refusal, logReason);
+            }
+
+            return CredentialStatusCheck.Determined(result.Value);
         }
         catch(StatusListValidationException exception)
         {

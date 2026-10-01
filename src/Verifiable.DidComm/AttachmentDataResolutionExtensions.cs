@@ -24,8 +24,8 @@ namespace Verifiable.DidComm;
 /// </para>
 /// <para>
 /// Fail-closed and never-throwing on the untrusted path: every decoder is wrapped so a malformed value is
-/// a typed <see cref="AttachmentResolutionError"/>, the outbound fetch fails closed by return, and a
-/// transport exception is caught (cancellation is re-thrown). A <c>hash</c> mismatch — inline or fetched —
+/// a typed <see cref="AttachmentResolutionError"/>, and the guarded outbound fetch returns transport failure
+/// kinds, including timeout, while propagating caller cancellation. A <c>hash</c> mismatch — inline or fetched —
 /// NEVER returns the bytes. Producer-side null/argument guards on the seam delegates MAY throw.
 /// </para>
 /// </remarks>
@@ -98,6 +98,7 @@ public static class AttachmentDataResolutionExtensions
         ArgumentNullException.ThrowIfNull(exchangeContext);
         ArgumentNullException.ThrowIfNull(jsonValueSerializer);
         ArgumentNullException.ThrowIfNull(memoryPool);
+        cancellationToken.ThrowIfCancellationRequested();
 
         //The two coders are the only attachment seams with a library registry: base58btc is the
         //PublicKeyMultibase decoder, base64url the PublicKeyJwk decoder (the same key the Out-of-Band URL
@@ -173,6 +174,7 @@ public static class AttachmentDataResolutionExtensions
         ArgumentNullException.ThrowIfNull(hashBase58Decoder);
         ArgumentNullException.ThrowIfNull(jsonValueSerializer);
         ArgumentNullException.ThrowIfNull(memoryPool);
+        cancellationToken.ThrowIfCancellationRequested();
 
         bool hasBase64 = attachmentData.Base64 is { Length: > 0 };
         bool hasJson = attachmentData.Json is not null;
@@ -322,6 +324,7 @@ public static class AttachmentDataResolutionExtensions
         int fetchAttempts = 0;
         bool anyContacted = false;
         OutboundResponseTooLarge? tooLarge = null;
+        Type? failureKind = null;
         foreach(string link in attachmentData.Links!)
         {
             if(string.IsNullOrWhiteSpace(link) || !Uri.TryCreate(link, UriKind.Absolute, out Uri? target))
@@ -342,24 +345,14 @@ public static class AttachmentDataResolutionExtensions
 
             fetchAttempts++;
 
-            OutboundFetchResult fetch;
-            try
+            OutboundFetchResult fetch = await OutboundFetch.FetchAsync(
+                new OutboundRequest { Target = target, Method = "GET", MaxResponseBytes = MaximumFetchedAttachmentLength },
+                exchangeContext, transport, cancellationToken).ConfigureAwait(false);
+
+            if(fetch.FailureKind is Type transportFailureKind)
             {
-                fetch = await OutboundFetch.FetchAsync(
-                    new OutboundRequest { Target = target, Method = "GET", MaxResponseBytes = MaximumFetchedAttachmentLength },
-                    exchangeContext,
-                    transport,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch(OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                //A transport failure (socket/DNS) for this link means the transport WAS reached but the link
-                //did not yield content — it is fail-closed AllLinksFailed territory, not a policy denial.
                 anyContacted = true;
+                failureKind ??= transportFailureKind;
                 continue;
             }
 
@@ -412,7 +405,7 @@ public static class AttachmentDataResolutionExtensions
         //No link verified. If not one link was even contacted (every absolute link was denied by policy, or
         //all links were non-absolute), report FetchDenied; otherwise the fetches happened but none verified.
         return anyContacted
-            ? AttachmentResolutionResult.Failed(AttachmentResolutionError.AllLinksFailed)
+            ? AttachmentResolutionResult.LinksFailed(failureKind)
             : AttachmentResolutionResult.Failed(AttachmentResolutionError.FetchDenied);
     }
 

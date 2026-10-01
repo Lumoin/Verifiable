@@ -387,28 +387,24 @@ internal sealed class WebDidResolverResolvingTests
     }
 
 
-    /// <summary>
-    /// <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3</see>: "Let
-    /// controllerDocument be the result of dereferencing controllerDocumentUrl, according to the rules of the URL scheme
-    /// and using the supplied options." A dereference whose transport ended on its own budget has not found the document
-    /// absent: the transport reports that cancellation inside an exception of its own, as the inner exception of its own
-    /// fault or among an aggregate's inner exceptions, and the did:web resolver lets it propagate as the cancellation it
-    /// is, as it does a bare one, rather than answering not found, so its caller can tell a stalled fetch from a missing
-    /// document.
-    /// </summary>
+    /// <summary>A wrapped transport cancellation with a live caller token is a typed retrieval timeout.</summary>
     /// <param name="cancellationShape">How the transport carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
     [TestMethod]
     [DataRow("wrapped")]
     [DataRow("aggregated")]
-    public async Task TransportCancellationCarriedInsideItsOwnExceptionPropagates(string cancellationShape)
+    public async Task TransportCancellationCarriedInsideItsOwnExceptionIsTimeout(string cancellationShape)
     {
         ExchangeContext resolutionContext = [];
         resolutionContext.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
         DidMethodResolverDelegate resolver = WebDidResolver.BuildResolving(
             CarriedCancellationFixtures.CreateTransport(cancellationShape, caller: null), DeserializeDocument);
 
-        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () => await resolver(
-            AliceDid, DidResolutionOptions.Empty, resolutionContext, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        DidResolutionResult result = await resolver(
+            AliceDid, DidResolutionOptions.Empty, resolutionContext, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.IsNotNull(result.ResolutionMetadata.Error);
+        DidRetrievalUnreachable failure = Assert.IsInstanceOfType<DidRetrievalUnreachable>(result.ResolutionMetadata.Error.RetrievalFailure);
+        Assert.AreEqual(typeof(TimeoutException), failure.FailureKind);
     }
 
 

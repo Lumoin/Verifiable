@@ -75,7 +75,7 @@ public sealed record JwtVcIssuerMetadataResolution
     /// <summary>The guarded fetch's size evidence when the outcome is TooLarge.</summary>
     public OutboundResponseTooLarge? TooLarge { get; init; }
 
-    /// <summary>The concrete transport exception type when the outcome is Unreachable.</summary>
+    /// <summary>The guarded fetch's transport kind; own-budget cancellation is classified as TimeoutException.</summary>
     public Type? FailureKind { get; init; }
 
     /// <summary>

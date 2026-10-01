@@ -183,16 +183,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     }
 
 
-    /// <summary>
-    /// <see href="https://identity.foundation/didwebvh/v1.0/#did-url-path-resolution">did:webvh v1.0 DID URL Path
-    /// Resolution</see>: "If the resolution of the constructed URL fails with a “not found” condition (e.g., HTTP 404), the
-    /// resolver MUST return the notFound error." A retrieval of the resource that was cancelled has met no “not found”
-    /// condition. When the transport reports that cancellation inside an exception of its own, as the inner exception of its
-    /// own fault or among an aggregate's inner exceptions, the DID URL dereference lets it propagate as the cancellation it
-    /// is instead of answering notFound, both when the caller abandoned the dereference while the resource was fetched and
-    /// when the fetch ended on its own budget while the caller still waits, so the caller tells the two apart by its own
-    /// token.
-    /// </summary>
+    /// <summary>Caller cancellation propagates; a wrapped transport timeout retains its typed retrieval kind.</summary>
     /// <param name="cancellationShape">How the transport carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
     /// <param name="isCallerCancelled">Whether the caller abandons the dereference while the resource is fetched.</param>
     [TestMethod]
@@ -200,7 +191,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     [DataRow("wrapped", true)]
     [DataRow("aggregated", false)]
     [DataRow("aggregated", true)]
-    public async Task PathFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
+    public async Task PathFetchCancellationCarriedInsideTheTransportFaultDistinguishesCallerCancellationFromTimeout(string cancellationShape, bool isCallerCancelled)
     {
         using WebVhController controller = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
@@ -212,11 +203,20 @@ internal sealed class WebVhDidUrlDereferencerTests
             CarriedCancellationFixtures.CreateTransport(cancellationShape, isCallerCancelled ? caller : null),
             DeserializePresentation);
 
-        await CarriedCancellationFixtures.AssertPropagatesAsTheCancellationAsync(
-            async () => await composed.DereferenceAsync(
-                $"{log.Did}/governance/issuers.json", CreateContext(), cancellationToken: caller.Token).ConfigureAwait(false),
-            isCallerCancelled,
-            caller.Token).ConfigureAwait(false);
+        if(isCallerCancelled)
+        {
+            OperationCanceledException caught = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+                async () => await composed.DereferenceAsync($"{log.Did}/governance/issuers.json", CreateContext(), cancellationToken: caller.Token).ConfigureAwait(false)).ConfigureAwait(false);
+            Assert.AreEqual(caller.Token, caught.CancellationToken);
+        }
+        else
+        {
+            DidDereferencingResult result = await composed.DereferenceAsync($"{log.Did}/governance/issuers.json", CreateContext(), cancellationToken: caller.Token).ConfigureAwait(false);
+            Assert.IsFalse(result.IsSuccessful);
+            Assert.IsNotNull(result.DereferencingMetadata.Error);
+            DidRetrievalUnreachable failure = Assert.IsInstanceOfType<DidRetrievalUnreachable>(result.DereferencingMetadata.Error.RetrievalFailure);
+            Assert.AreEqual(typeof(TimeoutException), failure.FailureKind);
+        }
     }
 
 

@@ -287,15 +287,7 @@ internal sealed class WebPlusDidResolverResolvingTests
     }
 
 
-    /// <summary>
-    /// <see href="https://www.w3.org/TR/did-resolution/#resolving-algorithm">DID Resolution §4.4</see>: "If the input DID
-    /// does not exist, return the following result: didResolutionMetadata: error object with type set to
-    /// https://www.w3.org/ns/did#NOT_FOUND". A microledger fetch that was cancelled has not shown the DID absent. When the
-    /// transport reports that cancellation inside an exception of its own, as the inner exception of its own fault or
-    /// among an aggregate's inner exceptions, the resolver lets it propagate as the cancellation it is instead of
-    /// answering not found, both when the caller abandoned the resolution while the fetch ran and when the fetch ended on
-    /// its own budget while the caller still waits, so the caller tells the two apart by its own token.
-    /// </summary>
+    /// <summary>Caller cancellation propagates; a wrapped transport timeout retains its typed retrieval kind.</summary>
     /// <param name="cancellationShape">How the transport carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
     /// <param name="isCallerCancelled">Whether the caller abandons the resolution while the fetch runs.</param>
     [TestMethod]
@@ -303,7 +295,7 @@ internal sealed class WebPlusDidResolverResolvingTests
     [DataRow("wrapped", true)]
     [DataRow("aggregated", false)]
     [DataRow("aggregated", true)]
-    public async Task MicroledgerFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
+    public async Task MicroledgerFetchCancellationCarriedInsideTheTransportFaultDistinguishesCallerCancellationFromTimeout(string cancellationShape, bool isCallerCancelled)
     {
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
         DidMethodResolverDelegate resolver = WebPlusTestResolver.Build(
@@ -311,10 +303,20 @@ internal sealed class WebPlusDidResolverResolvingTests
         ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
-        await CarriedCancellationFixtures.AssertPropagatesAsTheCancellationAsync(
-            async () => await resolver(WebPlusWorkedExamples.Example1Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false),
-            isCallerCancelled,
-            caller.Token).ConfigureAwait(false);
+        if(isCallerCancelled)
+        {
+            OperationCanceledException caught = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+                async () => await resolver(WebPlusWorkedExamples.Example1Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false)).ConfigureAwait(false);
+            Assert.AreEqual(caller.Token, caught.CancellationToken);
+        }
+        else
+        {
+            DidResolutionResult result = await resolver(WebPlusWorkedExamples.Example1Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false);
+            Assert.IsFalse(result.IsSuccessful);
+            Assert.IsNotNull(result.ResolutionMetadata.Error);
+            DidRetrievalUnreachable failure = Assert.IsInstanceOfType<DidRetrievalUnreachable>(result.ResolutionMetadata.Error.RetrievalFailure);
+            Assert.AreEqual(typeof(TimeoutException), failure.FailureKind);
+        }
     }
 
 

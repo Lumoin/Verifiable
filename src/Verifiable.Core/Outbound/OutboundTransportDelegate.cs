@@ -34,7 +34,10 @@ namespace Verifiable.Core.Outbound;
 /// size, await it exactly once, dispose the response, and return its typed result unchanged. An early
 /// size refusal is a result, never a transport exception. See <see cref="OutboundResponseReaderDelegate"/>.
 /// </param>
-/// <param name="cancellationToken">Cancellation token.</param>
+/// <param name="cancellationToken">
+/// The caller's token. The guarded fetch propagates cancellation only when this token is cancelled;
+/// a bare or wrapped cancellation with this token live becomes an unreachable timeout result.
+/// </param>
 /// <returns>The reader's single-hop result (a 3xx is returned, not followed).</returns>
 public delegate ValueTask<OutboundTransportResult> OutboundTransportDelegate(
     OutboundRequest request,

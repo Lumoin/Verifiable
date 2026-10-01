@@ -46,7 +46,8 @@ public static class OutboundFetch
     /// Fail-closed by return: a denied target/hop or an over-long chain yields a
     /// non-<see cref="OutboundFetchOutcome.Fetched"/> result, never a thrown
     /// policy error. The transport is invoked only after the target passes the
-    /// policy.
+    /// policy. Transport failures return their kind; cancellation propagates only when the caller's
+    /// token is cancelled. A transport's own cancellation is reported as a timeout.
     /// </summary>
     /// <param name="request">The initial request (carries the explicit method).</param>
     /// <param name="context">The per-call context; the policy is read from it.</param>
@@ -61,6 +62,7 @@ public static class OutboundFetch
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(request.MaxResponseBytes is long limit)
         {
@@ -78,13 +80,35 @@ public static class OutboundFetch
 
         while(true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             OutboundFetchDecision decision = policy.Evaluate(current.Target);
             if(!decision.IsAllowed)
             {
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy, decision.DenyReason, requested, current.Target, hops, redirect);
             }
 
-            OutboundTransportResult received = await transport(current, context, ReadHopResponseAsync, cancellationToken).ConfigureAwait(false);
+            OutboundTransportResult received;
+            try
+            {
+                received = await transport(current, context, ReadHopResponseAsync, cancellationToken).ConfigureAwait(false);
+            }
+            catch(Exception exception)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                return new OutboundFetchResult
+                {
+                    Outcome = OutboundFetchOutcome.Unreachable,
+                    FailureKind = WrappedCancellation.FindCancellation(exception) is not null
+                        ? typeof(TimeoutException)
+                        : exception.GetType(),
+                    RequestedUri = requested,
+                    FinalUri = current.Target,
+                    RedirectCount = hops
+                };
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
             if(received.TooLarge is OutboundResponseTooLarge tooLarge)
             {
                 return new OutboundFetchResult

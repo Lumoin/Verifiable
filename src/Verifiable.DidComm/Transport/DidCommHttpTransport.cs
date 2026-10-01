@@ -91,6 +91,7 @@ public static class DidCommHttpTransport
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
+        cancellationToken.ThrowIfCancellationRequested();
 
         OutboundRequest request = new()
         {
@@ -101,19 +102,11 @@ public static class DidCommHttpTransport
             MaxResponseBytes = MaxAcceptResponseBytes
         };
 
-        OutboundFetchResult fetch;
-        try
+        OutboundFetchResult fetch = await OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
-            fetch = await OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            //A transport-level failure (socket/DNS/connection) is fail-soft: the sender may fail over or retry.
-            return DidCommTransmitResult.Unreachable(exception.GetType());
+            return DidCommTransmitResult.Unreachable(failureKind);
         }
 
         if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
@@ -184,6 +177,7 @@ public static class DidCommHttpTransport
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
+        cancellationToken.ThrowIfCancellationRequested();
 
         OutboundRequest request = new()
         {
@@ -194,19 +188,11 @@ public static class DidCommHttpTransport
             MaxResponseBytes = maxReplyBytes
         };
 
-        OutboundFetchResult fetch;
-        try
+        OutboundFetchResult fetch = await OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
-            fetch = await OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            //A transport-level failure (socket/DNS/connection) is fail-soft: the caller may fail over or retry.
-            return DidCommExchangeResult.Unreachable(exception.GetType());
+            return DidCommExchangeResult.Unreachable(failureKind);
         }
 
         if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)

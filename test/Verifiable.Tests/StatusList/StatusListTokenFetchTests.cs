@@ -434,6 +434,9 @@ failing, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false);
     [TestMethod]
     public async Task CancellationPropagatesInsteadOfBecomingATransportFailure()
     {
+        using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        await caller.CancelAsync().ConfigureAwait(false);
+
         //Propagates cancellation before a response is available.
         static ValueTask<OutboundTransportResult> cancelling(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new OperationCanceledException("The caller cancelled the Status List Token fetch.");
@@ -441,7 +444,7 @@ failing, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false);
         _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             async () => await StatusListTokenFetch.FetchAsync(
                 new Uri(ListUrl), StatusListTokenFormat.Jwt, Context(OutboundFetchPolicy.SecureDefault),
-cancelling, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false));
+                cancelling, MaxResponseBytes, caller.Token).ConfigureAwait(false));
     }
 
 

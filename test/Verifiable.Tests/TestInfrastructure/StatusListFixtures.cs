@@ -68,7 +68,7 @@ internal static class StatusListFixtures
 
             //statusList is shared across every call this resolver answers, so the resolution does not
             //own it — the test's own `using` disposes it once.
-            return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+            return ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
             {
                 Token = new StatusListToken(subject, resolvedAt, statusList),
                 ResolvedAt = resolvedAt,
@@ -86,7 +86,7 @@ internal static class StatusListFixtures
     /// <param name="resolvedAt">The instant this resolution reports itself as made at.</param>
     /// <returns>The resolver a test is built with.</returns>
     public static ResolveVerifiedStatusListTokenDelegate ResolverFor(StatusListToken token, DateTimeOffset resolvedAt) =>
-        (context, cancellationToken) => ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+        (context, cancellationToken) => ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
         {
             Token = token,
             ResolvedAt = resolvedAt,
@@ -109,13 +109,13 @@ internal static class StatusListFixtures
     {
         int invocations = 0;
 
-        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             invocations++;
 
             DateTimeOffset resolvedAt = timeProvider.GetUtcNow();
 
-            return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+            return ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
             {
                 Token = new StatusListToken(subject, resolvedAt, statusList),
                 ResolvedAt = resolvedAt,
@@ -139,7 +139,7 @@ internal static class StatusListFixtures
     {
         List<StatusListResolutionContext> contexts = [];
 
-        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             contexts.Add(context);
 
