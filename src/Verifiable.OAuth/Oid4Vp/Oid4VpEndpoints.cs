@@ -334,7 +334,7 @@ public static class Oid4VpEndpoints
             //dispatch since the JAR-URL mount point is not fixed across
             //deployments. GET corresponds to the request_uri_method=get
             //default (OID4VP 1.0 §5.10); POST corresponds to
-            //request_uri_method=post with wallet_nonce in the form body.
+            //request_uri_method=post, with an OPTIONAL wallet_nonce in the form body.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -368,24 +368,41 @@ public static class Oid4VpEndpoints
                         "Flow not in expected state for JAR request."));
                 }
 
-                //POST path — request_uri_method=post per OID4VP 1.0 §5.10.
-                //The Wallet's wallet_nonce drives the PDA into
+                //POST path, request_uri_method=post per OpenID for Verifiable
+                //Presentations 1.0 section 5.10. The POST drives the PDA into
                 //VerifierWalletPostReceivedState whose NextAction is the
-                //wallet_nonce-bearing SignJarAction; the effect loop then
-                //runs it and steps PDA into VerifierJarServedState.
+                //SignJarAction carrying the Wallet's wallet_nonce when one was
+                //sent; the effect loop then runs it and steps PDA into
+                //VerifierJarServedState.
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is not null && WellKnownHttpMethods.IsPost(req.Method))
                 {
-                    if(!fields.TryGetValue(
-                            Oid4VpAuthorizationRequestParameterNames.WalletNonce,
-                            out string? walletNonce)
-                        || string.IsNullOrWhiteSpace(walletNonce))
+                    //Section 5.10: wallet_nonce is "OPTIONAL. A string value used to
+                    //mitigate replay attacks of the Authorization Request. When received,
+                    //the Verifier MUST use it as the wallet_nonce value in the signed
+                    //authorization request object." An occurrence that is empty is omitted,
+                    //so a request with no other occurrence is served a request object that
+                    //carries no wallet_nonce; an occurrence of white space only is a value
+                    //and is echoed as received. This endpoint refuses a wallet_nonce sent
+                    //with a value more than once, the reading the token exchange holds for
+                    //its single-valued parameters: the request object carries one.
+                    string? walletNonce = null;
+                    foreach(string walletNonceValue in fields.GetValues(Oid4VpAuthorizationRequestParameterNames.WalletNonce))
                     {
+                        if(string.IsNullOrEmpty(walletNonceValue))
+                        {
+                            continue;
+                        }
 
-                        return (null, ServerHttpResponse.BadRequest(
-                            OAuthErrors.InvalidRequest,
-                            "POST to request_uri must carry the wallet_nonce form parameter " +
-                            "per OID4VP 1.0 §5.10."));
+                        if(walletNonce is not null)
+                        {
+
+                            return (null, ServerHttpResponse.BadRequest(
+                                OAuthErrors.InvalidRequest,
+                                "The wallet_nonce form parameter was sent more than once."));
+                        }
+
+                        walletNonce = walletNonceValue;
                     }
 
                     string? walletMetadataJson = null;

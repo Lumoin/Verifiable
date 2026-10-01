@@ -173,16 +173,17 @@ public static class Oid4VpVerifierFlowTransitions
                             "VerifierJarServed"),
 
                     //VerifierParReceived + ServerWalletPostReceived -> VerifierWalletPostReceived.
-                    //The Wallet POSTed to request_uri with wallet_nonce per
-                    //OID4VP 1.0 §5.10 (request_uri_method=post path). The Verifier
-                    //records the wallet_nonce so the subsequent JAR-signing step
-                    //can echo it.
+                    //The Wallet POSTed to request_uri (request_uri_method=post path),
+                    //with an OPTIONAL wallet_nonce per OpenID for Verifiable
+                    //Presentations 1.0 section 5.10. The Verifier records a received
+                    //wallet_nonce so the subsequent JAR-signing step echoes it.
                     (VerifierParReceivedState received, ServerWalletPostReceived posted) =>
                         BuildWalletPostReceivedTransition(received, posted),
 
                     //VerifierWalletPostReceived + ServerJarSigned -> VerifierJarServed.
                     //Continuation of the POST path: the JAR-signing action just
-                    //emitted a JAR carrying the wallet_nonce echo.
+                    //emitted a JAR, carrying the wallet_nonce echo when the Wallet
+                    //sent one.
                     (VerifierWalletPostReceivedState postReceived, ServerJarSigned signed) =>
                         Transition(
                             new VerifierJarServedState

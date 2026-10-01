@@ -9,9 +9,13 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The Wallet POSTs <c>wallet_metadata</c> alongside <c>wallet_nonce</c> on the
-/// <c>request_uri_method=post</c> body per
-/// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OID4VP 1.0 §5.10</see>.
+/// The <c>request_uri_method=post</c> body carries <c>wallet_metadata</c>,
+/// <c>wallet_nonce</c>, both or neither: each is OPTIONAL per
+/// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OpenID for Verifiable Presentations 1.0 section 5.10</see>.
+/// Of <c>wallet_metadata</c> the section says "OPTIONAL. A string containing a JSON
+/// object containing metadata parameters as defined in Section 10." and of
+/// <c>wallet_nonce</c> "OPTIONAL. A string value used to mitigate replay attacks of
+/// the Authorization Request."
 /// The Verifier reads <c>jwks</c> to learn the Wallet's public exchange key
 /// for JAR encryption and (optionally)
 /// <c>authorization_encrypted_response_enc</c> to learn which content

@@ -361,10 +361,11 @@ public delegate ValueTask<IReadOnlyList<EntityIdentifier>> ResolveSubordinateLis
 /// Resolves a subject's effective metadata, trust chain, and trust marks for
 /// the <c>federation_resolve_endpoint</c> per
 /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3">Federation §8.3</see>
-/// when an inbound GET arrives. The library matches the request, parses the
-/// <c>sub</c> / <c>anchor</c> / <c>type</c> parameters, assembles the §8.3
-/// Resolve Response payload from the returned outcome's contribution, and signs it with
-/// the resolver's federation signing key; the application's response to this
+/// when an inbound GET arrives. The library matches the request, reads the
+/// <c>sub</c>, <c>trust_anchor</c> and <c>entity_type</c> parameters of
+/// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation section 8.3.1</see>,
+/// assembles the section 8.3 Resolve Response payload from the returned outcome's contribution,
+/// and signs it with the resolver's federation signing key; the application's response to this
 /// delegate is the resolution result itself.
 /// </summary>
 /// <remarks>
@@ -373,31 +374,40 @@ public delegate ValueTask<IReadOnlyList<EntityIdentifier>> ResolveSubordinateLis
 /// requested <paramref name="trustAnchor"/>, verifying each Entity Statement
 /// signature, and applying the accumulated metadata policy — is the
 /// resolver application's work; the library ships the §6/§10 engines it can
-/// compose but does not run them inside the endpoint. The
-/// <paramref name="entityTypeFilter"/> carries the §8.3 <c>type</c>
-/// parameter when present, restricting the resolved metadata to that Entity
-/// Type.
+/// compose but does not run them inside the endpoint.
+/// </para>
+/// <para>
+/// The endpoint reads <c>trust_anchor</c> ("REQUIRED. The Trust Anchor that the resolve
+/// endpoint MUST use when resolving the metadata. The value is an Entity Identifier.") and
+/// passes the first occurrence that carries a value as <paramref name="trustAnchor"/>; a
+/// request with no such occurrence, or whose first one is not an Entity Identifier, is answered
+/// 400 <c>invalid_request</c> before this delegate runs, so <paramref name="trustAnchor"/> is
+/// never <see langword="null"/> from this endpoint. It reads every <c>entity_type</c>
+/// occurrence that carries a value ("The entity_type request parameter MAY occur multiple
+/// times, in which case, data for each Entity Type whose Entity Type Identifier is in an
+/// entity_type parameter value is returned."): when exactly one distinct Entity Type is named,
+/// <paramref name="entityTypeFilter"/> is that Entity Type; when none or several are named, it
+/// is <see langword="null"/>. Whenever the request names one or more Entity Types, the library
+/// keeps the members of the named Entity Types only in the returned contribution's
+/// <c>metadata</c> before it signs the response.
 /// </para>
 /// <para>
 /// Returning an outcome naming a <see cref="Federation.FederationResolveError"/>
 /// (<see cref="Federation.FederationResolveOutcome.Failed(Federation.FederationResolveError)"/>)
 /// tells the library exactly which
 /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>
-/// error the endpoint answers with; returning <see langword="null"/> — or an outcome naming no
-/// error — answers <see cref="Federation.FederationResolveError.InvalidSubject"/>. The
-/// <paramref name="trustAnchor"/> is <see langword="null"/> when the requester omitted the
-/// optional <c>anchor</c> parameter — the application decides how to resolve in that case (a
-/// configured default anchor, or a refusal).
+/// error the endpoint answers with; returning <see langword="null"/>, or an outcome naming no
+/// error, answers <see cref="Federation.FederationResolveError.InvalidSubject"/>.
 /// </para>
 /// </remarks>
 /// <param name="subject">The Entity Identifier queried via the <c>sub</c> parameter.</param>
 /// <param name="trustAnchor">
-/// The Trust Anchor from the <c>anchor</c> parameter, or <see langword="null"/>
-/// when the requester did not supply one.
+/// The Trust Anchor from the first <c>trust_anchor</c> occurrence that carries a value; never
+/// <see langword="null"/> from the resolve endpoint, which refuses a request without one.
 /// </param>
 /// <param name="entityTypeFilter">
-/// The <c>type</c> filter from the request, or <see langword="null"/> when
-/// the requester asked for the subject's full resolved metadata.
+/// The Entity Type when the request names exactly one distinct <c>entity_type</c>, or
+/// <see langword="null"/> when it names none or several.
 /// </param>
 /// <param name="registration">The resolving entity's <see cref="ClientRecord"/>.</param>
 /// <param name="context">The per-request context bag.</param>

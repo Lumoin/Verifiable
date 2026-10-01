@@ -19,10 +19,11 @@ internal sealed class FederationEffectiveMetadataResolverTests
 
 
     /// <summary>
-    /// OpenID Federation 1.0 §8.3: the Resolve Request's <c>entity_type</c> parameter is
-    /// "OPTIONAL. A specific Entity Type to resolve... If this parameter is not present, then
-    /// all Entity Types are returned." A subject declaring two Entity Types returns both, in
-    /// ordinal order of the identifier.
+    /// Of the Resolve Request's <c>entity_type</c> parameter,
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">OpenID Federation 1.0 section 8.3.1</see>
+    /// says "OPTIONAL. A specific Entity Type to resolve." and "If this parameter is not
+    /// present, then all Entity Types are returned." A subject declaring two Entity Types
+    /// returns both, in ordinal order of the identifier.
     /// </summary>
     [TestMethod]
     public async Task ReadDeclaredEntityTypesReturnsEveryDeclaredTypeInOrdinalOrder()

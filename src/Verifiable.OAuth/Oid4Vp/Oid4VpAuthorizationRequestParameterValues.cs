@@ -57,9 +57,10 @@ public static class Oid4VpAuthorizationRequestParameterValues
     public static ReadOnlySpan<byte> RequestUriMethodPostUtf8 => "post"u8;
 
     /// <summary>
-    /// The <c>post</c> value for the <c>request_uri_method</c> parameter — the
-    /// Wallet POSTs to the <c>request_uri</c> endpoint, carrying
-    /// <c>wallet_nonce</c> and (optionally) <c>wallet_metadata</c>.
+    /// The <c>post</c> value for the <c>request_uri_method</c> parameter: the
+    /// Wallet POSTs to the <c>request_uri</c> endpoint, optionally carrying
+    /// <c>wallet_nonce</c> and <c>wallet_metadata</c>, both OPTIONAL per OpenID
+    /// for Verifiable Presentations 1.0 section 5.10.
     /// </summary>
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
         Justification = "This member is the wire enumerated VALUE 'post' for the request_uri_method parameter (compared and serialised as a string), not a dereferenceable System.Uri.")]

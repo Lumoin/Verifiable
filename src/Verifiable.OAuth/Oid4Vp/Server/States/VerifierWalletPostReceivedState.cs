@@ -8,8 +8,8 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 
 /// <summary>
 /// Intermediate Verifier flow state entered after the Wallet POSTs to the
-/// <c>request_uri</c> endpoint with <c>wallet_nonce</c> (and optionally
-/// <c>wallet_metadata</c>) per
+/// <c>request_uri</c> endpoint, optionally with <c>wallet_nonce</c> and
+/// <c>wallet_metadata</c>, per
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OID4VP 1.0 §5.10</see>.
 /// Only reached on the <c>request_uri_method=post</c> path; the GET path
 /// transitions directly from <see cref="VerifierParReceivedState"/> to
@@ -19,9 +19,10 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// Carries everything <see cref="VerifierParReceivedState"/> carried (so the
 /// JAR-signing action has the same inputs available) plus the
 /// <see cref="WalletNonce"/> the Wallet sent, which the JAR-signing handler
-/// echoes as the JAR's <c>wallet_nonce</c> claim. <see cref="FlowState.NextAction"/>
-/// returns <see cref="Verifiable.Foundation.Automata.NullAction.Instance"/> — JAR
-/// signing is dispatched by the endpoint handler, not auto-produced.
+/// echoes as the JAR's <c>wallet_nonce</c> claim. <see cref="NextAction"/>
+/// returns the <see cref="SignJarAction"/> built from these inputs, carrying the
+/// received <see cref="WalletNonce"/>, or <see langword="null"/> as its nonce when
+/// the Wallet sent none; the effect loop runs it.
 /// </remarks>
 [DebuggerDisplay("VerifierWalletPostReceived FlowId={FlowId} WalletNonce={WalletNonce}")]
 public sealed record VerifierWalletPostReceivedState: FlowState
@@ -48,11 +49,14 @@ public sealed record VerifierWalletPostReceivedState: FlowState
     public required IReadOnlyList<string> AllowedEncAlgorithms { get; init; }
 
     /// <summary>
-    /// The fresh nonce the Wallet sent in the POST body. The JAR-signing handler
-    /// MUST echo this value as the <c>wallet_nonce</c> claim in the signed JAR
-    /// per OID4VP 1.0 §5.10; the Wallet rejects the JAR otherwise.
+    /// The fresh nonce the Wallet sent in the POST body, or <see langword="null"/>
+    /// when it sent none. The JAR-signing handler echoes a received value as the
+    /// <c>wallet_nonce</c> claim in the signed JAR per
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OpenID for Verifiable Presentations 1.0 section 5.10</see>:
+    /// "When received, the Verifier MUST use it as the wallet_nonce value in the
+    /// signed authorization request object."
     /// </summary>
-    public required string WalletNonce { get; init; }
+    public required string? WalletNonce { get; init; }
 
     /// <summary>
     /// The raw <c>wallet_metadata</c> JSON the Wallet sent in the POST body, when

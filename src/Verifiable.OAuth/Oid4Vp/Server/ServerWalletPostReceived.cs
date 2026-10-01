@@ -4,15 +4,18 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 
 /// <summary>
 /// Server-side input produced by the <c>request_uri</c> endpoint when the
-/// Wallet POSTs <c>wallet_nonce</c> (and optionally <c>wallet_metadata</c>)
+/// Wallet POSTs to it, optionally with <c>wallet_nonce</c> and <c>wallet_metadata</c>,
 /// per
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OID4VP 1.0 §5.10</see>.
 /// Drives <see cref="States.VerifierParReceivedState"/> →
 /// <see cref="States.VerifierWalletPostReceivedState"/>.
 /// </summary>
 /// <param name="WalletNonce">
-/// The <c>wallet_nonce</c> form-body parameter the Wallet sent — to be echoed
-/// in the JAR's <c>wallet_nonce</c> claim by the JAR-signing handler.
+/// The <c>wallet_nonce</c> form-body parameter the Wallet sent, to be echoed
+/// in the JAR's <c>wallet_nonce</c> claim by the JAR-signing handler;
+/// <see langword="null"/> when the Wallet sent none, since
+/// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OpenID for Verifiable Presentations 1.0 section 5.10</see>
+/// makes it "OPTIONAL."
 /// </param>
 /// <param name="WalletMetadataJson">
 /// The raw <c>wallet_metadata</c> JSON the Wallet sent, when present;
@@ -21,6 +24,6 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// <param name="ReceivedAt">The UTC instant at which the POST was received.</param>
 [DebuggerDisplay("ServerWalletPostReceived WalletNonce={WalletNonce}")]
 public sealed record ServerWalletPostReceived(
-    string WalletNonce,
+    string? WalletNonce,
     string? WalletMetadataJson,
     DateTimeOffset ReceivedAt): FlowInput;

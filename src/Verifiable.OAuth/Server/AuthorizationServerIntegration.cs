@@ -536,9 +536,12 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <para>
     /// Required only for registrations carrying
     /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.ResolveTrustChain"/>.
-    /// The library matches the request, parses the <c>sub</c> / <c>anchor</c>
-    /// / <c>type</c> parameters, assembles the OpenID Federation 1.0 §8.3
-    /// Resolve Response from the returned contribution, and signs it with the
+    /// The library matches the request, reads the <c>sub</c>, <c>trust_anchor</c>
+    /// and <c>entity_type</c> parameters of OpenID Federation 1.0 section 8.3.1 as
+    /// <see cref="ResolveSubjectTrustChainDelegate"/> states, assembles the
+    /// section 8.3 Resolve Response from the returned contribution, keeping the
+    /// members of the named Entity Types only in its <c>metadata</c> whenever the
+    /// request names one or more, and signs it with the
     /// resolver's federation signing key; this delegate supplies the
     /// resolution result. Return <see langword="null"/> when the subject
     /// cannot be resolved — the endpoint then responds 404.

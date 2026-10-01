@@ -663,6 +663,171 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
+    /// <summary>
+    /// Serves a POST to the request URI that sends no <c>wallet_nonce</c>, or sends it without a
+    /// value, with a signed request object that carries no <c>wallet_nonce</c> claim.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OpenID for Verifiable Presentations 1.0 section 5.10</see>:
+    /// "OPTIONAL. A string value used to mitigate replay attacks of the Authorization Request. When
+    /// received, the Verifier MUST use it as the wallet_nonce value in the signed authorization
+    /// request object."
+    /// </summary>
+    /// <param name="isEmptyOccurrenceSent">
+    /// <see langword="true"/> sends <c>wallet_nonce</c> once without a value;
+    /// <see langword="false"/> sends no <c>wallet_nonce</c>.
+    /// </param>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task ARequestUriPostWithoutAWalletNonceIsServedARequestObjectWithoutOneAsync(bool isEmptyOccurrenceSent)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        _ = await app.CreateOAuthClientAndRegistrationAsync(
+            verifierKeys.Registration,
+            "https://wallet.example.com/cb",
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, _) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-no-wallet-nonce-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        List<KeyValuePair<string, string>> fields = isEmptyOccurrenceSent
+            ? [new KeyValuePair<string, string>("wallet_nonce", string.Empty)]
+            : [];
+        using FormUrlEncodedContent body = new(fields);
+
+        using HttpResponseMessage response = await app.Host("default").SharedHttpClient!
+            .PostAsync(requestUri, body, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await response.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, (int)response.StatusCode,
+            $"A POST to the request URI without a wallet_nonce value is served. Got: {compactJar}");
+        Assert.AreEqual("application/oauth-authz-req+jwt", response.Content.Headers.ContentType?.MediaType,
+            "The request URI serves a request object.");
+
+        bool isSignatureValid = await Jws.VerifyAsync(
+            compactJar, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, verifierKeys.SigningPublicKey,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isSignatureValid,
+            "The request object served to a POST is signed with the Verifier's signing key.");
+
+        using JsonDocument payload = JwtPayloadDecoding.DecodePayload(compactJar, BaseMemoryPool.Shared);
+        Assert.AreEqual("nonce-no-wallet-nonce-01", payload.RootElement.GetProperty("nonce").GetString(),
+            "The served request object is the one the pushed request prepared.");
+        Assert.IsFalse(payload.RootElement.TryGetProperty("wallet_nonce", out _),
+            "A request object served to a POST without a wallet_nonce value carries no wallet_nonce.");
+    }
+
+
+    /// <summary>
+    /// Echoes a <c>wallet_nonce</c> of white space only, sent once in a POST to the request URI, into
+    /// the signed request object as received: an occurrence of white space only carries a value, so
+    /// the value is received.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OpenID for Verifiable Presentations 1.0 section 5.10</see>:
+    /// "OPTIONAL. A string value used to mitigate replay attacks of the Authorization Request. When
+    /// received, the Verifier MUST use it as the wallet_nonce value in the signed authorization
+    /// request object."
+    /// </summary>
+    [TestMethod]
+    public async Task ARequestUriPostWithAWhiteSpaceWalletNonceIsEchoedAsReceivedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        _ = await app.CreateOAuthClientAndRegistrationAsync(
+            verifierKeys.Registration,
+            "https://wallet.example.com/cb",
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, _) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-white-space-wallet-nonce-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using FormUrlEncodedContent body = new(
+        [
+            new KeyValuePair<string, string>("wallet_nonce", " ")
+        ]);
+
+        using HttpResponseMessage response = await app.Host("default").SharedHttpClient!
+            .PostAsync(requestUri, body, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await response.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, (int)response.StatusCode,
+            $"A POST to the request URI with a wallet_nonce of white space only is served. Got: {compactJar}");
+
+        bool isSignatureValid = await Jws.VerifyAsync(
+            compactJar, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, verifierKeys.SigningPublicKey,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isSignatureValid,
+            "The request object served to a POST is signed with the Verifier's signing key.");
+
+        using JsonDocument payload = JwtPayloadDecoding.DecodePayload(compactJar, BaseMemoryPool.Shared);
+        Assert.IsTrue(payload.RootElement.TryGetProperty("wallet_nonce", out JsonElement walletNonce),
+            "The signed request object carries the wallet_nonce the POST sent.");
+        Assert.AreEqual(" ", walletNonce.GetString(),
+            "The signed request object carries the wallet_nonce of white space only as received.");
+    }
+
+
+    /// <summary>
+    /// Refuses a POST to the request URI that sends <c>wallet_nonce</c> with a value more than once
+    /// with 400 <c>invalid_request</c>. This endpoint refuses a <c>wallet_nonce</c> sent with a value
+    /// more than once, the reading the token exchange holds for its single-valued parameters under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>:
+    /// "Request and response parameters MUST NOT be included more than once." An occurrence of white
+    /// space only is a value and is counted; an empty occurrence is omitted (the same section:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request.").
+    /// </summary>
+    /// <param name="firstWalletNonce">The value of the first <c>wallet_nonce</c> occurrence.</param>
+    [TestMethod]
+    [DataRow("first-wallet-nonce")]
+    [DataRow(" ")]
+    public async Task ARequestUriPostSendingTwoWalletNoncesIsRefusedAsync(string firstWalletNonce)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        _ = await app.CreateOAuthClientAndRegistrationAsync(
+            verifierKeys.Registration,
+            "https://wallet.example.com/cb",
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, _) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-two-wallet-nonces-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using FormUrlEncodedContent body = new(
+        [
+            new KeyValuePair<string, string>("wallet_nonce", firstWalletNonce),
+            new KeyValuePair<string, string>("wallet_nonce", "second-wallet-nonce")
+        ]);
+
+        using HttpResponseMessage response = await app.Host("default").SharedHttpClient!
+            .PostAsync(requestUri, body, TestContext.CancellationToken).ConfigureAwait(false);
+        string responseBody = await response.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode,
+            $"A POST sending wallet_nonce with a value twice is malformed. Got: {responseBody}");
+        Assert.Contains("\"error\":\"invalid_request\"", responseBody, StringComparison.Ordinal,
+            $"A repeated wallet_nonce is an invalid_request. Got: {responseBody}");
+        Assert.Contains("\"error_description\":\"The wallet_nonce form parameter was sent more than once.\"", responseBody, StringComparison.Ordinal,
+            $"The refusal names the repeated wallet_nonce. Got: {responseBody}");
+    }
+
+
     //JAR-encryption hardening — four negative/algorithm-coverage paths that
     //share the §5.10 POST setup. The tests drive the POST via raw HttpClient
     //so they can inspect or tamper the encrypted JAR before handing it to

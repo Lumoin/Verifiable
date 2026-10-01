@@ -115,10 +115,12 @@ public static class FederationEffectiveMetadataResolver
 
     /// <summary>
     /// Reads every Entity Type the subject of <paramref name="chain"/> declares in its own
-    /// <c>metadata</c> claim, in ordinal order of the identifier — the OpenID Federation 1.0
-    /// §8.3 Resolve Request's <c>entity_type</c> parameter is "OPTIONAL. A specific Entity Type
-    /// to resolve... If this parameter is not present, then all Entity Types are returned,"
-    /// which requires enumerating every declared type up front. Composed over
+    /// <c>metadata</c> claim, in ordinal order of the identifier. Of the Resolve Request's
+    /// <c>entity_type</c> parameter,
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">OpenID Federation 1.0 section 8.3.1</see>
+    /// says "OPTIONAL. A specific Entity Type to resolve." and "If this parameter is not
+    /// present, then all Entity Types are returned." Returning all Entity Types requires
+    /// enumerating every declared type up front. Composed over
     /// <see cref="MetadataPolicyOrchestrator.ReadSubjectDeclaredMetadata(TrustChain)"/> rather
     /// than a second reader.
     /// </summary>

@@ -765,8 +765,11 @@ public static class FederationEndpoints
     /// <summary>
     /// Builds the <c>federation_resolve_endpoint</c> per
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3">Federation §8.3</see>.
-    /// Stateless: <c>GET ?sub=&lt;subject&gt;[&amp;anchor=&lt;anchor&gt;][&amp;type=&lt;entity-type&gt;]</c>
-    /// arrives, the application resolves the subject via
+    /// Stateless: <c>GET ?sub=&lt;subject&gt;&amp;trust_anchor=&lt;trust-anchor&gt;[&amp;entity_type=&lt;entity-type&gt;]</c>
+    /// arrives (the parameters of
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation section 8.3.1</see>,
+    /// <c>trust_anchor</c> and <c>entity_type</c> each MAY occur several times),
+    /// the application resolves the subject via
     /// <see cref="AuthorizationServerIntegration.ResolveSubjectTrustChainAsync"/>,
     /// the library assembles and signs the §8.3 Resolve Response JWT
     /// (<c>typ = resolve-response+jwt</c>) with the resolver's federation
@@ -899,13 +902,20 @@ public static class FederationEndpoints
                         $"sub parameter is not a valid Entity Identifier: {ex.Message}"));
                 }
 
-                //§8.3.1: anchor (the Trust Anchor the resolve endpoint MUST use) is REQUIRED.
-                if(!fields.TryGetValue(FederationEndpointParameterNames.Anchor, out string? anchorValue)
-                    || string.IsNullOrWhiteSpace(anchorValue))
+                //Section 8.3.1: "trust_anchor REQUIRED. The Trust Anchor that the resolve
+                //endpoint MUST use when resolving the metadata. The value is an Entity
+                //Identifier." and "The trust_anchor request parameter MAY occur multiple
+                //times, in which case, the resolver MAY return a successful resolve response
+                //using any of the Trust Anchor values provided." The first occurrence that
+                //carries a value is the Trust Anchor resolved against; an occurrence that is
+                //empty is omitted, and an occurrence of white space only is a value, which
+                //the Entity Identifier check below refuses.
+                string? anchorValue = ReadFirstValue(fields, FederationEndpointParameterNames.TrustAnchor);
+                if(anchorValue is null)
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
-                        "Missing anchor query parameter."));
+                        "Missing trust_anchor query parameter."));
                 }
 
                 EntityIdentifier trustAnchor;
@@ -917,18 +927,51 @@ public static class FederationEndpoints
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
-                        $"anchor parameter is not a valid Entity Identifier: {ex.Message}"));
+                        $"trust_anchor parameter is not a valid Entity Identifier: {ex.Message}"));
                 }
 
-                //Optional §8.3 type filter (the resolve endpoint's
-                //entity-type filter; spelled 'type', distinct from the §8.2
-                //list endpoint's 'entity_type').
-                EntityTypeIdentifier? entityTypeFilter = null;
-                if(fields.TryGetValue(FederationEndpointParameterNames.Type, out string? typeValue)
-                    && !string.IsNullOrWhiteSpace(typeValue))
+                //Section 8.3.1: "entity_type OPTIONAL. A specific Entity Type to resolve."
+                //"Its value is an Entity Type Identifier, as specified in Section 5.1."
+                //"If this parameter is not present, then all Entity Types are returned." and
+                //"The entity_type request parameter MAY occur multiple times, in which case,
+                //data for each Entity Type whose Entity Type Identifier is in an entity_type
+                //parameter value is returned." Every occurrence that carries a value is read
+                //and an occurrence that is empty is omitted; a value of white space only is
+                //not an Entity Type Identifier and is refused. Identical values name one
+                //Entity Type: each value read is added to a set that compares ordinally, and
+                //a value joins the named Entity Types only when the set did not hold it, so
+                //the read is linear in the number of occurrences. One named Entity Type is
+                //the delegate's filter; several reach the delegate as no filter. Whenever the
+                //request names an Entity Type, the response keeps the metadata of the named
+                //Entity Types only.
+                List<EntityTypeIdentifier> requestedEntityTypes = [];
+                HashSet<string> requestedEntityTypeValues = new(StringComparer.Ordinal);
+                foreach(string entityTypeValue in fields.GetValues(FederationEndpointParameterNames.EntityType))
                 {
-                    entityTypeFilter = new EntityTypeIdentifier(typeValue);
+                    if(string.IsNullOrEmpty(entityTypeValue))
+                    {
+                        continue;
+                    }
+
+                    EntityTypeIdentifier requestedEntityType;
+                    try
+                    {
+                        requestedEntityType = new EntityTypeIdentifier(entityTypeValue);
+                    }
+                    catch(ArgumentException ex)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            $"entity_type parameter is not a valid Entity Type Identifier: {ex.Message}"));
+                    }
+
+                    if(requestedEntityTypeValues.Add(requestedEntityType.Value))
+                    {
+                        requestedEntityTypes.Add(requestedEntityType);
+                    }
                 }
+
+                EntityTypeIdentifier? entityTypeFilter = requestedEntityTypes.Count == 1 ? requestedEntityTypes[0] : null;
 
                 FederationResolveOutcome? outcome =
                     await oauth.ResolveSubjectTrustChainAsync(
@@ -941,6 +984,14 @@ public static class FederationEndpoints
                     //answers with; a null delegate return, or an outcome naming no error,
                     //answers FederationResolveError.InvalidSubject.
                     return (null, BuildFederationResolveErrorResponse(outcome?.Error, subject));
+                }
+
+                if(requestedEntityTypes.Count > 0)
+                {
+                    contribution = contribution with
+                    {
+                        Metadata = KeepRequestedEntityTypes(contribution.Metadata, requestedEntityTypeValues)
+                    };
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
@@ -1029,6 +1080,65 @@ public static class FederationEndpoints
             _ => ServerHttpResponse.NotFound(OAuthErrors.InvalidSubject,
                 $"The trust chain for subject '{subject.Value}' could not be resolved.")
         };
+
+
+    /// <summary>
+    /// Reads the first occurrence of the request parameter <paramref name="name"/> that carries
+    /// a value, omitting every occurrence that is empty; an occurrence of white space only is a
+    /// value and is returned for the caller's check. The resolve endpoint reads
+    /// <c>trust_anchor</c> with it, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation section 8.3.1</see>:
+    /// "The trust_anchor request parameter MAY occur multiple times, in which case, the resolver
+    /// MAY return a successful resolve response using any of the Trust Anchor values provided."
+    /// </summary>
+    /// <param name="fields">The request's parameters.</param>
+    /// <param name="name">The parameter name.</param>
+    /// <returns>The first value, or <see langword="null"/> when no occurrence carries one.</returns>
+    private static string? ReadFirstValue(RequestFields fields, string name)
+    {
+        foreach(string value in fields.GetValues(name))
+        {
+            if(!string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Keeps the members of a resolved <c>metadata</c> object whose Entity Type Identifier is
+    /// one of <paramref name="requestedEntityTypes"/>, so a resolve request naming one or more
+    /// Entity Types receives the data of those Entity Types only, whether or not the
+    /// application's resolution applied its filter, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation section 8.3.1</see>:
+    /// "OPTIONAL. A specific Entity Type to resolve." and "The entity_type request parameter MAY
+    /// occur multiple times, in which case, data for each Entity Type whose Entity Type Identifier
+    /// is in an entity_type parameter value is returned." Each member name is looked up in the
+    /// set, which compares ordinally, so the cost is linear in the number of members.
+    /// </summary>
+    /// <param name="metadata">The resolved metadata the application returned, keyed by Entity Type Identifier.</param>
+    /// <param name="requestedEntityTypes">
+    /// The Entity Type Identifier values the request named, in a set built with
+    /// <see cref="StringComparer.Ordinal"/>.
+    /// </param>
+    /// <returns>The metadata of the requested Entity Types.</returns>
+    private static Dictionary<string, object> KeepRequestedEntityTypes(
+        IReadOnlyDictionary<string, object> metadata, HashSet<string> requestedEntityTypes)
+    {
+        Dictionary<string, object> kept = new(StringComparer.Ordinal);
+        foreach(KeyValuePair<string, object> member in metadata)
+        {
+            if(requestedEntityTypes.Contains(member.Key))
+            {
+                kept[member.Key] = member.Value;
+            }
+        }
+
+        return kept;
+    }
 
 
     /// <summary>

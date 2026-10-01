@@ -35,8 +35,9 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// <param name="WalletNonce">
 /// The <c>wallet_nonce</c> value to echo as a JAR claim per
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OID4VP 1.0 §5.10</see>.
-/// <see langword="null"/> on the <c>request_uri_method=get</c> path; non-null
-/// when produced from <see cref="States.VerifierWalletPostReceivedState"/>.
+/// <see langword="null"/> on the <c>request_uri_method=get</c> path, and on the
+/// <c>request_uri_method=post</c> path when the Wallet sent no <c>wallet_nonce</c>
+/// (<see cref="States.VerifierWalletPostReceivedState.WalletNonce"/>).
 /// </param>
 /// <param name="TransactionData">
 /// Optional <c>transaction_data</c> descriptors to bind into the JAR per

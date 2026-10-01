@@ -6,8 +6,9 @@ namespace Verifiable.OAuth.Federation;
 /// Well-known HTTP query-parameter NAMES for the OpenID Federation 1.0
 /// federation endpoints (§8). These are the <c>?name=value</c> keys a
 /// requester places on the URL when calling a
-/// <c>federation_fetch_endpoint</c> (§8.1) or
-/// <c>federation_list_endpoint</c> (§8.2); the matchers and input builders
+/// <c>federation_fetch_endpoint</c> (section 8.1),
+/// <c>federation_list_endpoint</c> (section 8.2) or
+/// <c>federation_resolve_endpoint</c> (section 8.3); the matchers and input builders
 /// in <see cref="FederationEndpoints"/> read them by these names rather
 /// than by inline string literals.
 /// </summary>
@@ -36,31 +37,34 @@ public static class FederationEndpointParameterNames
     /// <summary>
     /// <c>entity_type</c> — restricts a <c>federation_list_endpoint</c>
     /// response to subordinates declaring this Entity Type per
-    /// Federation §8.2.
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.2.1">Federation section 8.2.1</see>:
+    /// "When multiple entity_type parameters are present, for example
+    /// entity_type=openid_provider&amp;entity_type=openid_relying_party, the result
+    /// MUST be filtered to include all specified Entity Types." It names an Entity
+    /// Type whose resolved metadata a <c>federation_resolve_endpoint</c> returns per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation section 8.3.1</see>:
+    /// "OPTIONAL. A specific Entity Type to resolve." and "If this parameter is
+    /// not present, then all Entity Types are returned." and "The
+    /// entity_type request parameter MAY occur multiple times, in which case,
+    /// data for each Entity Type whose Entity Type Identifier is in an
+    /// entity_type parameter value is returned."
     /// </summary>
     public static string EntityType { get; } = Utf8Constants.ToInternedString(EntityTypeUtf8);
 
-    /// <summary>The UTF-8 source literal of <see cref="Anchor"/>.</summary>
-    public static ReadOnlySpan<byte> AnchorUtf8 => "anchor"u8;
+    /// <summary>The UTF-8 source literal of <see cref="TrustAnchor"/>.</summary>
+    public static ReadOnlySpan<byte> TrustAnchorUtf8 => "trust_anchor"u8;
 
     /// <summary>
-    /// <c>anchor</c> — the Trust Anchor the requester trusts, against which
-    /// a <c>federation_resolve_endpoint</c> resolves the subject's chain per
-    /// Federation §8.3.
+    /// <c>trust_anchor</c>: the Trust Anchor against which a
+    /// <c>federation_resolve_endpoint</c> resolves the subject per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.1">Federation section 8.3.1</see>:
+    /// "REQUIRED. The Trust Anchor that the resolve endpoint MUST use when
+    /// resolving the metadata. The value is an Entity Identifier." and "The
+    /// trust_anchor request parameter MAY occur multiple times, in which case,
+    /// the resolver MAY return a successful resolve response using any of the
+    /// Trust Anchor values provided."
     /// </summary>
-    public static string Anchor { get; } = Utf8Constants.ToInternedString(AnchorUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="Type"/>.</summary>
-    public static ReadOnlySpan<byte> TypeUtf8 => "type"u8;
-
-    /// <summary>
-    /// <c>type</c> — restricts the metadata a
-    /// <c>federation_resolve_endpoint</c> returns to a single Entity Type
-    /// per Federation §8.3. Distinct from the §8.2 list endpoint's
-    /// <see cref="EntityType"/> parameter — the two endpoints spell the
-    /// entity-type filter differently on the wire.
-    /// </summary>
-    public static string Type { get; } = Utf8Constants.ToInternedString(TypeUtf8);
+    public static string TrustAnchor { get; } = Utf8Constants.ToInternedString(TrustAnchorUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TrustMarked"/>.</summary>
     public static ReadOnlySpan<byte> TrustMarkedUtf8 => "trust_marked"u8;
