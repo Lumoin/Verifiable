@@ -453,17 +453,19 @@ internal sealed class TokenExchangeRequestBuilderTests
 
 
     /// <summary>
-    /// A <see cref="TokenExchangeBuilderOptions.Scope"/> of white space only holds no <c>scope-token</c>,
-    /// so the request the builder produces carries no <c>scope</c> parameter.
+    /// A <see cref="TokenExchangeBuilderOptions.Scope"/> of white space only is omitted by this
+    /// library's normalization at the builder, so the request the builder produces carries no
+    /// <c>scope</c> parameter.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see> defines
     /// the value as <c>scope = scope-token *( SP scope-token )</c> with
     /// <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, and neither a space (%x20) nor a tab (%x09)
-    /// is in a <c>scope-token</c>;
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 section 3.2</see> says
-    /// "Parameters sent without a value MUST be treated as if they were omitted from the request." The
-    /// impersonation request with <c>client_secret_post</c> is posted over the loopback listener to the
-    /// shipped token endpoint, which answers 200, and the fields it received are exactly those of a
-    /// request that names no scope.
+    /// is in a <c>scope-token</c>, so such a value holds no <c>scope-token</c>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 section 3.2</see>'s
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// governs an empty value only, not this one. The impersonation request with
+    /// <c>client_secret_post</c> is posted over the loopback listener to the shipped token
+    /// endpoint, which answers 200, and the fields it received are exactly those of a request that
+    /// names no scope.
     /// </summary>
     /// <param name="scope">The white-space-only <see cref="TokenExchangeBuilderOptions.Scope"/> the builder is given.</param>
     [TestMethod]
@@ -478,14 +480,16 @@ internal sealed class TokenExchangeRequestBuilderTests
     /// <summary>
     /// A <see cref="TokenExchangeBuilderOptions.Scope"/> of one Unicode white space character that
     /// <see cref="char.IsWhiteSpace(char)"/> reads as white space, U+00A0 (NO-BREAK SPACE) or U+2003
-    /// (EM SPACE), holds no <c>scope-token</c>, so the request the builder produces carries no
-    /// <c>scope</c> parameter.
+    /// (EM SPACE), is omitted by this library's normalization at the builder, so the request the
+    /// builder produces carries no <c>scope</c> parameter.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see> defines
-    /// <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, which holds neither code point;
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 section 3.2</see> says
-    /// "Parameters sent without a value MUST be treated as if they were omitted from the request." The
-    /// request is posted over the loopback listener to the shipped token endpoint, which answers 200,
-    /// and the fields it received are exactly those of a request that names no scope.
+    /// <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, which holds neither code point, so such a
+    /// value holds no <c>scope-token</c>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 section 3.2</see>'s
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// governs an empty value only, not this one. The request is posted over the loopback listener
+    /// to the shipped token endpoint, which answers 200, and the fields it received are exactly
+    /// those of a request that names no scope.
     /// </summary>
     /// <param name="codePoint">The code point of the one character <see cref="TokenExchangeBuilderOptions.Scope"/> holds.</param>
     [TestMethod]

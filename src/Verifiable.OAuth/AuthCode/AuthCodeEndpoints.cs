@@ -5358,11 +5358,13 @@ public static class AuthCodeEndpoints
                 //Space-joining it into the space-delimited Resource slot unparsed would corrupt
                 //that slot: ParseResourceIndicators/ResolveEffectiveResource would later split a
                 //single spacey audience name into several bogus "indicators". The carry is
-                //therefore gated: it populates Resource ONLY when every audience entry already IS
-                //a well-formed, whitespace-free absolute resource indicator
-                //(IsCarriedAudienceEntry); otherwise Resource stays null, the same fail-closed
-                //outcome as "nothing was granted", rather than smuggling a malformed value into a
-                //slot every downstream reader assumes is clean.
+                //therefore gated: it populates Resource ONLY when every audience entry parses as an
+                //absolute, whitespace-free URI with no fragment component (IsCarriedAudienceEntry).
+                //That is the carry rule, not the grammar ResourceIndicatorSyntax reads an incoming
+                //resource by: it admits entries that grammar refuses (a userinfo in an https value,
+                //a host that is not ASCII), and each entry is carried as the seam spelled it.
+                //Otherwise Resource stays null, the same fail-closed outcome as "nothing was
+                //granted", rather than a joined value the split would not return entry by entry.
                 Resource = authorization.Audience is { Count: > 0 } audienceEntries
                     && audienceEntries.All(IsCarriedAudienceEntry)
                     ? string.Join(' ', audienceEntries)
@@ -7141,13 +7143,14 @@ public static class AuthCodeEndpoints
     /// the granted set (section 2.2: "the authorization server will issue an access token based on
     /// that subset of requested resources"); a grant with no stored resource has nothing to narrow
     /// from, and any indicator not present in the granted set fails closed with
-    /// <c>invalid_target</c>. A malformed token-request value is refused before this method ever
+    /// <c>invalid_target</c> and one fixed <c>error_description</c> that names no value. A
+    /// malformed token-request value is refused before this method ever
     /// runs, by <see cref="ValidateResourceOccurrences"/>'s pre-correlation step, so no
     /// separate shape check is needed here. Section 2's resource set is a SET: the granted and
-    /// requested indicator lists are each deduplicated by
-    /// <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/> before use, via
-    /// <see cref="DeduplicateByComparisonKey"/>, so a client or stored grant that repeated an
-    /// indicator (in either spelling) never surfaces a duplicate <c>aud</c> member. Shared by the
+    /// requested lists are each deduplicated by exact spelling before use, via
+    /// <see cref="DeduplicateOrdinal"/>, and the effective list holds each matched granted entry
+    /// once, so a client or stored grant that repeated an entry never surfaces a duplicate
+    /// <c>aud</c> member. Shared by the
     /// <c>authorization_code</c> grant (<see cref="BuildToken"/>) and the <c>refresh_token</c>
     /// grant (<see cref="BuildRefreshToken"/>); the caller alone decides what to persist onto
     /// <see cref="ServerRefreshTokenIssuedState.Resource"/>: this method never narrows the stored
@@ -7156,20 +7159,47 @@ public static class AuthCodeEndpoints
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Subset membership is <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/> equality:
-    /// the scheme and host folded to lowercase ASCII when the value is an accepted indicator
+    /// A requested indicator matches the granted entry of its identical spelling first and, when no
+    /// granted entry has that spelling, the first granted entry whose
+    /// <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/> equals its own: the scheme and
+    /// host folded to lowercase ASCII when the value is an accepted indicator
     /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
     /// 6.2.2.1</see>: the scheme and host are case-insensitive), every other component compared
     /// exactly, the fail-closed side of
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.1">RFC 3986 section 6.2.1</see>'s
     /// simple string comparison: a requested indicator a looser comparison would have matched but
-    /// this one does not is refused, never silently accepted. A stored grant
-    /// therefore matches a request in either spelling of its scheme and host, and the issued token
-    /// carries the STORED spelling (the matched <paramref name="grantedResource"/> entry, never the
-    /// request's own); a stored value the check refuses (an IRI, or any other value outside the
-    /// ASCII grammar) is carried
-    /// unchanged and applies only when the request names no resource at all, since it can then
-    /// never share a key with anything the request supplies.
+    /// this one does not is refused, never silently accepted. A token request's <c>resource</c>
+    /// occurrences are folded at their ingress (<see cref="ReadResource"/> runs every occurrence
+    /// through <see cref="ResourceIndicatorSyntax.Fold(string)"/> before the join), so this method
+    /// never sees an unfolded requested value: a requested indicator matches the granted entry
+    /// stored in its folded spelling when there is one and otherwise the first granted entry with
+    /// its comparison key, and the issued token carries the STORED spelling (the matched
+    /// <paramref name="grantedResource"/> entry, never the request's own), in the requested order.
+    /// The requested values arrive folded and deduplicated by exact spelling, so each selects a
+    /// granted entry no other requested value selects, and two request spellings of one stored
+    /// entry, folded to one at the ingress, yield it once. A stored value the check refuses (an
+    /// IRI, or any other value outside the ASCII grammar) is carried unchanged and applies only
+    /// when the request names no resource at all, since it can then never share a comparison key
+    /// with anything the request supplies.
+    /// </para>
+    /// <para>
+    /// The granted entries are deduplicated by exact spelling, not by comparison key, because a
+    /// stored entry has two sources. A resource indicator is folded before it is stored
+    /// (<see cref="ResourceIndicatorSyntax.Fold(string)"/>), so for it the exact spelling and the
+    /// comparison key agree, and two stored indicators with one comparison key are one spelling. An
+    /// audience the token exchange's authorization seam authorized is carried into the same slot as
+    /// the seam spelled it (<see cref="BuildRefreshTokenExchangeResponseAsync"/>), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// defines an <c>audience</c> as "The logical name of the target service where the client
+    /// intends to use the requested security token", a name whose interpretation "requires that the
+    /// value be something that both the client and the authorization server understand": two
+    /// audiences that differ only in the case of the scheme or the host are two names, both issued
+    /// by a request that names no resource. Since a request's <c>resource</c> is folded at its
+    /// ingress (<see cref="ReadResource"/>), a request naming either spelling of two such carried
+    /// audiences arrives as the folded one, matches the carried audience stored in the folded
+    /// spelling when there is one and otherwise the first carried audience with its comparison
+    /// key, and the carried audience stored in the other spelling is issued only by a request that
+    /// names no <c>resource</c>.
     /// </para>
     /// <para>
     /// Section 2.2: "The resource value(s) that is acceptable to an authorization server in
@@ -7187,7 +7217,7 @@ public static class AuthCodeEndpoints
         {
             string[]? granted = ParseResourceIndicators(grantedResource);
 
-            return (granted is null ? null : DeduplicateByComparisonKey(granted), null);
+            return (granted is null ? null : DeduplicateOrdinal(granted), null);
         }
 
         //A non-null requested value that parses to zero indicators (ParseResourceIndicators
@@ -7195,7 +7225,7 @@ public static class AuthCodeEndpoints
         //requested": section 2's invalid_target covers a missing/malformed resource value the
         //same as at PAR/authorize receipt (ValidateResourceOccurrences). ReadResource hands
         //this method null, not such a value, for a request whose occurrences are all empty.
-        string[] requested = DeduplicateByComparisonKey(ParseResourceIndicators(requestedResource) ?? []);
+        string[] requested = DeduplicateOrdinal(ParseResourceIndicators(requestedResource) ?? []);
         if(requested.Length == 0)
         {
             RecordMalformedResourceIndicator(ResourceIndicatorSyntax.Check(requestedResource));
@@ -7206,7 +7236,7 @@ public static class AuthCodeEndpoints
         //Section 2.2's "sole discretion", the library's fail-closed exercise of it, refuses a
         //token-request resource when the grant carries none to narrow from, rather than treating
         //an empty granted set as unconstrained.
-        string[] grantedIndicators = DeduplicateByComparisonKey(ParseResourceIndicators(grantedResource) ?? []);
+        string[] grantedIndicators = DeduplicateOrdinal(ParseResourceIndicators(grantedResource) ?? []);
         if(grantedIndicators.Length == 0)
         {
             return (null, ServerHttpResponse.BadRequest(
@@ -7214,28 +7244,29 @@ public static class AuthCodeEndpoints
                 "The resource parameter must be a subset of the resource(s) originally granted; none were granted."));
         }
 
-        //Key-based subset membership, scheme/host case-insensitive in ASCII: see the remarks above.
-        //The effective list carries the matched GRANTED entry's spelling, in the requested order.
+        //Subset membership, the identical spelling first and the comparison key otherwise: see the
+        //remarks above. The effective list carries each matched GRANTED entry's spelling in the
+        //requested order, each once, since the requested values arrive folded and deduplicated by
+        //exact spelling and so no two of them select one granted entry.
         List<string> effective = new(requested.Length);
         foreach(string indicator in requested)
         {
-            string requestedKey = ResourceIndicatorSyntax.ComparisonKey(indicator);
-            string? matchedGrantedSpelling = null;
-            foreach(string granted in grantedIndicators)
-            {
-                if(string.Equals(ResourceIndicatorSyntax.ComparisonKey(granted), requestedKey, StringComparison.Ordinal))
-                {
-                    matchedGrantedSpelling = granted;
+            string? matchedGrantedSpelling = Array.Find(
+                grantedIndicators, granted => string.Equals(granted, indicator, StringComparison.Ordinal));
 
-                    break;
-                }
+            if(matchedGrantedSpelling is null)
+            {
+                string requestedKey = ResourceIndicatorSyntax.ComparisonKey(indicator);
+                matchedGrantedSpelling = Array.Find(
+                    grantedIndicators,
+                    granted => string.Equals(ResourceIndicatorSyntax.ComparisonKey(granted), requestedKey, StringComparison.Ordinal));
             }
 
             if(matchedGrantedSpelling is null)
             {
                 return (null, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidTarget,
-                    $"The resource parameter must be a subset of the resource(s) originally granted; '{indicator}' was not granted."));
+                    "The resource parameter must be a subset of the resource(s) originally granted."));
             }
 
             effective.Add(matchedGrantedSpelling);
@@ -7275,60 +7306,32 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Removes duplicate entries from <paramref name="indicators"/> by
-    /// <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/>, preserving the first
-    /// occurrence's spelling and position: the resource-indicator counterpart of
-    /// <see cref="DeduplicateOrdinal"/>, used where two spellings that differ only by the fold (an
-    /// upper-case and a lower-case scheme or host, for instance) name the same granted
-    /// resource under
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
-    /// 6.2.2.1</see>'s scheme/host case-insensitivity.
-    /// </summary>
-    private static string[] DeduplicateByComparisonKey(string[] indicators)
-    {
-        if(indicators.Length < 2)
-        {
-            return indicators;
-        }
-
-        List<string> deduplicated = new(indicators.Length);
-        HashSet<string> seen = new(StringComparer.Ordinal);
-        foreach(string indicator in indicators)
-        {
-            if(seen.Add(ResourceIndicatorSyntax.ComparisonKey(indicator)))
-            {
-                deduplicated.Add(indicator);
-            }
-        }
-
-        return [.. deduplicated];
-    }
-
-
-    /// <summary>
     /// Resolves the effective <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749
-    /// §6</see> scope for a refresh-grant response from the scope carried on the presented
+    /// section 6</see> scope for a refresh-grant response from the scope carried on the presented
     /// <see cref="ServerRefreshTokenIssuedState"/> and an optional token-request
     /// <c>scope</c>. Mirrors <see cref="ResolveEffectiveResource"/>'s narrowing shape: no
     /// token-request value leaves the full <paramref name="grantedScope"/> in force ("if omitted is
     /// treated as equal to the scope originally granted by the resource owner"); a token-request
     /// value MUST be a subset of the granted set ("The requested scope MUST NOT include any scope
     /// not originally granted"), compared as a case-sensitive SET of space-delimited tokens per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">§3.3</see> — order and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">section 3.3</see>: order and
     /// repetition carry no meaning (<see cref="DeduplicateOrdinal"/>). Any requested token outside
     /// the granted set fails closed with <see cref="OAuthErrors.InvalidScope"/>
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">§5.2</see>: "exceeds the
-    /// scope granted by the resource owner"), reachable only after
-    /// <see cref="VerifyRefreshClient"/> and the DPoP binding have already passed — the criterion
-    /// <see cref="RefreshTokenNotFoundDescription"/>'s remarks state for a refusal that keeps its
-    /// own body instead of that constant. A present but blank or all-whitespace token-request
-    /// <c>scope</c> is treated the same as an absent one: §3.3's grammar
-    /// (<c>scope-token = 1*( ... )</c>) requires at least one character per token, so a blank value
-    /// carries no scope-token at all, textually indistinguishable from omission. This method never
-    /// narrows the STORED refresh record itself — the caller alone decides what to persist onto
-    /// <see cref="ServerRefreshTokenIssuedState.Scope"/>, which §6 requires stay "identical to
-    /// that of the refresh token included by the client in the request" across rotation, however
-    /// narrow this request was.
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">section 5.2</see>:
+    /// <c>invalid_scope</c>, "The requested scope is invalid, unknown, malformed, or exceeds the
+    /// scope granted by the resource owner.") and one fixed <c>error_description</c>, "The scope
+    /// parameter must be a subset of the scope originally granted.", which names no requested scope
+    /// token, as the not-granted refusal of <see cref="ResolveEffectiveResource"/> names no value.
+    /// The refusal is reachable only after <see cref="VerifyRefreshClient"/> and the DPoP binding
+    /// have passed, the criterion <see cref="RefreshTokenNotFoundDescription"/>'s remarks state for
+    /// a refusal that keeps its own body instead of that constant. A present but blank or
+    /// all-whitespace token-request <c>scope</c> is treated the same as an absent one: section
+    /// 3.3's grammar (<c>scope-token = 1*( ... )</c>) requires at least one character per token, so
+    /// a blank value carries no scope-token at all, textually indistinguishable from omission. This
+    /// method never narrows the STORED refresh record itself; the caller alone decides what to
+    /// persist onto <see cref="ServerRefreshTokenIssuedState.Scope"/>, which section 6 requires stay
+    /// "identical to that of the refresh token included by the client in the request" across
+    /// rotation, however narrow this request was.
     /// </summary>
     /// <param name="grantedScope">The scope stored on the presented refresh record.</param>
     /// <param name="requestedScope">The token request's own <c>scope</c> field, or <see langword="null"/> when absent.</param>
@@ -7351,7 +7354,7 @@ public static class AuthCodeEndpoints
             {
                 return (string.Empty, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidScope,
-                    $"The scope parameter must be a subset of the scope originally granted; '{token}' was not granted."));
+                    "The scope parameter must be a subset of the scope originally granted."));
             }
         }
 

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
@@ -2190,14 +2191,20 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// to lowercase". <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">
     /// RFC 8707 section 2.2</see>: a token request's resource narrows the granted set. A token
     /// request naming the granted indicator in a different scheme/host spelling narrows to it,
-    /// by the folded comparison key, and the minted <c>aud</c> carries the GRANTED spelling.
+    /// by the folded comparison key, and the minted <c>aud</c> carries the GRANTED spelling. The
+    /// first case names the upper-case spelling at the code redemption and no resource at the
+    /// refresh; the second names no resource at the code redemption and both spellings at the
+    /// refresh, which narrows to the granted indicator once.
     /// </summary>
+    /// <param name="redemptionResources">The <c>resource</c> occurrences the code redemption names.</param>
+    /// <param name="refreshResources">The <c>resource</c> occurrences the refresh names.</param>
     [TestMethod]
     [DoNotParallelize]
-    public async Task NarrowingMatchesAGrantedResourceByItsKeyAsync()
+    [DataRow(new[] { "HTTPS://API.EXAMPLE.COM/x" }, new string[] { })]
+    [DataRow(new string[] { }, new[] { "HTTPS://API.EXAMPLE.COM/x", "https://api.example.com/x" })]
+    public async Task NarrowingMatchesAGrantedResourceByItsKeyAsync(string[] redemptionResources, string[] refreshResources)
     {
         const string grantedResource = "https://api.example.com/x";
-        const string requestedResource = "HTTPS://API.EXAMPLE.COM/x";
 
         await using TestHostShell host = new(TimeProvider);
         using ServedCultureScope culture = await ServedCultureScope.CreateAsync(
@@ -2213,11 +2220,56 @@ internal sealed class Rfc8707ResourceIndicatorTests
             host, material, segment, ResourceDeliveryMode.Pushed, grantedResource, pkce, TestContext.CancellationToken).ConfigureAwait(false);
 
         (int status, string body) = await PostTokenAsync(
-            host, segment, code, pkce.EncodedVerifier, [requestedResource]).ConfigureAwait(false);
+            host, segment, code, pkce.EncodedVerifier, redemptionResources).ConfigureAwait(false);
         Assert.AreEqual(200, status, body);
         Assert.AreSequenceEqual([grantedResource], DecodeAudienceFromTokenResponse(body));
 
-        culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
+        (int refreshStatus, string refreshBody) = await PostRefreshAsync(
+            host, segment, ExtractStringProperty(body, "refresh_token"), refreshResources).ConfigureAwait(false);
+        Assert.AreEqual(200, refreshStatus, refreshBody);
+        Assert.AreSequenceEqual([grantedResource], DecodeAudienceFromTokenResponse(refreshBody));
+
+        culture.AssertEveryRequestWasServedUnder("tr-TR", 4);
+    }
+
+
+    /// <summary>
+    /// A <see cref="ServedCultureScope"/> leaves <see cref="CultureInfo.DefaultThreadCurrentCulture"/>
+    /// on disposal exactly as it found it: <see langword="null"/> when no default was set before the
+    /// scope, and the same culture instance when one was, so a culture row changes nothing a later
+    /// test in the process observes. The row sets the value it starts from and restores the value it
+    /// found in <c>finally</c>; it is marked <c>[DoNotParallelize]</c> because the default is
+    /// process-wide. The row proves this library's test infrastructure, and no specification clause
+    /// applies.
+    /// </summary>
+    /// <param name="defaultCultureNameBefore">The name of the default thread culture set before the scope, or <see langword="null"/> for none.</param>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow(null)]
+    [DataRow("fi-FI")]
+    public async Task TheServedCultureScopeRestoresTheDefaultThreadCultureItFoundAsync(string? defaultCultureNameBefore)
+    {
+        CultureInfo? defaultCultureOfTheProcess = CultureInfo.DefaultThreadCurrentCulture;
+        CultureInfo? defaultCultureBefore = defaultCultureNameBefore is null ? null : new CultureInfo(defaultCultureNameBefore);
+
+        try
+        {
+            CultureInfo.DefaultThreadCurrentCulture = defaultCultureBefore;
+
+            await using TestHostShell host = new(TimeProvider);
+            using(await ServedCultureScope.CreateAsync(host, "tr-TR", TestContext.CancellationToken).ConfigureAwait(false))
+            {
+                Assert.AreEqual("tr-TR", CultureInfo.DefaultThreadCurrentCulture?.Name);
+            }
+
+            Assert.AreSame(defaultCultureBefore, CultureInfo.DefaultThreadCurrentCulture,
+                $"Expected the default thread culture '{defaultCultureBefore?.Name ?? "null"}' after disposal; "
+                + $"observed '{CultureInfo.DefaultThreadCurrentCulture?.Name ?? "null"}'.");
+        }
+        finally
+        {
+            CultureInfo.DefaultThreadCurrentCulture = defaultCultureOfTheProcess;
+        }
     }
 
 
@@ -2234,7 +2286,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// refused with <c>invalid_target</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>:
     /// "such policy may limit the acceptable resources to those that were originally granted by the
-    /// resource owner or a subset thereof."), the description naming the requested value as not granted.
+    /// resource owner or a subset thereof."), with this library's one fixed description for a
+    /// resource that was not granted, which names no value.
     /// </summary>
     /// <param name="grantedResource">The <c>resource</c> the authorization request granted.</param>
     /// <param name="requestedResource">The <c>resource</c> the token request names.</param>
@@ -2260,8 +2313,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// resource that is not in the granted set and is refused with <c>invalid_target</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>:
     /// "such policy may limit the acceptable resources to those that were originally granted by the
-    /// resource owner or a subset thereof."), the description naming the requested value as not
-    /// granted. The four pairs are the clauses the library does not apply:
+    /// resource owner or a subset thereof."), with this library's one fixed description for a
+    /// resource that was not granted, which names no value. The four pairs are the clauses the
+    /// library does not apply:
     /// an empty path against <c>/</c> (section 6.2.3: "a URI that uses the generic syntax for
     /// authority with an empty path should be normalized to a path of &quot;/&quot;"), an explicit
     /// default port against no port (section 6.2.3: "an explicit &quot;:port&quot;, for which the port
@@ -2676,15 +2730,19 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <see cref="OAuthEventNames.MalformedResourceIndicator"/> event, whose
     /// <see cref="OAuthEventNames.ResourceIndicatorFaultTagName"/> tag names the specific grammar part
     /// that failed, and that event carries no tag holding the presented value itself: the record
-    /// names the failure, never the rejected secret or personal data it might carry. The refusal
-    /// itself is <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section
-    /// 2.1</see>'s <c>invalid_target</c>.
+    /// names the failure, never the rejected secret or personal data it might carry. For an
+    /// <c>http</c> or <c>https</c> value the authority's faults are named before the path's, so a
+    /// value with an empty host or no authority is recorded by that fault whatever its path holds.
+    /// The refusal itself is <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707
+    /// section 2.1</see>'s <c>invalid_target</c>.
     /// </summary>
     [TestMethod]
     [DoNotParallelize]
     [DataRow("https://api.example.com/%GG", 0, "", "PercentEncoding")]
     [DataRow("https://", 0x212A, "ey.example/", "NonAscii")]
     [DataRow("https://api.example.com/x#", 0, "", "Fragment")]
+    [DataRow("https:///bad^", 0, "", "HttpHost")]
+    [DataRow("https:bad^", 0, "", "HttpAuthority")]
     public async Task AMalformedResourceIsRecordedOnTheRequestTraceByItsFailingPartAsync(
         string resourcePrefix, int nonAsciiCodePoint, string resourceSuffix, string expectedFaultName)
     {
@@ -3151,8 +3209,10 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <summary>
     /// Grants <paramref name="grantedResource"/> at the pushed request over the real loopback
     /// listener, served under "tr-TR", then redeems the code naming <paramref name="requestedResource"/>
-    /// and asserts the 400 <c>invalid_target</c> body that names the requested value as not granted
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>).
+    /// and asserts the 400 <c>invalid_target</c> body
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see>)
+    /// whose <c>error_description</c> is this library's one fixed text for a resource that was not
+    /// granted, the body holding no part of the requested value.
     /// </summary>
     /// <param name="grantedResource">The <c>resource</c> the authorization request grants.</param>
     /// <param name="requestedResource">The <c>resource</c> the token request names.</param>
@@ -3176,11 +3236,10 @@ internal sealed class Rfc8707ResourceIndicatorTests
             host, segment, code, pkce.EncodedVerifier, [requestedResource]).ConfigureAwait(false);
         Assert.AreEqual(400, status, body);
         Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", body, StringComparison.Ordinal, body);
-        Assert.Contains(
-            "The resource parameter must be a subset of the resource(s) originally granted;",
-            body, StringComparison.Ordinal, body);
-        Assert.Contains(requestedResource, body, StringComparison.Ordinal, body);
-        Assert.Contains("was not granted.", body, StringComparison.Ordinal, body);
+        Assert.AreEqual(
+            "The resource parameter must be a subset of the resource(s) originally granted.",
+            ExtractStringProperty(body, "error_description"), body);
+        Assert.DoesNotContain(requestedResource, body, StringComparison.Ordinal, body);
 
         culture.AssertEveryRequestWasServedUnder("tr-TR", 3);
     }

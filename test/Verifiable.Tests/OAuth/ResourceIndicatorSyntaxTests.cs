@@ -115,7 +115,13 @@ internal sealed class ResourceIndicatorSyntaxTests
     /// <c>ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )</c>, so a value whose first character is a
     /// <c>%</c> or a control character has no scheme, even when a well-formed triplet or a later
     /// <c>:</c> follows (<c>%41x:y</c>); a value that begins with <c>#</c> opens a fragment,
-    /// which no <c>absolute-URI</c> has, and is named as one (<c>#x</c>).
+    /// which no <c>absolute-URI</c> has, and is named as one (<c>#x</c>). The parts are named in the
+    /// order of <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3">RFC 3986 section 3</see>'s
+    /// "hierarchical sequence of components referred to as the scheme, authority, path, query, and
+    /// fragment", the <c>http</c> and <c>https</c> rules on the authority included, so a value that
+    /// fails in its authority and in its path is named by its authority: <c>https:///bad^</c> by its
+    /// empty host, <c>https:bad^</c> by its missing authority and <c>https://user@host/bad^</c> by its
+    /// <c>userinfo</c>.
     /// </summary>
     [TestMethod]
     [DataRow("", ResourceIndicatorFault.Empty)]
@@ -156,6 +162,9 @@ internal sealed class ResourceIndicatorSyntaxTests
     [DataRow("https://user:pass@api.example/", ResourceIndicatorFault.HttpUserInfo)]
     [DataRow("https://api.example.com@other.example/", ResourceIndicatorFault.HttpUserInfo)]
     [DataRow("HTTP://u@h/", ResourceIndicatorFault.HttpUserInfo)]
+    [DataRow("https:///bad^", ResourceIndicatorFault.HttpHost)]
+    [DataRow("https:bad^", ResourceIndicatorFault.HttpAuthority)]
+    [DataRow("https://user@host/bad^", ResourceIndicatorFault.HttpUserInfo)]
     [DataRow("ftp://user@host/", ResourceIndicatorFault.None)]
     [DataRow("urn:user@example", ResourceIndicatorFault.None)]
     [DataRow("foo://b%C3%BCcher.example/x", ResourceIndicatorFault.None)]

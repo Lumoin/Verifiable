@@ -259,6 +259,21 @@ internal static class ResourceIndicatorSyntax
             cursor = authorityEnd;
         }
 
+        //The authority precedes the path (RFC 3986 section 3), so the http and https requirements
+        //on the authority are read before the path, query and fragment.
+        if(isHttpScheme)
+        {
+            if(!hasAuthority)
+            {
+                return ResourceIndicatorFault.HttpAuthority;
+            }
+
+            if(isHostEmpty)
+            {
+                return ResourceIndicatorFault.HttpHost;
+            }
+        }
+
         int pathEnd = cursor;
 
         while(pathEnd < length && indicator[pathEnd] is not ('?' or '#'))
@@ -298,19 +313,6 @@ internal static class ResourceIndicatorSyntax
         if(cursor < length && indicator[cursor] == '#')
         {
             return ResourceIndicatorFault.Fragment;
-        }
-
-        if(isHttpScheme)
-        {
-            if(!hasAuthority)
-            {
-                return ResourceIndicatorFault.HttpAuthority;
-            }
-
-            if(isHostEmpty)
-            {
-                return ResourceIndicatorFault.HttpHost;
-            }
         }
 
         return ResourceIndicatorFault.None;

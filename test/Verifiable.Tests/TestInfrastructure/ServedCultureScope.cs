@@ -21,8 +21,11 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </summary>
 internal sealed class ServedCultureScope: IDisposable
 {
-    /// <summary>The default thread culture recorded before this scope changed it, restored on disposal.</summary>
-    private CultureInfo OriginalDefaultThreadCulture { get; }
+    /// <summary>
+    /// The default thread culture recorded before this scope changed it, <see langword="null"/> when
+    /// none was set, restored exactly on disposal.
+    /// </summary>
+    private CultureInfo? OriginalDefaultThreadCulture { get; }
 
     /// <summary>The current culture recorded before this scope changed it, restored on disposal.</summary>
     private CultureInfo OriginalCurrentCulture { get; }
@@ -38,9 +41,9 @@ internal sealed class ServedCultureScope: IDisposable
     /// only way to obtain an instance, because installing the resolver wrapper must complete before
     /// the culture actually changes.
     /// </summary>
-    /// <param name="originalDefaultThreadCulture">The default thread culture to restore on disposal.</param>
+    /// <param name="originalDefaultThreadCulture">The default thread culture to restore on disposal, <see langword="null"/> when none was set.</param>
     /// <param name="originalCurrentCulture">The current culture to restore on disposal.</param>
-    private ServedCultureScope(CultureInfo originalDefaultThreadCulture, CultureInfo originalCurrentCulture)
+    private ServedCultureScope(CultureInfo? originalDefaultThreadCulture, CultureInfo originalCurrentCulture)
     {
         OriginalDefaultThreadCulture = originalDefaultThreadCulture;
         OriginalCurrentCulture = originalCurrentCulture;
@@ -63,7 +66,7 @@ internal sealed class ServedCultureScope: IDisposable
     /// <returns>The active scope; dispose it to restore both cultures.</returns>
     internal static async Task<ServedCultureScope> CreateAsync(TestHostShell host, string cultureName, CancellationToken cancellationToken)
     {
-        ServedCultureScope scope = new(CultureInfo.DefaultThreadCurrentCulture ?? CultureInfo.InvariantCulture, CultureInfo.CurrentCulture);
+        ServedCultureScope scope = new(CultureInfo.DefaultThreadCurrentCulture, CultureInfo.CurrentCulture);
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
@@ -104,7 +107,10 @@ internal sealed class ServedCultureScope: IDisposable
         }
     }
 
-    /// <summary>Restores both cultures this scope changed.</summary>
+    /// <summary>
+    /// Restores both cultures this scope changed, the default thread culture to exactly the value
+    /// it found, <see langword="null"/> included.
+    /// </summary>
     public void Dispose()
     {
         CultureInfo.DefaultThreadCurrentCulture = OriginalDefaultThreadCulture;

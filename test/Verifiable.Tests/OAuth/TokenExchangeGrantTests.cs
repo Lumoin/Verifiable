@@ -3393,6 +3393,98 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
+    /// Two audiences an exchange's authorization seam authorizes stay two audiences in every access
+    /// token a refresh of the minted refresh token issues, although they differ only in the case of
+    /// the host and so share a comparison key.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
+    /// defines <c>audience</c> as "The logical name of the target service where the client intends to
+    /// use the requested security token", a name whose interpretation "requires that the value be
+    /// something that both the client and the authorization server understand", so two spellings the
+    /// seam authorized are two names, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 section 2.2</see> binds
+    /// "any refresh token that is returned" "to the full original grant". Section 2.2 states that
+    /// binding for the <c>authorization_code</c> case; this library applies the same binding to the
+    /// <c>refresh_token</c> grant of an exchange-minted refresh token under the section's "such
+    /// policy may limit the acceptable resources to those that were originally granted by the
+    /// resource owner or a subset thereof", and the rotation that keeps the full set is this
+    /// library's rule. The seam authorizes <c>https://API.EXAMPLE/x</c> and
+    /// <c>https://api.example/x</c> for an exchange that issues a refresh token. A refresh naming no
+    /// <c>resource</c> issues an <c>aud</c> of both spellings in the authorized order; a refresh
+    /// naming <c>https://api.example/x</c> issues an <c>aud</c> of that spelling alone; and the
+    /// refresh token that narrowed refresh rotated to, refreshed naming no <c>resource</c>, issues
+    /// both spellings again. A refresh naming <c>https://API.EXAMPLE/x</c> is answered with
+    /// <c>https://api.example/x</c> alone, because the request is folded at its ingress, a rule of
+    /// this library.
+    /// </summary>
+    /// <param name="firstRefreshResource">The <c>resource</c> the first refresh names, or <see langword="null"/> for none.</param>
+    /// <param name="isRotatedTokenRefreshed">Whether the rotated refresh token is refreshed again, naming no <c>resource</c>.</param>
+    /// <param name="expectedAudience">The <c>aud</c> of the access token the last refresh issues.</param>
+    [TestMethod]
+    [DataRow(null, false, new[] { "https://API.EXAMPLE/x", "https://api.example/x" })]
+    [DataRow("https://api.example/x", false, new[] { "https://api.example/x" })]
+    [DataRow("https://api.example/x", true, new[] { "https://API.EXAMPLE/x", "https://api.example/x" })]
+    [DataRow("https://API.EXAMPLE/x", false, new[] { "https://api.example/x" })]
+    public async Task TwoAuthorizedAudiencesThatShareAComparisonKeyStayTwoThroughRefreshAsync(
+        string? firstRefreshResource, bool isRotatedTokenRefreshed, string[] expectedAudience)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = ["https://API.EXAMPLE/x", "https://api.example/x"]
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        HttpClient http = host.SharedHttpClient!;
+
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+        Assert.AreEqual(200, mintStatus, mintBody);
+        string mintedRefreshToken = ReadMember(mintBody, WellKnownTokenTypes.AccessToken);
+
+        (int refreshStatus, string refreshBody) = await PostRefreshAsync(
+            http, tokenUrl, mintedRefreshToken, firstRefreshResource).ConfigureAwait(false);
+        Assert.AreEqual(200, refreshStatus, refreshBody);
+
+        if(isRotatedTokenRefreshed)
+        {
+            string rotatedRefreshToken = ReadMember(refreshBody, OAuthRequestParameterNames.RefreshToken);
+            Assert.AreNotEqual(mintedRefreshToken, rotatedRefreshToken, "The first refresh must rotate the refresh token.");
+
+            (refreshStatus, refreshBody) = await PostRefreshAsync(
+                http, tokenUrl, rotatedRefreshToken, resource: null).ConfigureAwait(false);
+            Assert.AreEqual(200, refreshStatus, refreshBody);
+        }
+
+        Assert.AreSequenceEqual(expectedAudience, ReadAudience(ReadMember(refreshBody, WellKnownTokenTypes.AccessToken)));
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 section 3.1</see>:
     /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the

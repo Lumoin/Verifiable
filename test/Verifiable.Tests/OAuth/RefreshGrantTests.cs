@@ -765,15 +765,19 @@ internal sealed class RefreshGrantTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>:
-    /// "invalid_scope — The requested scope is ... exceeds the scope granted by the resource
-    /// owner." A refresh-request scope naming a value the stored grant never carried is refused
-    /// BEFORE the rotation claim: nothing is minted, claimed, rotated, or revoked, so the presented
-    /// refresh token still works afterward.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 section 5.2</see>:
+    /// <c>invalid_scope</c>, "The requested scope is invalid, unknown, malformed, or exceeds the
+    /// scope granted by the resource owner." A refresh-request scope naming a value the stored grant
+    /// never carried is refused BEFORE the rotation claim: nothing is minted, claimed, rotated, or
+    /// revoked, so the presented refresh token works afterward. The refusal answers this
+    /// library's one fixed <c>error_description</c>, which names no requested scope token, so the
+    /// body holds no part of the token the client sent.
     /// </summary>
     [TestMethod]
     public async Task RefreshWithAnUngrantedScopeValueIsRefusedInvalidScopeWithoutConsumingTheTokenOverHttpWire()
     {
+        const string ungrantedScopeToken = "ungranted.7f3a";
+
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
@@ -795,7 +799,7 @@ internal sealed class RefreshGrantTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
                 [OAuthRequestParameterNames.RefreshToken] = refreshToken,
                 [OAuthRequestParameterNames.ClientId] = ClientId,
-                [OAuthRequestParameterNames.Scope] = WellKnownScopes.Address
+                [OAuthRequestParameterNames.Scope] = ungrantedScopeToken
             },
             TestContext.CancellationToken).ConfigureAwait(false);
         string refusedBody = await refusedResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -803,6 +807,13 @@ internal sealed class RefreshGrantTests
 
         using JsonDocument refusedDoc = JsonDocument.Parse(refusedBody);
         Assert.AreEqual(OAuthErrors.InvalidScope, refusedDoc.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "The scope parameter must be a subset of the scope originally granted.",
+            refusedDoc.RootElement.GetProperty("error_description").GetString());
+        Assert.DoesNotContain("ungranted", refusedBody,
+            "The invalid_scope refusal must not echo the requested scope token.");
+        Assert.DoesNotContain("7f3a", refusedBody,
+            "The invalid_scope refusal must not echo the requested scope token.");
 
         Assert.AreEqual(stepCountBefore, hosted.FlowStates[flowId].StepCount,
             "An invalid_scope refusal must not claim, rotate, or revoke the presented refresh record.");

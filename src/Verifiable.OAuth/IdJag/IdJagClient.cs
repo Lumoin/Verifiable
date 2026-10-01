@@ -42,12 +42,18 @@ public sealed record IdJagMintOptions
     public IReadOnlyList<string> Resource { get; init; } = [];
 
     /// <summary>
-    /// The requested scope (section 4.3 <c>scope</c>), or <see langword="null"/>. A value of white space only,
-    /// white space being every character <see cref="char.IsWhiteSpace(char)"/> reads as white space,
-    /// holds no <c>scope-token</c> and is no scope: the request carries no <c>scope</c> parameter
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>,
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>). Any other
-    /// value is sent as given, its <c>scope-token</c> syntax being the caller's.
+    /// The requested scope (section 4.3 <c>scope</c>), or <see langword="null"/>. An empty value, or
+    /// a value of white space only, white space being every character
+    /// <see cref="char.IsWhiteSpace(char)"/> reads as white space, is omitted: the request carries no
+    /// <c>scope</c> parameter. Omitting a value of white space only is this library's normalization
+    /// at the builder:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>'s
+    /// grammar, <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, shows such a value holds no
+    /// <c>scope-token</c>, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>'s "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." governs an
+    /// empty value only. Any other value is sent as given, its <c>scope-token</c> syntax being the
+    /// caller's.
     /// </summary>
     public string? Scope { get; init; }
 

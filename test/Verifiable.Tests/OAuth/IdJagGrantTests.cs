@@ -5629,15 +5629,18 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
-    /// An <see cref="IdJagMintOptions.Scope"/> of white space only holds no <c>scope-token</c>, so the
-    /// mint sends no <c>scope</c> parameter. <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749
+    /// An <see cref="IdJagMintOptions.Scope"/> of white space only is omitted by this library's
+    /// normalization at the builder, so the mint sends no <c>scope</c> parameter.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749
     /// section 3.3</see> defines the value as <c>scope = scope-token *( SP scope-token )</c> with
     /// <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, and neither a space (%x20) nor a tab (%x09)
-    /// is in a <c>scope-token</c>; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749
-    /// section 3.2</see> says "Parameters sent without a value MUST be treated as if they were omitted
-    /// from the request." The mint runs through the library's own <see cref="OAuthClient"/> ID-JAG
-    /// sub-client against the hosted token endpoint under a registration without a DPoP mandate, and
-    /// the fields the endpoint received are exactly those of a mint that names no scope.
+    /// is in a <c>scope-token</c>, so such a value holds no <c>scope-token</c>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 section 3.2</see>'s
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."
+    /// governs an empty value only, not this one. The mint runs through the library's own
+    /// <see cref="OAuthClient"/> ID-JAG sub-client against the hosted token endpoint under a
+    /// registration without a DPoP mandate, and the fields the endpoint received are exactly those
+    /// of a mint that names no scope.
     /// </summary>
     /// <param name="scope">The white-space-only <see cref="IdJagMintOptions.Scope"/> the mint is given.</param>
     [TestMethod]

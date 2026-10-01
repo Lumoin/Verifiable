@@ -86,12 +86,17 @@ public sealed record TokenExchangeBuilderOptions
 
     /// <summary>
     /// The requested scope of the issued token (RFC 8693 section 2.1 / RFC 6749 section 3.3 <c>scope</c>, OPTIONAL).
-    /// A value of white space only, white space being every character
-    /// <see cref="char.IsWhiteSpace(char)"/> reads as white space, holds no <c>scope-token</c> and is
-    /// no scope: the request carries no <c>scope</c> parameter
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>,
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>). Any other
-    /// value is sent as given, its <c>scope-token</c> syntax being the caller's.
+    /// An empty value, or a value of white space only, white space being every character
+    /// <see cref="char.IsWhiteSpace(char)"/> reads as white space, is omitted: the request carries no
+    /// <c>scope</c> parameter. Omitting a value of white space only is this library's normalization
+    /// at the builder:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>'s
+    /// grammar, <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>, shows such a value holds no
+    /// <c>scope-token</c>, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>'s "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." governs an
+    /// empty value only. Any other value is sent as given, its <c>scope-token</c> syntax being the
+    /// caller's.
     /// </summary>
     public string? Scope { get; init; }
 }
@@ -133,10 +138,13 @@ public static class TokenExchangeRequestBuilder
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-7.6">Section 7.6</see>), as the
     /// entry on resource indicators in the authorization server design document states. Every
     /// other entry is sent as its own <c>resource</c> occurrence, unfolded. A
-    /// <see cref="TokenExchangeBuilderOptions.Scope"/> of white space only holds no <c>scope-token</c>
-    /// and is no scope, so the request carries no <c>scope</c> parameter
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>,
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>). The
+    /// <see cref="TokenExchangeBuilderOptions.Scope"/> that is empty or of white space only is
+    /// omitted, the request carrying no <c>scope</c> parameter: the omission of a value of white
+    /// space only is this library's normalization, whose basis the member's own doc states
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 section 3.3</see>'s
+    /// <c>scope-token</c> grammar), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">section 3.2</see>'s rule on a
+    /// parameter sent without a value governs an empty value only. The
     /// authorization server's own <c>invalid_target</c> policy decision (RFC 8693 section 2.2.2) is a separate,
     /// later step this check does not perform or preempt.
     /// </summary>
