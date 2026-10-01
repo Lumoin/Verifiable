@@ -72,7 +72,11 @@ public sealed record PreAuthorizedCodeDecision
 
     /// <summary>
     /// The subject identifier the issued Credential is about. Becomes the access token's
-    /// <c>sub</c> claim. Required on a grant; ignored on a denial.
+    /// <c>sub</c> claim. Required on a grant; ignored on a denial. A grant whose subject is null, empty or white
+    /// space only names no End-User the access token could be bound to: it is the application seam's own defect,
+    /// which the token endpoint answers <c>server_error</c> with
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, the fixed description every defect of an
+    /// application seam is answered with, and nothing is issued. That rule is this library's.
     /// </summary>
     public string? Subject { get; init; }
 

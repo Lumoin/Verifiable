@@ -100,6 +100,62 @@ internal sealed class BackChannelLogoutTokenTests
     }
 
 
+    /// <summary>
+    /// A Logout Token's <c>sub</c> Claim names the End-User whose sessions end
+    /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OpenID Connect
+    /// Back-Channel Logout 1.0 Section 2.4</see>). A subject that is empty or white space only names no End-User,
+    /// so building a Logout Token with it and a <c>sid</c> throws <see cref="ArgumentException"/> for
+    /// <c>subject</c>, as the builder throws for its other arguments, and no token carries a blank <c>sub</c> or is
+    /// built without the <c>sub</c> its caller gave. The rule is this library's.
+    /// </summary>
+    /// <param name="subject">The blank subject: the empty string or one space.</param>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty subject")]
+    [DataRow(" ", DisplayName = "a subject of one space")]
+    public async Task BuildRejectsABlankSubject(string subject)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory opPublic = keys.PublicKey;
+        using PrivateKeyMemory opPrivate = keys.PrivateKey;
+
+        ArgumentException exception = await Assert.ThrowsExactlyAsync<ArgumentException>(
+            async () => await IssueAsync(opPrivate, subject: subject, sessionId: SessionId).ConfigureAwait(false))
+            .ConfigureAwait(false);
+        Assert.AreEqual("subject", exception.ParamName);
+    }
+
+
+    /// <summary>
+    /// A Logout Token's <c>sid</c> Claim names the session that ends
+    /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OpenID Connect
+    /// Back-Channel Logout 1.0 Section 2.4</see>). A session identifier that is empty or white space only names no
+    /// session, so building a Logout Token with it throws <see cref="ArgumentException"/> for <c>sessionId</c>,
+    /// whatever the subject is, as the builder throws for a blank subject: with no subject, and with a subject,
+    /// where the token would otherwise carry that <c>sub</c> beside a blank <c>sid</c> or none. No token carries a
+    /// blank <c>sid</c> or is built without the <c>sid</c> its caller gave. The rule is this library's.
+    /// </summary>
+    /// <param name="sessionId">The blank session identifier: the empty string or one space.</param>
+    /// <param name="subject">The subject given beside it: none, or the class's subject.</param>
+    [TestMethod]
+    [DataRow("", null, DisplayName = "an empty session identifier")]
+    [DataRow(" ", null, DisplayName = "a session identifier of one space")]
+    [DataRow("", Subject, DisplayName = "an empty session identifier beside a subject")]
+    [DataRow(" ", Subject, DisplayName = "a session identifier of one space beside a subject")]
+    public async Task BuildRejectsABlankSessionId(string sessionId, string? subject)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory opPublic = keys.PublicKey;
+        using PrivateKeyMemory opPrivate = keys.PrivateKey;
+
+        ArgumentException exception = await Assert.ThrowsExactlyAsync<ArgumentException>(
+            async () => await IssueAsync(opPrivate, subject: subject, sessionId: sessionId).ConfigureAwait(false))
+            .ConfigureAwait(false);
+        Assert.AreEqual("sessionId", exception.ParamName);
+    }
+
+
     /// <summary>§2.6: a Logout Token signed by another key (not the expected OP) is rejected.</summary>
     [TestMethod]
     public async Task WrongSigningKeyIsRejected()

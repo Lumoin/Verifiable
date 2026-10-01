@@ -4893,6 +4893,24 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// An authorization seam that selects the id-jag issued type and names no subject, a
+    /// <see cref="TokenExchangeAuthorization.Subject"/> of white space only, is answered <c>server_error</c> with the
+    /// fixed description and no grant is minted, and the refusal comes before the grant's <c>jti</c> is generated.
+    /// The authorization is the application's decision and names the subject of the grant, so one that names no
+    /// subject is the seam's own defect, answered as <see cref="MintRefusesAKnownFormatIdentifierBreakingItsFormatAsync"/>
+    /// answers the same seam's <c>sub_id</c> that is not well formed. The answer departs from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>, whose
+    /// <c>invalid_request</c> is the error for a request that is not valid; answering the server's own defect
+    /// <c>server_error</c> is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task MintRefusesAnAuthorizationThatNamesNoSubjectAsync()
+    {
+        await AssertTheMintAnswersNotReadyAsync(authorizedSubject: " ").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Mints over the loopback listener with an authorization seam that supplies the given values and asserts
     /// that nothing is minted: the answer is 500 with the <c>server_error</c> object alone, carrying the fixed
     /// description, and the host's identifier seam is asked for no grant identifier.
@@ -4901,11 +4919,16 @@ internal sealed class IdJagGrantTests
     /// <param name="tenant">The issuer <c>tenant</c> the seam supplies, or <see langword="null"/> for none.</param>
     /// <param name="audienceTenant">The <c>aud_tenant</c> the seam supplies, or <see langword="null"/> for none.</param>
     /// <param name="audienceSubject">The <c>aud_sub</c> the seam supplies, or <see langword="null"/> for none.</param>
+    /// <param name="authorizedSubject">
+    /// The <see cref="TokenExchangeAuthorization.Subject"/> the seam supplies, or <see langword="null"/> for the
+    /// validated subject token's subject.
+    /// </param>
     private async Task AssertTheMintAnswersNotReadyAsync(
         SubjectIdentifier? subjectIdentifier = null,
         string? tenant = null,
         string? audienceTenant = null,
-        string? audienceSubject = null)
+        string? audienceSubject = null,
+        string? authorizedSubject = null)
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
@@ -4916,7 +4939,8 @@ internal sealed class IdJagGrantTests
             subjectIdentifier: subjectIdentifier,
             tenant: tenant,
             audienceTenant: audienceTenant,
-            audienceSubject: audienceSubject).ConfigureAwait(false);
+            audienceSubject: audienceSubject,
+            authorizedSubject: authorizedSubject).ConfigureAwait(false);
 
         //The host's identifier seam counts the grant identifiers it is asked for.
         int grantIdentifierCalls = 0;
@@ -4941,7 +4965,9 @@ internal sealed class IdJagGrantTests
         using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(500, (int)response.StatusCode, body);
+        string record = $"{(int)response.StatusCode} '{body}' grant identifiers generated {grantIdentifierCalls}";
+        Assert.AreEqual(500, (int)response.StatusCode, record);
+        Assert.AreEqual(0, grantIdentifierCalls, $"No grant identifier is generated for a refused value of the seam. {record}");
 
         //The body is the error object alone: no access_token member carries a grant.
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -4949,7 +4975,6 @@ internal sealed class IdJagGrantTests
         Assert.HasCount(2, root.EnumerateObject());
         Assert.AreEqual("server_error", root.GetProperty("error").GetString());
         Assert.AreEqual("The server is not ready to serve this request.", root.GetProperty("error_description").GetString());
-        Assert.AreEqual(0, grantIdentifierCalls, "No grant identifier is generated for a refused value of the seam.");
     }
 
 
@@ -6842,6 +6867,9 @@ internal sealed class IdJagGrantTests
     /// <param name="resource">The granted <c>resource</c> entries, or <see langword="null"/> for none.</param>
     /// <param name="audienceTenant">The <c>aud_tenant</c> the grant carries, or <see langword="null"/> for none.</param>
     /// <param name="audienceSubject">The <c>aud_sub</c> the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="authorizedSubject">
+    /// The subject the authorization names, or <see langword="null"/> for the validated subject token's subject.
+    /// </param>
     private static void WireIdJagAuthorization(
         AuthorizationServerIntegration candidateIntegration,
         string grantedScope,
@@ -6850,14 +6878,15 @@ internal sealed class IdJagGrantTests
         string? tenant = null,
         IReadOnlyList<string>? resource = null,
         string? audienceTenant = null,
-        string? audienceSubject = null)
+        string? audienceSubject = null,
+        string? authorizedSubject = null)
     {
         candidateIntegration.AuthorizeTokenExchangeAsync =
             (subject, actor, request, registration, context, ct) =>
                 ValueTask.FromResult<TokenExchangeAuthorization?>(
                     new TokenExchangeAuthorization
                     {
-                        Subject = subject.Subject,
+                        Subject = authorizedSubject ?? subject.Subject,
                         Scope = grantedScope,
                         IssuedTokenType = TokenType.IdJag,
                         ResourceClientId = resourceClientId,
@@ -6884,6 +6913,9 @@ internal sealed class IdJagGrantTests
     /// <param name="tenant">The issuer <c>tenant</c> the grant carries, or <see langword="null"/> for none.</param>
     /// <param name="audienceTenant">The <c>aud_tenant</c> the grant carries, or <see langword="null"/> for none.</param>
     /// <param name="audienceSubject">The <c>aud_sub</c> the grant carries, or <see langword="null"/> for none.</param>
+    /// <param name="authorizedSubject">
+    /// The subject the authorization names, or <see langword="null"/> for the validated subject token's subject.
+    /// </param>
     private static async Task WireMintSeamsAsync(
         TestHostShell app,
         string grantedScope,
@@ -6891,7 +6923,8 @@ internal sealed class IdJagGrantTests
         SubjectIdentifier? subjectIdentifier = null,
         string? tenant = null,
         string? audienceTenant = null,
-        string? audienceSubject = null)
+        string? audienceSubject = null,
+        string? authorizedSubject = null)
     {
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
 
@@ -6909,7 +6942,8 @@ internal sealed class IdJagGrantTests
                 subjectIdentifier,
                 tenant,
                 audienceTenant: audienceTenant,
-                audienceSubject: audienceSubject);
+                audienceSubject: audienceSubject,
+                authorizedSubject: authorizedSubject);
         }).ConfigureAwait(false);
 
     }

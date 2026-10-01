@@ -2582,7 +2582,17 @@ public static class AuthCodeEndpoints
     /// </summary>
     /// <returns>
     /// The <see cref="TokenIssuanceResult"/> on success; a <see cref="ServerHttpResponse"/>
-    /// <c>server_error</c> failure when a producer's signing key could not be resolved.
+    /// <c>server_error</c> failure when a producer's signing key could not be resolved, or when a payload's
+    /// <c>sub</c> after the claim-contributor merge names no subject (with
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>; no token of the walk is returned): for the
+    /// producer whose <see cref="TokenProducer.ResponseField"/> is <see cref="WellKnownTokenTypes.IdToken"/> or
+    /// <see cref="WellKnownTokenTypes.AccessToken"/>, a <c>sub</c> that is absent, is not a string, or is a string
+    /// that is empty or white space only, since
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 Section 2</see>
+    /// makes it REQUIRED for the ID Token, whose producer composes none of its own, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see> makes it REQUIRED
+    /// for the access token, whose composed <c>sub</c> a claim contributor can replace; for any other producer,
+    /// which may carry no <c>sub</c>, a string that is empty or white space only. The rule is this library's.
     /// </returns>
     private static async ValueTask<(TokenIssuanceResult? Result, ServerHttpResponse? Failure)> IssueTokensAsync(
         EndpointServer server,
@@ -2646,6 +2656,31 @@ public static class AuthCodeEndpoints
                 BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
             await MergeContributedClaimsAsync(
                 server, contributionTarget, payload, cancellationToken).ConfigureAwait(false);
+
+            //OpenID Connect Core 1.0 Section 2 (https://openid.net/specs/openid-connect-core-1_0.html#IDToken)
+            //describes the sub Claim of an ID Token: "REQUIRED. Subject Identifier." The contributed sub is what
+            //the application's ResolveSubjectIdentifierAsync returns; a value that is empty or white space only
+            //identifies no End-User and is the resolver's own defect. RFC 9068 Section 2.2
+            //(https://www.rfc-editor.org/rfc/rfc9068#section-2.2) lists the access token's sub: "sub REQUIRED - as
+            //defined in Section 4.1.2 of [RFC7519]." The ID Token and the access token are also held to the
+            //presence of a string sub. The ID Token's producer composes no sub of its own, so a resolver that throws
+            //leaves a failed contribution the merge drops and the payload has no sub, and a resolver that returns
+            //null leaves a sub that is null. The access token's producer composes its sub, and the merge writes every
+            //successful contribution over the payload, so an application's contributor for the access token target
+            //can replace it with null or a value that is not a string. The presence rule binds any producer whose
+            //ResponseField is id_token or access_token, an application-defined one included; a producer of another
+            //response field may carry no sub, and only its blank string is refused. Either failure ends the walk
+            //before this payload is signed, and no token of the walk is returned, so the response carries none. The
+            //rule is this library's.
+            _ = payload.TryGetValue(WellKnownJwtClaimNames.Sub, out object? payloadSubject);
+            if(payloadSubject is string payloadSubjectValue
+                ? string.IsNullOrWhiteSpace(payloadSubjectValue)
+                : WellKnownTokenTypes.IsIdToken(producer.ResponseField)
+                    || WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
+            {
+                return (null, ServerHttpResponse.ServerError(
+                    OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+            }
 
             UnsignedJwt unsigned = new(output.Header, payload);
 
@@ -4903,10 +4938,19 @@ public static class AuthCodeEndpoints
                 //RFC 8693 §2.1: validate the subject_token for its indicated type. The application is
                 //the trust authority; a null result means the token is invalid, untrusted, or expired.
                 //§2.2.2: an invalid or unacceptable subject_token MUST be rejected with invalid_request.
+                //The validated token restates the subject token's claims, and one whose subject is null, empty or
+                //white space only names no subject (this library's reading). The library cannot tell a subject token
+                //whose sub is blank from a validation that lost it, so it answers the case a clause governs, a subject
+                //token that is not valid: RFC 8693 Section 2.2.2 (https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2),
+                //"If the request itself is not valid or if either the "subject_token" or "actor_token" are invalid for
+                //any reason, or are unacceptable based on policy, the authorization server MUST construct an error
+                //response, as specified in Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the
+                //"invalid_request" error code." That choice is this library's, made so that a fault that depends on
+                //the request is never answered 500, even when the authorization seam copies the subject.
                 Verifiable.OAuth.TokenExchange.ValidatedSecurityToken? validatedSubject =
                     await oauth.ValidateTokenExchangeTokenAsync!(
                         subjectToken, subjectTokenType, registration, context, ct).ConfigureAwait(false);
-                if(validatedSubject is null)
+                if(validatedSubject is null || string.IsNullOrWhiteSpace(validatedSubject.Subject))
                 {
                     //ID-JAG §4.3.3 / §4.3.4.3: an ID-JAG mint whose subject token (the Identity
                     //Assertion) fails validation — including the §4.3.3 MUST that its audience match
@@ -4927,7 +4971,18 @@ public static class AuthCodeEndpoints
                 {
                     validatedActor = await oauth.ValidateTokenExchangeTokenAsync!(
                         actorToken!, actorTokenType!.Value, registration, context, ct).ConfigureAwait(false);
-                    if(validatedActor is null)
+
+                    //The actor's subject is the sub of the act claim this exchange writes. The validated token
+                    //restates the actor token's claims, and one whose subject is null, empty or white space only
+                    //names no actor (this library's reading). The library cannot tell an actor token whose sub is
+                    //blank from a validation that lost it, so it answers the case a clause governs, an actor token
+                    //that is not valid: RFC 8693 Section 2.2.2 (https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2),
+                    //"If the request itself is not valid or if either the "subject_token" or "actor_token" are
+                    //invalid for any reason, or are unacceptable based on policy, the authorization server MUST
+                    //construct an error response, as specified in Section 5.2 of [RFC6749]. The value of the "error"
+                    //parameter MUST be the "invalid_request" error code." That choice is this library's, made so that
+                    //a fault that depends on the request is never answered 500.
+                    if(validatedActor is null || string.IsNullOrWhiteSpace(validatedActor.Subject))
                     {
                         return (null, ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "The actor_token is not valid."));
@@ -4991,6 +5046,27 @@ public static class AuthCodeEndpoints
                     return (null, ServerHttpResponse.BadRequest(
                         hasNamedTarget ? OAuthErrors.InvalidTarget : OAuthErrors.InvalidRequest,
                         "The token exchange was not authorized."));
+                }
+
+                //The authorization is the application's decision and names the subject of the issued token. One whose
+                //subject is null, empty or white space only names no subject: that is the seam's own defect, as a
+                //sub_id that is not well formed is at the ID-JAG mint, so it is answered server_error with the fixed
+                //description before the issued token type is read, and nothing is obtained, stored or minted. A
+                //subject token whose validated subject is blank was answered above as a token that is not valid, so a
+                //blank subject here is one the seam chose itself. An actor the seam shapes itself names the acting party
+                //in the act claim by its sub member; one whose sub member is present and is not a string with a
+                //character that is not white space (null, a value that is not a string, the empty string, or white
+                //space only) names no actor and is the same defect of the seam, answered by the same return whatever
+                //the issued token type. A shaped actor without a sub member is written as the seam shaped it. The rule
+                //is this library's.
+                if(string.IsNullOrWhiteSpace(authorization.Subject)
+                    || (authorization.Actor is { } shapedActor
+                        && shapedActor.TryGetValue(WellKnownJwtClaimNames.Sub, out object? shapedActorSubject)
+                        && (shapedActorSubject is not string shapedActorSubjectValue
+                            || string.IsNullOrWhiteSpace(shapedActorSubjectValue))))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 //RFC 8693 §2.2.1: token_type describes how to use the issued access_token, and
@@ -5835,7 +5911,17 @@ public static class AuthCodeEndpoints
                 //defect. Per §3.1 the error MUST be invalid_grant (NOT invalid_request).
                 JwtBearerGrant? grant = await oauth.ValidateJwtBearerAssertionAsync!(
                     assertion, requestedScope, registration, context, ct).ConfigureAwait(false);
-                if(grant is null)
+
+                //RFC 7523 Section 3 item 2 (https://www.rfc-editor.org/rfc/rfc7523#section-3): the grant's
+                //subject is the principal the token is issued for. The delegate's grant restates the assertion's
+                //claims, and a grant whose subject is null, empty or white space only names no principal (this
+                //library's reading). The library cannot tell an assertion whose sub is blank from a delegate that
+                //lost the subject, so it answers the case a clause governs, an assertion that is not valid:
+                //Section 3.1 (https://www.rfc-editor.org/rfc/rfc7523#section-3.1), "The value of the "error"
+                //parameter MUST be the "invalid_grant" error code." That choice is this library's, made so that a
+                //fault that depends on the request is never answered 500. The check stands before the replay guard
+                //below so a refused assertion leaves no replay record of its jti.
+                if(grant is null || string.IsNullOrWhiteSpace(grant.Subject))
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidGrant, "The JWT assertion is not valid."));
@@ -6556,12 +6642,15 @@ public static class AuthCodeEndpoints
                     return (null, MapPreAuthorizedCodeDenial(decision, context.IncomingRequest));
                 }
 
+                //A granted decision names the End-User the access token is bound to. A subject that is null, empty or
+                //white space only names none: the application's seam granted the code without one, which is the
+                //server's own defect, answered server_error with the fixed description every defect of an
+                //application seam is answered with, and nothing is issued. The rule is this library's.
                 string? subject = decision.Subject;
                 if(string.IsNullOrWhiteSpace(subject))
                 {
                     return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError,
-                        "Pre-Authorized Code grant was granted without a subject."));
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 //OID4VCI 1.0 §6.1.1: the Wallet MAY present authorization_details directly in
@@ -9552,6 +9641,9 @@ public static class AuthCodeEndpoints
         //(RFC 9110 §15.6.1), so it is never server_error. This runs before max_age (there is no
         //auth_time to measure) and before the decision seam (AuthorizationRequestEvaluation.Subject
         //stays non-null; the seam is never called without an established subject).
+        //An authenticated subject that is empty or white space only identifies no End-User and is no established
+        //subject, which is this library's reading: the context's SubjectId accessor reads such a value as null, so
+        //it reaches this check as null and is answered login_required.
         if(subjectId is null)
         {
             return (requestedScope, await BuildAuthorizeErrorResponseAsync(

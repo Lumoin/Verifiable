@@ -30,8 +30,13 @@ namespace Verifiable.OAuth.JwtBearer;
 public sealed record JwtBearerGrant
 {
     /// <summary>
-    /// The subject (<c>sub</c>) of the issued access token — the principal the assertion's <c>sub</c>
-    /// claim (RFC 7523 §3 rule 2.A) authorizes access for. Becomes the issued token's <c>sub</c>.
+    /// The subject (<c>sub</c>) of the issued access token, the principal the assertion's <c>sub</c> claim
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3 item 2, case A</see>)
+    /// authorizes access for. Becomes the issued token's <c>sub</c>. The grant restates the assertion's claims, so a
+    /// subject that is null, empty or white space only is answered as an assertion that is not valid, 400
+    /// <c>invalid_grant</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>), before the
+    /// replay guard records the assertion's <see cref="Jti"/>. That choice is this library's.
     /// </summary>
     public required string Subject { get; init; }
 

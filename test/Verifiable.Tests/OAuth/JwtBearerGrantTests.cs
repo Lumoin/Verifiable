@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
@@ -1496,6 +1498,122 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "If the JWT
+    /// is not valid, or the current time is not within the token's valid time window for use, the
+    /// authorization server constructs an error response as defined in OAuth 2.0 [RFC6749]. The value of
+    /// the "error" parameter MUST be the "invalid_grant" error code." A signed assertion whose <c>sub</c> is
+    /// a single space, posted over the wire to a token endpoint whose application validates the claims
+    /// with <see cref="Rfc7523AssertionValidation.Validate"/>, is not valid: its subject identifies no
+    /// principal (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>
+    /// item 2, as this library reads it). The answer is 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The JWT assertion is not valid."}</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task AnAssertionWhoseSubjectIsWhiteSpaceIsRefusedAsNotValidAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        string asAudience = material.Registration.IssuerUri!.OriginalString;
+
+        var signingMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await WireRfc7523ClaimValidatorAsync(app, signingMaterial.PublicKey, asAudience).ConfigureAwait(false);
+            string assertion = await SignAssertionAsync(signingMaterial.PrivateKey, " ", asAudience).ConfigureAwait(false);
+
+            OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+            {
+                Assertion = assertion
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(400, (int)response.StatusCode, body);
+            Assert.AreEqual("{\"error\":\"invalid_grant\",\"error_description\":\"The JWT assertion is not valid.\"}", body);
+        }
+        finally
+        {
+            signingMaterial.PublicKey.Dispose();
+            signingMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value
+    /// of the "error" parameter MUST be the "invalid_grant" error code." for a JWT that is not valid. A
+    /// grant the application's <see cref="AuthorizationServerIntegration.ValidateJwtBearerAssertionAsync"/>
+    /// returns with a <see cref="JwtBearerGrant.Subject"/> of white space only names no principal, so the
+    /// token endpoint answers it as an assertion that is not valid: 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The JWT assertion is not valid."}</c>, the same
+    /// bytes for the same assertion posted a second time. The grant carries a <c>jti</c>, an issuer and an
+    /// expiration, and the refusal comes before the replay defense is consulted, so the replay store holds
+    /// no record of that <c>jti</c> after either post; that order is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AGrantWithABlankSubjectFromTheDelegateIsRefusedBeforeTheReplayDefenseAsync()
+    {
+        const string BlankSubjectAssertion = "eyJhbGciOiJFUzI1NiJ9.blank-subject-assertion.signature";
+        const string BlankSubjectJti = "blank-subject-jti-001";
+        const string BlankSubjectIssuer = "https://idp.example.com/blank-subject";
+        const string ExpectedBody = "{\"error\":\"invalid_grant\",\"error_description\":\"The JWT assertion is not valid.\"}";
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        DateTimeOffset assertionExpiration = TimeProvider.GetUtcNow() + TimeSpan.FromMinutes(5);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>
+                ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant
+                {
+                    Subject = " ",
+                    Scope = GrantedScope,
+                    Jti = BlankSubjectJti,
+                    Issuer = BlankSubjectIssuer,
+                    Expiration = assertionExpiration
+                });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        //Both posts are made before any assertion so the answers to both are on record together.
+        List<(int Status, string Body, bool IsJtiRecorded)> answers = [];
+        for(int attempt = 0; attempt < 2; attempt++)
+        {
+            OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+            {
+                Assertion = BlankSubjectAssertion
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            bool isJtiRecorded = host.FlowStates.Values.Any(entry => entry.State is JtiSeenState { Jti: BlankSubjectJti });
+            answers.Add(((int)response.StatusCode, body, isJtiRecorded));
+        }
+
+        string record = string.Join(" | ", answers.Select((answer, index) =>
+            $"post {index + 1}: {answer.Status} '{answer.Body}' jti recorded {answer.IsJtiRecorded}"));
+        foreach((int status, string body, bool isJtiRecorded) in answers)
+        {
+            Assert.AreEqual(400, status, record);
+            Assert.AreEqual(ExpectedBody, body, record);
+            Assert.IsFalse(isJtiRecorded, $"The refused assertion must leave no replay record of its jti. {record}");
+        }
+
+        Assert.AreEqual(answers[0].Body, answers[1].Body, "The two refusals must be byte-identical.");
+    }
+
+
+    /// <summary>
     /// Wires the client_secret_post authentication seam (RFC 6749 §2.3.1): the application owns the
     /// secret store and the comparison; this test glue checks the form field against the registered
     /// client's secret. Required only because some tests present credentials (§3.1) — the grant itself
@@ -1641,6 +1759,114 @@ internal sealed class JwtBearerGrantTests
         Assert.IsTrue(built.IsSuccess, "The builder must accept a well-formed jwt-bearer request.");
 
         return built.Value;
+    }
+
+
+    /// <summary>Serializes an assertion's protected header to UTF-8 JSON bytes for signing.</summary>
+    private static JwtHeaderSerializer AssertionHeaderSerializer { get; } =
+        static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+
+
+    /// <summary>Serializes an assertion's claims to UTF-8 JSON bytes for signing.</summary>
+    private static JwtPayloadSerializer AssertionPayloadSerializer { get; } =
+        static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+
+
+    /// <summary>
+    /// Signs an <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> assertion
+    /// under <paramref name="signingKey"/>: <c>iss</c> the client,
+    /// <c>sub</c> <paramref name="subject"/> exactly as given, <c>aud</c> <paramref name="audience"/>, a
+    /// fresh <c>jti</c>, and <c>iat</c> and <c>exp</c> around the test clock's current instant.
+    /// </summary>
+    /// <param name="signingKey">The private signing material the application's validator trusts.</param>
+    /// <param name="subject">The <c>sub</c> value, written as given so a value no issuer should mint reaches the wire.</param>
+    /// <param name="audience">The authorization server's own identity the assertion names.</param>
+    /// <returns>The compact JWS.</returns>
+    private async Task<string> SignAssertionAsync(PrivateKeyMemory signingKey, string subject, string audience)
+    {
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow();
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        JwtHeader header = JwtHeader.ForSigning(algorithm, WellKnownJwkValues.TypeJwt, "assertion-signing-1");
+        JwtPayload payload = new(capacity: 6)
+        {
+            [WellKnownJwtClaimNames.Iss] = ClientId,
+            [WellKnownJwtClaimNames.Sub] = subject,
+            [WellKnownJwtClaimNames.Aud] = audience,
+            [WellKnownJwtClaimNames.Jti] = $"assertion-{Guid.NewGuid():N}",
+            [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = issuedAt.AddMinutes(5).ToUnixTimeSeconds()
+        };
+
+        UnsignedJwt unsigned = new(header, payload);
+        using JwsMessage jws = await unsigned.SignAsync(
+            signingKey,
+            AssertionHeaderSerializer,
+            AssertionPayloadSerializer,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
+    }
+
+
+    /// <summary>
+    /// Wires the application's assertion validator as a generic RFC 7523 deployment writes it: the
+    /// signature is verified under <paramref name="verificationKey"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">Section 3 item 9</see>), the claims are
+    /// judged by <see cref="Rfc7523AssertionValidation.Validate"/> against <paramref name="audience"/> at
+    /// the test clock's current instant with the exchange's clock-skew tolerance, and a valid assertion
+    /// becomes a grant carrying its subject, issuer, <c>jti</c> and expiration. Any failure is
+    /// <see langword="null"/>, the assertion that is not valid.
+    /// </summary>
+    /// <param name="app">The host to wire.</param>
+    /// <param name="verificationKey">The public verification material of the trusted assertion issuer.</param>
+    /// <param name="audience">The authorization server's own identity an assertion must name.</param>
+    private async Task WireRfc7523ClaimValidatorAsync(TestHostShell app, PublicKeyMemory verificationKey, string audience) =>
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                async (presentedAssertion, requestedScope, registration, context, ct) =>
+                {
+                    bool isSignatureValid = await Jws.VerifyAsync(
+                        presentedAssertion, TestSetup.Base64UrlDecoder, Pool, verificationKey, ct).ConfigureAwait(false);
+                    if(!isSignatureValid)
+                    {
+                        return null;
+                    }
+
+                    JwtPayload payload = ParseClaims(presentedAssertion);
+                    Rfc7523AssertionValidationResult result = Rfc7523AssertionValidation.Validate(
+                        payload, audience, TimeProvider.GetUtcNow(), context.ClockSkewTolerance);
+                    if(!result.IsValid)
+                    {
+                        return null;
+                    }
+
+                    return new JwtBearerGrant
+                    {
+                        Subject = result.Subject!,
+                        Scope = GrantedScope,
+                        Issuer = result.Issuer,
+                        Jti = payload.TryGetValue(WellKnownJwtClaimNames.Jti, out object? jti) ? jti as string : null,
+                        Expiration = result.Expiration
+                    };
+                };
+        }).ConfigureAwait(false);
+
+
+    /// <summary>Decodes the claims (the middle segment) of a compact JWS for the application's claim validation.</summary>
+    /// <param name="compactJws">The compact JWS.</param>
+    /// <returns>The decoded claims.</returns>
+    private static JwtPayload ParseClaims(string compactJws)
+    {
+        string[] segments = compactJws.Split('.');
+        Assert.HasCount(3, segments);
+        using IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(segments[1], Pool);
+
+        return JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
     }
 
 

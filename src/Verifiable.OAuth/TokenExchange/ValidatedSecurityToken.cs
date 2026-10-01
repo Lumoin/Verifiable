@@ -29,6 +29,13 @@ public sealed record ValidatedSecurityToken
     /// request is being made (RFC 8693 §2.1). With impersonation semantics this becomes the subject
     /// of the issued token per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#appendix-A.1.4">RFC 8693 Appendix A.1.4</see>.
+    /// For a validated <c>actor_token</c> it is the <c>sub</c> of the <c>act</c> claim. The validated token restates
+    /// the token's claims, and the library cannot tell a token whose <c>sub</c> is blank from a validation that lost
+    /// it, so the token exchange answers either token whose subject is null, empty or white space only as a token that
+    /// is not valid (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>),
+    /// before the authorization seam is asked: a <c>subject_token</c> with <c>invalid_request</c>, or with
+    /// <c>invalid_grant</c> when the request asks for an ID-JAG, and an <c>actor_token</c> with <c>invalid_request</c>.
+    /// That choice is this library's.
     /// </summary>
     public required string Subject { get; init; }
 

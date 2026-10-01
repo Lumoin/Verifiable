@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
+using Verifiable.OAuth.Pkce;
+using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -37,6 +40,9 @@ internal sealed class IdTokenIssuanceTests
     private static Uri ClientBaseUri { get; } = new("https://client.example.com");
     private static Uri RedirectUri { get; } =
         new("https://client.example.com/callback");
+
+    /// <summary>The test-local claim id of the application contributor that writes the access token's <c>sub</c>.</summary>
+    private static ClaimId AccessTokenSubjectClaimId { get; } = ClaimId.Create(9120, "TestAccessTokenSubject");
 
 
     [TestMethod]
@@ -246,6 +252,184 @@ internal sealed class IdTokenIssuanceTests
             "ID Token sub must reflect the AS-installed "
             + "ResolveSubjectIdentifierAsync delegate, not the raw end-user "
             + "identifier from IssuanceContext.Subject.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// Section 2</see> describes the ID Token's <c>sub</c> Claim: "REQUIRED. Subject Identifier." A subject
+    /// resolver that returns a value of white space only names no End-User, so the code exchange of a request that
+    /// asked for <c>openid</c> is answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, neither an <c>id_token</c> nor an <c>access_token</c>. The value is the
+    /// resolver's own defect; answering it <c>server_error</c> with no token of the response is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AResolverThatReturnsABlankSubjectReturnsNoTokenAsync()
+    {
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => ValueTask.FromResult(" ")).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// Section 2</see> describes the ID Token's <c>sub</c> Claim: "REQUIRED. Subject Identifier." A subject
+    /// resolver that throws contributes no <c>sub</c>, and the ID Token producer composes none of its own, so the
+    /// code exchange of a request that asked for <c>openid</c> is answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, neither an <c>id_token</c> nor an <c>access_token</c>, and no ID Token
+    /// without a subject is sent. Answering the resolver's fault <c>server_error</c> with no token of the response
+    /// is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AResolverThatThrowsReturnsNoTokenAsync()
+    {
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => throw new InvalidOperationException("The subject identifier store is unavailable."))
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// Section 2</see> describes the ID Token's <c>sub</c> Claim: "REQUIRED. Subject Identifier." A subject
+    /// resolver that returns null names no End-User, so the code exchange of a request that asked for
+    /// <c>openid</c> is answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, neither an <c>id_token</c> nor an <c>access_token</c>, and no ID Token
+    /// whose <c>sub</c> is null is sent. The value is the resolver's own defect; answering it <c>server_error</c>
+    /// with no token of the response is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AResolverThatReturnsNullReturnsNoTokenAsync()
+    {
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => ValueTask.FromResult<string>(null!)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see> lists the access
+    /// token's <c>sub</c> claim: "sub REQUIRED - as defined in Section 4.1.2 of [RFC7519]." An application's claim
+    /// contributor for the access token target that contributes <c>sub</c> with the value null replaces the
+    /// subject the access token's producer composed, and the payload then names no subject, so the code exchange is
+    /// answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, and no access token whose <c>sub</c> is null is sent. The value is the
+    /// contributor's own defect; answering it <c>server_error</c> with no token of the response is this library's
+    /// rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AContributorThatWritesANullSubjectForTheAccessTokenReturnsNoTokenAsync()
+    {
+        List<ClaimDelegate<ClaimContributionTarget>> rules = ContributionProfiles.StandardRules();
+        rules.Add(new ClaimDelegate<ClaimContributionTarget>(
+            new ClaimDelegateAsync<ClaimContributionTarget>(static (target, _) => ValueTask.FromResult<List<Claim>>(
+                target is AccessTokenTarget
+                    ?
+                    [
+                        new Claim(AccessTokenSubjectClaimId, ClaimOutcome.Success,
+                            new ClaimContributionContext(WellKnownJwtClaimNames.Sub, null!), Claim.NoSubClaims)
+                    ]
+                    : [new Claim(AccessTokenSubjectClaimId, ClaimOutcome.NotApplicable)])),
+            [AccessTokenSubjectClaimId]));
+
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
+                WellKnownAssessorIds.ClaimContributors, rules, TimeProvider)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Drives the code flow of a request that asks for <c>openid</c> over the loopback listener, the pushed
+    /// request, the authorize redirect and the code exchange, with <paramref name="alteration"/> applied to the
+    /// host's integration before the flow, and asserts that the code exchange returns no token: 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// other member. A 200 answer is rendered in the assertion message with the <c>sub</c> its <c>id_token</c> and
+    /// its <c>access_token</c> carry, each as its JSON text, <c>absent</c>, or <c>none</c> when that token is not
+    /// in the answer.
+    /// </summary>
+    /// <param name="alteration">The change to the host's integration the tokens are issued under.</param>
+    private async Task AssertTheCodeExchangeReturnsNoTokenAsync(Action<AuthorizationServerIntegration> alteration)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        await TestHostShell.AlterAsync(host.Server, alteration).ConfigureAwait(false);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        //The pushed request, the authorize redirect and the code exchange each cross the loopback listener.
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, TestHostShell.MemoryPool);
+        List<KeyValuePair<string, string>> parFields =
+        [
+            new(OAuthRequestParameterNames.ResponseType, WellKnownResponseTypes.Code),
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.CodeChallenge, pkce.EncodedChallenge),
+            new(OAuthRequestParameterNames.CodeChallengeMethod, WellKnownCodeChallengeMethods.S256),
+            new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString),
+            new(OAuthRequestParameterNames.Scope, WellKnownScopes.OpenId)
+        ];
+        (int parStatusCode, string parBody, Uri? authorizeLocation, int authorizeStatusCode) =
+            await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+                host, segment, ClientId, SubjectId, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        Assert.AreEqual(302, authorizeStatusCode);
+        Assert.IsNotNull(authorizeLocation, "The authorize answer is a redirect carrying a Location header.");
+        string code = TestBrowser.ExtractQueryParam(authorizeLocation.OriginalString, OAuthRequestParameterNames.Code)!;
+
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host,
+            segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A 200 answer is rendered with the sub its id_token and its access_token carry, as JSON text, or absent.
+        string idTokenSubject = "none";
+        string accessTokenSubject = "none";
+        if(status == 200)
+        {
+            using JsonDocument answer = JsonDocument.Parse(body);
+            idTokenSubject = DescribeIssuedSubject(answer.RootElement, OAuthRequestParameterNames.IdToken);
+            accessTokenSubject = DescribeIssuedSubject(answer.RootElement, OAuthRequestParameterNames.AccessToken);
+        }
+
+        string record = $"{status} '{body}' id_token sub {idTokenSubject} access_token sub {accessTokenSubject}";
+
+        Assert.AreEqual(500, status, record);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+    }
+
+
+    /// <summary>
+    /// Renders the <c>sub</c> of the token a token response carries under <paramref name="responseMember"/> for an
+    /// assertion message: its JSON text, <c>absent</c> when the token's payload has no <c>sub</c>, or <c>none</c>
+    /// when the response carries no such token.
+    /// </summary>
+    /// <param name="answer">The token response's JSON object.</param>
+    /// <param name="responseMember">The response member that carries the compact token.</param>
+    /// <returns>The rendering of the token's <c>sub</c>.</returns>
+    private static string DescribeIssuedSubject(JsonElement answer, string responseMember)
+    {
+        if(!answer.TryGetProperty(responseMember, out JsonElement token))
+        {
+            return "none";
+        }
+
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(token.GetString()!);
+
+        return payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Sub, out JsonElement sub)
+            ? sub.GetRawText()
+            : "absent";
     }
 
 

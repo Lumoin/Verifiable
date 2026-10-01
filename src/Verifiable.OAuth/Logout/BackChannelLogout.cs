@@ -56,8 +56,22 @@ public static class BackChannelLogout
     /// <param name="audience">The <c>aud</c> claim — the RP the token is delivered to (its client identifier).</param>
     /// <param name="jwtId">The <c>jti</c> claim — a unique per-token identifier for replay defense.</param>
     /// <param name="issuedAt">The <c>iat</c> claim, encoded as Unix seconds.</param>
-    /// <param name="subject">The <c>sub</c> claim — the logged-out subject; optional when <paramref name="sessionId"/> is given.</param>
-    /// <param name="sessionId">The <c>sid</c> claim — the terminated session; optional when <paramref name="subject"/> is given.</param>
+    /// <param name="subject">
+    /// The <c>sub</c> claim, the logged-out subject; optional when <paramref name="sessionId"/> is given. A subject that
+    /// is given and is empty or white space only names no End-User and throws <see cref="ArgumentException"/>, as the
+    /// other arguments do, so no Logout Token carries a blank <c>sub</c>
+    /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OpenID Connect
+    /// Back-Channel Logout 1.0 Section 2.4</see>). The rule is this library's.
+    /// </param>
+    /// <param name="sessionId">
+    /// The <c>sid</c> claim, the terminated session; optional when <paramref name="subject"/> is given. A session
+    /// identifier that is given and is empty or white space only names no session and throws
+    /// <see cref="ArgumentException"/> for this parameter whatever the <paramref name="subject"/> is, given or not,
+    /// as a blank <paramref name="subject"/> throws for its own, so no Logout Token carries a blank <c>sid</c> or is
+    /// built without the <c>sid</c> its caller gave
+    /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OpenID Connect
+    /// Back-Channel Logout 1.0 Section 2.4</see>). The rule is this library's.
+    /// </param>
     /// <param name="signingKey">The OP's signing key; the <c>alg</c> derives from its <see cref="Tag"/>.</param>
     /// <param name="base64UrlEncoder">Base64url encoder for compact serialization.</param>
     /// <param name="headerSerializer">Serializes the protected header to UTF-8 JSON bytes.</param>
@@ -90,6 +104,20 @@ public static class BackChannelLogout
         ArgumentNullException.ThrowIfNull(headerSerializer);
         ArgumentNullException.ThrowIfNull(payloadSerializer);
         ArgumentNullException.ThrowIfNull(memoryPool);
+
+        //A subject that is given names the End-User whose sessions end, and a session identifier that is given names
+        //the session that ends; one that is empty or white space only names none and is the caller's error, thrown
+        //for its own parameter as for the other arguments, before the check that one of the two is given. The rule
+        //is this library's.
+        if(subject is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+        }
+
+        if(sessionId is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        }
 
         //§2.4: a Logout Token MUST contain a sub Claim, a sid Claim, or both.
         if(string.IsNullOrEmpty(subject) && string.IsNullOrEmpty(sessionId))

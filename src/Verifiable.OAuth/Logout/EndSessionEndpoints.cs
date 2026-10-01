@@ -372,16 +372,21 @@ public static class EndSessionEndpoints
             }
 
             //exp is deliberately NOT checked — logout of an expired session is valid.
+            //A sub that is empty or white space only identifies no End-User, so the hint is answered as one
+            //without a sub, before any session is terminated. The rule is this library's.
             if(!payload.TryGetValue(WellKnownJwtClaimNames.Sub, out object? subObj)
                 || subObj is not string subject
-                || string.IsNullOrEmpty(subject))
+                || string.IsNullOrWhiteSpace(subject))
             {
                 return (null, null, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidRequest, "id_token_hint is missing the sub claim."));
             }
 
+            //A sid that is empty or white space only identifies no session and is read as absent, so the logout
+            //proceeds as for a hint without a sid, and neither the terminate seam nor the back-channel delivery
+            //receives it. The rule is this library's.
             string? sessionId = payload.TryGetValue(WellKnownJwtClaimNames.Sid, out object? sidObj)
-                && sidObj is string sid && !string.IsNullOrEmpty(sid) ? sid : null;
+                && sidObj is string sid && !string.IsNullOrWhiteSpace(sid) ? sid : null;
 
             return (subject, sessionId, null);
         }

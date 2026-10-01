@@ -78,6 +78,30 @@ internal sealed class Rfc7523AssertionValidationTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 2: "The
+    /// JWT MUST contain a "sub" (subject) claim identifying the principal that is the subject of the JWT."
+    /// A <c>sub</c> of white space only (a space, a tab, a no-break space) identifies no principal. That
+    /// reading is this library's, the one the ID-JAG validator applies to the same claim, and
+    /// <see cref="Rfc7523AssertionValidation.Validate"/> refuses such an assertion as
+    /// <see cref="Rfc7523AssertionValidationFailureReason.MissingSubject"/>.
+    /// </summary>
+    /// <param name="codePoint">The code point the <c>sub</c> value consists of, passed as a number so the source carries no raw white space character.</param>
+    [TestMethod]
+    [DataRow(0x0020)]
+    [DataRow(0x0009)]
+    [DataRow(0x00A0)]
+    public void ASubjectOfWhiteSpaceOnlyIsNoSubject(int codePoint)
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Sub] = char.ConvertFromUtf32(codePoint);
+
+        Rfc7523AssertionValidationResult result = Validate(payload);
+
+        Assert.AreEqual(Rfc7523AssertionValidationFailureReason.MissingSubject, result.FailureReason);
+    }
+
+
     /// <summary>§3 item 3: <c>aud</c> MUST be present.</summary>
     [TestMethod]
     public void MissingAudienceIsMissingAudience()

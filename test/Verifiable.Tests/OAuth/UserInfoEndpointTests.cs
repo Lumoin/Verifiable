@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core;
+using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -463,6 +464,116 @@ internal sealed class UserInfoEndpointTests
             "UserInfo response sub must reflect the AS-installed "
             + "ResolveSubjectIdentifierAsync delegate, not the validated "
             + "access token's raw sub claim.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse">OpenID Connect Core 1.0
+    /// Section 5.3.2</see>: "The sub (subject) Claim MUST always be returned in the UserInfo Response." A valid
+    /// access token is presented at UserInfo over the wire while the subject resolver returns a value of white space
+    /// only, which names no End-User, so no response without a subject is sent: the answer is 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// claim of the End-User. The value is the resolver's own defect; answering it <c>server_error</c> is this
+    /// library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AResolverThatReturnsABlankSubjectSendsNoUserInfoResponseAsync()
+    {
+        await AssertNoUserInfoResponseIsSentAsync(candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => ValueTask.FromResult(" ")).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse">OpenID Connect Core 1.0
+    /// Section 5.3.2</see>: "The sub (subject) Claim MUST always be returned in the UserInfo Response." A valid
+    /// access token is presented at UserInfo over the wire while the subject resolver throws, so the composed
+    /// response carries no <c>sub</c> and is not sent: the answer is 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// claim of the End-User. Answering the resolver's fault <c>server_error</c> is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AResolverThatThrowsSendsNoUserInfoResponseAsync()
+    {
+        await AssertNoUserInfoResponseIsSentAsync(candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => throw new InvalidOperationException("The subject identifier store is unavailable."))
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse">OpenID Connect Core 1.0
+    /// Section 5.3.2</see>: "The sub (subject) Claim MUST always be returned in the UserInfo Response." A valid
+    /// access token is presented at UserInfo over the wire while the subject resolver returns null, which names no
+    /// End-User, so no response whose <c>sub</c> is null is sent: the answer is 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// claim of the End-User. The value is the resolver's own defect; answering it <c>server_error</c> is this
+    /// library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AResolverThatReturnsNullSendsNoUserInfoResponseAsync()
+    {
+        await AssertNoUserInfoResponseIsSentAsync(candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => ValueTask.FromResult<string>(null!)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse">OpenID Connect Core 1.0
+    /// Section 5.3.2</see>: "The sub (subject) Claim MUST always be returned in the UserInfo Response." A valid
+    /// access token is presented at UserInfo over the wire while the host's claim issuer carries the standard rules
+    /// without the subject identifier rule, so the composed response carries no <c>sub</c> and is not sent: the
+    /// answer is 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// claim of the End-User. Answering the composition's defect <c>server_error</c> is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AResponseComposedWithoutASubjectIsNotSentAsync()
+    {
+        List<ClaimDelegate<ClaimContributionTarget>> rules = ContributionProfiles.StandardRules();
+        int removedRules = rules.RemoveAll(static rule =>
+            rule.ExpectedClaimIds.Contains(WellKnownClaimIds.SubjectIdentifier));
+        Assert.AreEqual(1, removedRules, "The standard rules carry one subject identifier rule.");
+
+        await AssertNoUserInfoResponseIsSentAsync(candidateIntegration =>
+            candidateIntegration.ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
+                WellKnownAssessorIds.ClaimContributors, rules, TimeProvider)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Issues an access token for <c>openid profile</c> to a subject named <c>Alice</c> under the host's standard
+    /// wiring, applies <paramref name="alteration"/> to the host's integration, presents the token at UserInfo over
+    /// the loopback listener, and asserts that no UserInfo response is sent: 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, which
+    /// carries no claim of the End-User.
+    /// </summary>
+    /// <param name="alteration">The change to the host's integration made after the token is issued.</param>
+    private async Task AssertNoUserInfoResponseIsSentAsync(Action<AuthorizationServerIntegration> alteration)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId, name: "Alice");
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(
+            host, material, $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile}").ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, alteration).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{(int)response.StatusCode} '{body}'";
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, record);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
     }
 
 

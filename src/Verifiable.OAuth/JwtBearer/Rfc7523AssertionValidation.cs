@@ -14,7 +14,13 @@ public enum Rfc7523AssertionValidationFailureReason
     /// <summary>§3 item 1: the <c>iss</c> claim is absent.</summary>
     MissingIssuer,
 
-    /// <summary>§3 item 2: the <c>sub</c> claim is absent.</summary>
+    /// <summary>
+    /// The <c>sub</c> claim is absent or white space only
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 2: "The
+    /// JWT MUST contain a "sub" (subject) claim identifying the principal that is the subject of the JWT.").
+    /// A value of white space only identifies no principal; that reading is this library's, the one
+    /// <see cref="IdJag.IdJagValidationFailureReason.MissingSubject"/> applies to the same claim.
+    /// </summary>
     MissingSubject,
 
     /// <summary>§3 item 3: the <c>aud</c> claim is absent.</summary>
@@ -183,10 +189,16 @@ public static class Rfc7523AssertionValidation
                 Rfc7523AssertionValidationFailureReason.MissingIssuer, "The assertion is missing the iss claim.");
         }
 
-        if(!TryReadStringClaim(payload, WellKnownJwtClaimNames.Sub, out string? subject))
+        //RFC 7523 Section 3 item 2 (https://www.rfc-editor.org/rfc/rfc7523#section-3): the subject the access is
+        //requested for. A value of white space only identifies no principal (this library's reading of
+        //"identifying the principal"; its token factories throw for such a subject), so it is refused here as no
+        //subject rather than reaching them.
+        if(!TryReadStringClaim(payload, WellKnownJwtClaimNames.Sub, out string? subject)
+            || string.IsNullOrWhiteSpace(subject))
         {
             return Rfc7523AssertionValidationResult.Failure(
-                Rfc7523AssertionValidationFailureReason.MissingSubject, "The assertion is missing the sub claim.");
+                Rfc7523AssertionValidationFailureReason.MissingSubject,
+                "The assertion is missing the sub claim or carries one of white space only.");
         }
 
         Rfc7523AudienceOutcome audienceOutcome = ValidateAudience(payload, audience, out string? matchedAudience);

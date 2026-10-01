@@ -184,6 +184,44 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
 
     /// <summary>
+    /// A Token Request of the Pre-Authorized Code grant
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 6</see>) whose code the application's seam grants with a
+    /// <see cref="PreAuthorizedCodeDecision.Subject"/> of white space only names no End-User the access token could
+    /// be bound to, so the token endpoint answers over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, the
+    /// fixed description every defect of an application seam is answered with, and issues nothing. The subject is
+    /// the application's choice, so a blank one is the server's own defect; answering it <c>server_error</c> is
+    /// this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AGrantedCodeWithoutASubjectIssuesNothingAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                static (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(" ", "UniversityDegree_dc_sd_jwt"));
+        }).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, material.Registration.TenantId.Value, BuildPreAuthorizedFields(), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string record = $"{status} '{body}'";
+
+        Assert.AreEqual(500, status, record);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+    }
+
+
+    /// <summary>
     /// §6.1: <c>pre-authorized_code</c> MUST be present when the grant type is used. The
     /// library rejects an absent code with <c>invalid_request</c> before the seam is consulted.
     /// </summary>

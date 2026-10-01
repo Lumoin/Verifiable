@@ -39,7 +39,15 @@ namespace Verifiable.OAuth.Server;
 /// <param name="registration">The registration the token is being issued for.</param>
 /// <param name="context">The per-request context.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
-/// <returns>The subject identifier to emit in the token's <c>sub</c> claim.</returns>
+/// <returns>
+/// The subject identifier to emit in the token's <c>sub</c> claim, which
+/// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 Section 2</see>
+/// describes for an ID Token as "REQUIRED. Subject Identifier." A value that is null, empty or white space only, or
+/// a resolver that throws and so contributes no value, is the resolver's own defect: the token endpoint answers
+/// <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and issues nothing, and the
+/// UserInfo endpoint answers <c>server_error</c> with the same description and sends no claim of the End-User. That
+/// rule is this library's.
+/// </returns>
 public delegate ValueTask<string> ResolveSubjectIdentifierDelegate(
     string endUserId,
     ClientRecord registration,

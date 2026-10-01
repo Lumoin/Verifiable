@@ -737,6 +737,94 @@ internal sealed class UnmetAuthenticationRequirementsTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>: "The
+    /// authorization server MUST first verify the identity of the resource owner." An authenticated subject that is
+    /// empty or white space only identifies no resource owner, so the PAR-completion path answers it as it answers no
+    /// subject: the <c>login_required</c> redirect of
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OpenID Connect Core 1.0 Section 3.1.2.6</see>
+    /// ("The Authorization Server requires End-User authentication."), carrying no authorization code. Reading such a
+    /// value as no End-User is this library's reading. The row dispatches the authorize endpoint in process, not over
+    /// the loopback listener, and places the value under the context's entry name through <see cref="CarrySubject"/>,
+    /// which asserts that the entry is the one the context's accessor reads and that the accessor answers null for it.
+    /// </summary>
+    /// <param name="blankSubject">The subject the application's context carries: empty, or one space.</param>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty subject")]
+    [DataRow(" ", DisplayName = "a subject of one space")]
+    public async Task ABlankSubjectFailsWithLoginRequiredOnPushedCompletion(string blankSubject)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        string requestUri = await PushAsync(host, material, state: "state-6", prompt: null).ConfigureAwait(false);
+        ServerHttpResponse response = await CompleteAuthorizeAsync(
+            host, material, requestUri, subjectId: blankSubject).ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-6");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>: "The
+    /// authorization server MUST first verify the identity of the resource owner." An authenticated subject that is
+    /// empty or white space only identifies no resource owner, so the direct authorize path answers it as it answers
+    /// no subject: the <c>login_required</c> redirect of
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OpenID Connect Core 1.0 Section 3.1.2.6</see>
+    /// ("The Authorization Server requires End-User authentication."), carrying no authorization code. Reading such a
+    /// value as no End-User is this library's reading. The row dispatches the authorize endpoint in process, not over
+    /// the loopback listener, and places the value under the context's entry name through <see cref="CarrySubject"/>,
+    /// which asserts that the entry is the one the context's accessor reads and that the accessor answers null for it.
+    /// </summary>
+    /// <param name="blankSubject">The subject the application's context carries: empty, or one space.</param>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty subject")]
+    [DataRow(" ", DisplayName = "a subject of one space")]
+    public async Task ABlankSubjectFailsWithLoginRequiredOnDirectAuthorize(string blankSubject)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DirectAuthorizeAsync(
+            host, material, subjectId: blankSubject, prompt: null, state: "state-7",
+            redirectUri: RedirectUri).ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-7");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>: "The
+    /// authorization server MUST first verify the identity of the resource owner." An authenticated subject that is
+    /// empty or white space only identifies no resource owner, so the path of a signed request by reference answers
+    /// it as it answers no subject: the <c>login_required</c> redirect of
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthError">OpenID Connect Core 1.0 Section 3.1.2.6</see>
+    /// ("The Authorization Server requires End-User authentication."), carrying no authorization code. Reading such a
+    /// value as no End-User is this library's reading. The row dispatches the authorize endpoint in process, not over
+    /// the loopback listener, and places the value under the context's entry name through <see cref="CarrySubject"/>,
+    /// which asserts that the entry is the one the context's accessor reads and that the accessor answers null for it.
+    /// </summary>
+    /// <param name="blankSubject">The subject the application's context carries: empty, or one space.</param>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty subject")]
+    [DataRow(" ", DisplayName = "a subject of one space")]
+    public async Task ABlankSubjectFailsWithLoginRequiredOnJarByReference(string blankSubject)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterAllPathsClientAsync(host).ConfigureAwait(false);
+
+        ServerHttpResponse pushResponse = await PushJarAsync(
+            host, material, state: "state-8", nonce: "nonce-8", prompt: null).ConfigureAwait(false);
+        Assert.AreEqual(201, pushResponse.StatusCode, pushResponse.Body);
+        string requestUri = ExtractRequestUri(pushResponse.Body);
+
+        ServerHttpResponse response = await CompleteAuthorizeAsync(
+            host, material, requestUri, subjectId: blankSubject).ConfigureAwait(false);
+
+        AssertLoginRequiredRedirect(response, "state-8");
+    }
+
+
     /// <summary>No subject, no <c>prompt</c>: <c>login_required</c> on a signed request by value.</summary>
     [TestMethod]
     public async Task NoSubjectNoPromptFailsWithLoginRequiredOnJarByValue()
@@ -1023,6 +1111,13 @@ internal sealed class UnmetAuthenticationRequirementsTests
         await host.RegisterClientAsync(ClientId, ClientBaseUri, AllPathCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
 
+    /// <summary>
+    /// Asserts that <paramref name="response"/> is the <c>login_required</c> error redirect: status 302 to the
+    /// already-validated <c>redirect_uri</c>, whose query carries <c>error=login_required</c> and echoes
+    /// <paramref name="state"/>, and whose query names no <c>code</c> parameter, so no authorization code is issued.
+    /// </summary>
+    /// <param name="response">The authorize endpoint's answer.</param>
+    /// <param name="state">The <c>state</c> the request carried.</param>
     private static void AssertLoginRequiredRedirect(ServerHttpResponse response, string state)
     {
         Assert.AreEqual(302, response.StatusCode, response.Body);
@@ -1031,6 +1126,16 @@ internal sealed class UnmetAuthenticationRequirementsTests
         Assert.Contains($"state={state}", response.Location!, StringComparison.Ordinal);
         Assert.StartsWith(RedirectUri.ToString(), response.Location!, StringComparison.Ordinal,
             "The error redirect must go to the already-validated redirect_uri.");
+
+        //The redirect's query names its parameters; none of them is the authorization code.
+        string[] parameterNames =
+        [
+            .. new Uri(response.Location!).Query.TrimStart('?')
+                .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(static parameter => parameter.Split('=')[0])
+        ];
+        Assert.DoesNotContain(OAuthRequestParameterNames.Code, parameterNames,
+            $"No authorization code may be issued. Location: {response.Location}");
     }
 
 
@@ -1071,6 +1176,18 @@ internal sealed class UnmetAuthenticationRequirementsTests
     }
 
 
+    /// <summary>
+    /// Completes a pushed authorization request: dispatches the authorize endpoint in process with the
+    /// <c>request_uri</c> the push returned, the client's <c>client_id</c> and, when given, a front-channel
+    /// <c>prompt</c>, under a context that carries <paramref name="subjectId"/> placed through
+    /// <see cref="CarrySubject"/>.
+    /// </summary>
+    /// <param name="host">The host whose authorize endpoint answers.</param>
+    /// <param name="material">The registration the request is made for.</param>
+    /// <param name="requestUri">The <c>request_uri</c> the pushed request returned.</param>
+    /// <param name="subjectId">The authenticated subject the context carries, or <see langword="null"/> for none.</param>
+    /// <param name="frontChannelPrompt">The <c>prompt</c> sent on the front channel, or <see langword="null"/> for none.</param>
+    /// <returns>The authorize endpoint's answer.</returns>
     private async Task<ServerHttpResponse> CompleteAuthorizeAsync(
         TestHostShell host, VerifierKeyMaterial material, string requestUri,
         string? subjectId, string? frontChannelPrompt = null)
@@ -1086,10 +1203,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         }
 
         ExchangeContext authorizeContext = [];
-        if(subjectId is not null)
-        {
-            authorizeContext.SetSubjectId(subjectId);
-        }
+        CarrySubject(authorizeContext, subjectId);
 
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -1099,6 +1213,19 @@ internal sealed class UnmetAuthenticationRequirementsTests
     }
 
 
+    /// <summary>
+    /// Sends an authorization request directly, without a push: dispatches the authorize endpoint in process with a
+    /// code request for <c>openid</c> carrying a fresh PKCE challenge, <paramref name="redirectUri"/>,
+    /// <paramref name="state"/> and, when given, <paramref name="prompt"/>, under a context that carries
+    /// <paramref name="subjectId"/> placed through <see cref="CarrySubject"/>.
+    /// </summary>
+    /// <param name="host">The host whose authorize endpoint answers.</param>
+    /// <param name="material">The registration the request is made for.</param>
+    /// <param name="subjectId">The authenticated subject the context carries, or <see langword="null"/> for none.</param>
+    /// <param name="prompt">The <c>prompt</c> the request carries, or <see langword="null"/> for none.</param>
+    /// <param name="state">The <c>state</c> the request carries.</param>
+    /// <param name="redirectUri">The <c>redirect_uri</c> the request names.</param>
+    /// <returns>The authorize endpoint's answer.</returns>
     private async Task<ServerHttpResponse> DirectAuthorizeAsync(
         TestHostShell host, VerifierKeyMaterial material,
         string? subjectId, string? prompt, string state, Uri redirectUri)
@@ -1120,16 +1247,62 @@ internal sealed class UnmetAuthenticationRequirementsTests
         }
 
         ExchangeContext context = [];
-        if(subjectId is not null)
-        {
-            context.SetSubjectId(subjectId);
-        }
+        CarrySubject(context, subjectId);
 
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
             fields, context,
             TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The name of the context entry <see cref="Verifiable.Server.ExchangeContextServerExtensions.SetSubjectId"/> writes the
+    /// authenticated subject under.
+    /// </summary>
+    private static string SubjectIdEntryName { get; } = "server.subjectId";
+
+
+    /// <summary>
+    /// Places <paramref name="subjectId"/> on <paramref name="context"/> as the application's authentication
+    /// middleware places it: a subject through <see cref="Verifiable.Server.ExchangeContextServerExtensions.SetSubjectId"/>, and a
+    /// value that is empty or white space only, which that setter refuses, under the entry the setter writes, as an
+    /// application that writes the context's entries directly places it. <see langword="null"/> places nothing.
+    /// For a blank value it asserts that <see cref="SubjectIdEntryName"/> is the entry the setter writes (a probe
+    /// subject placed through the setter is read back from that entry and through the public
+    /// <see cref="Verifiable.Server.ExchangeContextServerExtensions.extension(ExchangeContext).SubjectId"/>
+    /// accessor), that the context then holds the blank under that entry, and that the accessor
+    /// answers null for it, so a row that carries a blank proves the accessor reads the blank as no subject.
+    /// </summary>
+    /// <param name="context">The authorize request's context.</param>
+    /// <param name="subjectId">The authenticated subject, or <see langword="null"/> for none.</param>
+    private static void CarrySubject(ExchangeContext context, string? subjectId)
+    {
+        if(subjectId is null)
+        {
+            return;
+        }
+
+        if(string.IsNullOrWhiteSpace(subjectId))
+        {
+            //The setter writes under the entry name, and the accessor reads that entry.
+            context.SetSubjectId(SubjectId);
+            Assert.IsTrue(context.TryGetValue(SubjectIdEntryName, out object? probe),
+                $"The setter writes the subject under '{SubjectIdEntryName}'.");
+            Assert.AreEqual(SubjectId, probe);
+            Assert.AreEqual(SubjectId, context.SubjectId);
+
+            context[SubjectIdEntryName] = subjectId;
+            Assert.IsTrue(context.TryGetValue(SubjectIdEntryName, out object? carried),
+                $"The context holds the blank subject under '{SubjectIdEntryName}'.");
+            Assert.AreEqual(subjectId, carried);
+            Assert.IsNull(context.SubjectId, "The accessor reads a blank subject as no subject.");
+
+            return;
+        }
+
+        context.SetSubjectId(subjectId);
     }
 
 

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
@@ -8,6 +9,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Tests.OAuth.Contributors;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -110,61 +112,12 @@ internal sealed class RefreshedIdTokenParityTests
             DpopKey dpopKey = new(dpopMaterial, WellKnownJwaValues.Es256);
             string expectedThumbprint = dpopKey.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
 
-            //1. PAR over the real wire.
-            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
-            Uri parUrl = new(
-                hosted.HttpBaseAddress!,
-                TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
-            using HttpResponseMessage parResponse = await OAuthTestTransport.PostFormAsync(
-                hosted.SharedHttpClient!, parUrl, new Dictionary<string, string>
-                {
-                    [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
-                    [OAuthRequestParameterNames.ClientId] = ClientId,
-                    [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-                    [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-                    [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-                    [OAuthRequestParameterNames.Scope] = Scope
-                }, TestContext.CancellationToken).ConfigureAwait(false);
-            string parBody = await parResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(201, (int)parResponse.StatusCode, parBody);
-            string requestUri = ExtractRequestUri(parBody);
-
-            //2. Authorize — in-process on the SAME EndpointServer the Kestrel host serves, establishing
-            //   the End-User session (SetSessionId) the refreshed id_token's sid must repeat.
-            ExchangeContext authorizeContext = [];
-            authorizeContext.SetSubjectId(SubjectId);
-            authorizeContext.SetSessionId(SessionId);
-            RequestFields authorizeFields = new()
-            {
-                [OAuthRequestParameterNames.ClientId] = ClientId,
-                [OAuthRequestParameterNames.RequestUri] = requestUri
-            };
-            ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-                segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-                authorizeFields, authorizeContext, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
-            string code = TestBrowser.ExtractQueryParam(authorizeResponse.Location!, OAuthRequestParameterNames.Code)
-                ?? throw new InvalidOperationException("Authorize redirect Location missing code.");
-
-            //3. Token exchange over the real wire, presenting a DPoP proof for the key the confirmation
-            //   binding will carry. Rfc6749WithPkce does not REQUIRE DPoP, so this leg needs no nonce
-            //   round-trip — a well-formed proof is accepted and bound on the first attempt.
+            //1 to 3. PAR, authorize and the code exchange, establishing the End-User session (SetSessionId)
+            //the refreshed id_token's sid must repeat.
             Uri tokenUrl = new(hosted.HttpBaseAddress!, $"/connect/{segment}/token");
-            Dictionary<string, string> tokenFields = new()
-            {
-                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-                [OAuthRequestParameterNames.Code] = code,
-                [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-                [OAuthRequestParameterNames.ClientId] = ClientId,
-                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-            };
-            (HttpResponseMessage tokenResponse, string tokenBody) = await PostTokenEndpointWithDpopAsync(
-                hosted.SharedHttpClient!, tokenUrl, tokenFields, dpopKey, material.Registration, segment)
+            string tokenBody = await IssueTokensOverTheWireAsync(
+                host, material, dpopKey, tokenUrl, authorizeContext => authorizeContext.SetSessionId(SessionId))
                 .ConfigureAwait(false);
-            using(tokenResponse)
-            {
-                Assert.AreEqual(200, (int)tokenResponse.StatusCode, tokenBody);
-            }
 
             using JsonDocument tokenDoc = JsonDocument.Parse(tokenBody);
             Assert.IsTrue(tokenDoc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out JsonElement initialIdTokenElement),
@@ -261,6 +214,157 @@ internal sealed class RefreshedIdTokenParityTests
             dpopMaterial.PublicKey.Dispose();
             dpopMaterial.PrivateKey.Dispose();
         }
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OpenID Connect
+    /// Back-Channel Logout 1.0 section 2.1</see>: "If supported, the sid Claim is also included in ID Tokens
+    /// issued by the OP.", a Claim it defines as "Session ID - String identifier for a Session." An
+    /// authorize-time context whose session entry is one space establishes no session, so the ID Token issued
+    /// over the wire for it carries its <c>sub</c> and no <c>sid</c>: the context's session identifier accessor
+    /// reads the blank value as none, and <see cref="Verifiable.OAuth.SidClaimContributor"/> contributes no
+    /// <c>sid</c> for a blank one. Reading a blank session identifier as none is this library's reading.
+    /// </summary>
+    [TestMethod]
+    public async Task AnIdTokenIssuedForABlankSessionIdentifierCarriesNoSidAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId, name: ExpectedName, email: ExpectedEmail, emailVerified: true);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> dpopMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(dpopMaterial, WellKnownJwaValues.Es256);
+            Uri tokenUrl = new(hosted.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+            //The context's session entry is written directly, as an application that fills the context
+            //rather than calling SetSessionId, which refuses a blank value, would write it.
+            string tokenBody = await IssueTokensOverTheWireAsync(
+                host, material, dpopKey, tokenUrl, authorizeContext => authorizeContext["server.sessionId"] = " ")
+                .ConfigureAwait(false);
+
+            using JsonDocument tokenDoc = JsonDocument.Parse(tokenBody);
+            string idToken = tokenDoc.RootElement.GetProperty(WellKnownTokenTypes.IdToken).GetString()!;
+            using JsonDocument payload = JwtPayloadDecoding.DecodePayload(idToken, BaseMemoryPool.Shared);
+            Assert.AreEqual(SubjectId, payload.RootElement.GetProperty("sub").GetString());
+            Assert.IsFalse(payload.RootElement.TryGetProperty("sid", out _),
+                $"An ID Token issued for a blank session identifier must carry no sid. Payload: {payload.RootElement.GetRawText()}");
+        }
+        finally
+        {
+            dpopMaterial.PublicKey.Dispose();
+            dpopMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OpenID Connect
+    /// Back-Channel Logout 1.0 section 2.1</see> defines the <c>sid</c> Claim used in ID Tokens as "Session ID -
+    /// String identifier for a Session." Given an ID Token target whose
+    /// <see cref="Verifiable.OAuth.IssuanceContext.SessionId"/> is one space, which names no session,
+    /// <see cref="Verifiable.OAuth.SidClaimContributor.GenerateSidClaim"/> contributes no <c>sid</c>: its one
+    /// claim is <see cref="ClaimOutcome.NotApplicable"/>, as for a target without a session identifier.
+    /// Contributing a blank session identifier as none is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task TheSidContributorContributesNoSidForABlankSessionIdentifierAsync()
+    {
+        IdTokenTarget target = new(ContributorTestFixtures.BuildIssuance(WellKnownScopes.OpenId) with { SessionId = " " });
+
+        List<Claim> claims = await SidClaimContributor.GenerateSidClaim(target, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Claim claim = Assert.ContainsSingle(claims);
+        Assert.AreEqual(ClaimOutcome.NotApplicable, claim.Outcome, "A blank session identifier must contribute no sid.");
+    }
+
+
+    /// <summary>
+    /// Issues the initial tokens: PAR over the loopback listener, the authorize leg in-process on the same
+    /// <see cref="EndpointServer"/> the listener serves, with the subject stamped and the End-User session
+    /// written by <paramref name="establishSession"/>, and the authorization code exchange over the loopback
+    /// listener with a DPoP proof for <paramref name="dpopKey"/>. Asserts each leg's status.
+    /// </summary>
+    /// <param name="host">The host whose listener and endpoint server serve the legs.</param>
+    /// <param name="material">The registration the client presents.</param>
+    /// <param name="dpopKey">The DPoP key the token leg's proof is signed with.</param>
+    /// <param name="tokenUrl">The token endpoint's URL on the listener.</param>
+    /// <param name="establishSession">Writes the End-User session onto the authorize-time context.</param>
+    /// <returns>The token response body.</returns>
+    private async Task<string> IssueTokensOverTheWireAsync(
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        DpopKey dpopKey,
+        Uri tokenUrl,
+        Action<ExchangeContext> establishSession)
+    {
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+
+        //1. PAR over the real wire.
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Uri parUrl = new(
+            hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+        using HttpResponseMessage parResponse = await OAuthTestTransport.PostFormAsync(
+            hosted.SharedHttpClient!, parUrl, new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.Scope] = Scope
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+        string parBody = await parResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, (int)parResponse.StatusCode, parBody);
+        string requestUri = ExtractRequestUri(parBody);
+
+        //2. Authorize, in-process on the SAME EndpointServer the Kestrel host serves, with the subject
+        //   stamped and the End-User session the caller establishes.
+        ExchangeContext authorizeContext = [];
+        authorizeContext.SetSubjectId(SubjectId);
+        establishSession(authorizeContext);
+        RequestFields authorizeFields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
+        };
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
+            authorizeFields, authorizeContext, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+        string code = TestBrowser.ExtractQueryParam(authorizeResponse.Location!, OAuthRequestParameterNames.Code)
+            ?? throw new InvalidOperationException("Authorize redirect Location missing code.");
+
+        //3. Token exchange over the real wire, presenting a DPoP proof for the DPoP key the confirmation
+        //   binding will carry. Rfc6749WithPkce does not REQUIRE DPoP, so this leg needs no nonce
+        //   retry: a well-formed proof is accepted and bound on the first attempt.
+        Dictionary<string, string> tokenFields = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
+        };
+        (HttpResponseMessage tokenResponse, string tokenBody) = await PostTokenEndpointWithDpopAsync(
+            hosted.SharedHttpClient!, tokenUrl, tokenFields, dpopKey, material.Registration, segment)
+            .ConfigureAwait(false);
+        using(tokenResponse)
+        {
+            Assert.AreEqual(200, (int)tokenResponse.StatusCode, tokenBody);
+        }
+
+        return tokenBody;
     }
 
 

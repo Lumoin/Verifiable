@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -953,6 +954,90 @@ internal sealed class EndSessionLogoutTests
     }
 
 
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">RP-Initiated
+    /// Logout 1.0 section 2</see> describes the <c>id_token_hint</c>: "This is used as an indication of the
+    /// identity of the End-User that the RP is requesting be logged out by the OP." An ID Token hint signed by
+    /// this server whose <c>sub</c> is one space indicates no End-User: the end-session endpoint reads a
+    /// <c>sub</c> that is empty or white space only as a hint without one, and
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#ValidationAndErrorHandling">RP-Initiated
+    /// Logout 1.0 section 4</see> fixes what follows: "If any of the validation procedures defined in this
+    /// specification fail, any operations requiring the information that failed to correctly validate MUST be
+    /// aborted and the information that failed to validate MUST NOT be used." and "when the OP detects errors in
+    /// the RP-Initiated Logout request, the OP MUST not perform post-logout redirection to an RP." The
+    /// end-session request over the wire is answered 400 <c>invalid_request</c> with the description
+    /// "id_token_hint is missing the sub claim.", is not redirected, and neither the terminate seam nor the
+    /// back-channel delivery seam is called. Reading a blank <c>sub</c> as none is this library's reading, and
+    /// the status, the code and the description are the library's own refusal shape; the specification names
+    /// none.
+    /// </summary>
+    [TestMethod]
+    public async Task AnIdTokenHintWhoseSubjectIsBlankIsRefusedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        (List<(string Subject, string? SessionId)> terminated, List<(string Subject, string? SessionId)> delivered) =
+            await WireTerminateAndDeliverSeamsAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-S").ConfigureAwait(false);
+        string hint = await ResignIdTokenPayloadAsync(host, idToken, payload => payload["sub"] = " ").ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "s1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, body);
+        Assert.IsNull(response.Headers.Location, "A hint whose sub is blank must not redirect.");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "id_token_hint is missing the sub claim.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsEmpty(terminated, "A hint whose sub is blank must not end a session.");
+        Assert.IsEmpty(delivered, "A hint whose sub is blank must not reach the back-channel delivery.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OpenID Connect
+    /// Back-Channel Logout 1.0 section 2.1</see> defines the <c>sid</c> Claim used in ID Tokens: "Session ID -
+    /// String identifier for a Session." An ID Token hint signed by this server with its <c>sub</c> and a
+    /// <c>sid</c> of one space names no session: the end-session endpoint reads a <c>sid</c> that is empty or
+    /// white space only as absent, so the logout proceeds as for a hint without <c>sid</c>. The end-session
+    /// request over the wire is redirected to the registered post-logout URI with the <c>state</c>, and the
+    /// terminate seam and the back-channel delivery seam are each called once with the subject and no session
+    /// identifier. Reading a blank <c>sid</c> as absent is this library's reading.
+    /// </summary>
+    [TestMethod]
+    public async Task AnIdTokenHintWhoseSessionIdentifierIsBlankTerminatesWithoutASessionAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+
+        (List<(string Subject, string? SessionId)> terminated, List<(string Subject, string? SessionId)> delivered) =
+            await WireTerminateAndDeliverSeamsAsync(host).ConfigureAwait(false);
+
+        string idToken = await IssueIdTokenAsync(host, material, "session-B").ConfigureAwait(false);
+        string hint = await ResignIdTokenPayloadAsync(host, idToken, payload => payload["sid"] = " ").ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "b1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Found, response.StatusCode, body);
+        Assert.AreEqual("https://client.example.com/post-logout?state=b1", response.Headers.Location?.OriginalString);
+        (string terminatedSubject, string? terminatedSessionId) = Assert.ContainsSingle(terminated);
+        Assert.AreEqual(SubjectId, terminatedSubject);
+        Assert.IsNull(terminatedSessionId, "A blank sid must reach the terminate seam as no session identifier.");
+        (string deliveredSubject, string? deliveredSessionId) = Assert.ContainsSingle(delivered);
+        Assert.AreEqual(SubjectId, deliveredSubject);
+        Assert.IsNull(deliveredSessionId, "A blank sid must reach the back-channel delivery as no session identifier.");
+    }
+
+
     /// <summary>The client identifier of the second registration whose signing key the foreign-key hint borrows.</summary>
     private const string OtherClientId = "https://other.client.example.com";
 
@@ -980,6 +1065,65 @@ internal sealed class EndSessionLogoutTests
         }).ConfigureAwait(false);
 
         return terminated;
+    }
+
+
+    /// <summary>
+    /// Wires the application's terminate seam and back-channel delivery seam to record the subject and the
+    /// session identifier each receives, so a test can tell which session identifier, if any, reached them.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <returns>The lists the terminate seam and the delivery seam append each call's arguments to.</returns>
+    private static async Task<(List<(string Subject, string? SessionId)> Terminated, List<(string Subject, string? SessionId)> Delivered)>
+        WireTerminateAndDeliverSeamsAsync(TestHostShell host)
+    {
+        List<(string Subject, string? SessionId)> terminated = [];
+        List<(string Subject, string? SessionId)> delivered = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.TerminateSessionAsync = (sub, sid, _, _, _) =>
+            {
+                terminated.Add((sub, sid));
+
+                return ValueTask.CompletedTask;
+            };
+
+            candidateIntegration.DeliverBackChannelLogoutAsync = (sub, sid, _, _, _) =>
+            {
+                delivered.Add((sub, sid));
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        return (terminated, delivered);
+    }
+
+
+    /// <summary>
+    /// Re-signs an ID Token this server issued under the signing key its protected header names, with its payload
+    /// rewritten by <paramref name="alterPayload"/>, through
+    /// <see cref="CompactJwsResigning.ResignWithPayloadAsync"/>, so the hint verifies as this server's and
+    /// differs from the issued token only in its claims.
+    /// </summary>
+    /// <param name="host">The host whose signing-key store holds the signing key's private half.</param>
+    /// <param name="idToken">The ID Token the server issued.</param>
+    /// <param name="alterPayload">Rewrites the decoded payload in place.</param>
+    /// <returns>The re-signed ID Token.</returns>
+    private static async Task<string> ResignIdTokenPayloadAsync(
+        TestHostShell host, string idToken, Action<JsonObject> alterPayload)
+    {
+        string[] parts = idToken.Split('.');
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
+        using JsonDocument headerDocument = JsonDocument.Parse(headerOwner.Memory);
+        string kid = headerDocument.RootElement.GetProperty("kid").GetString()!;
+
+        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        JsonObject payload = JsonNode.Parse(payloadOwner.Memory.Span)!.AsObject();
+        alterPayload(payload);
+
+        return await CompactJwsResigning.ResignWithPayloadAsync(host, idToken, new KeyId(kid), payload.ToJsonString())
+            .ConfigureAwait(false);
     }
 
 

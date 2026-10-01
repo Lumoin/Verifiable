@@ -23,15 +23,25 @@ public static class SidClaimContributor
 {
     /// <summary>
     /// Emits the <c>sid</c> claim for an <see cref="IdTokenTarget"/> when
-    /// <see cref="IssuanceContext.SessionId"/> is populated.
+    /// <see cref="IssuanceContext.SessionId"/> has a character that is not white space.
     /// </summary>
+    /// <remarks>
+    /// A session identifier that is empty or white space only identifies no session, so it is contributed as
+    /// none: the outcome is <see cref="ClaimOutcome.NotApplicable"/>, as for a target without one, and no ID Token
+    /// carries a blank <c>sid</c>
+    /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OpenID Connect
+    /// Back-Channel Logout 1.0 Section 2.1</see> defines the Claim). The rule is this library's.
+    /// </remarks>
+    /// <param name="target">The contribution target; only an <see cref="IdTokenTarget"/> receives a <c>sid</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>One claim: the <c>sid</c> contribution, or <see cref="ClaimOutcome.NotApplicable"/>.</returns>
     public static ValueTask<List<Claim>> GenerateSidClaim(
         ClaimContributionTarget target,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
 
-        if(target is IdTokenTarget idt && idt.Issuance.SessionId is { Length: > 0 } sid)
+        if(target is IdTokenTarget idt && idt.Issuance.SessionId is { } sid && !string.IsNullOrWhiteSpace(sid))
         {
             return ValueTask.FromResult<List<Claim>>(
             [

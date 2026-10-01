@@ -280,6 +280,22 @@ public static class UserInfoEndpoints
                     }
                 }
 
+                //OpenID Connect Core 1.0 Section 5.3.2
+                //(https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse): "The sub (subject)
+                //Claim MUST always be returned in the UserInfo Response." A composed response without a sub (a
+                //claim issuer without the subject contribution, or a resolver that throws, whose failed contribution
+                //the walk drops), or with one that is not a string (a resolver that returns null) or is a string
+                //which is empty or white space only (the resolver's own defect), is not sent: the endpoint answers
+                //server_error with the fixed description and no claim of the End-User. Answering server_error is
+                //this library's rule.
+                if(!responseClaims.TryGetValue(WellKnownJwtClaimNames.Sub, out object? responseSubject)
+                    || responseSubject is not string responseSubjectValue
+                    || string.IsNullOrWhiteSpace(responseSubjectValue))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
                 string body = BuildResponseBody(responseClaims);
                 return (null, ServerHttpResponse.Ok(
                     body, WellKnownMediaTypes.Application.Json));

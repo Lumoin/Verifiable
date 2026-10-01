@@ -461,6 +461,351 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
+    /// An authorization seam that names no subject for the issued token, a
+    /// <see cref="TokenExchangeAuthorization.Subject"/> of white space only, is answered <c>server_error</c> with
+    /// the fixed description and nothing is issued: the answer is 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and
+    /// for an exchange whose requested token type is a refresh token no refresh token is stored. The authorization
+    /// is the application's decision and names the subject of the issued token, so one that names no subject is the
+    /// seam's own defect, answered as
+    /// <see cref="IdJagGrantTests.MintRefusesAKnownFormatIdentifierBreakingItsFormatAsync"/> answers the same
+    /// seam's <c>sub_id</c> that is not well formed. The answer departs from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>, whose
+    /// <c>invalid_request</c> is the error for a request that is not valid; answering the server's own defect
+    /// <c>server_error</c> is this library's rule.
+    /// </summary>
+    /// <param name="caseName">
+    /// The <c>requested_token_type</c> the exchange carries: <c>accessToken</c> or <c>refreshToken</c>; the seam
+    /// issues a refresh token when one is requested and an access token otherwise.
+    /// </param>
+    [TestMethod]
+    [DataRow("accessToken", DisplayName = "an exchange that issues an access token")]
+    [DataRow("refreshToken", DisplayName = "an exchange whose requested token type is a refresh token")]
+    public async Task AnAuthorizationThatNamesNoSubjectIssuesNothingAsync(string caseName)
+    {
+        TokenType requestedTokenType = caseName switch
+        {
+            "accessToken" => TokenType.AccessToken,
+            "refreshToken" => TokenType.RefreshToken,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = " ",
+                            Scope = GrantedScope,
+                            IssuedTokenType = request.RequestedTokenType == TokenType.RefreshToken
+                                ? TokenType.RefreshToken
+                                : TokenType.AccessToken
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(host.SharedHttpClient!, tokenUrl, requestedTokenType)
+            .ConfigureAwait(false);
+        string[] storedRefreshSubjects =
+        [
+            .. host.FlowStates.Values
+                .Select(entry => entry.State)
+                .OfType<ServerRefreshTokenIssuedState>()
+                .Select(state => $"'{state.SubjectId}'")
+        ];
+        string record = $"{status} '{body}' stored refresh token subjects [{string.Join(", ", storedRefreshSubjects)}]";
+
+        Assert.AreEqual(500, status, record);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+        Assert.IsEmpty(storedRefreshSubjects, $"An authorization that names no subject stores no refresh token. {record}");
+    }
+
+
+    /// <summary>
+    /// A validated <c>actor_token</c> whose <see cref="ValidatedSecurityToken.Subject"/> is white space only names
+    /// no actor, and the exchange answers it as an <c>actor_token</c> that is not valid: 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The actor_token is not valid."}</c>, and no token is
+    /// issued, so no <c>act</c> claim names a blank actor. The validated token restates the token's claims, and the
+    /// library cannot tell an actor token whose subject is blank from a validation that lost it, so it answers the
+    /// case a clause governs,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or
+    /// are unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+    /// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code." That
+    /// choice is this library's.
+    /// </summary>
+    [TestMethod]
+    public async Task AnActorTokenWhoseSubjectIsBlankIsNoValidActorTokenAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireBranchingValidatorAsync(app, subjectToken: null, actorToken: new ValidatedSecurityToken { Subject = " " })
+            .ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = ActorTokenValue, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = DescribeExchangeAnswer((int)response.StatusCode, body);
+
+        Assert.AreEqual(400, (int)response.StatusCode, record);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The actor_token is not valid.\"}",
+            body,
+            record);
+    }
+
+
+    /// <summary>
+    /// A validated <c>subject_token</c> whose <see cref="ValidatedSecurityToken.Subject"/> is white space only names
+    /// no subject, and the exchange answers it as a <c>subject_token</c> that is not valid even when the
+    /// authorization seam copies that subject into the issued token, as an impersonation policy does: an exchange
+    /// for an access token is answered 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The subject_token is not valid."}</c>, an exchange that
+    /// asks for an ID-JAG is answered 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The subject_token is not valid."}</c> (the error the
+    /// example of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4.3</see>
+    /// carries, a Token Error response of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> shown there
+    /// after "e.g:"; answering <c>invalid_grant</c> for a mint is this library's choice), and an exchange for an
+    /// access token that presents an <c>actor_token</c> is answered as the first. No token is issued, so the host's
+    /// identifier seam is asked for no <c>jti</c>, and the refusal comes before the actor token is validated and
+    /// before the authorization seam is called: the actor token's validation and the seam each count no call. The
+    /// validated token restates the token's claims, and the library cannot tell a subject token whose subject is
+    /// blank from a validation that lost it, so it answers the case a clause governs,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// request itself is not valid or if either the "subject_token" or "actor_token" are invalid for any reason, or
+    /// are unacceptable based on policy, the authorization server MUST construct an error response, as specified in
+    /// Section 5.2 of [RFC6749]. The value of the "error" parameter MUST be the "invalid_request" error code." That
+    /// choice is this library's.
+    /// </summary>
+    /// <param name="caseName">
+    /// The token the exchange asks for: <c>accessToken</c> for an access token, <c>idJag</c> for an ID-JAG, or
+    /// <c>accessTokenWithActor</c> for an access token with an <c>actor_token</c> presented.
+    /// </param>
+    [TestMethod]
+    [DataRow("accessToken", DisplayName = "an exchange for an access token")]
+    [DataRow("idJag", DisplayName = "an exchange for an ID-JAG")]
+    [DataRow("accessTokenWithActor", DisplayName = "an exchange for an access token that presents an actor token")]
+    public async Task ASubjectTokenWhoseSubjectIsBlankIsNoValidSubjectTokenAsync(string caseName)
+    {
+        (TokenType requestedTokenType, bool isActorTokenPresented, string expectedBody) = caseName switch
+        {
+            "accessToken" => (
+                TokenType.AccessToken,
+                false,
+                "{\"error\":\"invalid_request\",\"error_description\":\"The subject_token is not valid.\"}"),
+            "idJag" => (
+                TokenType.IdJag,
+                false,
+                "{\"error\":\"invalid_grant\",\"error_description\":\"The subject_token is not valid.\"}"),
+            "accessTokenWithActor" => (
+                TokenType.AccessToken,
+                true,
+                "{\"error\":\"invalid_request\",\"error_description\":\"The subject_token is not valid.\"}"),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, isIdJagAllowed: true)
+            .ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        //The host's identifier seam, the actor token's validation and the authorization seam count their calls.
+        int tokenIdentifierCalls = 0;
+        int actorValidationCalls = 0;
+        int authorizationCalls = 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                {
+                    if(string.Equals(token, ActorTokenValue, StringComparison.Ordinal))
+                    {
+                        actorValidationCalls++;
+
+                        return ValueTask.FromResult<ValidatedSecurityToken?>(
+                            new ValidatedSecurityToken { Subject = ActorIdentity });
+                    }
+
+                    return ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = " ", Scope = GrantedScope });
+                };
+
+            //The impersonation policy copies the validated subject into the issued token.
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                {
+                    authorizationCalls++;
+
+                    return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = request.RequestedTokenType == TokenType.IdJag
+                                ? TokenType.IdJag
+                                : TokenType.AccessToken
+                        });
+                };
+
+            Verifiable.Server.GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
+            candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
+            {
+                if(purpose.Equals(WellKnownIdentifierPurposes.OAuthJti))
+                {
+                    tokenIdentifierCalls++;
+                }
+
+                return original(purpose, context, ct);
+            };
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            RequestedTokenType = requestedTokenType,
+            Audience = requestedTokenType == TokenType.IdJag ? ResourceServerAudience : null,
+            Actor = isActorTokenPresented
+                ? new TokenExchangeActor { Token = ActorTokenValue, TokenType = TokenType.AccessToken }
+                : null
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{DescribeExchangeAnswer((int)response.StatusCode, body)} token identifiers generated "
+            + $"{tokenIdentifierCalls} actor validations {actorValidationCalls} authorization calls {authorizationCalls}";
+
+        Assert.AreEqual(400, (int)response.StatusCode, record);
+        Assert.AreEqual(expectedBody, body, record);
+        Assert.AreEqual(0, tokenIdentifierCalls, $"No token identifier is generated for a subject token that is not valid. {record}");
+        Assert.AreEqual(0, actorValidationCalls, $"The actor token is not validated for a subject token that is not valid. {record}");
+        Assert.AreEqual(0, authorizationCalls, $"The authorization seam is not called for a subject token that is not valid. {record}");
+    }
+
+
+    /// <summary>
+    /// An authorization seam that shapes the actor itself, a
+    /// <see cref="TokenExchangeAuthorization.Actor"/> whose <c>sub</c> member is present and is not a string with a
+    /// character that is not white space (white space only, null, or a number), names no actor for an <c>act</c>
+    /// claim, and the exchange answers it as it answers an authorization that names no subject, whatever the issued
+    /// token type: when the seam selects the id-jag issued type, and when it selects the access token issued type,
+    /// the answer is 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and no
+    /// token is issued. The shaped actor is the application's decision, so one that names no actor is the
+    /// seam's own defect, answered as <see cref="AnAuthorizationThatNamesNoSubjectIssuesNothingAsync"/> answers the
+    /// same seam's blank subject. The answer departs from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>, whose
+    /// <c>invalid_request</c> is the error for a request that is not valid; answering the server's own defect
+    /// <c>server_error</c> is this library's rule.
+    /// </summary>
+    /// <param name="caseName">
+    /// The value of the shaped actor's <c>sub</c> member at an ID-JAG exchange: <c>blank</c> (one space),
+    /// <c>null</c>, or <c>number</c> (the number 5); or <c>accessTokenBlank</c>, one space at an exchange whose seam
+    /// issues an access token.
+    /// </param>
+    [TestMethod]
+    [DataRow("blank", DisplayName = "a sub of one space")]
+    [DataRow("null", DisplayName = "a sub that is null")]
+    [DataRow("number", DisplayName = "a sub that is a number")]
+    [DataRow("accessTokenBlank", DisplayName = "an access token exchange with a sub of one space")]
+    public async Task AnAuthorizationWhoseActorNamesNoSubjectIssuesNothingAsync(string caseName)
+    {
+        (object shapedActorSubject, TokenType issuedTokenType) = caseName switch
+        {
+            "blank" => ((object)" ", TokenType.IdJag),
+            "null" => (null!, TokenType.IdJag),
+            "number" => (5, TokenType.IdJag),
+            "accessTokenBlank" => (" ", TokenType.AccessToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, isIdJagAllowed: true)
+            .ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = GrantedScope,
+                            IssuedTokenType = issuedTokenType,
+                            Actor = new Dictionary<string, object>(StringComparer.Ordinal)
+                            {
+                                [WellKnownJwtClaimNames.Sub] = shapedActorSubject
+                            }
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            RequestedTokenType = issuedTokenType,
+            Audience = issuedTokenType == TokenType.IdJag ? ResourceServerAudience : null
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = DescribeExchangeAnswer((int)response.StatusCode, body);
+
+        Assert.AreEqual(500, (int)response.StatusCode, record);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: the
     /// <c>resource</c> parameter's value "MUST be an absolute URI, as specified by Section 4.3 of
     /// [RFC3986]. The URI MUST NOT include a fragment component." A relative <c>resource</c> and a
@@ -3615,17 +3960,28 @@ internal sealed class TokenExchangeGrantTests
     /// The client's policy profile — <see cref="PolicyProfile.Rfc6749WithPkce"/> unless a DPoP test
     /// selects a profile <see cref="ClientPolicyProfiles.RequiresDpop"/> mandates against.
     /// </param>
-    private static async Task<VerifierKeyMaterial> RegisterTokenExchangeClientAsync(TestHostShell app, PolicyProfile? profile = null)
+    /// <param name="isIdJagAllowed">
+    /// Whether the client is also allowed <see cref="WellKnownCapabilityIdentifiers.OAuthIdJag"/>, so an
+    /// authorization seam that selects the id-jag issued type reaches the mint.
+    /// </param>
+    private static async Task<VerifierKeyMaterial> RegisterTokenExchangeClientAsync(
+        TestHostShell app, PolicyProfile? profile = null, bool isIdJagAllowed = false)
     {
+        ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+            WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+        if(isIdJagAllowed)
+        {
+            capabilities = capabilities.Add(WellKnownCapabilityIdentifiers.OAuthIdJag);
+        }
+
         VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             ClientId,
             new Uri(ClientId),
             profile: profile ?? PolicyProfile.Rfc6749WithPkce,
-            capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthClientCredentials,
-                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
-                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+            capabilities: capabilities).ConfigureAwait(false);
 
         await AddMachineScopeAudienceMappingAsync(app, material).ConfigureAwait(false);
 
@@ -3821,10 +4177,16 @@ internal sealed class TokenExchangeGrantTests
     /// token resolves to the actor's claims. Distinct subjects (<see cref="SubjectIdentity"/> vs
     /// <see cref="ActorIdentity"/>) make the §4.1 actor recording observable.
     /// </summary>
-    private static async Task WireBranchingValidatorAsync(TestHostShell app, ValidatedSecurityToken? subjectToken)
+    /// <param name="app">The host shell whose server is wired.</param>
+    /// <param name="subjectToken">The subject token's validated claims, or <see langword="null"/> for the fixture's subject.</param>
+    /// <param name="actorToken">The actor token's validated claims, or <see langword="null"/> for the fixture's actor.</param>
+    private static async Task WireBranchingValidatorAsync(
+        TestHostShell app, ValidatedSecurityToken? subjectToken, ValidatedSecurityToken? actorToken = null)
     {
         ValidatedSecurityToken subject = subjectToken
             ?? new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope };
+        ValidatedSecurityToken actor = actorToken
+            ?? new ValidatedSecurityToken { Subject = ActorIdentity };
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
@@ -3832,7 +4194,7 @@ internal sealed class TokenExchangeGrantTests
                 (token, tokenType, registration, context, ct) =>
                     ValueTask.FromResult<ValidatedSecurityToken?>(
                         string.Equals(token, ActorTokenValue, StringComparison.Ordinal)
-                            ? new ValidatedSecurityToken { Subject = ActorIdentity }
+                            ? actor
                             : subject);
             WirePermissivePolicy(candidateIntegration);
         }).ConfigureAwait(false);
@@ -3936,6 +4298,33 @@ internal sealed class TokenExchangeGrantTests
         using JsonDocument doc = JsonDocument.Parse(body);
 
         return doc.RootElement.GetProperty(name).GetString()!;
+    }
+
+
+    /// <summary>
+    /// Renders a token endpoint answer for an assertion message: its status, its body, and the <c>act</c> claim of
+    /// the token a 200 body issues, so a row whose refusal was answered with a token shows the actor that token
+    /// names.
+    /// </summary>
+    /// <param name="status">The response's status code.</param>
+    /// <param name="body">The response's body.</param>
+    /// <returns>The rendered answer.</returns>
+    private static string DescribeExchangeAnswer(int status, string body)
+    {
+        string issuedAct = "none";
+        if(status == 200)
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            if(doc.RootElement.TryGetProperty(WellKnownTokenTypes.AccessToken, out JsonElement issued))
+            {
+                using JsonDocument payload = DecodePayload(issued.GetString()!);
+                issuedAct = payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Act, out JsonElement act)
+                    ? act.GetRawText()
+                    : "none";
+            }
+        }
+
+        return $"{status} '{body}' issued act {issuedAct}";
     }
 
 

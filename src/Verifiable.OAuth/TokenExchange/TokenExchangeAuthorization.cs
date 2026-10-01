@@ -36,6 +36,10 @@ public sealed record TokenExchangeAuthorization
     /// The subject (<c>sub</c>) of the issued token. For impersonation this is the validated
     /// <c>subject_token</c>'s subject per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#appendix-A.1.4">RFC 8693 Appendix A.1.4</see>.
+    /// A subject that is null, empty or white space only names no subject: it is the authorization seam's own defect,
+    /// which the token exchange answers <c>server_error</c> before anything is obtained, stored or minted. That rule is
+    /// this library's. A <c>subject_token</c> whose validated subject is blank never reaches this seam: the token
+    /// exchange answers it as a token that is not valid (<see cref="ValidatedSecurityToken.Subject"/>).
     /// </summary>
     public required string Subject { get; init; }
 
@@ -225,7 +229,14 @@ public sealed record TokenExchangeAuthorization
     /// <see langword="null"/> lets the library carry the chain it already built from the validated
     /// <c>actor_token</c> (delegation) and the subject token's own prior <c>act</c>, and emits no claim
     /// when the exchange was an impersonation. Applies only when <see cref="IssuedTokenType"/> is
-    /// <see cref="TokenType.IdJag"/>.
+    /// <see cref="TokenType.IdJag"/>. An actor whose <c>sub</c> member is present and is not a string with a
+    /// character that is not white space (null, a value that is not a string, the empty string, or white space
+    /// only) names no actor: it is the authorization seam's own defect, which the token exchange answers
+    /// <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, as it answers a blank
+    /// <see cref="Subject"/>, before anything is obtained, stored or minted. The check runs whatever the
+    /// <see cref="IssuedTokenType"/>, so an access or refresh token exchange whose authorization shapes such an actor
+    /// is refused too. That rule is this library's. An actor without a <c>sub</c> member is written as given, and the
+    /// prior actors nested under its own <c>act</c> member are written as given.
     /// </summary>
     /// <remarks>
     /// <para>
